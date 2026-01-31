@@ -1,0 +1,39 @@
+{% extends 'base.html' %}
+
+{% block title %}班级列表{% endblock %}
+
+{% block actions %}
+<a href="{% url 'create_classroom' %}" class="btn btn-primary">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <path d="M12 5V19M5 12H19" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+    </svg>
+    新建班级
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="classrooms-grid animate-fade-in"
+    style="display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 24px;">
+    {% for classroom in classrooms %}
+    <a href="{% url 'classroom_detail' classroom.pk %}" style="text-decoration: none; color: inherit;">
+        <div class="card">
+            <h3 style="font-size: 20px; font-weight: 600; margin-bottom: 8px;">{{ classroom.name }}</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 16px;">
+                {{ classroom.rows }} 行 × {{ classroom.cols }} 列
+                <br>
+                {{ classroom.students.count }} 名学生
+                <br>
+                {{ classroom.seats.count }} 个座位
+            </p>
+            <div style="display: flex; gap: 8px;">
+                <span class="btn btn-secondary" style="font-size: 12px; padding: 4px 12px;">管理</span>
+            </div>
+        </div>
+    </a>
+    {% empty %}
+    <div style="grid-column: 1 / -1; text-align: center; padding: 60px; color: var(--text-secondary);">
+        <p>暂无班级，点击右上角新建</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

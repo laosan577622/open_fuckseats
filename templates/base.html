@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}排座系统{% endblock %}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=1.1">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css" />
+    <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
+</head>
+
+<body>
+    <header class="app-header">
+        <div class="header-content">
+            <a href="{% url 'index' %}" class="logo">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="3" y="3" width="7" height="7" rx="2" fill="#0a59f7" />
+                    <rect x="14" y="3" width="7" height="7" rx="2" fill="#0a59f7" fill-opacity="0.7" />
+                    <rect x="3" y="14" width="7" height="7" rx="2" fill="#0a59f7" fill-opacity="0.7" />
+                    <rect x="14" y="14" width="7" height="7" rx="2" fill="#0a59f7" />
+                </svg>
+                <span>排座系统</span>
+            </a>
+            <div class="header-actions">
+                {% block actions %}{% endblock %}
+            </div>
+        </div>
+    </header>
+
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="app-footer">
+        <span>开发者：老三</span>
+        <span>网址：www.577622.xyz</span>
+    </footer>
+
+    <div id="toast-container"></div>
+
+    <script src="{% static 'js/main.js' %}"></script>
+</body>
+
+</html>

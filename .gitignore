@@ -1,0 +1,16 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.env
+.DS_Store
+db.sqlite3
+staticfiles/
+.vscode/
+*.log
+*.seats
+*.bak
+open_ver/

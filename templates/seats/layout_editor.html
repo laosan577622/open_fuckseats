@@ -1,0 +1,81 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ classroom.name }} - 布局编辑{% endblock %}
+
+{% block actions %}
+<a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回排座</a>
+{% endblock %}
+
+{% block content %}
+<div id="layout-root" class="classroom-layout animate-fade-in"
+    data-cell-url="{% url 'update_cell_type' classroom.pk %}"
+    data-csrf="{{ csrf_token }}">
+
+    <section class="seat-stage">
+        <div class="seat-grid">
+            {% for row_seats in seat_grid %}
+            <div class="seat-row">
+                {% for seat in row_seats %}
+                {% if seat %}
+                <div class="seat cell-{{ seat.cell_type }}"
+                    data-row="{{ seat.row }}"
+                    data-col="{{ seat.col }}"
+                    data-cell-type="{{ seat.cell_type }}">
+                    {% if seat.cell_type == 'seat' %}
+                    <div class="seat-placeholder">{{ seat.row }}-{{ seat.col }}</div>
+                    {% else %}
+                    <div class="seat-placeholder">{{ seat.get_cell_type_display }}</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <aside class="side-panel">
+        <div class="panel-card">
+            <div class="panel-header">
+                <h3>基础布局</h3>
+                <span class="panel-meta">仅编辑座位/走廊/讲台</span>
+            </div>
+            <form method="post" action="{% url 'update_layout_grid' classroom.pk %}" class="stack-form">
+                {% csrf_token %}
+                <div class="constraint-grid">
+                    <input type="number" name="rows" min="1" max="30" value="{{ classroom.rows }}" placeholder="行数">
+                    <input type="number" name="cols" min="1" max="30" value="{{ classroom.cols }}" placeholder="列数">
+                    <button type="submit" class="btn btn-primary">更新网格</button>
+                </div>
+            </form>
+            <div class="panel-note">右键座位可快速设置类型</div>
+        </div>
+
+        <div class="panel-card">
+            <div class="panel-header">
+                <h3>编辑工具</h3>
+            </div>
+            <div class="tool-grid">
+                <button type="button" class="tool-btn active" data-tool="seat">座位</button>
+                <button type="button" class="tool-btn" data-tool="aisle">走廊</button>
+                <button type="button" class="tool-btn" data-tool="podium">讲台</button>
+                <button type="button" class="tool-btn" data-tool="empty">空位</button>
+            </div>
+            <div class="tool-row">
+                <button type="button" class="btn btn-secondary" id="applySelected">应用到选中</button>
+                <button type="button" class="btn btn-secondary" id="clearSelected">清空选中</button>
+            </div>
+        </div>
+    </aside>
+
+    <div id="contextMenu" class="context-menu">
+        <button type="button" data-tool="seat">设为座位</button>
+        <button type="button" data-tool="aisle">设为走廊</button>
+        <button type="button" data-tool="podium">设为讲台</button>
+        <button type="button" data-tool="empty">设为空位</button>
+    </div>
+</div>
+
+<script src="{% static 'js/layout_editor.js' %}"></script>
+{% endblock %}

@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+
+{% block title %}新建班级{% endblock %}
+
+{% block actions %}
+<a href="{% url 'index' %}" class="btn btn-secondary">取消</a>
+{% endblock %}
+
+{% block content %}
+<div class="form-page animate-fade-in">
+    <div class="card form-card">
+        <h2 style="margin-bottom: 24px;">创建新班级</h2>
+        <form method="post">
+            {% csrf_token %}
+            <div class="form-group">
+                <label for="name">班级名称</label>
+                <input type="text" id="name" name="name" required placeholder="例如：高二（3）班">
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="form-group">
+                    <label for="rows">座位行数</label>
+                    <input type="number" id="rows" name="rows" value="6" required min="1" max="20">
+                </div>
+                <div class="form-group">
+                    <label for="cols">座位列数</label>
+                    <input type="number" id="cols" name="cols" value="8" required min="1" max="20">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">创建班级</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

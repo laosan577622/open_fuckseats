@@ -1,0 +1,503 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ classroom.name }} - 排座详情{% endblock %}
+
+{% block actions %}
+<form method="post" action="{% url 'delete_classroom' classroom.pk %}" style="margin-right: auto;"
+    onsubmit="return confirm('确定要删除这个班级吗？');">
+    {% csrf_token %}
+    <button type="submit" class="btn btn-danger" style="margin-right: 12px;">删除班级</button>
+</form>
+
+<a href="{% url 'layout_editor' classroom.pk %}" class="btn btn-secondary" style="margin-right: 12px;"
+    id="btn-layout-editor">布局编辑</a>
+<a href="{% url 'export_students' classroom.pk %}" class="btn btn-secondary" style="margin-right: 12px;"
+    id="btn-export">导出排座表</a>
+<button class="btn btn-secondary" style="margin-right: 12px;" onclick="toggleFullScreen()"
+    id="btn-fullscreen">全屏</button>
+<button class="btn btn-secondary" style="margin-right: 12px;" onclick="startTour()">教程</button>
+
+<div style="position: relative; display: inline-block;">
+    <button class="btn btn-primary" id="btn-auto-arrange"
+        onclick="document.getElementById('arrangeMenu').classList.toggle('show')">自动排座</button>
+    <div id="arrangeMenu" class="dropdown-menu">
+        <form method="post" action="{% url 'auto_arrange_seats' classroom.pk %}">
+            {% csrf_token %}
+            <button type="submit" name="method" value="random">随机排座</button>
+            <button type="submit" name="method" value="score_desc">按成绩从高到低</button>
+            <button type="submit" name="method" value="score_asc">按成绩从低到高</button>
+            <button type="submit" name="method" value="good_front">成绩好的在前排</button>
+            <button type="submit" name="method" value="good_back">成绩好的在后排</button>
+            <button type="submit" name="method" value="score_spread">相邻成绩差异大</button>
+            <button type="submit" name="method" value="group_balanced">小组均衡模式</button>
+            <button type="submit" name="method" value="group_mentor">小组优带差模式</button>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+    /* 仅针对排座详情页的沉浸式布局样式覆盖 */
+    html,
+    body {
+        height: 100%;
+        overflow: hidden;
+        padding-top: 0;
+        /* 移除 body 的默认 padding，由 layout 内部接管 */
+    }
+</style>
+<div id="classroom-root" class="classroom-layout animate-fade-in" data-move-url="{% url 'move_student' classroom.pk %}"
+    data-clear-url="{% url 'clear_seat' classroom.pk %}" data-assign-url="{% url 'assign_student' classroom.pk %}"
+    data-group-assign-url="{% url 'assign_group' classroom.pk %}"
+    data-group-assign-batch-url="{% url 'assign_group_batch' classroom.pk %}"
+    data-state-url="{% url 'classroom_state' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
+    data-redo-url="{% url 'redo_action' classroom.pk %}" data-csrf="{{ csrf_token }}">
+
+    <div class="zoom-controls">
+        <button type="button" class="zoom-btn" onclick="zoomOut()" title="缩小">-</button>
+        <span id="zoom-level">100%</span>
+        <button type="button" class="zoom-btn" onclick="zoomIn()" title="放大">+</button>
+    </div>
+
+    <section class="seat-stage">
+        <div class="seat-grid" id="seat-grid-container">
+            {% for row_seats in seat_grid %}
+            <div class="seat-row">
+                {% for seat in row_seats %}
+                {% if seat %}
+                <div class="seat cell-{{ seat.cell_type }} {% if seat.student %}occupied{% endif %}"
+                    data-row="{{ seat.row }}" data-col="{{ seat.col }}" data-cell-type="{{ seat.cell_type }}"
+                    data-student-id="{% if seat.student %}{{ seat.student.pk }}{% endif %}">
+                    {% if seat.cell_type == 'seat' %}
+                    {% if seat.student %}
+                    <div class="seat-content" draggable="true" data-student-id="{{ seat.student.pk }}">
+                        <div class="seat-name">{{ seat.student.name }}</div>
+                        {% if seat.student.score > 0 %}
+                        <div class="seat-info">{{ seat.student.display_score }}分</div>
+                        {% endif %}
+                    </div>
+                    {% else %}
+                    <div class="seat-info seat-coord">{{ seat.row }}-{{ seat.col }}</div>
+                    {% endif %}
+                    {% if seat.group %}
+                    <div class="seat-group-tag">{{ seat.group.name }}</div>
+                    {% endif %}
+                    {% else %}
+                    <div class="seat-placeholder">{{ seat.get_cell_type_display }}</div>
+                    {% endif %}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+
+    <aside class="side-panel">
+        <div class="panel-card">
+            <div class="panel-header">
+                <h3>快捷操作</h3>
+                <div class="panel-actions" id="shortcut-actions">
+                    <button type="button" class="btn btn-secondary" id="undoBtn">撤销</button>
+                    <button type="button" class="btn btn-secondary" id="redoBtn">重做</button>
+                </div>
+            </div>
+            <div class="panel-note">快捷键：Ctrl+Z 撤销，Ctrl+Y 重做，Ctrl+C 复制，Ctrl+X 剪切，Ctrl+V 粘贴，Delete 删除，Ctrl+D
+                移入暂存区，Ctrl+U
+                从暂存区取出</div>
+        </div>
+
+        <div class="panel-card panel-tabs">
+            <div class="tab-header" id="main-tab-header">
+                <button type="button" class="tab-btn active" data-tab="students">学生</button>
+                <button type="button" class="tab-btn" data-tab="groups">小组</button>
+                <button type="button" class="tab-btn" data-tab="constraints">约束</button>
+                <button type="button" class="tab-btn" data-tab="files">文件</button>
+                <button type="button" class="tab-btn" data-tab="suggestions">建议</button>
+            </div>
+
+            <div class="tab-body">
+                <div class="tab-panel active" data-tab-panel="students">
+                    <div class="panel-header">
+                        <h3>未入座</h3>
+                        <span class="panel-meta" id="unseatedCount">{{ unseated_students|length }} 人</span>
+                    </div>
+                    <div class="unseated-list">
+                        {% for student in unseated_students %}
+                        <div class="unseated-item" draggable="true" data-student-id="{{ student.pk }}">
+                            <div>
+                                <div class="unseated-name">{{ student.name }}</div>
+                                <div class="unseated-info">{% if student.score %}{{ student.display_score }}分{% endif %}
+                                </div>
+                            </div>
+                            <button type="button" class="icon-btn delete-student"
+                                data-delete-url="{% url 'delete_student' classroom.pk student.pk %}">删除</button>
+                        </div>
+                        {% empty %}
+                        <div class="empty-hint">所有学生已入座</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="tab-panel" data-tab-panel="groups">
+                    <div class="panel-header">
+                        <h3>小组管理</h3>
+                    </div>
+                    <form method="post" action="{% url 'create_group' classroom.pk %}" class="inline-form">
+                        {% csrf_token %}
+                        <input type="text" name="name" placeholder="小组名称" required>
+                        <button type="submit" class="btn btn-primary">添加</button>
+                    </form>
+                    <div class="group-list">
+                        {% for group in groups %}
+                        <div class="group-item">
+                            <span>{{ group.name }}</span>
+                            <div style="display: flex; gap: 4px;">
+                                <button type="button" class="btn btn-secondary"
+                                    style="padding: 2px 8px; font-size: 12px;"
+                                    onclick="renameGroup('{{ group.pk }}', '{{ group.name|escapejs }}')">重命名</button>
+                                <form method="post" action="{% url 'delete_group' classroom.pk group.pk %}"
+                                    style="margin:0;">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-secondary"
+                                        style="padding: 2px 8px; font-size: 12px;">删除</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="empty-hint">暂无小组</div>
+                        {% endfor %}
+                    </div>
+
+                    <form id="renameGroupForm" method="post" style="display:none;">
+                        {% csrf_token %}
+                        <input type="hidden" name="name" id="renameGroupNameInput">
+                    </form>
+                    <script>
+                        function renameGroup(groupId, currentName) {
+                            const newName = prompt('请输入新的小组名称：', currentName);
+                            if (newName && newName.trim() !== '') {
+                                const form = document.getElementById('renameGroupForm');
+                                form.action = `{% url 'classroom_detail' classroom.pk %}group/${groupId}/rename/`;
+                                document.getElementById('renameGroupNameInput').value = newName;
+                                form.submit();
+                            }
+                        }
+                    </script>
+                    <div class="panel-note">开启分组模式后可框选或点击多选座位，再应用分组</div>
+                    <div class="tool-row">
+                        <select id="groupSelect">
+                            <option value="">未分组</option>
+                            {% for group in groups %}
+                            <option value="{{ group.pk }}">{{ group.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-secondary" id="groupAssignToggle">分组模式</button>
+                        <button type="button" class="btn btn-secondary" id="groupApplyBtn">应用到选中</button>
+                        <button type="button" class="btn btn-secondary" id="groupClearSelectBtn">清空选中</button>
+                    </div>
+                </div>
+
+                <div class="tab-panel" data-tab-panel="constraints">
+                    <div class="panel-header">
+                        <h3>约束管理</h3>
+                    </div>
+                    <form method="post" action="{% url 'create_constraint' classroom.pk %}" class="constraint-form">
+                        {% csrf_token %}
+                        <select name="constraint_type" required>
+                            <option value="must_seat">指定座位</option>
+                            <option value="forbid_seat">禁用座位</option>
+                            <option value="must_row">指定行</option>
+                            <option value="forbid_row">禁用行</option>
+                            <option value="must_col">指定列</option>
+                            <option value="forbid_col">禁用列</option>
+                            <option value="must_together">指定相邻</option>
+                            <option value="forbid_together">禁止相邻</option>
+                        </select>
+                        <select name="student_id" required>
+                            {% for student in students %}
+                            <option value="{{ student.pk }}">{{ student.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="target_student_id">
+                            <option value="">关联学生（可选）</option>
+                            {% for student in students %}
+                            <option value="{{ student.pk }}">{{ student.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <div class="constraint-grid">
+                            <input type="number" name="row" placeholder="行" min="1">
+                            <input type="number" name="col" placeholder="列" min="1">
+                            <input type="number" name="distance" placeholder="距离" min="1" value="1">
+                        </div>
+                        <input type="text" name="note" placeholder="备注（可选）">
+                        <button type="submit" class="btn btn-primary">添加约束</button>
+                    </form>
+                    <div class="constraint-list">
+                        {% for constraint in constraints %}
+                        <div class="constraint-item">
+                            <div>
+                                <div class="constraint-title">{{ constraint.get_constraint_type_display }}</div>
+                                <div class="constraint-desc">
+                                    {{ constraint.student.name }}
+                                    {% if constraint.target_student %} ↔ {{ constraint.target_student.name }}{% endif %}
+                                    {% if constraint.row %} 行 {{ constraint.row }}{% endif %}
+                                    {% if constraint.col %} 列 {{ constraint.col }}{% endif %}
+                                    {% if constraint.distance %} 距离 {{ constraint.distance }}{% endif %}
+                                </div>
+                            </div>
+                            <form method="post" action="{% url 'delete_constraint' classroom.pk constraint.pk %}">
+                                {% csrf_token %}
+                                <button type="submit" class="btn btn-secondary">删除</button>
+                            </form>
+                        </div>
+                        {% empty %}
+                        <div class="empty-hint">暂无约束</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="tab-panel" data-tab-panel="files">
+                    <div class="panel-header">
+                        <h3>数据导入导出</h3>
+                    </div>
+                    <form method="post" action="{% url 'import_students' classroom.pk %}" enctype="multipart/form-data"
+                        class="stack-form">
+                        {% csrf_token %}
+                        <input type="file" name="excel_file" accept=".xlsx, .xls" required>
+                        <label class="checkbox-row">
+                            <input type="checkbox" name="clear_existing" value="1">导入前清空学生
+                        </label>
+                        <button type="submit" class="btn btn-primary">导入学生Excel</button>
+                    </form>
+                    <form method="post" action="{% url 'import_seats_file' classroom.pk %}"
+                        enctype="multipart/form-data" class="stack-form">
+                        {% csrf_token %}
+                        <input type="file" name="seats_file" accept=".seats" required>
+                        <button type="submit" class="btn btn-secondary">导入 .seats</button>
+                    </form>
+                    <a href="{% url 'export_seats_file' classroom.pk %}" class="btn btn-secondary"
+                        style="width: 100%;">导出 .seats</a>
+                    <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-secondary"
+                        style="width: 100%; margin-top: 8px;">导出小组登记表</a>
+
+                    <div class="panel-header" style="margin-top: 8px;">
+                        <h3>布局快照</h3>
+                    </div>
+                    <form method="post" action="{% url 'save_layout_snapshot' classroom.pk %}" class="inline-form">
+                        {% csrf_token %}
+                        <input type="text" name="snapshot_name" placeholder="例如：期中考试座位" required>
+                        <button type="submit" class="btn btn-primary">保存</button>
+                    </form>
+                    <div class="snapshot-list">
+                        {% for snap in snapshots %}
+                        <div class="snapshot-item">
+                            <span>{{ snap.name }}</span>
+                            <div class="snapshot-actions">
+                                <a href="{% url 'load_layout_snapshot' classroom.pk snap.pk %}"
+                                    class="btn btn-secondary">加载</a>
+                                <form method="post" action="{% url 'delete_layout_snapshot' classroom.pk snap.pk %}">
+                                    {% csrf_token %}
+                                    <button type="submit" class="btn btn-secondary">删除</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% empty %}
+                        <div class="empty-hint">暂无快照</div>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <div class="tab-panel" data-tab-panel="suggestions">
+                    <div class="panel-header">
+                        <h3>排座建议</h3>
+                    </div>
+                    <div class="suggestion-list" id="suggestionList">
+                        {% for suggestion in suggestions %}
+                        <div class="suggestion-item">{{ suggestion }}</div>
+                        {% empty %}
+                        <div class="empty-hint">当前布局没有明显问题</div>
+                        {% endfor %}
+                    </div>
+                </div>
+            </div>
+        </div>
+    </aside>
+</div>
+
+<script src="{% static 'js/classroom.js' %}"></script>
+<script>
+    function startTour() {
+        const driver = window.driver.js.driver({
+            showProgress: true,
+            animate: true,
+            doneBtnText: '开始使用',
+            nextBtnText: '下一步',
+            prevBtnText: '上一步',
+            steps: [
+                {
+                    element: '.header-content',
+                    popover: {
+                        title: '欢迎使用智能排座系统',
+                        description: '这是一个简单而强大的排座工具。让我们花一分钟熟悉一下基本操作吧。'
+                    }
+                },
+                {
+                    element: '.seat-stage',
+                    popover: {
+                        title: '排座区域',
+                        description: '这里显示当前的座位布局。您可以直接拖拽学生进行位置交换，或点击空位查看详细信息。'
+                    }
+                },
+                {
+                    element: '#shortcut-actions',
+                    popover: {
+                        title: '后悔药',
+                        description: '操作失误不用担心，这里可以随时撤销 (Ctrl+Z) 或重做 (Ctrl+Y) 您的最后一步操作。'
+                    }
+                },
+                {
+                    element: '#main-tab-header',
+                    popover: {
+                        title: '多功能面板',
+                        description: '在这里切换不同功能：<br>• <b>学生</b>：管理未入座学生<br>• <b>小组</b>：创建和管理学习小组<br>• <b>约束</b>：设置固定座位或互斥规则<br>• <b>文件</b>：导入导出数据与快照'
+                    }
+                },
+                {
+                    element: '.tab-panel[data-tab-panel="groups"]',
+                    popover: {
+                        title: '小组管理',
+                        description: '切换到“小组”标签页，您可以创建学习小组。开启“分组模式”后，框选多个座位即可批量分配小组。'
+                    },
+                    onHighlightStarted: (element) => {
+                        document.querySelector('.tab-btn[data-tab="groups"]').click();
+                    }
+                },
+                {
+                    element: 'form[action*="import_students"]',
+                    popover: {
+                        title: '班级名单导入',
+                        description: '在此处上传 Excel 文件（需包含“姓名”列），可批量导入学生。支持学号、性别、成绩等字段。'
+                    },
+                    onHighlightStarted: (element) => {
+                        document.querySelector('.tab-btn[data-tab="files"]').click();
+                    }
+                },
+                {
+                    element: 'form[action*="save_layout_snapshot"]',
+                    popover: {
+                        title: '布局快照系统',
+                        description: '保存当前座位布局为快照，随时一键恢复。适用于保存考试座位、日常座位等不同方案。'
+                    },
+                    onHighlightStarted: (element) => {
+                        document.querySelector('.tab-btn[data-tab="files"]').click();
+                    }
+                },
+                {
+                    element: '#btn-auto-arrange',
+                    popover: {
+                        title: '自动排座',
+                        description: '点击这里可以使用多种算法自动生成座位表，例如按成绩排序或确保小组均衡。'
+                    }
+                },
+                {
+                    element: '#btn-layout-editor',
+                    popover: {
+                        title: '布局自定义',
+                        description: '需要修改教室形状？点击这里可以自由添加座位、过道，调整教室大小。'
+                    }
+                },
+                {
+                    element: '#btn-export',
+                    popover: {
+                        title: '导出结果',
+                        description: '满意后，点击这里导出一份精美的 Excel 座位表，直接打印使用。'
+                    }
+                },
+                {
+                    element: '#btn-fullscreen',
+                    popover: {
+                        title: '沉浸式体验',
+                        description: '点击全屏按钮，让排座界面充满整个屏幕，获得更大的操作空间。'
+                    }
+                },
+                {
+                    element: '.zoom-controls',
+                    popover: {
+                        title: '视图缩放',
+                        description: '座位太多看不全？使用这里或者按住 Ctrl 滚动鼠标滚轮来缩放视图。'
+                    }
+                }
+            ],
+            onDestroyStarted: () => {
+                if (!driver.hasNextStep() || confirm('确定要结束教程吗？')) {
+                    driver.destroy();
+                    localStorage.setItem('seat_app_tour_seen', 'true');
+                    // 教程结束后重置滚动位置
+                    window.scrollTo(0, 0);
+                    document.documentElement.scrollTop = 0;
+                    document.body.scrollTop = 0;
+                }
+            },
+        });
+
+        driver.drive();
+    }
+
+    function toggleFullScreen() {
+        if (!document.fullscreenElement) {
+            document.documentElement.requestFullscreen();
+        } else {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            }
+        }
+    }
+
+    let currentScale = 1.0;
+    const gridContainer = document.getElementById('seat-grid-container');
+    const zoomLevelDisplay = document.getElementById('zoom-level');
+
+    function updateZoom() {
+        if (!gridContainer) return;
+        // Use CSS zoom property which handles layout re-flow and scrolling automatically
+        // This is non-standard but works well in WebKit (Chrome/Safari)
+        gridContainer.style.zoom = currentScale;
+
+        if (zoomLevelDisplay) {
+            zoomLevelDisplay.textContent = `${Math.round(currentScale * 100)}%`;
+        }
+    }
+
+    function zoomIn() {
+        currentScale = Math.min(currentScale + 0.1, 2.0);
+        updateZoom();
+    }
+
+    function zoomOut() {
+        currentScale = Math.max(currentScale - 0.1, 0.5);
+        updateZoom();
+    }
+
+    // Mouse wheel zoom
+    const stage = document.querySelector('.seat-stage');
+    if (stage) {
+        stage.addEventListener('wheel', function (e) {
+            if (e.ctrlKey || e.metaKey) {
+                e.preventDefault();
+                if (e.deltaY < 0) zoomIn();
+                else zoomOut();
+            }
+        });
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        const hasSeenTour = localStorage.getItem('seat_app_tour_seen');
+        if (!hasSeenTour) {
+            startTour();
+        }
+    });
+</script>
+{% endblock %}
