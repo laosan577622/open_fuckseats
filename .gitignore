@@ -14,3 +14,4 @@ staticfiles/
 *.seats
 *.bak
 open_ver/
+temp_git_backup/
