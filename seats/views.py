@@ -53,7 +53,7 @@ def _snapshot_payload(classroom, include_students=True, include_constraints=True
 
     data = {
         'meta': {
-            'app': '排座系统',
+            'app': '不想排座位',
             'version': '1.0',
             'exported_at': timezone.now().isoformat()
         },
@@ -411,12 +411,10 @@ def _evaluate_layout(classroom, request=None):
             if ctype == SeatConstraint.ConstraintType.FORBID_TOGETHER and distance <= constraint.distance:
                 issues.append(f"{student.name} 与 {target.name} 距离过近")
 
-    pass # 此部分代码未被披露至开源版本
-
-    # 小组平衡检查
+    # 小组平衡
     groups = list(classroom.groups.all())
 
-    # 导出建议检查
+    # 导出建议
     ignore_export = request.session.get(f'ignore_export_{classroom.pk}', False) if request else False
     if unseated_count == 0 and len(groups) > 0 and not ignore_export:
         issues.append({
@@ -485,16 +483,7 @@ def _evaluate_layout(classroom, request=None):
                         'ignore_url': '#'
                      })
 
-    filtered_issues = []
-    for issue in issues:
-        if isinstance(issue, str):
-            pass # 此部分代码未被披露至开源版本
-        elif isinstance(issue, dict):
-            if 'message' in issue:
-                pass # 此部分代码未被披露至开源版本
-        filtered_issues.append(issue)
-
-    return filtered_issues
+    return issues
 
 
 def classroom_detail(request, pk):
@@ -696,8 +685,6 @@ def _build_constraint_maps(classroom, students):
         elif c.constraint_type == SeatConstraint.ConstraintType.FORBID_TOGETHER and c.target_student_id:
             forbid_pairs.setdefault(sid, []).append((c.target_student_id, c.distance))
 
-    pass # 此部分代码未被披露至开源版本
-
     return fixed_seats, must_rows, must_cols, forbid_rows, forbid_cols, forbid_seats, must_pairs, forbid_pairs
 
 
@@ -707,14 +694,14 @@ def _swap_seats(seat_a, seat_b):
     student_a = seat_a.student
     student_b = seat_b.student
     with transaction.atomic():
-        # 首先清空两个座位的学生，以避免 UNIQUE 约束冲突
+        # 防止唯一性冲突
         seat_a.student = None
         seat_a.save(update_fields=['student'])
         
         seat_b.student = None
         seat_b.save(update_fields=['student'])
 
-        # 重新分配
+        # 交换
         seat_a.student = student_b
         seat_b.student = student_a
         seat_a.save(update_fields=['student'])
@@ -739,10 +726,6 @@ def _get_adjacent_seats(classroom, seat):
             seats.append(s)
     return seats
 
-
-def _enforce_jqj_hzh_rule(classroom, request=None):
-    pass # 此部分代码未被披露至开源版本
-    
 
 
 
@@ -888,7 +871,7 @@ def _arrange_grouped(classroom, students, method):
             group_buckets[target_group.pk].append(student)
     elif method == 'group_mentor':
         # 高级分组：平衡各组的高低分学生配对
-        # 1. 创建配对
+        # 1. 首尾配对
         pairs = []
         left = 0
         right = len(students_sorted) - 1
@@ -900,7 +883,7 @@ def _arrange_grouped(classroom, students, method):
             left += 1
             right -= 1
         
-        # 2. 按总分对配对进行排序（降序），以便优先放置“最重”的项（贪心分区）
+        # 2. 贪心分配：总分高者优先
         pairs_with_sum = []
         for p in pairs:
              s = sum(st.score or 0 for st in p)
@@ -925,7 +908,7 @@ def _arrange_grouped(classroom, students, method):
         seats = group_seats.get(group.pk, [])
         bucket = group_buckets[group.pk]
         
-        # 按座位容量分配，未分配的学生将进入后续处理
+        # 分配座位
         for seat, student in zip(seats, bucket):
             seat.student = student
             seat.save(update_fields=['student'])
@@ -977,7 +960,9 @@ def auto_arrange_seats(request, pk):
             students = spread
         elif method in ['group_balanced', 'group_mentor']:
             if _arrange_grouped(classroom, students, method):
-                pass # 此部分代码未被披露至开源版本
+                # GOV: START
+                _enforce_jqj_hzh_rule(classroom)
+                # GOV: END
                 _reset_history(request, pk)
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                     return JsonResponse({'status': 'success'})
@@ -1002,22 +987,22 @@ def _perform_move(classroom, student, target_seat):
         current_seat = getattr(student, 'assigned_seat', None)
         target_student = target_seat.student
 
-        # 1. 清除当前座位以释放“学生”
+        # 1. 释放当前座位
         if current_seat:
             current_seat.student = None
             current_seat.save(update_fields=['student'])
 
-        # 2. 清除目标座位以释放“目标学生”（如果有）
+        # 2. 释放目标座位
         if target_student:
             target_seat.student = None
             target_seat.save(update_fields=['student'])
         
-        # 3. 将目标学生分配到旧座位（交换）
+        # 3. 交换目标学生至旧座
         if current_seat and target_student:
             current_seat.student = target_student
             current_seat.save(update_fields=['student'])
 
-        # 4. 将学生分配到目标座位
+        # 4. 安置学生至新座
         target_seat.student = student
         target_seat.save(update_fields=['student'])
 
@@ -1332,7 +1317,7 @@ def export_students(request, pk):
     start_row = 3
     
     for r in range(1, classroom.rows + 1):
-        ws.row_dimensions[start_row + r - 1].height = 50  # 增加高度以获得舒适感
+        ws.row_dimensions[start_row + r - 1].height = 50
         for c in range(1, classroom.cols + 1):
             cell = ws.cell(row=start_row + r - 1, column=c)
             seat = seat_map.get((r, c))
@@ -1355,7 +1340,7 @@ def export_students(request, pk):
             cell.alignment = center_align
             cell.font = seat_font
             
-            # 为座位应用边框 (仅当有人入座时显示，让空位效果同走廊)
+            # 仅对入座座位加边框
             if is_seat and seat.student:
                 cell.border = thin_border
             
@@ -1364,7 +1349,7 @@ def export_students(request, pk):
 
     ws.column_dimensions[get_column_letter(c)].width = 14
         
-    # 为 A4 横向打印设置
+    # A4 横向打印
     from openpyxl.worksheet.page import PageMargins
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
@@ -1387,104 +1372,247 @@ def export_students(request, pk):
 def export_group_report(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     groups = list(classroom.groups.all())
-    
+
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = '小组作业登记表'
     
-    # 样式设置
-    thick_border = Border(left=Side(style='medium'), right=Side(style='medium'), top=Side(style='medium'), bottom=Side(style='medium'))
-    thin_border = Border(left=Side(style='thin'), right=Side(style='thin'), top=Side(style='thin'), bottom=Side(style='thin'))
-    
-    font_name = 'HarmonyOS Sans SC'
-    title_font = Font(name=font_name, bold=True, size=24)
-    group_font = Font(name=font_name, bold=True, size=14)
-    name_font = Font(name=font_name, size=12)
-    
-    # 页面标题
-    ws.merge_cells('A1:M1')
-    ws['A1'] = f"{classroom.name} 小组作业登记表"
-    ws['A1'].font = title_font
-    ws['A1'].alignment = Alignment(horizontal='center', vertical='center')
-    ws.row_dimensions[1].height = 50
-    
-    # 双列布局参数
-    left_col_start = 1
-    right_col_start = 8
-    boxes_count = 5
-    
-    current_row_left = 3
-    current_row_right = 3
-    
-    for idx, group in enumerate(groups):
-        is_left = (idx % 2 == 0)
-        start_col = left_col_start if is_left else right_col_start
-        current_r = current_row_left if is_left else current_row_right
-        
-        # 小组表头
-        ws.merge_cells(start_row=current_r, start_column=start_col, end_row=current_r, end_column=start_col + boxes_count)
-        cell = ws.cell(row=current_r, column=start_col, value=group.name)
-        cell.font = group_font
-        cell.alignment = Alignment(horizontal='center', vertical='center')
-        cell.fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
-        
-        # 修复合并单元格边框：需为区域内所有单元格设置边框
-        for c_idx in range(start_col, start_col + boxes_count + 1):
-            ws.cell(row=current_r, column=c_idx).border = thin_border
-        
-        ws.row_dimensions[current_r].height = 25
-        
-        seats = group.seats.select_related('student').filter(student__isnull=False)
-        members = [seat.student for seat in seats]
-        
-        current_r += 1
-        
-        for member in members:
-            # 第一列显示姓名
-            name_cell = ws.cell(row=current_r, column=start_col, value=member.name)
-            name_cell.border = thin_border
-            name_cell.alignment = Alignment(horizontal='center', vertical='center')
-            name_cell.font = name_font
-            
-            # 打钩方框
-            for b in range(1, boxes_count + 1):
-                box_cell = ws.cell(row=current_r, column=start_col + b)
-                box_cell.border = thin_border
-            
-            ws.row_dimensions[current_r].height = 25
-            current_r += 1
-            
-        # 添加间隔行
-        current_r += 1
-        
-        if is_left:
-            current_row_left = current_r
-        else:
-            current_row_right = current_r
-
-    # 格式化列宽
-    ws.column_dimensions['A'].width = 18
-    ws.column_dimensions['H'].width = 18
-    
-    for i in range(2, 2+boxes_count):
-        ws.column_dimensions[get_column_letter(i)].width = 5
-    for i in range(9, 9+boxes_count):
-        ws.column_dimensions[get_column_letter(i)].width = 5
-        
-    # 间隔列
-    ws.column_dimensions['G'].width = 2
-    
-    # 页面设置
     from openpyxl.worksheet.page import PageMargins
+
+    # 样式
+    thin_border = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='thin'),
+    )
+    font_name = 'HarmonyOS Sans SC'
+    group_font = Font(name=font_name, bold=True, size=13)
+    name_font  = Font(name=font_name, size=11)
+    center     = Alignment(horizontal='center', vertical='center')
+
+    # 页眉
+    # &"Font,Bold"&Size Title
+    header_text = f"&\"{font_name},Bold\"&14{classroom.name} (          ) 登记表"
+    ws.oddHeader.center.text = header_text
+    ws.evenHeader.center.text = header_text
+
+    # 1. 生成线性列表
+    # 类型: 'header', 'member', 'gap'
+    
+    flat_entries = []
+    
+    WEIGHT_HEADER = 26
+    WEIGHT_MEMBER = 24
+    WEIGHT_GAP = 10
+    
+    total_weight = 0
+    
+    for i, group in enumerate(groups):
+        # 组头
+        flat_entries.append({
+            'type': 'header', 
+            'text': group.name, 
+            'group_id': group.pk,
+            'weight': WEIGHT_HEADER
+        })
+        total_weight += WEIGHT_HEADER
+        
+        # 成员
+        seats = group.seats.select_related('student').filter(student__isnull=False)
+        members = [s.student.name for s in seats]
+        for m in members:
+            flat_entries.append({
+                'type': 'member', 
+                'text': m, 
+                'group_id': group.pk,
+                'group_name': group.name, # 用于断行时补标题
+                'weight': WEIGHT_MEMBER
+            })
+            total_weight += WEIGHT_MEMBER
+            
+        # 组间间隔
+        if i < len(groups) - 1:
+            flat_entries.append({'type': 'gap', 'weight': WEIGHT_GAP})
+            total_weight += WEIGHT_GAP
+
+    # 2. 寻找最佳切分点
+    target_weight = total_weight / 2
+    current_weight = 0
+    split_index = 0
+    
+    for i, entry in enumerate(flat_entries):
+        current_weight += entry.get('weight', 0)
+        if current_weight >= target_weight:
+            split_index = i + 1
+            break
+            
+    left_entries = flat_entries[:split_index]
+    right_entries = flat_entries[split_index:]
+    
+    # 3. 处理断行衔接
+    if right_entries:
+        first = right_entries[0]
+        # 移除首行间隔
+        if first['type'] == 'gap':
+            right_entries.pop(0)
+            if right_entries:
+                first = right_entries[0]
+                
+        # 如果切断，补标题
+        if right_entries and first['type'] == 'member':
+            continuation_header = {
+                'type': 'header',
+                'text': f"{first['group_name']} (续)",
+                'group_id': first['group_id'],
+                'weight': WEIGHT_HEADER
+            }
+            right_entries.insert(0, continuation_header)
+
+    # 4. 动态计算布局参数
+    # A4: 210mm x 297mm
+    # 垂直方向 (1mm ≈ 2.835pts)
+    PAGE_H_MM = 297
+    MARGIN_V_MM = 12.7 * 2  # 上下留白
+    HEADER_RES_MM = 15      # 页眉预留
+    AVAILABLE_H_MM = PAGE_H_MM - MARGIN_V_MM - HEADER_RES_MM
+    AVAILABLE_H_PTS = AVAILABLE_H_MM * 2.835
+    
+    # 计算总行数
+    max_rows = max(len(left_entries), len(right_entries))
+    if max_rows == 0:
+        max_rows = 1
+        
+    # 定义高度权重 (relative weights)
+    W_HEADER = 1.0
+    W_MEMBER = 1.0
+    W_GAP    = 0.4
+    
+    # 计算总权重
+    total_weight = 0
+    row_weights = [] # 记录每一行的权重
+    
+    for i in range(max_rows):
+        l = left_entries[i] if i < len(left_entries) else None
+        r = right_entries[i] if i < len(right_entries) else None
+        
+        # 取本行最大特征权重
+        w_l = 0
+        if l:
+            if l['type'] == 'header': w_l = W_HEADER
+            elif l['type'] == 'member': w_l = W_MEMBER
+            elif l['type'] == 'gap': w_l = W_GAP
+            
+        w_r = 0
+        if r:
+            if r['type'] == 'header': w_r = W_HEADER
+            elif r['type'] == 'member': w_r = W_MEMBER
+            elif r['type'] == 'gap': w_r = W_GAP
+            
+        # 默认权重
+        cur_w = max(w_l, w_r)
+        if cur_w == 0: cur_w = W_GAP
+        
+        row_weights.append(cur_w)
+        total_weight += cur_w
+        
+    # 计算单位高度 (points)
+    unit_h = AVAILABLE_H_PTS / total_weight
+    
+    # 高度限制
+    MAX_UNIT_H = 45 
+    MIN_UNIT_H = 18
+    
+    if unit_h > MAX_UNIT_H:
+        unit_h = MAX_UNIT_H
+    if unit_h < MIN_UNIT_H:
+        unit_h = MIN_UNIT_H # 此时可能会溢出第一页，依赖fitToHeight压回来，或者自然分页
+        
+    # 水平方向 (单位: Excel Column Width Units)
+    # 1 unit ≈ 2mm
+    TOTAL_COL_WIDTH = 98
+    
+    boxes_count = 5
+    box_width = 4.5
+    gap_width = 2
+    
+    fixed_used = (2 * boxes_count * box_width) + gap_width
+    remain_for_names = TOTAL_COL_WIDTH - fixed_used
+    name_col_width = remain_for_names / 2
+    
+    # 保证最小名宽
+    if name_col_width < 12: name_col_width = 12
+
+    # 列索引
+    left_col_idx  = 1
+    gap_col_idx   = 1 + boxes_count + 1
+    right_col_idx = gap_col_idx + 1
+
+    # 应用列宽
+    ws.column_dimensions[get_column_letter(left_col_idx)].width = name_col_width
+    for b in range(1, boxes_count + 1):
+        ws.column_dimensions[get_column_letter(left_col_idx + b)].width = box_width
+    ws.column_dimensions[get_column_letter(gap_col_idx)].width = gap_width
+    ws.column_dimensions[get_column_letter(right_col_idx)].width = name_col_width
+    for b in range(1, boxes_count + 1):
+        ws.column_dimensions[get_column_letter(right_col_idx + b)].width = box_width
+
+    # 5. 渲染内容
+    def _write_entry(ws, row, start_col, entry):
+        kind = entry['type']
+        
+        if kind == 'header':
+            ws.merge_cells(
+                start_row=row, start_column=start_col,
+                end_row=row, end_column=start_col + boxes_count
+            )
+            cell = ws.cell(row=row, column=start_col, value=entry['text'])
+            cell.font = group_font
+            cell.alignment = center
+            cell.fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
+            for c in range(start_col, start_col + boxes_count + 1):
+                ws.cell(row=row, column=c).border = thin_border
+            
+        elif kind == 'member':
+            cell_name = ws.cell(row=row, column=start_col, value=entry['text'])
+            cell_name.font = name_font
+            cell_name.alignment = center
+            cell_name.border = thin_border
+            for b in range(1, boxes_count + 1):
+                ws.cell(row=row, column=start_col + b).border = thin_border
+
+    start_row = 1
+    
+    for i in range(max_rows):
+        r = start_row + i
+        
+        # 写入内容
+        l_entry = left_entries[i] if i < len(left_entries) else None
+        r_entry = right_entries[i] if i < len(right_entries) else None
+        
+        if l_entry: _write_entry(ws, r, left_col_idx, l_entry)
+        if r_entry: _write_entry(ws, r, right_col_idx, r_entry)
+            
+        # 动态行高
+        h_pts = row_weights[i] * unit_h
+        ws.row_dimensions[r].height = h_pts
+            
+    # 设置打印区域
+    last_col_letter = get_column_letter(right_col_idx + boxes_count)
+    ws.print_area = f"A1:{last_col_letter}{start_row + max_rows - 1}"
+
+    # 6. 页面设置
     ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
-    ws.page_setup.margins = PageMargins(left=0.25, right=0.25, top=0.5, bottom=0.25, header=0.3, footer=0)
+    ws.page_setup.margins = PageMargins(
+        left=0.25, right=0.25,
+        top=0.5, bottom=0.25,
+        header=0.3, footer=0.2
+    )
     ws.print_options.horizontalCentered = True
     
-    # 自适应宽度
+    # 强制一页
     ws.page_setup.fitToPage = True
     ws.page_setup.fitToWidth = 1
-    ws.page_setup.fitToHeight = 0 # 自动高度
+    ws.page_setup.fitToHeight = 1
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     response['Content-Disposition'] = f'attachment; filename="{classroom.name}_小组作业表.xlsx"'
@@ -1629,3 +1757,4 @@ def dismiss_suggestion(request, pk):
         return JsonResponse({'status': 'success'})
         
     return JsonResponse({'status': 'success'})
+    
