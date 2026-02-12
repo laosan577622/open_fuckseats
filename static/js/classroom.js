@@ -10,7 +10,9 @@ document.addEventListener('DOMContentLoaded', () => {
         groupAssignBatch: root.dataset.groupAssignBatchUrl,
         state: root.dataset.stateUrl,
         undo: root.dataset.undoUrl,
+        undo: root.dataset.undoUrl,
         redo: root.dataset.redoUrl,
+        setLeader: root.dataset.setLeaderUrl,
     };
     const csrf = root.dataset.csrf;
 
@@ -145,7 +147,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const hadMulti = seat.classList.contains('multi-selected');
 
         Array.from(seat.classList).forEach(cls => {
-            if (cls.startsWith('cell-') || cls === 'occupied') {
+            if (cls.startsWith('cell-') || cls === 'occupied' || cls === 'is-leader') {
                 seat.classList.remove(cls);
             }
         });
@@ -153,6 +155,9 @@ document.addEventListener('DOMContentLoaded', () => {
         seat.classList.add(`cell-${data.cell_type}`);
         if (data.student) {
             seat.classList.add('occupied');
+            if (data.student.is_leader) {
+                seat.classList.add('is-leader');
+            }
         }
         if (hadSelected) seat.classList.add('selected');
         if (hadMulti) seat.classList.add('multi-selected');
@@ -585,6 +590,46 @@ document.addEventListener('DOMContentLoaded', () => {
     setDragEnabled(true);
 
     // Import handling logic moved to global handleImportSubmit
+
+    // Context Menu Logic
+    const contextMenu = document.getElementById('seat-context-menu');
+    const ctxSetLeader = document.getElementById('ctx-set-leader');
+    let ctxTargetStudentId = null;
+
+    document.addEventListener('click', () => {
+        if (contextMenu) contextMenu.style.display = 'none';
+    });
+
+    if (contextMenu && ctxSetLeader) {
+        seatElements.forEach(seat => {
+            seat.addEventListener('contextmenu', (e) => {
+                if (seat.dataset.cellType !== 'seat' || !seat.dataset.studentId) return;
+
+                // 检查是否有小组
+                // 这里我们假设 seat 元素如果有 group tag 或者从 dataset 中能知道 group
+                // 简单点：只有占座且在组里的才能设为组长
+                // 需要 updateSeatElement 更新时把 group_id 也存一下，或者直接判断 DOM
+                const hasGroup = seat.querySelector('.seat-group-tag') !== null;
+
+                if (!hasGroup) return;
+
+                e.preventDefault();
+                ctxTargetStudentId = seat.dataset.studentId;
+
+                contextMenu.style.display = 'block';
+                contextMenu.style.left = `${e.pageX}px`;
+                contextMenu.style.top = `${e.pageY}px`;
+            });
+        });
+
+        ctxSetLeader.addEventListener('click', () => {
+            if (!ctxTargetStudentId) return;
+            handleResponse(postJson(urls.setLeader, {
+                student_id: ctxTargetStudentId
+            }));
+            contextMenu.style.display = 'none';
+        });
+    }
 });
 
 function handleImportSubmit(e) {

@@ -4,6 +4,7 @@ from django.views.decorators.http import require_POST
 from django.db import transaction, models
 from django.utils import timezone
 from django.urls import reverse
+from django.utils.encoding import escape_uri_path
 from .models import Classroom, Student, Seat, SeatCellType, SeatGroup, LayoutSnapshot, SeatConstraint
 import pandas as pd
 import json
@@ -298,14 +299,24 @@ def _apply_move_action(classroom, action):
     if from_row is not None and from_col is not None:
         seat_from = classroom.seats.filter(row=from_row, col=from_col).first()
 
-    if seat_from:
-         seat_from.student = target_student
-         seat_from.save(update_fields=['student'])
-    
-    if seat_to:
-        seat_to.student = student
-        seat_to.save(update_fields=['student'])
+    with transaction.atomic():
+        # 先清空相关座位的学生，防止唯一性冲突
+        if seat_from:
+            seat_from.student = None
+            seat_from.save(update_fields=['student'])
         
+        if seat_to:
+            seat_to.student = None
+            seat_to.save(update_fields=['student'])
+
+        # 重新赋值
+        if seat_from and target_student:
+             seat_from.student = target_student
+             seat_from.save(update_fields=['student'])
+        
+        if seat_to and student:
+            seat_to.student = student
+            seat_to.save(update_fields=['student'])
     return True
 
 
@@ -366,7 +377,7 @@ def _apply_group_batch_action(classroom, action, forward=True):
 
 def _evaluate_layout(classroom, request=None):
     issues = []
-    seats = list(classroom.seats.select_related('student'))
+    seats = list(classroom.seats.select_related('student', 'group'))
     seat_map = _build_seat_map(seats)
     student_seat = {seat.student_id: seat for seat in seats if seat.student_id}
 
@@ -411,12 +422,16 @@ def _evaluate_layout(classroom, request=None):
             if ctype == SeatConstraint.ConstraintType.FORBID_TOGETHER and distance <= constraint.distance:
                 issues.append(f"{student.name} 与 {target.name} 距离过近")
 
+    pass # 此部分代码未被披露至开源版本
+
     # 小组平衡
     groups = list(classroom.groups.all())
 
     # 导出建议
     ignore_export = request.session.get(f'ignore_export_{classroom.pk}', False) if request else False
-    if unseated_count == 0 and len(groups) > 0 and not ignore_export:
+    # 检查所有入座学生是否都已分配小组
+    ungrouped_count = sum(1 for s in seats if s.student_id and not s.group_id)
+    if unseated_count == 0 and ungrouped_count == 0 and len(groups) > 0 and not ignore_export:
         issues.append({
             'type': 'export_suggestion',
             'message': '所有学生已入座并分组，建议导出小组作业登记表。',
@@ -483,7 +498,16 @@ def _evaluate_layout(classroom, request=None):
                         'ignore_url': '#'
                      })
 
-    return issues
+    filtered_issues = []
+    for issue in issues:
+        if isinstance(issue, str):
+            pass # 此部分代码未被披露至开源版本
+        elif isinstance(issue, dict):
+            if 'message' in issue:
+                pass # 此部分代码未被披露至开源版本
+        filtered_issues.append(issue)
+
+    return filtered_issues
 
 
 def classroom_detail(request, pk):
@@ -535,7 +559,8 @@ def classroom_state(request, pk):
             'student': {
                 'id': student.pk,
                 'name': student.name,
-                'score_display': score_value
+                'score_display': score_value,
+                'is_leader': (group and getattr(group, 'leader_id', None) == student.pk)
             } if student else None,
             'group': {
                 'id': group.pk,
@@ -676,7 +701,8 @@ def import_students(request, pk):
                 df = pd.read_excel(temp_path, header=None)
                 
                 # 切片获取数据区域
-                df_data = df.iloc[start_row:].copy()
+                # start_row 是用户选择的标题行，数据从下一行开始
+                df_data = df.iloc[start_row + 1:].copy()
                 
                 # 获取列名（用于_process_import，虽然我们这里用索引）
                 # 为了复用逻辑，我们重构 DataFrame
@@ -809,7 +835,7 @@ def _get_adjacent_seats(classroom, seat):
     return seats
 
 
-
+pass # 此部分代码未被披露至开源版本
     
 
 
@@ -1019,11 +1045,10 @@ def auto_arrange_seats(request, pk):
         seat_cells = [s for s in seats if s.cell_type == SeatCellType.SEAT]
 
         if len(seat_cells) < len(students):
-            message = '可用座位不足，无法保证100%入座，请在布局编辑中增加座位。'
+            message = f'可用座位不足(座位:{len(seat_cells)} < 学生:{len(students)})，无法保证100%入座，请在布局编辑中增加座位。'
             if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                 return JsonResponse({'status': 'error', 'message': message}, status=400)
             return HttpResponse(message, status=400)
-
         if method == 'random':
             random.shuffle(students)
         elif method == 'score_desc':
@@ -1045,7 +1070,7 @@ def auto_arrange_seats(request, pk):
             students = spread
         elif method in ['group_balanced', 'group_mentor']:
             if _arrange_grouped(classroom, students, method):
-
+                pass # 此部分代码未被披露至开源版本
                 _reset_history(request, pk)
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                     return JsonResponse({'status': 'success'})
@@ -1055,7 +1080,7 @@ def auto_arrange_seats(request, pk):
             return redirect('classroom_detail', pk=pk)
 
         _arrange_standard(classroom, students, seats, method)
-
+        pass # 此部分代码未被披露至开源版本
         _reset_history(request, pk)
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             return JsonResponse({'status': 'success'})
@@ -1088,6 +1113,25 @@ def _perform_move(classroom, student, target_seat):
         # 4. 安置学生至新座
         target_seat.student = student
         target_seat.save(update_fields=['student'])
+
+    # 检查组长身份变更
+    def _check_leader_lost(stu):
+        if not stu: return
+        led_group = getattr(stu, 'led_group', None)
+        if led_group:
+            current_s = getattr(stu, 'assigned_seat', None)
+            # 如果没座位，或者座位所在的组不是他领导的组
+            if not current_s or current_s.group != led_group:
+                # 只有当他确实离开了这个组，才取消他的组长身份
+                led_group.leader = None
+                led_group.save(update_fields=['leader'])
+
+    # 刷新对象状态以检查最新关联
+    if student: student.refresh_from_db()
+    if target_student: target_student.refresh_from_db()
+    
+    _check_leader_lost(student)
+    _check_leader_lost(target_student)
 
     action = {
         'type': 'move',
@@ -1143,6 +1187,13 @@ def clear_seat(request, pk):
             'to_col': None,
             'target_student_id': None
         }
+        if seat.student:
+            student = seat.student
+            led_group = getattr(student, 'led_group', None)
+            if led_group:
+                led_group.leader = None
+                led_group.save(update_fields=['leader'])
+        
         seat.student = None
         seat.save(update_fields=['student'])
         _push_action(request, pk, action)
@@ -1170,12 +1221,12 @@ def assign_student(request, pk):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
 
-@require_POST
 def delete_student(request, pk, student_id):
     classroom = get_object_or_404(Classroom, pk=pk)
     student = get_object_or_404(Student, pk=student_id, classroom=classroom)
     student.delete()
-    if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.headers.get('sec-fetch-mode') == 'cors'
+    if is_ajax:
         return JsonResponse({'status': 'success'})
     return redirect('classroom_detail', pk=pk)
 
@@ -1501,11 +1552,19 @@ def export_group_report(request, pk):
         
         # 成员
         seats = group.seats.select_related('student').filter(student__isnull=False)
-        members = [s.student.name for s in seats]
+        members = []
+        for s in seats:
+             is_ldr = (group.leader_id == s.student_id)
+             members.append({'name': s.student.name, 'is_leader': is_ldr})
+        
+        # 组长排第一
+        members.sort(key=lambda x: not x['is_leader'])
+
         for m in members:
             flat_entries.append({
                 'type': 'member', 
-                'text': m, 
+                'text': m['name'], 
+                'is_leader': m['is_leader'],
                 'group_id': group.pk,
                 'group_name': group.name, # 用于断行时补标题
                 'weight': WEIGHT_MEMBER
@@ -1656,7 +1715,7 @@ def export_group_report(request, pk):
             
         elif kind == 'member':
             cell_name = ws.cell(row=row, column=start_col, value=entry['text'])
-            cell_name.font = name_font
+            cell_name.font = Font(name='微软雅黑', size=11, color="FF0000" if entry.get('is_leader') else "000000")
             cell_name.alignment = center
             cell_name.border = thin_border
             for b in range(1, boxes_count + 1):
@@ -1737,8 +1796,9 @@ def export_seats_file(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     data = _snapshot_payload(classroom, include_students=True)
     payload = json.dumps(data, ensure_ascii=False, indent=2)
-    response = HttpResponse(payload, content_type='application/json')
-    response['Content-Disposition'] = f'attachment; filename="{classroom.name}.seats"'
+    response = HttpResponse(payload, content_type='application/octet-stream')
+    filename = escape_uri_path(f'{classroom.name}.seats')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
@@ -1806,6 +1866,8 @@ def apply_suggestion(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     suggestion_type = request.GET.get('type')
     
+    pass # 此部分代码未被披露至开源版本
+    
     if suggestion_type == 'swap_balance':
         s1_id = request.GET.get('s1')
         s2_id = request.GET.get('s2')
@@ -1834,4 +1896,29 @@ def dismiss_suggestion(request, pk):
         return JsonResponse({'status': 'success'})
         
     return JsonResponse({'status': 'success'})
-    
+
+@require_POST
+def set_group_leader(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        data = json.loads(request.body)
+        student_id = data.get('student_id')
+        
+        student = get_object_or_404(Student, pk=student_id, classroom=classroom)
+        seat = getattr(student, 'assigned_seat', None)
+        if not seat or not seat.group:
+            return JsonResponse({'status': 'error', 'message': '该学生未分配或未在小组中'}, status=400)
+            
+        group = seat.group
+        
+        # Toggle: if already leader, unset
+        if group.leader == student:
+            group.leader = None
+        else:
+            group.leader = student
+            
+        group.save()
+        
+        return JsonResponse({'status': 'success'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)

@@ -47,13 +47,44 @@
         padding-top: 0;
         /* 移除 body 的默认 padding，由 layout 内部接管 */
     }
+
+    .seat.occupied.is-leader .seat-name {
+        color: #ff3b30;
+        /* Red color for leader */
+        font-weight: bold;
+    }
+
+    .context-menu {
+        display: none;
+        position: absolute;
+        z-index: 1000;
+        background: white;
+        border: 1px solid #ddd;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        padding: 4px 0;
+        min-width: 140px;
+    }
+
+    .context-menu .menu-item {
+        padding: 8px 16px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #333;
+        transition: background 0.2s;
+    }
+
+    .context-menu .menu-item:hover {
+        background: #f5f5f7;
+    }
 </style>
 <div id="classroom-root" class="classroom-layout animate-fade-in" data-move-url="{% url 'move_student' classroom.pk %}"
     data-clear-url="{% url 'clear_seat' classroom.pk %}" data-assign-url="{% url 'assign_student' classroom.pk %}"
     data-group-assign-url="{% url 'assign_group' classroom.pk %}"
     data-group-assign-batch-url="{% url 'assign_group_batch' classroom.pk %}"
     data-state-url="{% url 'classroom_state' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
-    data-redo-url="{% url 'redo_action' classroom.pk %}" data-csrf="{{ csrf_token }}">
+    data-redo-url="{% url 'redo_action' classroom.pk %}" data-set-leader-url="{% url 'set_group_leader' classroom.pk %}"
+    data-csrf="{{ csrf_token }}">
 
     <div class="zoom-controls">
         <button type="button" class="zoom-btn" onclick="zoomOut()" title="缩小">-</button>
@@ -67,7 +98,7 @@
             <div class="seat-row">
                 {% for seat in row_seats %}
                 {% if seat %}
-                <div class="seat cell-{{ seat.cell_type }} {% if seat.student %}occupied{% endif %}"
+                <div class="seat cell-{{ seat.cell_type }} {% if seat.student %}occupied{% endif %} {% if seat.student and seat.group and seat.group.leader_id == seat.student.pk %}is-leader{% endif %}"
                     data-row="{{ seat.row }}" data-col="{{ seat.col }}" data-cell-type="{{ seat.cell_type }}"
                     data-student-id="{% if seat.student %}{{ seat.student.pk }}{% endif %}">
                     {% if seat.cell_type == 'seat' %}
@@ -364,6 +395,10 @@
                 <button type="button" class="btn btn-primary" onclick="confirmImportMapping()">确认导入</button>
             </div>
         </div>
+    </div>
+    <!-- Context Menu -->
+    <div id="seat-context-menu" class="context-menu">
+        <div class="menu-item" id="ctx-set-leader">任命为组长</div>
     </div>
 </div>
 

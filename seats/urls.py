@@ -20,6 +20,7 @@ urlpatterns = [
     path('classroom/<int:pk>/group/<int:group_id>/rename/', views.rename_group, name='rename_group'),
     path('classroom/<int:pk>/group/assign/', views.assign_group, name='assign_group'),
     path('classroom/<int:pk>/group/assign/batch/', views.assign_group_batch, name='assign_group_batch'),
+    path('classroom/<int:pk>/group/set_leader/', views.set_group_leader, name='set_group_leader'),
     path('classroom/<int:pk>/group/export/', views.export_group_report, name='export_group_report'),
     path('classroom/<int:pk>/constraint/create/', views.create_constraint, name='create_constraint'),
     path('classroom/<int:pk>/constraint/<int:constraint_id>/delete/', views.delete_constraint, name='delete_constraint'),

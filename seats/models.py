@@ -44,6 +44,7 @@ class Classroom(models.Model):
 class SeatGroup(models.Model):
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='groups')
     name = models.CharField(max_length=50, verbose_name="小组名称")
+    leader = models.OneToOneField('Student', on_delete=models.SET_NULL, null=True, blank=True, related_name='led_group', verbose_name="组长")
     order = models.PositiveIntegerField(default=0, verbose_name="排序")
     created_at = models.DateTimeField(auto_now_add=True)
 
