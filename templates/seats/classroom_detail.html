@@ -264,7 +264,7 @@
                         <h3>数据导入导出</h3>
                     </div>
                     <form method="post" action="{% url 'import_students' classroom.pk %}" enctype="multipart/form-data"
-                        class="stack-form">
+                        class="stack-form" onsubmit="return handleImportSubmit(event)">
                         {% csrf_token %}
                         <input type="file" name="excel_file" accept=".xlsx, .xls" required>
                         <label class="checkbox-row">
@@ -325,9 +325,49 @@
             </div>
         </div>
     </aside>
+
+    <!-- Import Mapping Modal -->
+    <div id="import-mapping-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 8px;">匹配数据</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 20px; font-size: 14px;">
+                我们需要你协助识别文件中的数据列。请选择标题行以及对应的列。</p>
+
+            <div class="form-group">
+                <label>数据起始行 (标题行)</label>
+                <input type="number" id="import-start-row" value="1" min="1" class="form-control">
+                <small style="color: var(--text-secondary); font-size: 12px;">请输入包含列名（如“姓名”、“总分”）的那一行行号</small>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+                <div class="form-group">
+                    <label>姓名列</label>
+                    <select id="import-name-col" class="form-control"></select>
+                </div>
+                <div class="form-group">
+                    <label>总分列 (可选)</label>
+                    <select id="import-score-col" class="form-control">
+                        <option value="">不导入分数</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>识别预览 (前2位学生)</label>
+                <div id="import-preview-area" class="table-container">
+                    <div style="text-align: center; color: var(--text-secondary); padding: 20px;">请先选择列以查看预览</div>
+                </div>
+            </div>
+
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" onclick="closeImportModal()">取消</button>
+                <button type="button" class="btn btn-primary" onclick="confirmImportMapping()">确认导入</button>
+            </div>
+        </div>
+    </div>
 </div>
 
-<script src="{% static 'js/classroom.js' %}"></script>
+<script src="{% static 'js/classroom.js' %}?v={{ request.session.session_key|default:'dev' }}"></script>
 <script>
     function startTour() {
         const driver = window.driver.js.driver({

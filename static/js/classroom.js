@@ -584,7 +584,247 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setDragEnabled(true);
 
-    if (document.fullscreenEnabled) {
-        document.documentElement.requestFullscreen().catch(() => { });
-    }
+    // Import handling logic moved to global handleImportSubmit
 });
+
+function handleImportSubmit(e) {
+    const importForm = e.target;
+    // Basic validation to ensure it's the right form
+    // if (!importForm.action.includes('import')) return true; 
+
+    e.preventDefault();
+    const formData = new FormData(importForm);
+
+    // Show loading state if needed
+    const submitBtn = importForm.querySelector('button[type="submit"]');
+    if (!submitBtn) return;
+
+    const originalText = submitBtn.textContent;
+    submitBtn.textContent = '处理中...';
+    submitBtn.disabled = true;
+
+    const csrf = importForm.querySelector('input[name="csrfmiddlewaretoken"]')?.value;
+
+    fetch(importForm.action, {
+        method: 'POST',
+        body: formData,
+        headers: {
+            'X-Requested-With': 'XMLHttpRequest',
+            'X-CSRFToken': csrf
+        }
+    })
+        .then(res => res.json())
+        .then(data => {
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+
+            if (data.status === 'success') {
+                alert(data.message);
+                window.location.reload();
+            } else if (data.status === 'ambiguous') {
+                showImportModal(data);
+            } else {
+                alert(data.message || '导入失败');
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            submitBtn.textContent = originalText;
+            submitBtn.disabled = false;
+            alert('网络错误，请稍后重试');
+        });
+
+    return false;
+}
+
+let currentImportData = null;
+let currentImportFileId = null;
+
+function showImportModal(data) {
+    const modal = document.getElementById('import-mapping-modal');
+    if (!modal) return;
+
+    currentImportData = data.preview_data;
+    currentImportFileId = data.file_id;
+
+    modal.style.display = 'block';
+
+    // Reset inputs
+    document.getElementById('import-start-row').value = 1;
+    updateColumnSelects();
+    updatePreview();
+}
+
+function closeImportModal() {
+    const modal = document.getElementById('import-mapping-modal');
+    if (modal) modal.style.display = 'none';
+    currentImportData = null;
+    currentImportFileId = null;
+}
+
+const startRowInput = document.getElementById('import-start-row');
+if (startRowInput) {
+    startRowInput.addEventListener('change', () => {
+        updateColumnSelects();
+        updatePreview();
+    });
+}
+
+const nameColSelect = document.getElementById('import-name-col');
+if (nameColSelect) nameColSelect.addEventListener('change', updatePreview);
+
+const scoreColSelect = document.getElementById('import-score-col');
+if (scoreColSelect) scoreColSelect.addEventListener('change', updatePreview);
+
+function updateColumnSelects() {
+    if (!currentImportData) return;
+
+    const startRowInput = document.getElementById('import-start-row');
+    const startRowIdx = Math.max(0, parseInt(startRowInput.value) - 1);
+
+    if (startRowIdx >= currentImportData.length) return;
+
+    const headerRow = currentImportData[startRowIdx];
+    const nameSelect = document.getElementById('import-name-col');
+    const scoreSelect = document.getElementById('import-score-col');
+
+    nameSelect.innerHTML = '<option value="">请选择列</option>';
+    scoreSelect.innerHTML = '<option value="">不导入分数</option>';
+
+    headerRow.forEach((val, idx) => {
+        const displayVal = val !== null && val !== undefined ? String(val).substring(0, 20) : `(列 ${idx + 1})`;
+        const option = `<option value="${idx}">列 ${idx + 1}: ${displayVal}</option>`;
+        nameSelect.innerHTML += option;
+        scoreSelect.innerHTML += option;
+    });
+
+    // Simple Auto-match
+    headerRow.forEach((val, idx) => {
+        const str = String(val).toLowerCase();
+        if (str.includes('姓名') || str.includes('name')) {
+            nameSelect.value = idx;
+        }
+        if (str.includes('成绩') || str.includes('score') || str.includes('总分')) {
+            scoreSelect.value = idx;
+        }
+    });
+}
+
+function updatePreview() {
+    if (!currentImportData) return;
+
+    const startRowIdx = Math.max(0, parseInt(document.getElementById('import-start-row').value) - 1);
+    const nameColIdx = document.getElementById('import-name-col').value;
+    const scoreColIdx = document.getElementById('import-score-col').value;
+
+    const previewArea = document.getElementById('import-preview-area');
+
+    if (nameColIdx === '') {
+        previewArea.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">请至少选择“姓名列”</div>';
+        return;
+    }
+
+    // Get next 2 rows strictly after startRow
+    const dataRows = [];
+    for (let i = startRowIdx + 1; i < currentImportData.length && dataRows.length < 2; i++) {
+        dataRows.push(currentImportData[i]);
+    }
+
+    if (dataRows.length === 0) {
+        previewArea.innerHTML = '<div style="text-align: center; color: var(--text-secondary); padding: 20px;">没有更多数据行</div>';
+        return;
+    }
+
+    let html = `
+        <table class="preview-table">
+            <thead>
+                <tr>
+                    <th>姓名 (预览)</th>
+                    <th>总分 (预览)</th>
+                </tr>
+            </thead>
+            <tbody>
+    `;
+
+    dataRows.forEach(row => {
+        const name = row[nameColIdx] !== undefined ? row[nameColIdx] : '';
+        const score = scoreColIdx !== '' && row[scoreColIdx] !== undefined ? row[scoreColIdx] : '-';
+        html += `
+            <tr>
+                <td>${name}</td>
+                <td>${score}</td>
+            </tr>
+        `;
+    });
+
+    html += '</tbody></table>';
+    previewArea.innerHTML = html;
+}
+
+function confirmImportMapping() {
+    if (!currentImportFileId) return;
+
+    const nameColIdx = document.getElementById('import-name-col').value;
+    if (nameColIdx === '') {
+        alert('请选择姓名列');
+        return;
+    }
+
+    const startRow = Math.max(0, parseInt(document.getElementById('import-start-row').value) - 1);
+    const scoreColIdx = document.getElementById('import-score-col').value;
+    const clearExisting = document.querySelector('input[name="clear_existing"]').checked;
+
+    const btn = document.querySelector('#import-mapping-modal .btn-primary');
+    const originalText = btn.textContent;
+    btn.textContent = '导入中...';
+    btn.disabled = true;
+
+    const importForm = document.querySelector('form[action*="import"]'); // Loose match
+    // Ensure we are posting to the import endpoint, not current page
+    let importUrl = importForm ? importForm.action : null;
+    if (!importUrl) {
+        // Fallback constructing URL from current path if possible, or just error out
+        console.error("Cannot find import form to get action URL");
+        alert("系统错误：无法找到导入接口");
+        btn.textContent = originalText;
+        btn.disabled = false;
+        return;
+    }
+
+    const csrf = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || document.getElementById('classroom-root')?.dataset.csrf;
+
+    // Create FormData
+    const formData = new FormData();
+    formData.append('action', 'confirm');
+    formData.append('file_id', currentImportFileId);
+    formData.append('start_row', startRow);
+    formData.append('name_col_index', nameColIdx);
+    if (scoreColIdx) formData.append('score_col_index', scoreColIdx);
+    if (clearExisting) formData.append('clear_existing', 'true');
+
+    fetch(importUrl, {
+        method: 'POST',
+        headers: {
+            'X-CSRFToken': csrf,
+            'X-Requested-With': 'XMLHttpRequest'
+        },
+        body: formData
+    })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert(data.message);
+                window.location.reload();
+            } else {
+                alert(data.message || '导入失败');
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('网络错误');
+            btn.textContent = originalText;
+            btn.disabled = false;
+        });
+}

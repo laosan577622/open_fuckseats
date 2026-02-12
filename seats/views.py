@@ -590,69 +590,149 @@ def update_layout_grid(request, pk):
 
 def import_students(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
-    if request.method == 'POST' and request.FILES.get('excel_file'):
-        excel_file = request.FILES['excel_file']
-        clear_existing = request.POST.get('clear_existing') == '1'
-        try:
-            df = pd.read_excel(excel_file)
-            columns = list(df.columns)
+    
+    if request.method == 'POST':
+        action = request.POST.get('action', 'upload')
+        
+        # 处理第一次上传
+        if action == 'upload' and request.FILES.get('excel_file'):
+            excel_file = request.FILES['excel_file']
+            clear_existing = request.POST.get('clear_existing') == '1'
+            
+            try:
+                # 先读取一次尝试自动识别
+                df = pd.read_excel(excel_file)
+                columns = list(df.columns)
 
-            def find_column(keys):
-                for key in keys:
-                    for col in columns:
-                        if key in str(col):
-                            return col
-                return None
+                def find_column(keys):
+                    for key in keys:
+                        for col in columns:
+                            if key in str(col):
+                                return col
+                    return None
 
-            name_col = find_column(['姓名', '名字', '学生姓名', '学生'])
-            student_id_col = find_column(['学号', '学生号', '编号', 'ID'])
-            gender_col = find_column(['性别', '男女性别'])
-            score_col = find_column(['成绩', '总分', '分数', '得分', '总成绩', '总成绩分', '学科总分'])
+                name_col = find_column(['姓名', '名字', '学生姓名', '学生'])
+                
+                # 如果自动识别成功，直接导入
+                if name_col:
+                    student_id_col = find_column(['学号', '学生号', '编号', 'ID'])
+                    gender_col = find_column(['性别', '男女性别'])
+                    score_col = find_column(['成绩', '总分', '分数', '得分', '总成绩', '总成绩分', '学科总分'])
 
-            if not score_col:
-                numeric_cols = [c for c in columns if pd.api.types.is_numeric_dtype(df[c])]
-                numeric_cols = [c for c in numeric_cols if c != student_id_col]
-                score_col = numeric_cols[-1] if numeric_cols else None
+                    if not score_col:
+                        numeric_cols = [c for c in columns if pd.api.types.is_numeric_dtype(df[c])]
+                        numeric_cols = [c for c in numeric_cols if c != student_id_col]
+                        score_col = numeric_cols[-1] if numeric_cols else None
 
-            if name_col:
-                if clear_existing:
-                    classroom.students.all().delete()
-                count = 0
-                for _, row in df.iterrows():
-                    name = row[name_col]
-                    if pd.isna(name):
-                        continue
-                    student_id = row.get(student_id_col, '') if student_id_col else ''
-                    gender_raw = row.get(gender_col, '') if gender_col else ''
-                    score = row.get(score_col, 0) if score_col else 0
-
-                    gender = 'M' if gender_raw == '男' else 'F' if gender_raw == '女' else None
-                    score_value = score if pd.notna(score) else 0
-                    if isinstance(score_value, str):
-                        try:
-                            score_value = float(score_value.strip())
-                        except Exception:
-                            score_value = 0
-
-                    Student.objects.create(
-                        classroom=classroom,
-                        name=str(name).strip(),
-                        student_id=str(student_id).strip() if pd.notna(student_id) else '',
-                        gender=gender,
-                        score=score_value
-                    )
-                    count += 1
-                if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                    count = _process_import(classroom, df, name_col, student_id_col, gender_col, score_col, clear_existing)
                     return JsonResponse({'status': 'success', 'message': f'成功导入 {count} 名学生'})
-                return redirect('classroom_detail', pk=pk)
-            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-                return JsonResponse({'status': 'error', 'message': '未找到“姓名”列'}, status=400)
-            return redirect('classroom_detail', pk=pk)
-        except Exception as e:
-            if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+                
+                # 自动识别失败，保存临时文件并返回预览数据
+                import os
+                import uuid
+                from django.conf import settings
+                
+                file_id = str(uuid.uuid4())
+                temp_dir = os.path.join(settings.BASE_DIR, 'temp_imports')
+                os.makedirs(temp_dir, exist_ok=True)
+                temp_path = os.path.join(temp_dir, f'{file_id}.xlsx')
+                
+                # 重新定位指针或直接保存上传的文件
+                with open(temp_path, 'wb+') as destination:
+                    for chunk in excel_file.chunks():
+                        destination.write(chunk)
+                
+                # 读取前20行（无标题模式）返回给前端预览
+                df_preview = pd.read_excel(temp_path, header=None)
+                preview_data = df_preview.head(20).fillna('').values.tolist()
+                
+                return JsonResponse({
+                    'status': 'ambiguous',
+                    'file_id': file_id,
+                    'preview_data': preview_data,
+                    'message': '未识别到姓名列，请手动匹配'
+                })
+
+            except Exception as e:
                 return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
-            return redirect('classroom_detail', pk=pk)
+
+        # 处理确认映射
+        elif action == 'confirm':
+            file_id = request.POST.get('file_id')
+            start_row = int(request.POST.get('start_row', 0)) # 0-indexed
+            name_col_idx = int(request.POST.get('name_col_index'))
+            score_col_idx = request.POST.get('score_col_index')
+            clear_existing = request.POST.get('clear_existing') == 'true'
+            
+            import os
+            from django.conf import settings
+            temp_path = os.path.join(settings.BASE_DIR, 'temp_imports', f'{file_id}.xlsx')
+            
+            if not os.path.exists(temp_path):
+                return JsonResponse({'status': 'error', 'message': '临时文件已过期，请重新上传'}, status=400)
+                
+            try:
+                # 读取原始文件（无header）
+                df = pd.read_excel(temp_path, header=None)
+                
+                # 切片获取数据区域
+                df_data = df.iloc[start_row:].copy()
+                
+                # 获取列名（用于_process_import，虽然我们这里用索引）
+                # 为了复用逻辑，我们重构 DataFrame
+                df_data.columns = [i for i in range(df_data.shape[1])]
+                
+                name_col = name_col_idx
+                score_col = int(score_col_idx) if score_col_idx and score_col_idx != '' else None
+                
+                count = _process_import(classroom, df_data, name_col, None, None, score_col, clear_existing)
+                
+                # 清理文件
+                os.remove(temp_path)
+                
+                return JsonResponse({'status': 'success', 'message': f'成功导入 {count} 名学生'})
+            except Exception as e:
+                return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
     return redirect('classroom_detail', pk=pk)
+
+
+def _process_import(classroom, df, name_col, student_id_col, gender_col, score_col, clear_existing):
+    if clear_existing:
+        classroom.students.all().delete()
+    
+    count = 0
+    with transaction.atomic():
+        for _, row in df.iterrows():
+            name = row[name_col]
+            if pd.isna(name) or str(name).strip() == '':
+                continue
+                
+            # 处理可能的标题行混入（如果手动选择时不准确）
+            if str(name).strip() in ['姓名', 'Name']: 
+                continue
+
+            student_id = row.get(student_id_col, '') if student_id_col is not None else ''
+            gender_raw = row.get(gender_col, '') if gender_col is not None else ''
+            score = row.get(score_col, 0) if score_col is not None else 0
+
+            gender = 'M' if gender_raw == '男' else 'F' if gender_raw == '女' else None
+            score_value = score if pd.notna(score) else 0
+            if isinstance(score_value, str):
+                try:
+                    score_value = float(score_value.strip())
+                except Exception:
+                    score_value = 0
+
+            Student.objects.create(
+                classroom=classroom,
+                name=str(name).strip(),
+                student_id=str(student_id).strip() if pd.notna(student_id) else '',
+                gender=gender,
+                score=score_value
+            )
+            count += 1
+    return count
 
 
 def _build_constraint_maps(classroom, students):
@@ -684,6 +764,8 @@ def _build_constraint_maps(classroom, students):
             must_pairs.setdefault(sid, []).append((c.target_student_id, c.distance))
         elif c.constraint_type == SeatConstraint.ConstraintType.FORBID_TOGETHER and c.target_student_id:
             forbid_pairs.setdefault(sid, []).append((c.target_student_id, c.distance))
+
+
 
     return fixed_seats, must_rows, must_cols, forbid_rows, forbid_cols, forbid_seats, must_pairs, forbid_pairs
 
@@ -726,6 +808,9 @@ def _get_adjacent_seats(classroom, seat):
             seats.append(s)
     return seats
 
+
+
+    
 
 
 
@@ -960,9 +1045,7 @@ def auto_arrange_seats(request, pk):
             students = spread
         elif method in ['group_balanced', 'group_mentor']:
             if _arrange_grouped(classroom, students, method):
-                # GOV: START
-                _enforce_jqj_hzh_rule(classroom)
-                # GOV: END
+
                 _reset_history(request, pk)
                 if request.headers.get('x-requested-with') == 'XMLHttpRequest':
                     return JsonResponse({'status': 'success'})
@@ -972,7 +1055,7 @@ def auto_arrange_seats(request, pk):
             return redirect('classroom_detail', pk=pk)
 
         _arrange_standard(classroom, students, seats, method)
-        # _enforce_jqj_hzh_rule(classroom) # 移除了自动强制执行
+
         _reset_history(request, pk)
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
             return JsonResponse({'status': 'success'})
@@ -1723,13 +1806,7 @@ def apply_suggestion(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     suggestion_type = request.GET.get('type')
     
-    if suggestion_type == 'jqj_hzh':
-        import random
-        # 执行强制相邻规则
-        _enforce_jqj_hzh_rule(classroom, request)
-        return JsonResponse({'status': 'success', 'message': '优化完成'})  
-    
-    elif suggestion_type == 'swap_balance':
+    if suggestion_type == 'swap_balance':
         s1_id = request.GET.get('s1')
         s2_id = request.GET.get('s2')
         try:
