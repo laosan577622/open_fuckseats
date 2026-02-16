@@ -746,10 +746,11 @@ function updateColumnSelects() {
     // Simple Auto-match
     headerRow.forEach((val, idx) => {
         const str = String(val).toLowerCase();
+        const normalized = String(val).trim().toLowerCase();
         if (str.includes('姓名') || str.includes('name')) {
             nameSelect.value = idx;
         }
-        if (str.includes('成绩') || str.includes('score') || str.includes('总分')) {
+        if (normalized === '总分' || normalized === '学生总分') {
             scoreSelect.value = idx;
         }
     });

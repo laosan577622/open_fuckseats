@@ -636,18 +636,21 @@ def import_students(request, pk):
                                 return col
                     return None
 
+                def find_exact_column(candidates):
+                    normalized_candidates = {str(item).strip().lower() for item in candidates}
+                    for col in columns:
+                        normalized_col = str(col).strip().lower()
+                        if normalized_col in normalized_candidates:
+                            return col
+                    return None
+
                 name_col = find_column(['姓名', '名字', '学生姓名', '学生'])
+                score_col = find_exact_column(['总分', '学生总分'])
                 
                 # 如果自动识别成功，直接导入
-                if name_col:
+                if name_col and score_col:
                     student_id_col = find_column(['学号', '学生号', '编号', 'ID'])
                     gender_col = find_column(['性别', '男女性别'])
-                    score_col = find_column(['成绩', '总分', '分数', '得分', '总成绩', '总成绩分', '学科总分'])
-
-                    if not score_col:
-                        numeric_cols = [c for c in columns if pd.api.types.is_numeric_dtype(df[c])]
-                        numeric_cols = [c for c in numeric_cols if c != student_id_col]
-                        score_col = numeric_cols[-1] if numeric_cols else None
 
                     count = _process_import(classroom, df, name_col, student_id_col, gender_col, score_col, clear_existing)
                     return JsonResponse({'status': 'success', 'message': f'成功导入 {count} 名学生'})
@@ -675,7 +678,7 @@ def import_students(request, pk):
                     'status': 'ambiguous',
                     'file_id': file_id,
                     'preview_data': preview_data,
-                    'message': '未识别到姓名列，请手动匹配'
+                    'message': '仅当列名精确为“总分”或“学生总分”时才会自动导入，请手动匹配列'
                 })
 
             except Exception as e:
