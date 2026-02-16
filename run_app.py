@@ -21,8 +21,10 @@ def main():
 
 
     PORT = 23948
-    print(f"Starting server on http://127.0.0.1:{PORT} ...", flush=True)
+    print(f"正在启动服务器 http://127.0.0.1:23948 ...", flush=True)
     serve(application, host='127.0.0.1', port=PORT)
 
 if __name__ == '__main__':
+    print("服务器已启动，请使用浏览器打开 http://127.0.0.1:23948 访问\n在此期间，请不要关闭本窗口。", flush=True)
     main()
+   
