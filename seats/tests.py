@@ -625,3 +625,119 @@ class GroupInteractionTests(TestCase):
             self.assertEqual(len(cols), 1)
             group_cols[g["id"]] = cols.pop()
         self.assertEqual(set(group_cols.values()), {1, 2})
+
+
+class GroupRotationTests(TestCase):
+    def test_rotate_groups_swaps_group_positions_with_students(self):
+        classroom = Classroom.objects.create(name="R1", rows=1, cols=4)
+        g1 = SeatGroup.objects.create(classroom=classroom, name="G1", order=1)
+        g2 = SeatGroup.objects.create(classroom=classroom, name="G2", order=2)
+
+        seats = {col: classroom.seats.get(row=1, col=col) for col in [1, 2, 3, 4]}
+        for col in [1, 2]:
+            seats[col].group = g1
+            seats[col].save(update_fields=["group"])
+        for col in [3, 4]:
+            seats[col].group = g2
+            seats[col].save(update_fields=["group"])
+
+        students = {}
+        for idx, name in enumerate(["A", "B", "C", "D"], start=1):
+            students[idx] = classroom.students.create(name=name, score=80 - idx)
+            seats[idx].student = students[idx]
+            seats[idx].save(update_fields=["student"])
+
+        g1.leader = students[1]
+        g1.save(update_fields=["leader"])
+
+        url = reverse("rotate_groups", args=[classroom.pk])
+        response = self.client.post(url, data=json.dumps({}), content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+
+        seats = {col: classroom.seats.get(row=1, col=col) for col in [1, 2, 3, 4]}
+        self.assertEqual(seats[1].group_id, g2.pk)
+        self.assertEqual(seats[2].group_id, g2.pk)
+        self.assertEqual(seats[3].group_id, g1.pk)
+        self.assertEqual(seats[4].group_id, g1.pk)
+
+        self.assertEqual(seats[1].student.name, "C")
+        self.assertEqual(seats[2].student.name, "D")
+        self.assertEqual(seats[3].student.name, "A")
+        self.assertEqual(seats[4].student.name, "B")
+
+        g1.refresh_from_db()
+        self.assertEqual(g1.leader_id, students[1].pk)
+
+    def test_rotate_groups_rejects_when_group_sizes_differ(self):
+        classroom = Classroom.objects.create(name="R2", rows=1, cols=5)
+        g1 = SeatGroup.objects.create(classroom=classroom, name="G1", order=1)
+        g2 = SeatGroup.objects.create(classroom=classroom, name="G2", order=2)
+
+        for col in [1, 2, 3]:
+            seat = classroom.seats.get(row=1, col=col)
+            seat.group = g1
+            seat.save(update_fields=["group"])
+        for col in [4, 5]:
+            seat = classroom.seats.get(row=1, col=col)
+            seat.group = g2
+            seat.save(update_fields=["group"])
+
+        url = reverse("rotate_groups", args=[classroom.pk])
+        response = self.client.post(url, data=json.dumps({}), content_type="application/json")
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("status"), "error")
+        self.assertIn("座位数量不一致", response.json().get("message", ""))
+
+
+class ClassroomFeatureTests(TestCase):
+    def test_export_students_svg_returns_svg_content(self):
+        classroom = Classroom.objects.create(name="SVG班", rows=1, cols=2)
+        student = classroom.students.create(name="Alice", score=95)
+        seat = classroom.seats.get(row=1, col=1)
+        seat.student = student
+        seat.save(update_fields=["student"])
+
+        url = reverse("export_students_svg", args=[classroom.pk])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("image/svg+xml", response.get("Content-Type", ""))
+        content = response.content.decode("utf-8")
+        self.assertIn("<svg", content)
+        self.assertIn("Alice", content)
+        self.assertIn("SVG班", content)
+        self.assertNotIn("总座位", content)
+        self.assertNotIn("网格", content)
+
+    def test_rename_classroom_success(self):
+        classroom = Classroom.objects.create(name="原班级", rows=2, cols=2)
+        url = reverse("rename_classroom", args=[classroom.pk])
+
+        response = self.client.post(
+            url,
+            data=json.dumps({"name": "新班级名称"}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+        classroom.refresh_from_db()
+        self.assertEqual(classroom.name, "新班级名称")
+
+    def test_rename_classroom_rejects_empty_name(self):
+        classroom = Classroom.objects.create(name="原班级2", rows=2, cols=2)
+        url = reverse("rename_classroom", args=[classroom.pk])
+
+        response = self.client.post(
+            url,
+            data=json.dumps({"name": "   "}),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("status"), "error")
+        classroom.refresh_from_db()
+        self.assertEqual(classroom.name, "原班级2")

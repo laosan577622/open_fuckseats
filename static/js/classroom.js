@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', () => {
         groupAssignBatch: root.dataset.groupAssignBatchUrl,
         groupAuto: root.dataset.groupAutoUrl,
         groupMerge: root.dataset.groupMergeUrl,
+        groupRotate: root.dataset.groupRotateUrl,
+        renameClassroom: root.dataset.renameClassroomUrl,
         state: root.dataset.stateUrl,
         undo: root.dataset.undoUrl,
         redo: root.dataset.redoUrl,
@@ -37,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const seatElements = Array.from(document.querySelectorAll('.seat'));
     const undoBtn = document.getElementById('undoBtn');
     const redoBtn = document.getElementById('redoBtn');
+    const renameClassroomBtn = document.getElementById('btn-rename-classroom');
     const groupSelect = document.getElementById('groupSelect');
     const groupAssignToggle = document.getElementById('groupAssignToggle');
     const groupApplyBtn = document.getElementById('groupApplyBtn');
@@ -45,6 +48,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const groupAutoDetectStyleCheckbox = document.getElementById('groupAutoDetectStyleCheckbox');
     const groupAutoConfirmBtn = document.getElementById('groupAutoConfirmBtn');
     const groupMergeBtn = document.getElementById('groupMergeBtn');
+    const groupRotateBtn = document.getElementById('groupRotateBtn');
     const groupClearSelectBtn = document.getElementById('groupClearSelectBtn');
     const groupMergeFromSelect = document.getElementById('groupMergeFromSelect');
     const groupMergeToSelect = document.getElementById('groupMergeToSelect');
@@ -1096,6 +1100,73 @@ document.addEventListener('DOMContentLoaded', () => {
                 .finally(() => {
                     groupMergeBtn.textContent = originalText;
                     groupMergeBtn.disabled = false;
+                });
+        });
+    }
+
+    if (groupRotateBtn) {
+        groupRotateBtn.addEventListener('click', () => {
+            if (!urls.groupRotate) {
+                alert('当前版本不支持小组轮换');
+                return;
+            }
+            if (!confirm('确定执行小组平移轮换吗？将按当前小组顺序整体交换位置。')) {
+                return;
+            }
+            const originalText = groupRotateBtn.textContent;
+            groupRotateBtn.textContent = '轮换中...';
+            groupRotateBtn.disabled = true;
+            postJson(urls.groupRotate, {})
+                .then((data) => {
+                    if (!data || data.status !== 'success') {
+                        throw new Error(data?.message || '小组轮换失败');
+                    }
+                    showInlineToast(data.message || '已完成小组轮换');
+                    refreshState();
+                })
+                .catch((err) => {
+                    alert(err.message || '小组轮换失败');
+                })
+                .finally(() => {
+                    groupRotateBtn.textContent = originalText;
+                    groupRotateBtn.disabled = false;
+                });
+        });
+    }
+
+    if (renameClassroomBtn) {
+        renameClassroomBtn.addEventListener('click', () => {
+            if (!urls.renameClassroom) {
+                alert('当前版本不支持修改班级名称');
+                return;
+            }
+            const currentName = root.dataset.classroomName || '';
+            const newName = prompt('请输入新的班级名称：', currentName);
+            if (newName === null) return;
+            const trimmed = newName.trim();
+            if (!trimmed) {
+                alert('班级名称不能为空');
+                return;
+            }
+
+            const originalText = renameClassroomBtn.textContent;
+            renameClassroomBtn.textContent = '保存中...';
+            renameClassroomBtn.disabled = true;
+
+            postJson(urls.renameClassroom, { name: trimmed })
+                .then((data) => {
+                    if (!data || data.status !== 'success') {
+                        throw new Error(data?.message || '修改班级名称失败');
+                    }
+                    showInlineToast(`班级名称已更新为：${data.name || trimmed}`);
+                    window.location.reload();
+                })
+                .catch((err) => {
+                    alert(err.message || '修改班级名称失败');
+                })
+                .finally(() => {
+                    renameClassroomBtn.textContent = originalText;
+                    renameClassroomBtn.disabled = false;
                 });
         });
     }

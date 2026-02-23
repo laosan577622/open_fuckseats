@@ -56,6 +56,9 @@
                 data-system-save="1" data-default-filename="{{ classroom.name }}_座次图.xlsx"
                 data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 data-accept-ext=".xlsx">导出排座表</a>
+            <a href="{% url 'export_students_svg' classroom.pk %}" class="btn btn-secondary" id="btn-export-svg"
+                data-system-save="1" data-default-filename="{{ classroom.name }}_座次图.svg"
+                data-accept-mime="image/svg+xml" data-accept-ext=".svg">导出可插入 PPT 的无损图片</a>
             <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-secondary" id="btn-export-group-report"
                 data-system-save="1" data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
                 data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
@@ -77,6 +80,10 @@
     </div>
 
     <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="class">
+        <div class="ribbon-group">
+            <button type="button" class="btn btn-secondary" id="btn-rename-classroom">修改班级名称</button>
+            <span class="ribbon-group-label">班级信息</span>
+        </div>
         <div class="ribbon-group ribbon-group-danger">
             <form method="post" action="{% url 'delete_classroom' classroom.pk %}" class="danger-inline-form"
                 onsubmit="return confirm('确定要删除这个班级吗？');">
@@ -97,6 +104,8 @@
     data-group-assign-batch-url="{% url 'assign_group_batch' classroom.pk %}"
     data-group-auto-url="{% url 'auto_group_from_reference' classroom.pk %}"
     data-group-merge-url="{% url 'merge_groups' classroom.pk %}"
+    data-group-rotate-url="{% url 'rotate_groups' classroom.pk %}"
+    data-rename-classroom-url="{% url 'rename_classroom' classroom.pk %}" data-classroom-name="{{ classroom.name }}"
     data-state-url="{% url 'classroom_state' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
     data-redo-url="{% url 'redo_action' classroom.pk %}" data-set-leader-url="{% url 'set_group_leader' classroom.pk %}"
     data-csrf="{{ csrf_token }}">
@@ -224,6 +233,7 @@
                         <button type="button" class="btn btn-secondary" id="groupApplyBtn">应用到选中</button>
                         <button type="button" class="btn btn-secondary" id="groupAutoBtn"
                             data-open-modal="group-auto-config-modal">自动编组</button>
+                        <button type="button" class="btn btn-secondary" id="groupRotateBtn">小组轮换</button>
                         <button type="button" class="btn btn-secondary" id="groupClearSelectBtn">清空选中</button>
                     </div>
                     <div class="tool-row">

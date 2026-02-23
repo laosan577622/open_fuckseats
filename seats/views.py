@@ -13,6 +13,7 @@ import random
 import os
 import re
 import uuid
+import html
 import openpyxl
 import math
 from collections import defaultdict
@@ -423,6 +424,75 @@ def _apply_group_batch_action(classroom, action, forward=True):
         if item.get('after_group_id'):
             affected_group_ids.add(item.get('after_group_id'))
         seat.save(update_fields=['group'])
+    if affected_group_ids:
+        _normalize_group_leaders(classroom, affected_group_ids)
+    return True
+
+
+def _apply_seat_layout_action(classroom, action, forward=True):
+    items = action.get('items', [])
+    if not isinstance(items, list):
+        return False
+
+    seat_map = {}
+    student_ids = set()
+    group_ids = set()
+    affected_group_ids = set()
+
+    for item in items:
+        try:
+            row = int(item.get('row'))
+            col = int(item.get('col'))
+        except Exception:
+            continue
+        seat = classroom.seats.filter(row=row, col=col, cell_type=SeatCellType.SEAT).first()
+        if not seat:
+            continue
+        key = (row, col)
+        seat_map[key] = {
+            'seat': seat,
+            'item': item,
+        }
+
+        before_student_id = item.get('before_student_id')
+        after_student_id = item.get('after_student_id')
+        if before_student_id:
+            student_ids.add(before_student_id)
+        if after_student_id:
+            student_ids.add(after_student_id)
+
+        before_group_id = item.get('before_group_id')
+        after_group_id = item.get('after_group_id')
+        if before_group_id:
+            group_ids.add(before_group_id)
+            affected_group_ids.add(before_group_id)
+        if after_group_id:
+            group_ids.add(after_group_id)
+            affected_group_ids.add(after_group_id)
+
+    if not seat_map:
+        return False
+
+    student_map = {s.pk: s for s in classroom.students.filter(pk__in=list(student_ids))}
+    group_map = {g.pk: g for g in classroom.groups.filter(pk__in=list(group_ids))}
+
+    with transaction.atomic():
+        # 先清空，避免 Student.assigned_seat 的唯一性冲突
+        for payload in seat_map.values():
+            seat = payload['seat']
+            seat.student = None
+            seat.group = None
+            seat.save(update_fields=['student', 'group'])
+
+        for payload in seat_map.values():
+            seat = payload['seat']
+            item = payload['item']
+            student_id = item.get('after_student_id') if forward else item.get('before_student_id')
+            group_id = item.get('after_group_id') if forward else item.get('before_group_id')
+            seat.student = student_map.get(student_id) if student_id else None
+            seat.group = group_map.get(group_id) if group_id else None
+            seat.save(update_fields=['student', 'group'])
+
     if affected_group_ids:
         _normalize_group_leaders(classroom, affected_group_ids)
     return True
@@ -2792,6 +2862,90 @@ def merge_groups(request, pk):
 
 
 @require_POST
+def rotate_groups(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+
+    groups = list(classroom.groups.all())
+    if len(groups) < 2:
+        return JsonResponse({'status': 'error', 'message': '至少需要 2 个小组才能轮换'}, status=400)
+
+    ordered_groups = []
+    expected_size = None
+    for group in groups:
+        group_seats = list(
+            group.seats
+            .filter(cell_type=SeatCellType.SEAT)
+            .select_related('student', 'group')
+            .order_by('row', 'col')
+        )
+        if not group_seats:
+            return JsonResponse({'status': 'error', 'message': f'小组【{group.name}】没有可轮换的座位'}, status=400)
+        if expected_size is None:
+            expected_size = len(group_seats)
+        elif len(group_seats) != expected_size:
+            return JsonResponse({'status': 'error', 'message': '小组座位数量不一致，无法执行平移轮换'}, status=400)
+
+        avg_row = sum(seat.row for seat in group_seats) / len(group_seats)
+        avg_col = sum(seat.col for seat in group_seats) / len(group_seats)
+        ordered_groups.append({
+            'group': group,
+            'seats': group_seats,
+            'avg_row': avg_row,
+            'avg_col': avg_col,
+        })
+
+    ordered_groups.sort(
+        key=lambda item: (
+            round(item['avg_row'], 6),
+            round(item['avg_col'], 6),
+            item['group'].order,
+            item['group'].pk
+        )
+    )
+
+    action_items = []
+    for idx, source in enumerate(ordered_groups):
+        target = ordered_groups[(idx + 1) % len(ordered_groups)]
+        source_group = source['group']
+        source_seats = source['seats']
+        target_seats = target['seats']
+
+        for source_seat, target_seat in zip(source_seats, target_seats):
+            action_items.append({
+                'row': target_seat.row,
+                'col': target_seat.col,
+                'before_student_id': target_seat.student_id,
+                'after_student_id': source_seat.student_id,
+                'before_group_id': target_seat.group_id,
+                'after_group_id': source_group.pk
+            })
+
+    if not action_items:
+        return JsonResponse({'status': 'error', 'message': '没有可轮换的数据'}, status=400)
+
+    action = {'type': 'seat_layout_batch', 'items': action_items}
+
+    try:
+        with transaction.atomic():
+            if not _apply_seat_layout_action(classroom, action, forward=True):
+                raise ValueError('轮换失败：无法应用座位布局')
+            violations = _stabilize_layout_with_rules(classroom, request)
+            if violations:
+                raise ValueError(f'轮换失败：{_format_issues_preview(violations)}')
+            _push_action(request, pk, action)
+    except ValueError as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'轮换失败：{e}'}, status=400)
+
+    order_preview = ' -> '.join(item['group'].name for item in ordered_groups)
+    return JsonResponse({
+        'status': 'success',
+        'message': f'已完成小组平移轮换：{order_preview}'
+    })
+
+
+@require_POST
 def rename_group(request, pk, group_id):
     classroom = get_object_or_404(Classroom, pk=pk)
     group = get_object_or_404(SeatGroup, classroom=classroom, pk=group_id)
@@ -3053,6 +3207,129 @@ def export_students(request, pk):
     response['Content-Disposition'] = f'attachment; filename="{classroom.name}_座次图.xlsx"'
     wb.save(response)
 
+    return response
+
+
+def export_students_svg(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    seats = list(classroom.seats.select_related('student', 'group').all())
+    seat_map = _build_seat_map(seats)
+
+    cell_w = 120
+    cell_h = 86
+    gap = 10
+    padding_x = 24
+    padding_y = 24
+    header_h = 90
+
+    grid_w = classroom.cols * cell_w + max(0, classroom.cols - 1) * gap
+    grid_h = classroom.rows * cell_h + max(0, classroom.rows - 1) * gap
+
+    width = padding_x * 2 + grid_w
+    height = padding_y * 2 + header_h + grid_h
+    grid_top = padding_y + header_h
+
+    podium_w = min(340, max(180, int(grid_w * 0.42)))
+    podium_h = 34
+    podium_x = padding_x + (grid_w - podium_w) // 2
+    podium_y = padding_y + 32
+
+    group_palette = [
+        '#0a59f7', '#00a38c', '#ff8b00', '#e45193',
+        '#6b64ff', '#2ca2ff', '#13a44a', '#c85a0f'
+    ]
+
+    def group_color(group_id):
+        if not group_id:
+            return '#9aa6c2'
+        return group_palette[(int(group_id) - 1) % len(group_palette)]
+
+    chunks = [
+        '<?xml version="1.0" encoding="UTF-8"?>',
+        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
+        '<defs>',
+        '<style><![CDATA['
+        '.title{font:700 24px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#0f172a;}'
+        '.cell-name{font:600 16px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#111827;}'
+        '.cell-sub{font:500 12px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#667085;}'
+        '.tag{font:700 11px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#ffffff;}'
+        '.cell-type{font:600 13px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#475467;}'
+        ']]></style>',
+        '</defs>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f7faff"/>',
+        f'<text x="{padding_x}" y="{padding_y + 28}" class="title">{html.escape(classroom.name)} 座次图</text>',
+        f'<rect x="{podium_x}" y="{podium_y}" width="{podium_w}" height="{podium_h}" rx="12" fill="#e7efff" stroke="#c9dbff"/>',
+        f'<text x="{podium_x + podium_w / 2}" y="{podium_y + 22}" text-anchor="middle" class="cell-type">讲台</text>',
+    ]
+
+    for r in range(1, classroom.rows + 1):
+        for c in range(1, classroom.cols + 1):
+            seat = seat_map.get((r, c))
+            if not seat:
+                continue
+
+            x = padding_x + (c - 1) * (cell_w + gap)
+            y = grid_top + (r - 1) * (cell_h + gap)
+
+            if seat.cell_type == SeatCellType.SEAT:
+                if seat.student_id:
+                    fill = '#eef4ff'
+                    stroke = '#bfd4ff'
+                else:
+                    fill = '#f8fbff'
+                    stroke = '#d3e1ff'
+
+                chunks.append(
+                    f'<rect x="{x}" y="{y}" width="{cell_w}" height="{cell_h}" rx="16" fill="{fill}" stroke="{stroke}"/>'
+                )
+                chunks.append(
+                    f'<text x="{x + 8}" y="{y + 16}" class="cell-sub">({r}-{c})</text>'
+                )
+
+                if seat.group_id and seat.group:
+                    tag_w = max(36, min(66, 18 + len(seat.group.name) * 12))
+                    tag_color = group_color(seat.group_id)
+                    chunks.append(
+                        f'<rect x="{x + cell_w - tag_w - 8}" y="{y + 8}" width="{tag_w}" height="20" rx="10" fill="{tag_color}"/>'
+                    )
+                    chunks.append(
+                        f'<text x="{x + cell_w - tag_w / 2 - 8}" y="{y + 22}" text-anchor="middle" class="tag">{html.escape(seat.group.name)}</text>'
+                    )
+
+                if seat.student:
+                    chunks.append(
+                        f'<text x="{x + 12}" y="{y + 48}" class="cell-name">{html.escape(seat.student.name)}</text>'
+                    )
+                    if (seat.student.score or 0) > 0:
+                        chunks.append(
+                            f'<text x="{x + 12}" y="{y + 68}" class="cell-sub">{seat.student.display_score}分</text>'
+                        )
+                else:
+                    chunks.append(
+                        f'<text x="{x + 12}" y="{y + 56}" class="cell-sub">空座位</text>'
+                    )
+                continue
+
+            if seat.cell_type == SeatCellType.AISLE:
+                fill = '#eff3f8'
+            elif seat.cell_type == SeatCellType.PODIUM:
+                fill = '#fff3e8'
+            else:
+                fill = '#f2f4f7'
+
+            chunks.append(
+                f'<rect x="{x}" y="{y}" width="{cell_w}" height="{cell_h}" rx="16" fill="{fill}" stroke="#d0d5dd"/>'
+            )
+            chunks.append(
+                f'<text x="{x + cell_w / 2}" y="{y + 50}" text-anchor="middle" class="cell-type">{html.escape(seat.get_cell_type_display())}</text>'
+            )
+
+    chunks.append('</svg>')
+    svg_content = ''.join(chunks)
+
+    response = HttpResponse(svg_content, content_type='image/svg+xml; charset=utf-8')
+    filename = escape_uri_path(f'{classroom.name}_座次图.svg')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
@@ -3386,6 +3663,8 @@ def undo_action(request, pk):
         _apply_group_action(classroom, action, forward=False)
     elif action['type'] == 'group_batch':
         _apply_group_batch_action(classroom, action, forward=False)
+    elif action['type'] == 'seat_layout_batch':
+        _apply_seat_layout_action(classroom, action, forward=False)
     history['redo'].append(action)
     request.session.modified = True
     return JsonResponse({'status': 'success'})
@@ -3407,6 +3686,8 @@ def redo_action(request, pk):
         _apply_group_action(classroom, action, forward=True)
     elif action['type'] == 'group_batch':
         _apply_group_batch_action(classroom, action, forward=True)
+    elif action['type'] == 'seat_layout_batch':
+        _apply_seat_layout_action(classroom, action, forward=True)
     history['undo'].append(action)
     request.session.modified = True
     return JsonResponse({'status': 'success'})
@@ -3416,6 +3697,32 @@ def delete_classroom(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     classroom.delete()
     return redirect('index')
+
+
+@require_POST
+def rename_classroom(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    is_json = bool(request.content_type and 'application/json' in request.content_type)
+    try:
+        if is_json:
+            payload = json.loads(request.body or '{}')
+            new_name = str(payload.get('name') or '').strip()
+        else:
+            new_name = str(request.POST.get('name') or '').strip()
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': '请求数据格式错误'}, status=400)
+
+    if not new_name:
+        return JsonResponse({'status': 'error', 'message': '班级名称不能为空'}, status=400)
+    if len(new_name) > 100:
+        return JsonResponse({'status': 'error', 'message': '班级名称不能超过 100 个字符'}, status=400)
+
+    classroom.name = new_name
+    classroom.save(update_fields=['name'])
+
+    if is_json or _is_ajax_request(request):
+        return JsonResponse({'status': 'success', 'name': classroom.name})
+    return redirect('classroom_detail', pk=pk)
 
 
 @require_POST
