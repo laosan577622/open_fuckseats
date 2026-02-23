@@ -101,6 +101,182 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 2200);
     };
 
+    const excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+
+    const sanitizeFilename = (name, fallback = '导出文件') => {
+        const normalized = String(name || '')
+            .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+            .replace(/[. ]+$/g, '')
+            .trim();
+        return normalized || fallback;
+    };
+
+    const parseContentDispositionFilename = (contentDisposition) => {
+        if (!contentDisposition) return '';
+        const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
+        if (utf8Match && utf8Match[1]) {
+            try {
+                return decodeURIComponent(utf8Match[1]);
+            } catch (_) {
+                return utf8Match[1];
+            }
+        }
+        const plainMatch = contentDisposition.match(/filename\s*=\s*"([^"]+)"|filename\s*=\s*([^;]+)/i);
+        if (!plainMatch) return '';
+        return (plainMatch[1] || plainMatch[2] || '').trim();
+    };
+
+    const inferFilenameFromUrl = (url, fallback = '导出文件') => {
+        try {
+            const parsed = new URL(url, window.location.origin);
+            const lastPart = parsed.pathname.split('/').filter(Boolean).pop() || '';
+            if (!lastPart) return fallback;
+            if (lastPart.includes('.')) return lastPart;
+            return fallback;
+        } catch (_) {
+            return fallback;
+        }
+    };
+
+    const parseAcceptExtensions = (raw = '') => {
+        return String(raw)
+            .split(',')
+            .map((item) => item.trim())
+            .filter(Boolean)
+            .map((item) => (item.startsWith('.') ? item : `.${item}`));
+    };
+
+    const buildSavePickerTypes = (acceptMime, extensions, filename) => {
+        const extList = [...(extensions || [])];
+        if (!extList.length && filename.includes('.')) {
+            const suffix = filename.slice(filename.lastIndexOf('.'));
+            if (suffix && suffix.length <= 10) {
+                extList.push(suffix);
+            }
+        }
+        if (!extList.length) return [];
+        const mime = acceptMime || 'application/octet-stream';
+        return [{
+            description: '导出文件',
+            accept: {
+                [mime]: extList
+            }
+        }];
+    };
+
+    const triggerBrowserDownload = (blob, filename) => {
+        const blobUrl = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = blobUrl;
+        link.download = filename;
+        link.style.display = 'none';
+        document.body.appendChild(link);
+        link.click();
+        setTimeout(() => {
+            URL.revokeObjectURL(blobUrl);
+            link.remove();
+        }, 1000);
+    };
+
+    const openSaveFileHandle = async (filename, acceptMime, extensions) => {
+        if (!window.isSecureContext || typeof window.showSaveFilePicker !== 'function') return null;
+        const pickerOptions = {
+            suggestedName: filename
+        };
+        const types = buildSavePickerTypes(acceptMime, extensions, filename);
+        if (types.length) pickerOptions.types = types;
+        return window.showSaveFilePicker(pickerOptions);
+    };
+
+    const saveExportFromUrl = async (url, options = {}) => {
+        if (!url) throw new Error('导出地址无效');
+        const fallbackFilename = sanitizeFilename(
+            options.fallbackFilename || inferFilenameFromUrl(url),
+            '导出文件'
+        );
+        const acceptMime = options.acceptMime || '';
+        const acceptExtensions = options.acceptExtensions || [];
+
+        let fileHandle = null;
+        try {
+            fileHandle = await openSaveFileHandle(fallbackFilename, acceptMime, acceptExtensions);
+        } catch (error) {
+            if (error?.name === 'AbortError') {
+                return { status: 'cancelled', filename: fallbackFilename };
+            }
+        }
+
+        const response = await fetch(url, {
+            method: 'GET',
+            credentials: 'same-origin'
+        });
+        if (!response.ok) {
+            throw new Error(`导出失败（${response.status}）`);
+        }
+
+        const headerFilename = parseContentDispositionFilename(response.headers.get('Content-Disposition') || '');
+        const finalFilename = sanitizeFilename(headerFilename || fallbackFilename, fallbackFilename);
+        const blob = await response.blob();
+
+        if (fileHandle) {
+            const writable = await fileHandle.createWritable();
+            await writable.write(blob);
+            await writable.close();
+            return { status: 'saved', filename: finalFilename };
+        }
+
+        triggerBrowserDownload(blob, finalFilename);
+        return { status: 'downloaded', filename: finalFilename };
+    };
+
+    const setExportAnchorPending = (anchor, pending) => {
+        if (!anchor) return;
+        if (pending) {
+            anchor.dataset.pending = '1';
+            anchor.dataset.prevText = anchor.textContent || '';
+            anchor.style.pointerEvents = 'none';
+            anchor.textContent = '保存中...';
+            return;
+        }
+        anchor.dataset.pending = '';
+        anchor.style.pointerEvents = '';
+        if (anchor.dataset.prevText) {
+            anchor.textContent = anchor.dataset.prevText;
+        }
+    };
+
+    const bindSystemSaveLinks = () => {
+        document.querySelectorAll('a[data-system-save="1"]').forEach((anchor) => {
+            if (anchor.dataset.boundSystemSave === '1') return;
+            anchor.dataset.boundSystemSave = '1';
+            anchor.addEventListener('click', async (event) => {
+                event.preventDefault();
+                if (anchor.dataset.pending === '1') return;
+                const href = anchor.getAttribute('href');
+                const fallbackFilename = anchor.dataset.defaultFilename || '';
+                const acceptMime = anchor.dataset.acceptMime || '';
+                const acceptExtensions = parseAcceptExtensions(anchor.dataset.acceptExt || '');
+                setExportAnchorPending(anchor, true);
+                try {
+                    const result = await saveExportFromUrl(href, {
+                        fallbackFilename,
+                        acceptMime,
+                        acceptExtensions
+                    });
+                    if (result.status === 'saved') {
+                        showInlineToast(`文件已保存：${result.filename}`);
+                    } else if (result.status === 'downloaded') {
+                        showInlineToast(`已开始下载：${result.filename}`);
+                    }
+                } catch (error) {
+                    alert(error?.message || '导出失败');
+                } finally {
+                    setExportAnchorPending(anchor, false);
+                }
+            });
+        });
+    };
+
     const postForm = (url, formData = null) => {
         return fetch(url, {
             method: 'POST',
@@ -582,8 +758,28 @@ document.addEventListener('DOMContentLoaded', () => {
                             const type = btn.dataset.msgType;
 
                             if (type === 'export_suggestion') {
-                                window.location.href = url;
-                                btn.closest('.toast-notification').remove();
+                                const originalText = btn.textContent;
+                                btn.disabled = true;
+                                btn.textContent = '保存中...';
+                                saveExportFromUrl(url, {
+                                    fallbackFilename: '小组作业表.xlsx',
+                                    acceptMime: excelMime,
+                                    acceptExtensions: ['.xlsx']
+                                }).then((result) => {
+                                    if (result.status === 'cancelled') return;
+                                    if (result.status === 'saved') {
+                                        showInlineToast(`文件已保存：${result.filename}`);
+                                    } else if (result.status === 'downloaded') {
+                                        showInlineToast(`已开始下载：${result.filename}`);
+                                    }
+                                    btn.closest('.toast-notification')?.remove();
+                                }).catch((error) => {
+                                    alert(error?.message || '导出失败');
+                                }).finally(() => {
+                                    if (!btn.isConnected) return;
+                                    btn.disabled = false;
+                                    btn.textContent = originalText;
+                                });
                                 return;
                             }
 
@@ -1061,6 +1257,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     });
+
+    bindSystemSaveLinks();
 
     if (seatStage) {
         seatStage.addEventListener('mousedown', (e) => {

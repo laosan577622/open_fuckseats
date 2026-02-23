@@ -52,8 +52,14 @@
             <span class="ribbon-group-label">导入导出</span>
         </div>
         <div class="ribbon-group">
-            <a href="{% url 'export_students' classroom.pk %}" class="btn btn-secondary" id="btn-export">导出排座表</a>
-            <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-secondary" id="btn-export-group-report">导出小组登记表</a>
+            <a href="{% url 'export_students' classroom.pk %}" class="btn btn-secondary" id="btn-export"
+                data-system-save="1" data-default-filename="{{ classroom.name }}_座次图.xlsx"
+                data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                data-accept-ext=".xlsx">导出排座表</a>
+            <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-secondary" id="btn-export-group-report"
+                data-system-save="1" data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
+                data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                data-accept-ext=".xlsx">导出小组登记表</a>
             <span class="ribbon-group-label">导出</span>
         </div>
         <div class="ribbon-group">
@@ -306,7 +312,10 @@
                         <button type="button" class="btn btn-secondary" data-open-modal="seat-layout-import-modal">导入座位表</button>
                     </div>
                     <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-secondary"
-                        style="width: 100%;">导出小组登记表</a>
+                        style="width: 100%;" data-system-save="1"
+                        data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
+                        data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        data-accept-ext=".xlsx">导出小组登记表</a>
 
                     <div class="panel-header" style="margin-top: 8px;">
                         <h3>布局快照</h3>
@@ -515,7 +524,10 @@
             <div class="modal-block">
                 <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 14px;">
                     导出当前班级完整快照，后续可直接导回系统。</p>
-                <a href="{% url 'export_seats_file' classroom.pk %}" class="btn btn-secondary">导出 .seats</a>
+                <a href="{% url 'export_seats_file' classroom.pk %}" class="btn btn-secondary"
+                    data-system-save="1" data-default-filename="{{ classroom.name }}.seats"
+                    data-accept-mime="application/octet-stream"
+                    data-accept-ext=".seats,.json">导出 .seats</a>
             </div>
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" data-close-modal="seats-file-modal">关闭</button>
