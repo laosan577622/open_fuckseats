@@ -3,85 +3,94 @@
 
 {% block title %}{{ classroom.name }} - 排座详情{% endblock %}
 
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="home">开始</button>
+<button type="button" class="ribbon-tab" data-ribbon-tab="view">视图</button>
+<button type="button" class="ribbon-tab" data-ribbon-tab="file">文件</button>
+<button type="button" class="ribbon-tab" data-ribbon-tab="help">帮助</button>
+<button type="button" class="ribbon-tab" data-ribbon-tab="class">班级</button>
+{% endblock %}
+
 {% block actions %}
-<form method="post" action="{% url 'delete_classroom' classroom.pk %}" style="margin-right: auto;"
-    onsubmit="return confirm('确定要删除这个班级吗？');">
-    {% csrf_token %}
-    <button type="submit" class="btn btn-danger" style="margin-right: 12px;">删除班级</button>
-</form>
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="home">
+        <div class="ribbon-group">
+            <form method="post" action="{% url 'auto_arrange_seats' classroom.pk %}" class="quick-arrange-form">
+                {% csrf_token %}
+                <select name="method" aria-label="自动排座算法">
+                    <option value="random">随机排座</option>
+                    <option value="score_desc">按成绩从高到低</option>
+                    <option value="score_asc">按成绩从低到高</option>
+                    <option value="good_front">成绩好的在前排</option>
+                    <option value="good_back">成绩好的在后排</option>
+                    <option value="score_spread">相邻成绩差异大</option>
+                    <option value="group_balanced">小组均衡模式</option>
+                    <option value="group_mentor">小组优带差模式</option>
+                </select>
+                <button class="btn btn-primary" id="btn-auto-arrange" type="submit">执行排座</button>
+            </form>
+            <span class="ribbon-group-label">排座</span>
+        </div>
+    </div>
 
-<a href="{% url 'layout_editor' classroom.pk %}" class="btn btn-secondary" style="margin-right: 12px;"
-    id="btn-layout-editor">布局编辑</a>
-<a href="{% url 'export_students' classroom.pk %}" class="btn btn-secondary" style="margin-right: 12px;"
-    id="btn-export">导出排座表</a>
-<button class="btn btn-secondary" style="margin-right: 12px;" onclick="toggleFullScreen()"
-    id="btn-fullscreen">全屏</button>
-<button class="btn btn-secondary" style="margin-right: 12px;" onclick="startTour()">教程</button>
+    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="view">
+        <div class="ribbon-group">
+            <a href="{% url 'layout_editor' classroom.pk %}" class="btn btn-secondary" id="btn-layout-editor">布局编辑</a>
+            <button type="button" class="btn btn-secondary" onclick="toggleFullScreen()" id="btn-fullscreen">全屏</button>
+            <span class="ribbon-group-label">视图</span>
+        </div>
+    </div>
 
-<div style="position: relative; display: inline-block;">
-    <button class="btn btn-primary" id="btn-auto-arrange"
-        onclick="document.getElementById('arrangeMenu').classList.toggle('show')">自动排座</button>
-    <div id="arrangeMenu" class="dropdown-menu">
-        <form method="post" action="{% url 'auto_arrange_seats' classroom.pk %}">
-            {% csrf_token %}
-            <button type="submit" name="method" value="random">随机排座</button>
-            <button type="submit" name="method" value="score_desc">按成绩从高到低</button>
-            <button type="submit" name="method" value="score_asc">按成绩从低到高</button>
-            <button type="submit" name="method" value="good_front">成绩好的在前排</button>
-            <button type="submit" name="method" value="good_back">成绩好的在后排</button>
-            <button type="submit" name="method" value="score_spread">相邻成绩差异大</button>
-            <button type="submit" name="method" value="group_balanced">小组均衡模式</button>
-            <button type="submit" name="method" value="group_mentor">小组优带差模式</button>
-        </form>
+    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="file">
+        <div class="ribbon-group">
+            <button type="button" class="btn btn-secondary" id="btn-open-excel-import-modal"
+                data-open-modal="excel-import-modal">导入 Excel 成绩表</button>
+            <button type="button" class="btn btn-secondary" id="btn-open-seats-modal"
+                data-open-modal="seats-file-modal">导入/导出 .seats</button>
+            <button type="button" class="btn btn-secondary" id="btn-open-layout-import-modal"
+                data-open-modal="seat-layout-import-modal">导入座位表</button>
+            <span class="ribbon-group-label">导入导出</span>
+        </div>
+        <div class="ribbon-group">
+            <a href="{% url 'export_students' classroom.pk %}" class="btn btn-secondary" id="btn-export">导出排座表</a>
+            <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-secondary" id="btn-export-group-report">导出小组登记表</a>
+            <span class="ribbon-group-label">导出</span>
+        </div>
+        <div class="ribbon-group">
+            <button type="button" class="btn btn-secondary" data-open-side-tab="files" id="btn-open-files-tab">文件面板</button>
+            <button type="button" class="btn btn-secondary" data-open-side-tab="constraints" id="btn-open-constraints-tab">约束管理</button>
+            <span class="ribbon-group-label">面板</span>
+        </div>
+    </div>
+
+    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="help">
+        <div class="ribbon-group">
+            <button type="button" class="btn btn-secondary" onclick="startTour()" id="btn-tour">教程</button>
+            <span class="ribbon-group-label">帮助</span>
+        </div>
+    </div>
+
+    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="class">
+        <div class="ribbon-group ribbon-group-danger">
+            <form method="post" action="{% url 'delete_classroom' classroom.pk %}" class="danger-inline-form"
+                onsubmit="return confirm('确定要删除这个班级吗？');">
+                {% csrf_token %}
+                <button type="submit" class="btn btn-danger">删除班级</button>
+            </form>
+            <span class="ribbon-group-label">危险操作</span>
+        </div>
     </div>
 </div>
 {% endblock %}
 
 {% block content %}
-<style>
-    /* 仅针对排座详情页的沉浸式布局样式覆盖 */
-    html,
-    body {
-        height: 100%;
-        overflow: hidden;
-        padding-top: 0;
-        /* 移除 body 的默认 padding，由 layout 内部接管 */
-    }
-
-    .seat.occupied.is-leader .seat-name {
-        color: #ff3b30;
-        /* Red color for leader */
-        font-weight: bold;
-    }
-
-    .context-menu {
-        display: none;
-        position: absolute;
-        z-index: 1000;
-        background: white;
-        border: 1px solid #ddd;
-        border-radius: 8px;
-        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-        padding: 4px 0;
-        min-width: 140px;
-    }
-
-    .context-menu .menu-item {
-        padding: 8px 16px;
-        cursor: pointer;
-        font-size: 13px;
-        color: #333;
-        transition: background 0.2s;
-    }
-
-    .context-menu .menu-item:hover {
-        background: #f5f5f7;
-    }
-</style>
 <div id="classroom-root" class="classroom-layout animate-fade-in" data-move-url="{% url 'move_student' classroom.pk %}"
+    data-move-batch-url="{% url 'move_students_batch' classroom.pk %}"
     data-clear-url="{% url 'clear_seat' classroom.pk %}" data-assign-url="{% url 'assign_student' classroom.pk %}"
     data-group-assign-url="{% url 'assign_group' classroom.pk %}"
     data-group-assign-batch-url="{% url 'assign_group_batch' classroom.pk %}"
+    data-group-auto-url="{% url 'auto_group_from_reference' classroom.pk %}"
+    data-group-merge-url="{% url 'merge_groups' classroom.pk %}"
     data-state-url="{% url 'classroom_state' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
     data-redo-url="{% url 'redo_action' classroom.pk %}" data-set-leader-url="{% url 'set_group_leader' classroom.pk %}"
     data-csrf="{{ csrf_token }}">
@@ -136,8 +145,7 @@
                 </div>
             </div>
             <div class="panel-note">快捷键：Ctrl+Z 撤销，Ctrl+Y 重做，Ctrl+C 复制，Ctrl+X 剪切，Ctrl+V 粘贴，Delete 删除，Ctrl+D
-                移入暂存区，Ctrl+U
-                从暂存区取出</div>
+                移入暂存区，Ctrl+U 从暂存区取出。按 Ctrl/Shift 点击可多选，拖拽任一选中座位可批量移动。</div>
         </div>
 
         <div class="panel-card panel-tabs">
@@ -146,7 +154,6 @@
                 <button type="button" class="tab-btn" data-tab="groups">小组</button>
                 <button type="button" class="tab-btn" data-tab="constraints">约束</button>
                 <button type="button" class="tab-btn" data-tab="files">文件</button>
-                <button type="button" class="tab-btn" data-tab="suggestions">建议</button>
             </div>
 
             <div class="tab-body">
@@ -155,6 +162,7 @@
                         <h3>未入座</h3>
                         <span class="panel-meta" id="unseatedCount">{{ unseated_students|length }} 人</span>
                     </div>
+                    <input type="text" id="unseatedSearch" placeholder="搜索未入座学生（姓名）">
                     <div class="unseated-list">
                         {% for student in unseated_students %}
                         <div class="unseated-item" draggable="true" data-student-id="{{ student.pk }}">
@@ -176,50 +184,31 @@
                     <div class="panel-header">
                         <h3>小组管理</h3>
                     </div>
-                    <form method="post" action="{% url 'create_group' classroom.pk %}" class="inline-form">
+                    <form method="post" action="{% url 'create_group' classroom.pk %}" class="inline-form" id="createGroupForm">
                         {% csrf_token %}
                         <input type="text" name="name" placeholder="小组名称" required>
                         <button type="submit" class="btn btn-primary">添加</button>
                     </form>
-                    <div class="group-list">
+                    <div class="group-list" id="groupList">
                         {% for group in groups %}
-                        <div class="group-item">
+                        <div class="group-item" data-group-id="{{ group.pk }}" data-group-name="{{ group.name }}">
                             <span>{{ group.name }}</span>
                             <div style="display: flex; gap: 4px;">
                                 <button type="button" class="btn btn-secondary"
-                                    style="padding: 2px 8px; font-size: 12px;"
-                                    onclick="renameGroup('{{ group.pk }}', '{{ group.name|escapejs }}')">重命名</button>
-                                <form method="post" action="{% url 'delete_group' classroom.pk group.pk %}"
-                                    style="margin:0;">
-                                    {% csrf_token %}
-                                    <button type="submit" class="btn btn-secondary"
-                                        style="padding: 2px 8px; font-size: 12px;">删除</button>
-                                </form>
+                                    style="padding: 2px 8px; font-size: 12px;" data-action="rename-group"
+                                    data-url="{% url 'rename_group' classroom.pk group.pk %}">重命名</button>
+                                <button type="button" class="btn btn-secondary"
+                                    style="padding: 2px 8px; font-size: 12px;" data-action="delete-group"
+                                    data-url="{% url 'delete_group' classroom.pk group.pk %}">删除</button>
                             </div>
                         </div>
                         {% empty %}
                         <div class="empty-hint">暂无小组</div>
                         {% endfor %}
                     </div>
-
-                    <form id="renameGroupForm" method="post" style="display:none;">
-                        {% csrf_token %}
-                        <input type="hidden" name="name" id="renameGroupNameInput">
-                    </form>
-                    <script>
-                        function renameGroup(groupId, currentName) {
-                            const newName = prompt('请输入新的小组名称：', currentName);
-                            if (newName && newName.trim() !== '') {
-                                const form = document.getElementById('renameGroupForm');
-                                form.action = `{% url 'classroom_detail' classroom.pk %}group/${groupId}/rename/`;
-                                document.getElementById('renameGroupNameInput').value = newName;
-                                form.submit();
-                            }
-                        }
-                    </script>
                     <div class="panel-note">开启分组模式后可框选或点击多选座位，再应用分组</div>
                     <div class="tool-row">
-                        <select id="groupSelect">
+                        <select id="groupSelect" class="group-select-control">
                             <option value="">未分组</option>
                             {% for group in groups %}
                             <option value="{{ group.pk }}">{{ group.name }}</option>
@@ -227,7 +216,24 @@
                         </select>
                         <button type="button" class="btn btn-secondary" id="groupAssignToggle">分组模式</button>
                         <button type="button" class="btn btn-secondary" id="groupApplyBtn">应用到选中</button>
+                        <button type="button" class="btn btn-secondary" id="groupAutoBtn"
+                            data-open-modal="group-auto-config-modal">自动编组</button>
                         <button type="button" class="btn btn-secondary" id="groupClearSelectBtn">清空选中</button>
+                    </div>
+                    <div class="tool-row">
+                        <select id="groupMergeFromSelect" class="group-select-control">
+                            <option value="">来源组</option>
+                            {% for group in groups %}
+                            <option value="{{ group.pk }}">{{ group.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <select id="groupMergeToSelect" class="group-select-control">
+                            <option value="">目标组</option>
+                            {% for group in groups %}
+                            <option value="{{ group.pk }}">{{ group.name }}</option>
+                            {% endfor %}
+                        </select>
+                        <button type="button" class="btn btn-secondary" id="groupMergeBtn">合并组</button>
                     </div>
                 </div>
 
@@ -292,27 +298,15 @@
 
                 <div class="tab-panel" data-tab-panel="files">
                     <div class="panel-header">
-                        <h3>数据导入导出</h3>
+                        <h3>文件导入导出</h3>
                     </div>
-                    <form method="post" action="{% url 'import_students' classroom.pk %}" enctype="multipart/form-data"
-                        class="stack-form" onsubmit="return handleImportSubmit(event)">
-                        {% csrf_token %}
-                        <input type="file" name="excel_file" accept=".xlsx, .xls" required>
-                        <label class="checkbox-row">
-                            <input type="checkbox" name="clear_existing" value="1">导入前清空学生
-                        </label>
-                        <button type="submit" class="btn btn-primary">导入学生Excel</button>
-                    </form>
-                    <form method="post" action="{% url 'import_seats_file' classroom.pk %}"
-                        enctype="multipart/form-data" class="stack-form">
-                        {% csrf_token %}
-                        <input type="file" name="seats_file" accept=".seats" required>
-                        <button type="submit" class="btn btn-secondary">导入 .seats</button>
-                    </form>
-                    <a href="{% url 'export_seats_file' classroom.pk %}" class="btn btn-secondary"
-                        style="width: 100%;">导出 .seats</a>
+                    <div class="tool-row" style="margin-bottom: 8px;">
+                        <button type="button" class="btn btn-primary" data-open-modal="excel-import-modal">导入 Excel 成绩表</button>
+                        <button type="button" class="btn btn-secondary" data-open-modal="seats-file-modal">导入/导出 .seats</button>
+                        <button type="button" class="btn btn-secondary" data-open-modal="seat-layout-import-modal">导入座位表</button>
+                    </div>
                     <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-secondary"
-                        style="width: 100%; margin-top: 8px;">导出小组登记表</a>
+                        style="width: 100%;">导出小组登记表</a>
 
                     <div class="panel-header" style="margin-top: 8px;">
                         <h3>布局快照</h3>
@@ -341,21 +335,193 @@
                     </div>
                 </div>
 
-                <div class="tab-panel" data-tab-panel="suggestions">
-                    <div class="panel-header">
-                        <h3>排座建议</h3>
+            </div>
+        </div>
+    </aside>
+
+    <div id="group-auto-config-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 8px;">自动编组配置</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 14px;">
+                请选择参考小组和“无法整除”时的处理策略。</p>
+            <div class="form-group" style="margin-bottom: 10px;">
+                <label>参考小组</label>
+                <select id="groupAutoReferenceSelect" class="group-select-control">
+                    <option value="">请选择参考小组</option>
+                    {% for group in groups %}
+                    <option value="{{ group.pk }}">{{ group.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="margin-bottom: 8px;">
+                <label>余数处理策略</label>
+                <div class="stack-form">
+                    <label class="checkbox-row">
+                        <input type="radio" name="group_auto_remainder_strategy" value="merge_prev">
+                        最后一人与附近人/上一组编为一组
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="radio" name="group_auto_remainder_strategy" value="new_group" checked>
+                        剩余人编为一组
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="radio" name="group_auto_remainder_strategy" value="skip">
+                        不编组（仅整组人数）
+                    </label>
+                </div>
+            </div>
+            <label class="checkbox-row" style="margin-bottom: 8px;">
+                <input type="checkbox" id="groupAutoDetectStyleCheckbox" checked>
+                自动识别编组样式（竖排/横排/附近几人）
+            </label>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" data-close-modal="group-auto-config-modal">取消</button>
+                <button type="button" class="btn btn-primary" id="groupAutoConfirmBtn">开始编组</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="seat-layout-import-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 8px;">导入座位表（Excel）</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 14px; font-size: 14px;">
+                支持自动识别合并单元格，空白单元格按走廊处理；自动识别讲台/空位/座位，并支持手动词典覆盖识别。</p>
+            <form id="seat-layout-upload-form" method="post" action="{% url 'import_layout_excel' classroom.pk %}"
+                enctype="multipart/form-data" onsubmit="return handleSeatLayoutUpload(event)">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label>座位表文件</label>
+                    <input type="file" name="layout_excel_file" accept=".xlsx,.xls,.xlsm" required>
+                </div>
+                <div class="modal-actions" style="margin-top: 12px;">
+                    <button type="button" class="btn btn-secondary" data-close-modal="seat-layout-import-modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="seat-layout-upload-btn">上传并识别</button>
+                </div>
+            </form>
+
+            <div id="seat-layout-config" style="display: none; margin-top: 14px;">
+                <input type="hidden" id="seat-layout-file-id">
+                <div class="constraint-grid">
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>开始行</label>
+                        <input type="number" id="seat-layout-start-row" min="1">
                     </div>
-                    <div class="suggestion-list" id="suggestionList">
-                        {% for suggestion in suggestions %}
-                        <div class="suggestion-item">{{ suggestion }}</div>
-                        {% empty %}
-                        <div class="empty-hint">当前布局没有明显问题</div>
-                        {% endfor %}
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>结束行</label>
+                        <input type="number" id="seat-layout-end-row" min="1">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>姓名识别</label>
+                        <label class="checkbox-row">
+                            <input type="checkbox" id="seat-layout-auto-name" checked>
+                            自动识别2-5位无数字文本
+                        </label>
+                    </div>
+                </div>
+
+                <div class="tool-row seat-layout-transform-row" style="margin-top: 4px;">
+                    <button type="button" class="btn btn-secondary seat-layout-transform-btn active"
+                        data-layout-transform="none" onclick="setSeatLayoutTransform('none')">原始方向</button>
+                    <button type="button" class="btn btn-secondary seat-layout-transform-btn"
+                        data-layout-transform="flip_ud" onclick="setSeatLayoutTransform('flip_ud')">上下翻转</button>
+                    <button type="button" class="btn btn-secondary seat-layout-transform-btn"
+                        data-layout-transform="flip_lr" onclick="setSeatLayoutTransform('flip_lr')">左右翻转</button>
+                    <button type="button" class="btn btn-secondary seat-layout-transform-btn"
+                        data-layout-transform="rotate_180" onclick="setSeatLayoutTransform('rotate_180')">180°旋转</button>
+                </div>
+
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <label>手动标记为“姓名”（逗号分隔）</label>
+                    <input type="text" id="seat-layout-manual-names" placeholder="例如：张三,李四">
+                </div>
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <label>手动标记为“讲台”（逗号分隔）</label>
+                    <input type="text" id="seat-layout-manual-podium" placeholder="例如：讲台,教师区">
+                </div>
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <label>手动标记为“空位”（逗号分隔）</label>
+                    <input type="text" id="seat-layout-manual-empty" placeholder="例如：空位,留空">
+                </div>
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <label>手动标记为“走廊”（逗号分隔）</label>
+                    <input type="text" id="seat-layout-manual-aisle" placeholder="例如：走廊,过道">
+                </div>
+                <label class="checkbox-row">
+                    <input type="checkbox" id="seat-layout-replace-students">
+                    导入前清空现有学生（会同时清空与学生相关约束）
+                </label>
+
+                <div class="tool-row" style="margin-top: 10px;">
+                    <button type="button" class="btn btn-secondary" id="seat-layout-preview-btn"
+                        onclick="refreshSeatLayoutPreview()">更新预览</button>
+                    <button type="button" class="btn btn-primary" id="seat-layout-confirm-btn"
+                        onclick="confirmSeatLayoutImport()">确认导入</button>
+                    <button type="button" class="btn btn-secondary" data-close-modal="seat-layout-import-modal">关闭</button>
+                </div>
+
+                <div id="seat-layout-preview-meta" class="panel-note" style="margin-top: 8px;"></div>
+                <div class="seat-layout-preview-wrap">
+                    <div>
+                        <h4 style="font-size: 13px; margin: 8px 0;">前2排预览</h4>
+                        <div id="seat-layout-front-preview" class="table-container"></div>
+                    </div>
+                    <div>
+                        <h4 style="font-size: 13px; margin: 8px 0;">后2排预览</h4>
+                        <div id="seat-layout-back-preview" class="table-container"></div>
                     </div>
                 </div>
             </div>
         </div>
-    </aside>
+    </div>
+
+    <div id="excel-import-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 8px;">导入 Excel 成绩表</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 14px; font-size: 14px;">
+                上传包含“姓名”列的 Excel 文件。若“总分/学生总分”列可识别，会自动导入；否则会进入列映射步骤。</p>
+            <form id="excel-import-form" method="post" action="{% url 'import_students' classroom.pk %}"
+                enctype="multipart/form-data" onsubmit="return handleImportSubmit(event)">
+                {% csrf_token %}
+                <div class="form-group">
+                    <label>Excel 文件</label>
+                    <input type="file" name="excel_file" accept=".xlsx,.xls" required>
+                </div>
+                <label class="checkbox-row">
+                    <input type="checkbox" name="clear_existing" value="1">
+                    清空现有学生后再导入
+                </label>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" data-close-modal="excel-import-modal">取消</button>
+                    <button type="submit" class="btn btn-primary">开始导入</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <div id="seats-file-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 8px;">导入/导出 .seats 文件</h3>
+            <div class="modal-block">
+                <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 14px;">
+                    导入会用文件内容覆盖当前班级布局、学生、小组与约束。</p>
+                <form method="post" action="{% url 'import_seats_file' classroom.pk %}" enctype="multipart/form-data"
+                    class="stack-form">
+                    {% csrf_token %}
+                    <input type="file" name="seats_file" accept=".seats,application/json" required>
+                    <button type="submit" class="btn btn-primary">导入 .seats</button>
+                </form>
+            </div>
+            <div class="modal-divider"></div>
+            <div class="modal-block">
+                <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 14px;">
+                    导出当前班级完整快照，后续可直接导回系统。</p>
+                <a href="{% url 'export_seats_file' classroom.pk %}" class="btn btn-secondary">导出 .seats</a>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" data-close-modal="seats-file-modal">关闭</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Import Mapping Modal -->
     <div id="import-mapping-modal" class="modal">
@@ -398,13 +564,18 @@
     </div>
     <!-- Context Menu -->
     <div id="seat-context-menu" class="context-menu">
-        <div class="menu-item" id="ctx-set-leader">任命为组长</div>
+        <button type="button" class="menu-item" id="ctx-set-leader">任命为组长</button>
     </div>
 </div>
 
 <script src="{% static 'js/classroom.js' %}?v={{ request.session.session_key|default:'dev' }}"></script>
 <script>
     function startTour() {
+        const switchRibbon = (tabKey) => {
+            const tab = document.querySelector(`.ribbon-tab[data-ribbon-tab="${tabKey}"]`);
+            if (tab) tab.click();
+        };
+
         const driver = window.driver.js.driver({
             showProgress: true,
             animate: true,
@@ -451,12 +622,13 @@
                     }
                 },
                 {
-                    element: 'form[action*="import_students"]',
+                    element: '#btn-open-excel-import-modal',
                     popover: {
                         title: '班级名单导入',
-                        description: '在此处上传 Excel 文件（需包含“姓名”列），可批量导入学生。支持学号、性别、成绩等字段。'
+                        description: '点击这里打开 Excel 导入窗口，上传后可批量导入学生数据，并按提示完成列映射。'
                     },
                     onHighlightStarted: (element) => {
+                        switchRibbon('file');
                         document.querySelector('.tab-btn[data-tab="files"]').click();
                     }
                 },
@@ -475,6 +647,9 @@
                     popover: {
                         title: '自动排座',
                         description: '点击这里可以使用多种算法自动生成座位表，例如按成绩排序或确保小组均衡。'
+                    },
+                    onHighlightStarted: () => {
+                        switchRibbon('home');
                     }
                 },
                 {
@@ -482,6 +657,9 @@
                     popover: {
                         title: '布局自定义',
                         description: '需要修改教室形状？点击这里可以自由添加座位、过道，调整教室大小。'
+                    },
+                    onHighlightStarted: () => {
+                        switchRibbon('view');
                     }
                 },
                 {
@@ -489,6 +667,9 @@
                     popover: {
                         title: '导出结果',
                         description: '满意后，点击这里导出一份精美的 Excel 座位表，直接打印使用。'
+                    },
+                    onHighlightStarted: () => {
+                        switchRibbon('file');
                     }
                 },
                 {
@@ -496,6 +677,9 @@
                     popover: {
                         title: '沉浸式体验',
                         description: '点击全屏按钮，让排座界面充满整个屏幕，获得更大的操作空间。'
+                    },
+                    onHighlightStarted: () => {
+                        switchRibbon('view');
                     }
                 },
                 {
@@ -522,12 +706,19 @@
     }
 
     function toggleFullScreen() {
-        if (!document.fullscreenElement) {
-            document.documentElement.requestFullscreen();
-        } else {
-            if (document.exitFullscreen) {
-                document.exitFullscreen();
+        const doc = document;
+        const root = document.documentElement;
+        const isFullscreen = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
+        if (!isFullscreen) {
+            const enter = root.requestFullscreen || root.webkitRequestFullscreen || root.mozRequestFullScreen || root.msRequestFullscreen;
+            if (enter) {
+                enter.call(root).catch(() => { });
             }
+            return;
+        }
+        const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
+        if (exit) {
+            exit.call(doc).catch(() => { });
         }
     }
 

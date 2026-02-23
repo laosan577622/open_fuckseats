@@ -4,7 +4,12 @@
 {% block title %}{{ classroom.name }} - 布局编辑{% endblock %}
 
 {% block actions %}
-<a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回排座</a>
+<div class="header-action-row office-ribbon-row">
+    <div class="ribbon-group">
+        <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回排座</a>
+        <span class="ribbon-group-label">导航</span>
+    </div>
+</div>
 {% endblock %}
 
 {% block content %}
