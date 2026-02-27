@@ -1,6 +1,8 @@
 from django.test import TestCase
 from django.urls import reverse
 import json
+import importlib.util
+import unittest
 from io import BytesIO
 import openpyxl
 import pandas as pd
@@ -756,6 +758,38 @@ class StudentImportTests(TestCase):
 
 
 class ClassroomFeatureTests(TestCase):
+    def test_export_options_pages_render(self):
+        classroom = Classroom.objects.create(name="导出配置页", rows=2, cols=2)
+
+        excel_url = reverse("export_students_options_page", args=[classroom.pk])
+        svg_url = reverse("export_students_svg_options_page", args=[classroom.pk])
+        pptx_url = reverse("export_students_pptx_options_page", args=[classroom.pk])
+
+        excel_resp = self.client.get(excel_url)
+        svg_resp = self.client.get(svg_url)
+        pptx_resp = self.client.get(pptx_url)
+
+        self.assertEqual(excel_resp.status_code, 200)
+        self.assertEqual(svg_resp.status_code, 200)
+        self.assertEqual(pptx_resp.status_code, 200)
+        self.assertIn("导出排座表", excel_resp.content.decode("utf-8"))
+        self.assertIn("导出 SVG 图片", svg_resp.content.decode("utf-8"))
+        self.assertIn("导出 PPTX（单页 16:9）", pptx_resp.content.decode("utf-8"))
+
+    def test_import_options_pages_render(self):
+        classroom = Classroom.objects.create(name="导入配置页", rows=2, cols=2)
+
+        score_url = reverse("import_students_options_page", args=[classroom.pk])
+        layout_url = reverse("import_layout_excel_options_page", args=[classroom.pk])
+
+        score_resp = self.client.get(score_url)
+        layout_resp = self.client.get(layout_url)
+
+        self.assertEqual(score_resp.status_code, 200)
+        self.assertEqual(layout_resp.status_code, 200)
+        self.assertIn("导入 Excel 成绩表", score_resp.content.decode("utf-8"))
+        self.assertIn("导入座位表（Excel）", layout_resp.content.decode("utf-8"))
+
     def test_export_students_default_layout(self):
         classroom = Classroom.objects.create(name="导出默认", rows=2, cols=2)
         seat_a = classroom.seats.get(row=1, col=1)
@@ -813,6 +847,96 @@ class ClassroomFeatureTests(TestCase):
         self.assertIn("SVG班", content)
         self.assertNotIn("总座位", content)
         self.assertNotIn("网格", content)
+
+    def test_export_students_svg_respects_visibility_options(self):
+        classroom = Classroom.objects.create(name="SVG配置班", rows=1, cols=1)
+        student = classroom.students.create(name="Alice", score=95)
+        seat = classroom.seats.get(row=1, col=1)
+        seat.student = student
+        seat.save(update_fields=["student"])
+
+        url = reverse("export_students_svg", args=[classroom.pk]) + (
+            "?show_title=0&show_podium=0&show_coords=0&show_name=0&show_score=0&show_empty_label=0"
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertNotIn("座次图", content)
+        self.assertNotIn("讲台", content)
+        self.assertNotIn("Alice", content)
+        self.assertNotIn("95分", content)
+        self.assertNotIn("(1-1)", content)
+
+    def test_export_students_svg_supports_theme_and_hide_seat_type(self):
+        classroom = Classroom.objects.create(name="SVG主题班", rows=1, cols=2)
+        seat = classroom.seats.get(row=1, col=2)
+        seat.cell_type = SeatCellType.AISLE
+        seat.save(update_fields=["cell_type"])
+
+        url = reverse("export_students_svg", args=[classroom.pk]) + "?theme=contrast&show_podium=0&show_seat_type=0"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn("#0b1220", content)
+        self.assertNotIn("走廊", content)
+
+    def test_export_students_svg_name_with_group_uses_emphasis_layout(self):
+        classroom = Classroom.objects.create(name="SVG姓名小组班", rows=1, cols=1)
+        group = classroom.groups.create(name="第1组", order=1)
+        student = classroom.students.create(name="赵小明")
+        seat = classroom.seats.get(row=1, col=1)
+        seat.student = student
+        seat.group = group
+        seat.save(update_fields=["student", "group"])
+
+        url = reverse("export_students_svg", args=[classroom.pk]) + (
+            "?show_coords=0&show_name=1&show_score=0&show_group=1"
+        )
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        content = response.content.decode("utf-8")
+        self.assertIn('class="cell-name" font-size="', content)
+        self.assertIn('dominant-baseline="middle"', content)
+
+    @unittest.skipUnless(importlib.util.find_spec("pptx"), "python-pptx not installed")
+    def test_export_students_pptx_returns_pptx_content(self):
+        classroom = Classroom.objects.create(name="PPT班", rows=1, cols=1)
+        student = classroom.students.create(name="Alice", score=91)
+        seat = classroom.seats.get(row=1, col=1)
+        seat.student = student
+        seat.save(update_fields=["student"])
+
+        url = reverse("export_students_pptx", args=[classroom.pk]) + "?show_coords=0&show_score=0"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+            response.get("Content-Type", ""),
+        )
+        self.assertIn(".pptx", response.get("Content-Disposition", ""))
+        self.assertTrue(response.content.startswith(b"PK"))
+
+    def test_export_students_svg_preview_student_returns_real_student(self):
+        classroom = Classroom.objects.create(name="SVG预览班", rows=1, cols=2)
+        s1 = classroom.students.create(name="Alice", score=90)
+        s2 = classroom.students.create(name="Bob", score=80)
+        seat = classroom.seats.get(row=1, col=1)
+        seat.student = s1
+        seat.save(update_fields=["student"])
+
+        url = reverse("export_students_svg_preview_student", args=[classroom.pk])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("status"), "success")
+        sample = payload.get("sample") or {}
+        self.assertEqual(sample.get("classroom"), "SVG预览班")
+        self.assertIn(sample.get("name"), ["Alice", "Bob"])
 
     def test_rename_classroom_success(self):
         classroom = Classroom.objects.create(name="原班级", rows=2, cols=2)

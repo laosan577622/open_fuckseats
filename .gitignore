@@ -101,6 +101,7 @@ Desktop.ini
 open_ver/
 temp_git_backup/
 temp_imports/
+_data_stage/
 
 # Frontend
 node_modules/

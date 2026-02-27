@@ -42,6 +42,9 @@ def main():
     DIST_DIR = os.path.join(BASE_DIR, 'dist')
     BUILD_DIR = os.path.join(BASE_DIR, 'build')
     SPEC_FILE = os.path.join(BASE_DIR, 'FuckSeats.spec')
+    STAGE_DIR = os.path.join(BASE_DIR, '_data_stage')
+    DATA_DIRS = ['templates', 'static', 'seats', 'website', 'config']
+    DB_EXCLUDE_PATTERNS = ['*.sqlite3', '*.sqlite', '*.db']
     
     # 清理旧的构建文件
     print("正在清理旧构建文件...", flush=True)
@@ -67,22 +70,44 @@ def main():
     
     # 构建 PyInstaller 命令
     # 使用 sys.executable 确保使用当前环境的 Python 解释器和库
+    # Stage data directories to exclude database files from packaging
+    print("Preparing data files (excluding database files)...", flush=True)
+    if os.path.exists(STAGE_DIR):
+        try:
+            shutil.rmtree(STAGE_DIR)
+        except Exception as e:
+            print(f"Failed to clean stage directory: {e}", flush=True)
+    os.makedirs(STAGE_DIR, exist_ok=True)
+
+    staged_data_dirs = {}
+    for data_dir in DATA_DIRS:
+        src_dir = os.path.join(BASE_DIR, data_dir)
+        if not os.path.exists(src_dir):
+            continue
+        dst_dir = os.path.join(STAGE_DIR, data_dir)
+        shutil.copytree(
+            src_dir,
+            dst_dir,
+            ignore=shutil.ignore_patterns(*DB_EXCLUDE_PATTERNS),
+        )
+        staged_data_dirs[data_dir] = dst_dir
+
+    data_args = []
+    for data_dir in DATA_DIRS:
+        staged_dir = staged_data_dirs.get(data_dir)
+        if staged_dir:
+            data_args += ['--add-data', f'{staged_dir}{os.pathsep}{data_dir}']
+
     cmd = [
         sys.executable, '-m', 'PyInstaller',
         '--noconfirm',
         '--onedir',
         '--clean',
         '--name', 'FuckSeats',
-        
-        # 数据文件包含
-        '--add-data', f'templates{os.pathsep}templates',
-        '--add-data', f'static{os.pathsep}static',
-        '--add-data', f'seats{os.pathsep}seats',
-        '--add-data', f'website{os.pathsep}website',
-        # config 文件夹包含设置为 app 配置
-        '--add-data', f'config{os.pathsep}config',
-        
-        # 隐式导入 - 解决运行时缺包问题
+
+        # Data files (staged; database files excluded)
+        *data_args,
+
         '--hidden-import', 'waitress',
         '--hidden-import', 'whitenoise',
         '--hidden-import', 'whitenoise.middleware',
@@ -95,7 +120,10 @@ def main():
         '--hidden-import', 'django.contrib.humanize',
         '--hidden-import', 'pandas',
         '--hidden-import', 'openpyxl',
+        '--hidden-import', 'xlrd',
+        '--hidden-import', 'pptx',
         '--hidden-import', 'tzdata',
+        '--collect-all', 'pptx',
         
         # 如果 run_app.py 里排除了这些模块，则需要在这里排除，或者让 pyinstaller 自动分析
         # 用户之前的指令排除了它们，可能是因为包含在 add-data 中了。

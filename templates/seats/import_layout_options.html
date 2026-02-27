@@ -1,0 +1,119 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ classroom.name }} - 导入座位表{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="import">导入配置</button>
+{% endblock %}
+
+{% block actions %}
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="import">
+        <div class="ribbon-group">
+            <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回班级</a>
+            <span class="ribbon-group-label">导航</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="options-workspace">
+    <div class="options-shell" id="import-layout-root"
+        data-import-url="{% url 'import_layout_excel' classroom.pk %}"
+        data-back-url="{% url 'classroom_detail' classroom.pk %}">
+        <h1 class="options-title">导入座位表（Excel）</h1>
+        <div class="options-layout">
+            <div class="options-left">
+                <div class="panel-card options-card">
+                    <form id="seat-layout-upload-form" method="post" action="{% url 'import_layout_excel' classroom.pk %}" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label>座位表文件</label>
+                            <input type="file" name="layout_excel_file" accept=".xlsx,.xls,.xlsm" required>
+                        </div>
+                        <div class="options-actions">
+                            <button type="button" class="btn btn-secondary" id="layout-import-cancel-btn">取消</button>
+                            <button type="submit" class="btn btn-primary" id="seat-layout-upload-btn">上传并识别</button>
+                        </div>
+                    </form>
+                    <div class="options-hint" id="layout-import-hint"></div>
+                </div>
+
+                <div class="panel-card options-card" id="seat-layout-config" style="display: none;">
+                    <input type="hidden" id="seat-layout-file-id">
+                    <div class="constraint-grid">
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label>开始行</label>
+                            <input type="number" id="seat-layout-start-row" min="1">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label>结束行</label>
+                            <input type="number" id="seat-layout-end-row" min="1">
+                        </div>
+                        <div class="form-group" style="margin-bottom: 8px;">
+                            <label>姓名识别</label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="seat-layout-auto-name" checked>
+                                自动识别2-5位无数字文本
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="tool-row seat-layout-transform-row" style="margin-top: 4px;">
+                        <button type="button" class="btn btn-secondary seat-layout-transform-btn active" data-layout-transform="none">原始方向</button>
+                        <button type="button" class="btn btn-secondary seat-layout-transform-btn" data-layout-transform="flip_ud">上下翻转</button>
+                        <button type="button" class="btn btn-secondary seat-layout-transform-btn" data-layout-transform="flip_lr">左右翻转</button>
+                        <button type="button" class="btn btn-secondary seat-layout-transform-btn" data-layout-transform="rotate_180">180°旋转</button>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>手动标记为“姓名”（逗号分隔）</label>
+                        <input type="text" id="seat-layout-manual-names" placeholder="例如：张三,李四">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>手动标记为“讲台”（逗号分隔）</label>
+                        <input type="text" id="seat-layout-manual-podium" placeholder="例如：讲台,教师区">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>手动标记为“空位”（逗号分隔）</label>
+                        <input type="text" id="seat-layout-manual-empty" placeholder="例如：空位,留空">
+                    </div>
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>手动标记为“走廊”（逗号分隔）</label>
+                        <input type="text" id="seat-layout-manual-aisle" placeholder="例如：走廊,过道">
+                    </div>
+                    <label class="checkbox-row">
+                        <input type="checkbox" id="seat-layout-replace-students">
+                        导入前清空现有学生（会同时清空与学生相关约束）
+                    </label>
+
+                    <div class="options-actions" style="margin-top: 10px;">
+                        <button type="button" class="btn btn-secondary" id="seat-layout-preview-btn">更新预览</button>
+                        <button type="button" class="btn btn-primary" id="seat-layout-confirm-btn">确认导入</button>
+                    </div>
+                </div>
+            </div>
+            <div class="options-right">
+                <div class="panel-card options-preview-card">
+                    <div class="options-preview-title">导入预览</div>
+                    <div id="seat-layout-preview-meta" class="panel-note" style="margin-bottom: 8px;">尚未识别文件。</div>
+                    <div class="seat-layout-preview-wrap">
+                        <div>
+                            <h4 style="font-size: 13px; margin: 8px 0;">前2排预览</h4>
+                            <div id="seat-layout-front-preview" class="table-container"></div>
+                        </div>
+                        <div>
+                            <h4 style="font-size: 13px; margin: 8px 0;">后2排预览</h4>
+                            <div id="seat-layout-back-preview" class="table-container"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="{% static 'js/import_layout_options.js' %}?v=1"></script>
+{% endblock %}

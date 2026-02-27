@@ -1,0 +1,72 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ classroom.name }} - 导出排座表{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="export">导出配置</button>
+{% endblock %}
+
+{% block actions %}
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="export">
+        <div class="ribbon-group">
+            <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回班级</a>
+            <span class="ribbon-group-label">导航</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="options-workspace">
+    <div class="options-shell" id="export-options-root"
+        data-kind="excel"
+        data-export-url="{% url 'export_students' classroom.pk %}"
+        data-back-url="{% url 'classroom_detail' classroom.pk %}"
+        data-default-filename="{{ classroom.name }}_座次图.xlsx"
+        data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        data-accept-ext=".xlsx">
+        <h1 class="options-title">导出排座表</h1>
+        <div class="options-layout">
+            <div class="options-left">
+                <div class="panel-card options-card">
+                    <div class="form-group">
+                        <label>导出方向</label>
+                        <div class="export-options-list">
+                            <label class="export-option-item">
+                                <input type="radio" name="excel-export-layout-transform" value="none" checked>
+                                <span>原始方向（讲台在上）</span>
+                            </label>
+                            <label class="export-option-item">
+                                <input type="radio" name="excel-export-layout-transform" value="rotate_180">
+                                <span>180°翻转（讲台在下）</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="options-actions">
+                        <button type="button" class="btn btn-secondary" id="export-options-cancel-btn">取消</button>
+                        <button type="button" class="btn btn-primary" id="export-options-confirm-btn">开始导出</button>
+                    </div>
+                    <div class="options-hint" id="export-options-hint"></div>
+                </div>
+            </div>
+            <div class="options-right">
+                <div class="panel-card options-preview-card">
+                    <div class="options-preview-title">导出预览</div>
+                    <div class="preview-stat-list">
+                        <div class="preview-stat-item">方向：<span id="excel-preview-orientation">原始方向（讲台在上）</span></div>
+                        <div class="preview-stat-item">文件名：<span id="excel-preview-filename">{{ classroom.name }}_座次图.xlsx</span></div>
+                    </div>
+                    <div class="preview-seat-demo" style="margin-top: 10px;">
+                        <div class="demo-name">{{ classroom.name }} 座位表</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="{% static 'js/export_options.js' %}?v=1"></script>
+{% endblock %}

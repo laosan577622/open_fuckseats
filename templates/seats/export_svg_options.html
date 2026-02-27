@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ classroom.name }} - 导出 SVG{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="export">导出配置</button>
+{% endblock %}
+
+{% block actions %}
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="export">
+        <div class="ribbon-group">
+            <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回班级</a>
+            <span class="ribbon-group-label">导航</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="options-workspace">
+    <div class="options-shell" id="export-options-root"
+        data-kind="svg"
+        data-export-url="{% url 'export_students_svg' classroom.pk %}"
+        data-preview-student-url="{% url 'export_students_svg_preview_student' classroom.pk %}"
+        data-back-url="{% url 'classroom_detail' classroom.pk %}"
+        data-default-filename="{{ classroom.name }}_座次图.svg"
+        data-accept-mime="image/svg+xml"
+        data-accept-ext=".svg">
+        <h1 class="options-title">导出 SVG 图片</h1>
+        <div class="options-layout">
+            <div class="options-left">
+                <div class="panel-card options-card">
+                    <div class="form-group" style="margin-bottom: 10px;">
+                        <label>样式主题</label>
+                        <div class="export-options-list">
+                            <label class="export-option-item">
+                                <input type="radio" name="svg-export-theme" value="classic" checked>
+                                <span>经典蓝（默认）</span>
+                            </label>
+                            <label class="export-option-item">
+                                <input type="radio" name="svg-export-theme" value="minimal">
+                                <span>简洁灰</span>
+                            </label>
+                            <label class="export-option-item">
+                                <input type="radio" name="svg-export-theme" value="contrast">
+                                <span>高对比</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-bottom: 8px;">
+                        <label>显示内容</label>
+                        <div class="stack-form">
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="svg-export-show-title" checked>
+                                标题
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="svg-export-show-podium" checked>
+                                顶部讲台标识
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="svg-export-show-coords" checked>
+                                座位坐标（如 1-1）
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="svg-export-show-name" checked>
+                                学生姓名
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="svg-export-show-score" checked>
+                                学生成绩
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="svg-export-show-group" checked>
+                                小组标签
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="svg-export-show-empty-label" checked>
+                                空座位提示
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="checkbox" id="svg-export-show-seat-type" checked>
+                                非座位类型文本（走廊/讲台/空位）
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="options-actions">
+                        <button type="button" class="btn btn-secondary" id="export-options-cancel-btn">取消</button>
+                        <button type="button" class="btn btn-primary" id="export-options-confirm-btn">开始导出</button>
+                    </div>
+                    <div class="options-hint" id="export-options-hint"></div>
+                </div>
+            </div>
+            <div class="options-right">
+                <div class="panel-card options-preview-card">
+                    <div class="options-preview-title">导出预览</div>
+                    <div class="preview-stat-list">
+                        <div class="preview-stat-item">主题：<span id="svg-preview-theme">经典蓝</span></div>
+                        <div class="preview-stat-item">显示字段：<span id="svg-preview-fields">标题、讲台、坐标、姓名、成绩、小组、空座、类型</span></div>
+                    </div>
+                    <div class="preview-seat-demo" style="margin-top: 10px; padding: 8px;" id="svg-preview-demo">
+                        <div id="svg-live-preview" style="width: 100%; overflow: auto;"></div>
+                    </div>
+                    <div class="options-actions" style="margin-top: 6px; justify-content: flex-start;">
+                        <button type="button" class="btn btn-secondary" id="svg-preview-random-btn">换一个随机学生</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="{% static 'js/export_options.js' %}?v=1"></script>
+{% endblock %}

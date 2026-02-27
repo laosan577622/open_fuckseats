@@ -1,0 +1,100 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ classroom.name }} - 导入 Excel 成绩表{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="import">导入配置</button>
+{% endblock %}
+
+{% block actions %}
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="import">
+        <div class="ribbon-group">
+            <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回班级</a>
+            <span class="ribbon-group-label">导航</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="options-workspace">
+    <div class="options-shell" id="import-students-root"
+        data-import-url="{% url 'import_students' classroom.pk %}"
+        data-back-url="{% url 'classroom_detail' classroom.pk %}">
+        <h1 class="options-title">导入 Excel 成绩表</h1>
+        <div class="options-layout">
+            <div class="options-left">
+                <div class="panel-card options-card">
+                    <form id="excel-import-form" method="post" action="{% url 'import_students' classroom.pk %}" enctype="multipart/form-data">
+                        {% csrf_token %}
+                        <div class="form-group">
+                            <label>Excel 文件</label>
+                            <input type="file" name="excel_file" accept=".xlsx,.xls" required>
+                        </div>
+                        <div class="form-group">
+                            <label>导入模式</label>
+                            <label class="checkbox-row">
+                                <input type="radio" name="import_mode" value="match" checked>
+                                匹配现有学生并更新成绩（未匹配自动新增）
+                            </label>
+                            <label class="checkbox-row">
+                                <input type="radio" name="import_mode" value="replace">
+                                清空现有学生后全量导入
+                            </label>
+                        </div>
+                        <div class="options-actions">
+                            <button type="button" class="btn btn-secondary" id="student-import-cancel-btn">取消</button>
+                            <button type="submit" class="btn btn-primary" id="student-import-upload-btn">上传并识别</button>
+                        </div>
+                    </form>
+                    <div class="options-hint" id="student-import-hint"></div>
+                </div>
+
+                <div class="panel-card options-card" id="import-mapping-panel" style="display:none;">
+                    <h3 style="margin-bottom: 6px;">匹配数据</h3>
+
+                    <div class="form-group">
+                        <label>数据起始行（标题行）</label>
+                        <input type="number" id="import-start-row" value="1" min="1" class="form-control">
+                        <small style="color: var(--text-secondary); font-size: 12px;">请输入包含列名（如“姓名”、“总分”或“学生总分”）的那一行。</small>
+                    </div>
+
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
+                        <div class="form-group">
+                            <label>姓名列</label>
+                            <select id="import-name-col" class="form-control"></select>
+                        </div>
+                        <div class="form-group">
+                            <label>总分列（可选）</label>
+                            <select id="import-score-col" class="form-control">
+                                <option value="">不导入分数</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="options-actions">
+                        <button type="button" class="btn btn-secondary" id="student-import-remap-btn">重新上传</button>
+                        <button type="button" class="btn btn-primary" id="student-import-confirm-btn">确认导入</button>
+                    </div>
+                </div>
+            </div>
+            <div class="options-right">
+                <div class="panel-card options-preview-card">
+                    <div class="options-preview-title">导入预览</div>
+                    <div class="options-preview-subtitle" id="student-import-stage"></div>
+                    <div class="preview-stat-list" style="margin-bottom: 8px;">
+                        <div class="preview-stat-item">当前模式：<span id="student-import-mode-preview">匹配更新</span></div>
+                    </div>
+                    <div id="import-preview-area" class="table-container">
+                        <div style="text-align: center; color: var(--text-secondary); padding: 20px;">上传并识别后，这里显示前2位学生预览。</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<script src="{% static 'js/import_students_options.js' %}?v=1"></script>
+{% endblock %}

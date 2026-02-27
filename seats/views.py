@@ -8,6 +8,7 @@ from django.utils.encoding import escape_uri_path
 from django.conf import settings
 from .models import Classroom, Student, Seat, SeatCellType, SeatGroup, LayoutSnapshot, SeatConstraint
 import pandas as pd
+from io import BytesIO
 import json
 import random
 import os
@@ -44,6 +45,89 @@ def _seat_key(row, col):
 
 def _build_seat_map(seats):
     return {(s.row, s.col): s for s in seats}
+
+
+SVG_EXPORT_THEME_MAP = {
+    'classic': {
+        'bg': '#f7faff',
+        'title': '#0f172a',
+        'name': '#111827',
+        'sub': '#667085',
+        'type': '#475467',
+        'podium_fill': '#e7efff',
+        'podium_stroke': '#c9dbff',
+        'seat_fill_occupied': '#eef4ff',
+        'seat_stroke_occupied': '#bfd4ff',
+        'seat_fill_empty': '#f8fbff',
+        'seat_stroke_empty': '#d3e1ff',
+        'nonseat_stroke': '#d0d5dd',
+        'nonseat_aisle': '#eff3f8',
+        'nonseat_podium': '#fff3e8',
+        'nonseat_empty': '#f2f4f7',
+        'tag_text': '#ffffff',
+        'group_palette': ['#0a59f7', '#00a38c', '#ff8b00', '#e45193', '#6b64ff', '#2ca2ff', '#13a44a', '#c85a0f'],
+    },
+    'minimal': {
+        'bg': '#f8fafc',
+        'title': '#1f2937',
+        'name': '#111827',
+        'sub': '#6b7280',
+        'type': '#4b5563',
+        'podium_fill': '#edf2f7',
+        'podium_stroke': '#d2dae6',
+        'seat_fill_occupied': '#f9fafb',
+        'seat_stroke_occupied': '#cbd5e1',
+        'seat_fill_empty': '#ffffff',
+        'seat_stroke_empty': '#d1d5db',
+        'nonseat_stroke': '#d1d5db',
+        'nonseat_aisle': '#f1f5f9',
+        'nonseat_podium': '#f3f4f6',
+        'nonseat_empty': '#f8fafc',
+        'tag_text': '#ffffff',
+        'group_palette': ['#0a59f7', '#64748b', '#0f766e', '#b45309', '#be123c', '#1d4ed8', '#065f46', '#7c3aed'],
+    },
+    'contrast': {
+        'bg': '#0b1220',
+        'title': '#e5ecff',
+        'name': '#ffffff',
+        'sub': '#b7c7e9',
+        'type': '#d2dbf5',
+        'podium_fill': '#1c2f5d',
+        'podium_stroke': '#33509c',
+        'seat_fill_occupied': '#172a55',
+        'seat_stroke_occupied': '#3b5db7',
+        'seat_fill_empty': '#111b34',
+        'seat_stroke_empty': '#30477f',
+        'nonseat_stroke': '#2e426f',
+        'nonseat_aisle': '#1d2a44',
+        'nonseat_podium': '#2a2f4d',
+        'nonseat_empty': '#202c47',
+        'tag_text': '#ffffff',
+        'group_palette': ['#0a59f7', '#0fa968', '#f59e0b', '#ef4444', '#06b6d4', '#a855f7', '#f97316', '#14b8a6'],
+    },
+}
+
+
+def _name_emphasis_font_size(text):
+    length = max(1, len(str(text or '')))
+    size = 30 - length * 2
+    if size < 16:
+        size = 16
+    if size > 26:
+        size = 26
+    return size
+
+
+def _hex_to_rgb_parts(color):
+    raw = str(color or '').strip().lstrip('#')
+    if len(raw) == 3:
+        raw = ''.join(ch * 2 for ch in raw)
+    if len(raw) != 6:
+        return 0, 0, 0
+    try:
+        return int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+    except ValueError:
+        return 0, 0, 0
 
 
 def _sync_seats(classroom, rows, cols):
@@ -1430,6 +1514,13 @@ def import_layout_excel(request, pk):
     return JsonResponse({'status': 'error', 'message': '未知操作'}, status=400)
 
 
+def import_layout_excel_options_page(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    return render(request, 'seats/import_layout_options.html', {
+        'classroom': classroom
+    })
+
+
 def import_students(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     
@@ -1559,6 +1650,13 @@ def import_students(request, pk):
                 return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
     return redirect('classroom_detail', pk=pk)
+
+
+def import_students_options_page(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    return render(request, 'seats/import_students_options.html', {
+        'classroom': classroom
+    })
 
 
 IMPORT_MODE_REPLACE = 'replace'
@@ -3279,7 +3377,7 @@ def export_students(request, pk):
     center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
     # 字体设置
-    font_name = 'HarmonyOS Sans SC'
+    font_name = '鸿蒙黑体'
     header_font = Font(name=font_name, bold=True, size=20)
     podium_font = Font(name=font_name, bold=True, size=14)
     seat_font = Font(name=font_name, size=12, bold=False)
@@ -3360,17 +3458,50 @@ def export_students(request, pk):
     return response
 
 
+def export_students_options_page(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    return render(request, 'seats/export_excel_options.html', {
+        'classroom': classroom
+    })
+
+
 def export_students_svg(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     seats = list(classroom.seats.select_related('student', 'group').all())
     seat_map = _build_seat_map(seats)
+
+    def _qbool(key, default=True):
+        raw = request.GET.get(key)
+        if raw is None or raw == '':
+            return default
+        return str(raw).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+    show_title = _qbool('show_title', True)
+    show_podium = _qbool('show_podium', True)
+    show_coords = _qbool('show_coords', True)
+    show_name = _qbool('show_name', True)
+    show_score = _qbool('show_score', True)
+    show_group = _qbool('show_group', True)
+    show_empty_label = _qbool('show_empty_label', True)
+    show_seat_type = _qbool('show_seat_type', True)
+    name_emphasis_mode = show_name and (not show_coords) and (not show_score)
+
+    theme = str(request.GET.get('theme', 'classic')).strip().lower()
+    if theme not in SVG_EXPORT_THEME_MAP:
+        theme = 'classic'
+    style = SVG_EXPORT_THEME_MAP[theme]
 
     cell_w = 120
     cell_h = 86
     gap = 10
     padding_x = 24
     padding_y = 24
-    header_h = 90
+    if show_title and show_podium:
+        header_h = 90
+    elif show_title or show_podium:
+        header_h = 64
+    else:
+        header_h = 16
 
     grid_w = classroom.cols * cell_w + max(0, classroom.cols - 1) * gap
     grid_h = classroom.rows * cell_h + max(0, classroom.rows - 1) * gap
@@ -3382,16 +3513,11 @@ def export_students_svg(request, pk):
     podium_w = min(340, max(180, int(grid_w * 0.42)))
     podium_h = 34
     podium_x = padding_x + (grid_w - podium_w) // 2
-    podium_y = padding_y + 32
-
-    group_palette = [
-        '#0a59f7', '#00a38c', '#ff8b00', '#e45193',
-        '#6b64ff', '#2ca2ff', '#13a44a', '#c85a0f'
-    ]
 
     def group_color(group_id):
         if not group_id:
             return '#9aa6c2'
+        group_palette = style['group_palette']
         return group_palette[(int(group_id) - 1) % len(group_palette)]
 
     chunks = [
@@ -3399,18 +3525,30 @@ def export_students_svg(request, pk):
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<defs>',
         '<style><![CDATA['
-        '.title{font:700 24px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#0f172a;}'
-        '.cell-name{font:600 16px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#111827;}'
-        '.cell-sub{font:500 12px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#667085;}'
-        '.tag{font:700 11px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#ffffff;}'
-        '.cell-type{font:600 13px "HarmonyOS Sans SC","PingFang SC","Microsoft YaHei",sans-serif;fill:#475467;}'
+        '.title{font:700 24px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
+        '.cell-name{font:600 16px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
+        '.cell-sub{font:500 12px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
+        '.tag{font:700 11px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
+        '.cell-type{font:600 13px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
         ']]></style>',
         '</defs>',
-        f'<rect x="0" y="0" width="{width}" height="{height}" fill="#f7faff"/>',
-        f'<text x="{padding_x}" y="{padding_y + 28}" class="title">{html.escape(classroom.name)} 座次图</text>',
-        f'<rect x="{podium_x}" y="{podium_y}" width="{podium_w}" height="{podium_h}" rx="12" fill="#e7efff" stroke="#c9dbff"/>',
-        f'<text x="{podium_x + podium_w / 2}" y="{podium_y + 22}" text-anchor="middle" class="cell-type">讲台</text>',
+        f'<rect x="0" y="0" width="{width}" height="{height}" fill="{style["bg"]}"/>',
     ]
+
+    if show_title:
+        title_y = padding_y + 28 if show_podium else padding_y + 30
+        chunks.append(
+            f'<text x="{padding_x}" y="{title_y}" class="title" fill="{style["title"]}">{html.escape(classroom.name)} 座次图</text>'
+        )
+
+    if show_podium:
+        podium_y = padding_y + 32 if show_title else padding_y + 14
+        chunks.append(
+            f'<rect x="{podium_x}" y="{podium_y}" width="{podium_w}" height="{podium_h}" rx="12" fill="{style["podium_fill"]}" stroke="{style["podium_stroke"]}"/>'
+        )
+        chunks.append(
+            f'<text x="{podium_x + podium_w / 2}" y="{podium_y + 22}" text-anchor="middle" class="cell-type" fill="{style["type"]}">讲台</text>'
+        )
 
     for r in range(1, classroom.rows + 1):
         for c in range(1, classroom.cols + 1):
@@ -3423,56 +3561,69 @@ def export_students_svg(request, pk):
 
             if seat.cell_type == SeatCellType.SEAT:
                 if seat.student_id:
-                    fill = '#eef4ff'
-                    stroke = '#bfd4ff'
+                    fill = style['seat_fill_occupied']
+                    stroke = style['seat_stroke_occupied']
                 else:
-                    fill = '#f8fbff'
-                    stroke = '#d3e1ff'
+                    fill = style['seat_fill_empty']
+                    stroke = style['seat_stroke_empty']
 
                 chunks.append(
                     f'<rect x="{x}" y="{y}" width="{cell_w}" height="{cell_h}" rx="16" fill="{fill}" stroke="{stroke}"/>'
                 )
-                chunks.append(
-                    f'<text x="{x + 8}" y="{y + 16}" class="cell-sub">({r}-{c})</text>'
-                )
+                if show_coords:
+                    chunks.append(
+                        f'<text x="{x + 8}" y="{y + 16}" class="cell-sub" fill="{style["sub"]}">({r}-{c})</text>'
+                    )
 
-                if seat.group_id and seat.group:
+                if show_group and seat.group_id and seat.group:
                     tag_w = max(36, min(66, 18 + len(seat.group.name) * 12))
                     tag_color = group_color(seat.group_id)
                     chunks.append(
                         f'<rect x="{x + cell_w - tag_w - 8}" y="{y + 8}" width="{tag_w}" height="20" rx="10" fill="{tag_color}"/>'
                     )
                     chunks.append(
-                        f'<text x="{x + cell_w - tag_w / 2 - 8}" y="{y + 22}" text-anchor="middle" class="tag">{html.escape(seat.group.name)}</text>'
+                        f'<text x="{x + cell_w - tag_w / 2 - 8}" y="{y + 22}" text-anchor="middle" class="tag" fill="{style["tag_text"]}">{html.escape(seat.group.name)}</text>'
                     )
 
                 if seat.student:
-                    chunks.append(
-                        f'<text x="{x + 12}" y="{y + 48}" class="cell-name">{html.escape(seat.student.name)}</text>'
-                    )
-                    if (seat.student.score or 0) > 0:
+                    base_name_y = y + (48 if show_coords else 42)
+                    if show_name:
+                        if name_emphasis_mode:
+                            name_size = _name_emphasis_font_size(seat.student.name)
+                            center_y = y + cell_h / 2 + (6 if (show_group and seat.group_id) else 0)
+                            chunks.append(
+                                f'<text x="{x + cell_w / 2}" y="{center_y}" text-anchor="middle" dominant-baseline="middle" class="cell-name" font-size="{name_size}" fill="{style["name"]}">{html.escape(seat.student.name)}</text>'
+                            )
+                        else:
+                            chunks.append(
+                                f'<text x="{x + 12}" y="{base_name_y}" class="cell-name" fill="{style["name"]}">{html.escape(seat.student.name)}</text>'
+                            )
+                    if show_score and (seat.student.score or 0) > 0:
+                        score_y = base_name_y + 20 if show_name else y + (56 if show_coords else 50)
                         chunks.append(
-                            f'<text x="{x + 12}" y="{y + 68}" class="cell-sub">{seat.student.display_score}分</text>'
+                            f'<text x="{x + 12}" y="{score_y}" class="cell-sub" fill="{style["sub"]}">{seat.student.display_score}分</text>'
                         )
-                else:
+                elif show_empty_label:
+                    empty_y = y + (56 if show_coords else 50)
                     chunks.append(
-                        f'<text x="{x + 12}" y="{y + 56}" class="cell-sub">空座位</text>'
+                        f'<text x="{x + 12}" y="{empty_y}" class="cell-sub" fill="{style["sub"]}">空座位</text>'
                     )
                 continue
 
             if seat.cell_type == SeatCellType.AISLE:
-                fill = '#eff3f8'
+                fill = style['nonseat_aisle']
             elif seat.cell_type == SeatCellType.PODIUM:
-                fill = '#fff3e8'
+                fill = style['nonseat_podium']
             else:
-                fill = '#f2f4f7'
+                fill = style['nonseat_empty']
 
             chunks.append(
-                f'<rect x="{x}" y="{y}" width="{cell_w}" height="{cell_h}" rx="16" fill="{fill}" stroke="#d0d5dd"/>'
+                f'<rect x="{x}" y="{y}" width="{cell_w}" height="{cell_h}" rx="16" fill="{fill}" stroke="{style["nonseat_stroke"]}"/>'
             )
-            chunks.append(
-                f'<text x="{x + cell_w / 2}" y="{y + 50}" text-anchor="middle" class="cell-type">{html.escape(seat.get_cell_type_display())}</text>'
-            )
+            if show_seat_type:
+                chunks.append(
+                    f'<text x="{x + cell_w / 2}" y="{y + 50}" text-anchor="middle" class="cell-type" fill="{style["type"]}">{html.escape(seat.get_cell_type_display())}</text>'
+                )
 
     chunks.append('</svg>')
     svg_content = ''.join(chunks)
@@ -3481,6 +3632,406 @@ def export_students_svg(request, pk):
     filename = escape_uri_path(f'{classroom.name}_座次图.svg')
     response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
+
+
+def export_students_svg_preview_student(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    student_ids = list(classroom.students.values_list('pk', flat=True))
+    if not student_ids:
+        return JsonResponse({'status': 'empty', 'message': '当前班级暂无学生'})
+
+    random_student_id = random.choice(student_ids)
+    student = classroom.students.filter(pk=random_student_id).first()
+    if not student:
+        return JsonResponse({'status': 'empty', 'message': '当前班级暂无学生'})
+
+    seat = getattr(student, 'assigned_seat', None)
+    group_name = ''
+    group_index = 0
+    coord = ''
+    if seat:
+        coord = f'{seat.row}-{seat.col}'
+        if seat.group_id and seat.group:
+            group_name = seat.group.name
+            group_index = int(seat.group_id)
+
+    score_display = student.display_score if (student.score or 0) > 0 else ''
+
+    return JsonResponse({
+        'status': 'success',
+        'sample': {
+            'classroom': classroom.name,
+            'name': student.name,
+            'score': score_display,
+            'group': group_name,
+            'group_index': group_index,
+            'coord': coord
+        }
+    })
+
+
+def export_students_svg_options_page(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    return render(request, 'seats/export_svg_options.html', {
+        'classroom': classroom
+    })
+
+
+def export_students_pptx(request, pk):
+    try:
+        from pptx import Presentation
+        from pptx.dml.color import RGBColor
+        from pptx.enum.shapes import MSO_SHAPE
+        from pptx.enum.text import PP_ALIGN, MSO_ANCHOR
+        from pptx.oxml import parse_xml
+        from pptx.oxml.ns import nsdecls, qn
+        from pptx.util import Inches, Pt
+    except ImportError:
+        return HttpResponse('缺少 python-pptx 依赖，请先安装 requirements.txt', status=500)
+
+    classroom = get_object_or_404(Classroom, pk=pk)
+    seats = list(classroom.seats.select_related('student', 'group').all())
+    seat_map = _build_seat_map(seats)
+
+    def _qbool(key, default=True):
+        raw = request.GET.get(key)
+        if raw is None or raw == '':
+            return default
+        return str(raw).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+    show_title = _qbool('show_title', True)
+    show_podium = _qbool('show_podium', True)
+    show_coords = _qbool('show_coords', True)
+    show_name = _qbool('show_name', True)
+    show_score = _qbool('show_score', True)
+    show_group = _qbool('show_group', True)
+    show_empty_label = _qbool('show_empty_label', True)
+    show_seat_type = _qbool('show_seat_type', True)
+    name_emphasis_mode = show_name and (not show_coords) and (not show_score)
+
+    theme = str(request.GET.get('theme', 'classic')).strip().lower()
+    if theme not in SVG_EXPORT_THEME_MAP:
+        theme = 'classic'
+    style = SVG_EXPORT_THEME_MAP[theme]
+
+    cell_w = 120
+    cell_h = 86
+    gap = 10
+    padding_x = 24
+    padding_y = 24
+    if show_title and show_podium:
+        header_h = 90
+    elif show_title or show_podium:
+        header_h = 64
+    else:
+        header_h = 16
+
+    grid_w = classroom.cols * cell_w + max(0, classroom.cols - 1) * gap
+    grid_h = classroom.rows * cell_h + max(0, classroom.rows - 1) * gap
+    grid_top = padding_y + header_h
+
+    content_w = padding_x * 2 + grid_w
+    content_h = padding_y * 2 + header_h + grid_h
+
+    podium_w = min(340, max(180, int(grid_w * 0.42)))
+    podium_h = 34
+    podium_x = padding_x + (grid_w - podium_w) // 2
+
+    slide_w = 13.333
+    slide_h = 7.5
+    margin = 0.3
+    usable_w = max(0.1, slide_w - margin * 2)
+    usable_h = max(0.1, slide_h - margin * 2)
+    scale = min(usable_w / max(1, content_w), usable_h / max(1, content_h))
+    offset_x = (slide_w - content_w * scale) / 2
+    offset_y = (slide_h - content_h * scale) / 2
+
+    def sx(value):
+        return offset_x + value * scale
+
+    def sy(value):
+        return offset_y + value * scale
+
+    def sw(value):
+        return value * scale
+
+    def sh(value):
+        return value * scale
+
+    def font_pt(base_px):
+        return max(8, base_px * scale * 72)
+
+    def rgb(hex_color):
+        return RGBColor(*_hex_to_rgb_parts(hex_color))
+
+    def group_color(group_id):
+        if not group_id:
+            return '#9aa6c2'
+        group_palette = style['group_palette']
+        return group_palette[(int(group_id) - 1) % len(group_palette)]
+
+    prs = Presentation()
+    prs.slide_width = Inches(slide_w)
+    prs.slide_height = Inches(slide_h)
+    slide = prs.slides.add_slide(prs.slide_layouts[6])
+
+    bg = slide.shapes.add_shape(
+        MSO_SHAPE.RECTANGLE,
+        Inches(0),
+        Inches(0),
+        Inches(slide_w),
+        Inches(slide_h),
+    )
+    bg.fill.solid()
+    bg.fill.fore_color.rgb = rgb(style['bg'])
+    bg.line.fill.background()
+
+    def add_round_rect(x, y, w, h, fill_color, stroke_color=None):
+        shape = slide.shapes.add_shape(
+            MSO_SHAPE.ROUNDED_RECTANGLE,
+            Inches(sx(x)),
+            Inches(sy(y)),
+            Inches(sw(w)),
+            Inches(sh(h)),
+        )
+        shape.fill.solid()
+        shape.fill.fore_color.rgb = rgb(fill_color)
+        if stroke_color:
+            shape.line.color.rgb = rgb(stroke_color)
+            shape.line.width = Pt(max(0.75, scale * 72))
+        else:
+            shape.line.fill.background()
+        # 控制阴影透明度，避免默认主题阴影过重
+        sp_pr = shape._element.spPr
+        for child in list(sp_pr):
+            if child.tag == qn('a:effectLst'):
+                sp_pr.remove(child)
+        effect_xml = parse_xml(
+            f'<a:effectLst {nsdecls("a")}>'
+            '<a:outerShdw blurRad="38100" dist="19050" dir="5400000" algn="ctr" rotWithShape="0">'
+            '<a:srgbClr val="000000"><a:alpha val="12000"/></a:srgbClr>'
+            '</a:outerShdw>'
+            '</a:effectLst>'
+        )
+        sp_pr.append(effect_xml)
+        return shape
+
+    def add_text(x, y, w, h, text, color, size_px, bold=False, center=False, middle=True):
+        if text is None:
+            return
+        font_name = '鸿蒙黑体'
+        shape = slide.shapes.add_textbox(
+            Inches(sx(x)),
+            Inches(sy(y)),
+            Inches(sw(w)),
+            Inches(sh(h)),
+        )
+        tf = shape.text_frame
+        tf.clear()
+        tf.margin_left = 0
+        tf.margin_right = 0
+        tf.margin_top = 0
+        tf.margin_bottom = 0
+        tf.word_wrap = False
+        tf.vertical_anchor = MSO_ANCHOR.MIDDLE if middle else MSO_ANCHOR.TOP
+        paragraph = tf.paragraphs[0]
+        paragraph.alignment = PP_ALIGN.CENTER if center else PP_ALIGN.LEFT
+        run = paragraph.add_run()
+        run.text = str(text)
+        run.font.name = font_name
+        run.font.bold = bool(bold)
+        run.font.size = Pt(font_pt(size_px))
+        run.font.color.rgb = rgb(color)
+        # 同时设置 latin/eastAsia/cs，确保中文文本在 PPT 中按指定字体渲染
+        r_pr = run._r.get_or_add_rPr()
+        for tag in ('latin', 'ea', 'cs'):
+            node = r_pr.find(qn(f'a:{tag}'))
+            if node is None:
+                node = parse_xml(f'<a:{tag} {nsdecls("a")} typeface="{font_name}"/>')
+                r_pr.append(node)
+            else:
+                node.set('typeface', font_name)
+
+    if show_title:
+        title_y = padding_y + 28 if show_podium else padding_y + 30
+        add_text(
+            padding_x,
+            title_y - 24,
+            grid_w,
+            32,
+            f'{classroom.name} 座次图',
+            style['title'],
+            24,
+            bold=True,
+            center=False,
+            middle=True,
+        )
+
+    if show_podium:
+        podium_y = padding_y + 32 if show_title else padding_y + 14
+        add_round_rect(podium_x, podium_y, podium_w, podium_h, style['podium_fill'], style['podium_stroke'])
+        add_text(
+            podium_x,
+            podium_y + 4,
+            podium_w,
+            24,
+            '讲台',
+            style['type'],
+            13,
+            bold=True,
+            center=True,
+            middle=True,
+        )
+
+    for r in range(1, classroom.rows + 1):
+        for c in range(1, classroom.cols + 1):
+            seat = seat_map.get((r, c))
+            if not seat:
+                continue
+
+            x = padding_x + (c - 1) * (cell_w + gap)
+            y = grid_top + (r - 1) * (cell_h + gap)
+
+            if seat.cell_type == SeatCellType.SEAT:
+                if seat.student_id:
+                    fill = style['seat_fill_occupied']
+                    stroke = style['seat_stroke_occupied']
+                else:
+                    fill = style['seat_fill_empty']
+                    stroke = style['seat_stroke_empty']
+
+                add_round_rect(x, y, cell_w, cell_h, fill, stroke)
+
+                if show_coords:
+                    add_text(
+                        x + 8,
+                        y + 5,
+                        cell_w - 16,
+                        16,
+                        f'({r}-{c})',
+                        style['sub'],
+                        12,
+                        bold=False,
+                        center=False,
+                        middle=False,
+                    )
+
+                if show_group and seat.group_id and seat.group:
+                    tag_w = max(36, min(66, 18 + len(seat.group.name) * 12))
+                    tag_color = group_color(seat.group_id)
+                    add_round_rect(x + cell_w - tag_w - 8, y + 8, tag_w, 20, tag_color, None)
+                    add_text(
+                        x + cell_w - tag_w - 8,
+                        y + 8,
+                        tag_w,
+                        20,
+                        seat.group.name,
+                        style['tag_text'],
+                        11,
+                        bold=True,
+                        center=True,
+                        middle=True,
+                    )
+
+                if seat.student:
+                    base_name_y = y + (48 if show_coords else 42)
+                    if show_name:
+                        if name_emphasis_mode:
+                            name_size = _name_emphasis_font_size(seat.student.name)
+                            center_y = y + cell_h / 2 + (6 if (show_group and seat.group_id) else 0)
+                            add_text(
+                                x + 10,
+                                center_y - 18,
+                                cell_w - 20,
+                                36,
+                                seat.student.name,
+                                style['name'],
+                                name_size,
+                                bold=True,
+                                center=True,
+                                middle=True,
+                            )
+                        else:
+                            add_text(
+                                x + 12,
+                                base_name_y - 16,
+                                cell_w - 24,
+                                22,
+                                seat.student.name,
+                                style['name'],
+                                16,
+                                bold=True,
+                                center=False,
+                                middle=False,
+                            )
+                    if show_score and (seat.student.score or 0) > 0:
+                        score_y = base_name_y + 20 if show_name else y + (56 if show_coords else 50)
+                        add_text(
+                            x + 12,
+                            score_y - 14,
+                            cell_w - 24,
+                            20,
+                            f'{seat.student.display_score}分',
+                            style['sub'],
+                            12,
+                            bold=False,
+                            center=False,
+                            middle=False,
+                        )
+                elif show_empty_label:
+                    empty_y = y + (56 if show_coords else 50)
+                    add_text(
+                        x + 12,
+                        empty_y - 14,
+                        cell_w - 24,
+                        20,
+                        '空座位',
+                        style['sub'],
+                        12,
+                        bold=False,
+                        center=False,
+                        middle=False,
+                    )
+                continue
+
+            if seat.cell_type == SeatCellType.AISLE:
+                fill = style['nonseat_aisle']
+            elif seat.cell_type == SeatCellType.PODIUM:
+                fill = style['nonseat_podium']
+            else:
+                fill = style['nonseat_empty']
+
+            add_round_rect(x, y, cell_w, cell_h, fill, style['nonseat_stroke'])
+            if show_seat_type:
+                add_text(
+                    x + 8,
+                    y + 33,
+                    cell_w - 16,
+                    28,
+                    seat.get_cell_type_display(),
+                    style['type'],
+                    13,
+                    bold=True,
+                    center=True,
+                    middle=True,
+                )
+
+    buffer = BytesIO()
+    prs.save(buffer)
+    response = HttpResponse(
+        buffer.getvalue(),
+        content_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    )
+    filename = escape_uri_path(f'{classroom.name}_座次图.pptx')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    return response
+
+
+def export_students_pptx_options_page(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    return render(request, 'seats/export_pptx_options.html', {
+        'classroom': classroom
+    })
 
 
 def export_group_report(request, pk):
@@ -3498,7 +4049,7 @@ def export_group_report(request, pk):
         left=Side(style='thin'), right=Side(style='thin'),
         top=Side(style='thin'), bottom=Side(style='thin'),
     )
-    font_name = 'HarmonyOS Sans SC'
+    font_name = '鸿蒙黑体'
     group_font = Font(name=font_name, bold=True, size=13)
     name_font  = Font(name=font_name, size=11)
     center     = Alignment(horizontal='center', vertical='center')

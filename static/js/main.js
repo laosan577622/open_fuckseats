@@ -4,9 +4,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const syncHeaderHeight = () => {
         if (!header) return;
-        const height = Math.ceil(header.getBoundingClientRect().height);
+        const height = Math.max(0, Math.round(header.getBoundingClientRect().height));
         if (height > 0) {
-            document.documentElement.style.setProperty('--header-height', `${height}px`);
+            const current = parseInt(
+                getComputedStyle(document.documentElement).getPropertyValue('--header-height'),
+                10
+            );
+            if (Number.isNaN(current) || Math.abs(current - height) >= 1) {
+                document.documentElement.style.setProperty('--header-height', `${height}px`);
+            }
         }
     };
 
