@@ -53,7 +53,7 @@
         </div>
         <div class="ribbon-group">
             <a href="{% url 'export_students' classroom.pk %}" class="btn btn-secondary" id="btn-export"
-                data-system-save="1" data-default-filename="{{ classroom.name }}_座次图.xlsx"
+                data-default-filename="{{ classroom.name }}_座次图.xlsx"
                 data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                 data-accept-ext=".xlsx">导出排座表</a>
             <a href="{% url 'export_students_svg' classroom.pk %}" class="btn btn-secondary" id="btn-export-svg"
@@ -400,6 +400,28 @@
         </div>
     </div>
 
+    <div id="excel-export-options-modal" class="modal">
+        <div class="modal-content">
+            <h3 style="margin-bottom: 8px;">导出排座表</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 14px; font-size: 14px;">
+                请选择导出方向。</p>
+            <div class="export-options-list">
+                <label class="export-option-item">
+                    <input type="radio" name="excel-export-layout-transform" value="none" checked>
+                    <span>原始方向（讲台在上）</span>
+                </label>
+                <label class="export-option-item">
+                    <input type="radio" name="excel-export-layout-transform" value="rotate_180">
+                    <span>180°翻转（讲台在下）</span>
+                </label>
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" data-close-modal="excel-export-options-modal">取消</button>
+                <button type="button" class="btn btn-primary" id="excel-export-confirm-btn">开始导出</button>
+            </div>
+        </div>
+    </div>
+
     <div id="seat-layout-import-modal" class="modal">
         <div class="modal-content">
             <h3 style="margin-bottom: 8px;">导入座位表（Excel）</h3>
@@ -505,10 +527,17 @@
                     <label>Excel 文件</label>
                     <input type="file" name="excel_file" accept=".xlsx,.xls" required>
                 </div>
-                <label class="checkbox-row">
-                    <input type="checkbox" name="clear_existing" value="1">
-                    清空现有学生后再导入
-                </label>
+                <div class="form-group">
+                    <label>导入模式</label>
+                    <label class="checkbox-row">
+                        <input type="radio" name="import_mode" value="match" checked>
+                        匹配现有学生并更新成绩（未匹配自动新增）
+                    </label>
+                    <label class="checkbox-row">
+                        <input type="radio" name="import_mode" value="replace">
+                        清空现有学生后全量导入
+                    </label>
+                </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" data-close-modal="excel-import-modal">取消</button>
                     <button type="submit" class="btn btn-primary">开始导入</button>

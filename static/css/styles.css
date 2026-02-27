@@ -1442,6 +1442,25 @@ input:focus {
     margin: 14px 0;
 }
 
+.export-options-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.export-option-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(10, 89, 247, 0.16);
+    background: rgba(10, 89, 247, 0.05);
+    border-radius: 12px;
+    font-size: 13px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
 .seat-layout-preview-wrap {
     display: grid;
     grid-template-columns: 1fr;

@@ -142,6 +142,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    const buildUrlWithQuery = (url, query = {}) => {
+        const parsed = new URL(url, window.location.origin);
+        Object.entries(query).forEach(([key, value]) => {
+            if (value === null || value === undefined || value === '') {
+                parsed.searchParams.delete(key);
+            } else {
+                parsed.searchParams.set(key, `${value}`);
+            }
+        });
+        return `${parsed.pathname}${parsed.search}`;
+    };
+
     const parseAcceptExtensions = (raw = '') => {
         return String(raw)
             .split(',')
@@ -1329,7 +1341,72 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const getExcelExportLayoutTransform = () => {
+        return document.querySelector('input[name="excel-export-layout-transform"]:checked')?.value || 'none';
+    };
+
+    const buildExcelExportFilename = (baseFilename, layoutTransform) => {
+        const fallback = baseFilename || '座次图.xlsx';
+        if (layoutTransform !== 'rotate_180') return fallback;
+        if (/\.xlsx$/i.test(fallback)) {
+            return fallback.replace(/\.xlsx$/i, '_180度翻转.xlsx');
+        }
+        return `${fallback}_180度翻转.xlsx`;
+    };
+
+    const bindExcelExportWithOptions = () => {
+        const exportBtn = document.getElementById('btn-export');
+        const confirmBtn = document.getElementById('excel-export-confirm-btn');
+        if (!exportBtn || !confirmBtn) return;
+
+        exportBtn.addEventListener('click', (event) => {
+            event.preventDefault();
+            if (exportBtn.dataset.pending === '1') return;
+            openModal('excel-export-options-modal');
+        });
+
+        confirmBtn.addEventListener('click', async () => {
+            if (exportBtn.dataset.pending === '1') return;
+
+            const href = exportBtn.getAttribute('href');
+            if (!href) {
+                alert('导出地址无效');
+                return;
+            }
+            const layoutTransform = getExcelExportLayoutTransform();
+            const exportUrl = buildUrlWithQuery(href, {
+                layout_transform: layoutTransform === 'rotate_180' ? 'rotate_180' : '',
+            });
+            const fallbackFilename = buildExcelExportFilename(
+                exportBtn.dataset.defaultFilename || '',
+                layoutTransform
+            );
+            const acceptMime = exportBtn.dataset.acceptMime || '';
+            const acceptExtensions = parseAcceptExtensions(exportBtn.dataset.acceptExt || '');
+
+            closeModal('excel-export-options-modal');
+            setExportAnchorPending(exportBtn, true);
+            try {
+                const result = await saveExportFromUrl(exportUrl, {
+                    fallbackFilename,
+                    acceptMime,
+                    acceptExtensions
+                });
+                if (result.status === 'saved') {
+                    showInlineToast(`文件已保存：${result.filename}`);
+                } else if (result.status === 'downloaded') {
+                    showInlineToast(`已开始下载：${result.filename}`);
+                }
+            } catch (error) {
+                alert(error?.message || '导出失败');
+            } finally {
+                setExportAnchorPending(exportBtn, false);
+            }
+        });
+    };
+
     bindSystemSaveLinks();
+    bindExcelExportWithOptions();
 
     if (seatStage) {
         seatStage.addEventListener('mousedown', (e) => {
@@ -1592,6 +1669,11 @@ function handleImportSubmit(e) {
 let currentImportData = null;
 let currentImportFileId = null;
 
+function getStudentImportMode() {
+    const checked = document.querySelector('#excel-import-form input[name="import_mode"]:checked');
+    return checked ? checked.value : 'match';
+}
+
 function showImportModal(data) {
     const modal = document.getElementById('import-mapping-modal');
     if (!modal) return;
@@ -1725,7 +1807,7 @@ function confirmImportMapping() {
 
     const startRow = Math.max(0, parseInt(document.getElementById('import-start-row').value) - 1);
     const scoreColIdx = document.getElementById('import-score-col').value;
-    const clearExisting = document.querySelector('#excel-import-form input[name="clear_existing"]')?.checked || false;
+    const importMode = getStudentImportMode();
 
     const btn = document.querySelector('#import-mapping-modal .btn-primary');
     const originalText = btn.textContent;
@@ -1752,8 +1834,8 @@ function confirmImportMapping() {
     formData.append('file_id', currentImportFileId);
     formData.append('start_row', startRow);
     formData.append('name_col_index', nameColIdx);
+    formData.append('import_mode', importMode);
     if (scoreColIdx) formData.append('score_col_index', scoreColIdx);
-    if (clearExisting) formData.append('clear_existing', 'true');
 
     fetch(importUrl, {
         method: 'POST',

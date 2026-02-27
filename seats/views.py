@@ -1440,6 +1440,7 @@ def import_students(request, pk):
         if action == 'upload' and request.FILES.get('excel_file'):
             excel_file = request.FILES['excel_file']
             clear_existing = request.POST.get('clear_existing') == '1'
+            import_mode = _resolve_student_import_mode(request.POST.get('import_mode'), clear_existing)
             
             try:
                 # 先读取一次尝试自动识别
@@ -1469,8 +1470,16 @@ def import_students(request, pk):
                     student_id_col = find_column(['学号', '学生号', '编号', 'ID'])
                     gender_col = find_column(['性别', '男女性别'])
 
-                    count = _process_import(classroom, df, name_col, student_id_col, gender_col, score_col, clear_existing)
-                    return JsonResponse({'status': 'success', 'message': f'成功导入 {count} 名学生'})
+                    result = _process_import(
+                        classroom,
+                        df,
+                        name_col,
+                        student_id_col,
+                        gender_col,
+                        score_col,
+                        import_mode
+                    )
+                    return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
                 
                 # 自动识别失败，保存临时文件并返回预览数据
                 import os
@@ -1508,6 +1517,7 @@ def import_students(request, pk):
             name_col_idx = int(request.POST.get('name_col_index'))
             score_col_idx = request.POST.get('score_col_index')
             clear_existing = request.POST.get('clear_existing') == 'true'
+            import_mode = _resolve_student_import_mode(request.POST.get('import_mode'), clear_existing)
             
             import os
             from django.conf import settings
@@ -1531,54 +1541,186 @@ def import_students(request, pk):
                 name_col = name_col_idx
                 score_col = int(score_col_idx) if score_col_idx and score_col_idx != '' else None
                 
-                count = _process_import(classroom, df_data, name_col, None, None, score_col, clear_existing)
+                result = _process_import(
+                    classroom,
+                    df_data,
+                    name_col,
+                    None,
+                    None,
+                    score_col,
+                    import_mode
+                )
                 
                 # 清理文件
                 os.remove(temp_path)
                 
-                return JsonResponse({'status': 'success', 'message': f'成功导入 {count} 名学生'})
+                return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
             except Exception as e:
                 return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
     return redirect('classroom_detail', pk=pk)
 
 
-def _process_import(classroom, df, name_col, student_id_col, gender_col, score_col, clear_existing):
-    if clear_existing:
-        classroom.students.all().delete()
-    
-    count = 0
+IMPORT_MODE_REPLACE = 'replace'
+IMPORT_MODE_MATCH = 'match'
+VALID_IMPORT_MODES = {IMPORT_MODE_REPLACE, IMPORT_MODE_MATCH}
+
+
+def _resolve_student_import_mode(raw_mode, clear_existing=False):
+    mode = str(raw_mode or '').strip().lower()
+    if mode in VALID_IMPORT_MODES:
+        return mode
+    return IMPORT_MODE_REPLACE if clear_existing else IMPORT_MODE_MATCH
+
+
+def _normalize_import_text(value):
+    if value is None or pd.isna(value):
+        return ''
+    return str(value).strip()
+
+
+def _parse_import_gender(value):
+    text = _normalize_import_text(value).lower()
+    if text in {'男', 'm', 'male'}:
+        return 'M'
+    if text in {'女', 'f', 'female'}:
+        return 'F'
+    return None
+
+
+def _parse_import_score(value):
+    if value is None or pd.isna(value):
+        return 0
+    numeric_value = pd.to_numeric(value, errors='coerce')
+    if pd.isna(numeric_value):
+        return 0
+    return float(numeric_value)
+
+
+def _format_import_result_message(result):
+    if result['mode'] == IMPORT_MODE_REPLACE:
+        return f"成功导入 {result['created']} 名学生"
+
+    parts = [f"匹配更新 {result['updated']} 人"]
+    if result['created'] > 0:
+        parts.append(f"新增 {result['created']} 人")
+    if result['skipped'] > 0:
+        parts.append(f"未匹配 {result['skipped']} 人")
+    return "匹配导入完成：" + "，".join(parts)
+
+
+def _process_import(classroom, df, name_col, student_id_col, gender_col, score_col, import_mode=IMPORT_MODE_MATCH):
+    import_mode = _resolve_student_import_mode(import_mode)
+    created_count = 0
+    updated_count = 0
+    skipped_count = 0
+    has_score_column = score_col is not None
+
     with transaction.atomic():
+        if import_mode == IMPORT_MODE_REPLACE:
+            classroom.students.all().delete()
+
+        existing_students = list(classroom.students.all())
+        should_match_existing = import_mode == IMPORT_MODE_MATCH and len(existing_students) > 0
+
+        existing_by_id = {}
+        existing_names = defaultdict(list)
+        if should_match_existing:
+            for student in existing_students:
+                sid = _normalize_import_text(student.student_id).lower()
+                if sid and sid not in existing_by_id:
+                    existing_by_id[sid] = student
+                normalized_name = _normalize_import_text(student.name).lower()
+                if normalized_name:
+                    existing_names[normalized_name].append(student)
+
+        unique_name_map = {
+            name_key: students[0]
+            for name_key, students in existing_names.items()
+            if len(students) == 1
+        }
+
+        def index_student(student):
+            sid = _normalize_import_text(student.student_id).lower()
+            if sid and sid not in existing_by_id:
+                existing_by_id[sid] = student
+            name_key = _normalize_import_text(student.name).lower()
+            if not name_key:
+                return
+            if student not in existing_names[name_key]:
+                existing_names[name_key].append(student)
+            if len(existing_names[name_key]) == 1:
+                unique_name_map[name_key] = student
+            else:
+                unique_name_map.pop(name_key, None)
+
         for _, row in df.iterrows():
-            name = row[name_col]
-            if pd.isna(name) or str(name).strip() == '':
+            name = _normalize_import_text(row[name_col])
+            if not name:
                 continue
-                
+
             # 处理可能的标题行混入（如果手动选择时不准确）
-            if str(name).strip() in ['姓名', 'Name']: 
+            if name.lower() in {'姓名', 'name'}:
                 continue
 
-            student_id = row.get(student_id_col, '') if student_id_col is not None else ''
-            gender_raw = row.get(gender_col, '') if gender_col is not None else ''
-            score = row.get(score_col, 0) if score_col is not None else 0
+            student_id = _normalize_import_text(row.get(student_id_col, '')) if student_id_col is not None else ''
+            gender = _parse_import_gender(row.get(gender_col, '')) if gender_col is not None else None
+            score_value = _parse_import_score(row.get(score_col, 0)) if has_score_column else 0
 
-            gender = 'M' if gender_raw == '男' else 'F' if gender_raw == '女' else None
-            score_value = score if pd.notna(score) else 0
-            if isinstance(score_value, str):
-                try:
-                    score_value = float(score_value.strip())
-                except Exception:
-                    score_value = 0
+            if should_match_existing:
+                matched_student = None
+                if student_id:
+                    matched_student = existing_by_id.get(student_id.lower())
+                if not matched_student:
+                    matched_student = unique_name_map.get(name.lower())
+
+                if not matched_student:
+                    created_student = Student.objects.create(
+                        classroom=classroom,
+                        name=name,
+                        student_id=student_id,
+                        gender=gender,
+                        score=score_value
+                    )
+                    index_student(created_student)
+                    created_count += 1
+                    continue
+
+                update_fields = []
+                if matched_student.name != name:
+                    matched_student.name = name
+                    update_fields.append('name')
+                if student_id and _normalize_import_text(matched_student.student_id) != student_id:
+                    matched_student.student_id = student_id
+                    update_fields.append('student_id')
+                    existing_by_id[student_id.lower()] = matched_student
+                if gender is not None and matched_student.gender != gender:
+                    matched_student.gender = gender
+                    update_fields.append('gender')
+                if has_score_column and matched_student.score != score_value:
+                    matched_student.score = score_value
+                    update_fields.append('score')
+
+                if update_fields:
+                    matched_student.save(update_fields=update_fields)
+                updated_count += 1
+                continue
 
             Student.objects.create(
                 classroom=classroom,
-                name=str(name).strip(),
-                student_id=str(student_id).strip() if pd.notna(student_id) else '',
+                name=name,
+                student_id=student_id,
                 gender=gender,
                 score=score_value
             )
-            count += 1
-    return count
+            created_count += 1
+
+    return {
+        'mode': import_mode,
+        'created': created_count,
+        'updated': updated_count,
+        'skipped': skipped_count,
+    }
 
 
 def _build_constraint_maps(classroom, students):
@@ -3117,52 +3259,64 @@ def delete_constraint(request, pk, constraint_id):
 
 def export_students(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
-    
+
+    layout_transform = str(request.GET.get('layout_transform', 'none')).strip().lower()
+    rotate_180 = layout_transform in {'rotate_180', 'rot180', '180'}
+    if not rotate_180:
+        rotate_flag = str(request.GET.get('rotate_180', '')).strip().lower()
+        rotate_180 = rotate_flag in {'1', 'true', 'yes', 'on'}
+
     # 导出网格布局
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = classroom.name
-    
+
     # 样式设置
-    thin_border = Border(left=Side(style='thin'), 
-                         right=Side(style='thin'), 
-                         top=Side(style='thin'), 
+    thin_border = Border(left=Side(style='thin'),
+                         right=Side(style='thin'),
+                         top=Side(style='thin'),
                          bottom=Side(style='thin'))
     center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
-    
+
     # 字体设置
-    font_name = 'HarmonyOS Sans SC' 
+    font_name = 'HarmonyOS Sans SC'
     header_font = Font(name=font_name, bold=True, size=20)
-    normal_font = Font(name=font_name, size=12)
     podium_font = Font(name=font_name, bold=True, size=14)
     seat_font = Font(name=font_name, size=12, bold=False)
-    note_font = Font(name=font_name, size=10, color="808080")
-    
+
     # 标题
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=classroom.cols)
-    cell = ws.cell(row=1, column=1, value=f"{classroom.name} 座位表")
+    title_suffix = "（180°翻转）" if rotate_180 else ""
+    cell = ws.cell(row=1, column=1, value=f"{classroom.name} 座位表{title_suffix}")
     cell.font = header_font
     cell.alignment = center_align
     ws.row_dimensions[1].height = 40
-    
-    # 讲台
-    ws.merge_cells(start_row=2, start_column=1, end_row=2, end_column=classroom.cols)
-    cell = ws.cell(row=2, column=1, value="讲台")
-    cell.font = podium_font
-    cell.alignment = center_align
-    ws.row_dimensions[2].height = 30
-    
+
+    seat_start_row = 2 if rotate_180 else 3
+    podium_row = seat_start_row + classroom.rows if rotate_180 else 2
+
+    # 讲台（翻转模式下展示在底部）
+    ws.merge_cells(start_row=podium_row, start_column=1, end_row=podium_row, end_column=classroom.cols)
+    podium_cell = ws.cell(row=podium_row, column=1, value="讲台")
+    podium_cell.font = podium_font
+    podium_cell.alignment = center_align
+    ws.row_dimensions[podium_row].height = 30
+
     seats = classroom.seats.select_related('student').all()
     seat_map = _build_seat_map(seats)
-    
-    start_row = 3
-    
-    for r in range(1, classroom.rows + 1):
-        ws.row_dimensions[start_row + r - 1].height = 50
+
+    for c in range(1, classroom.cols + 1):
+        ws.column_dimensions[get_column_letter(c)].width = 14
+
+    for visual_row in range(1, classroom.rows + 1):
+        row_index = seat_start_row + visual_row - 1
+        ws.row_dimensions[row_index].height = 50
         for c in range(1, classroom.cols + 1):
-            cell = ws.cell(row=start_row + r - 1, column=c)
-            seat = seat_map.get((r, c))
-            
+            cell = ws.cell(row=row_index, column=c)
+            source_row = classroom.rows - visual_row + 1 if rotate_180 else visual_row
+            source_col = classroom.cols - c + 1 if rotate_180 else c
+            seat = seat_map.get((source_row, source_col))
+
             value = ""
             is_seat = False
             if seat:
@@ -3171,25 +3325,20 @@ def export_students(request, pk):
                     if seat.student:
                         value = seat.student.name
                     else:
-                        value = "" # 空座位空白
+                        value = ""
                 elif seat.cell_type == SeatCellType.AISLE or seat.cell_type == SeatCellType.EMPTY:
                     value = ""
                 else:
                     value = seat.get_cell_type_display()
-            
+
             cell.value = value
             cell.alignment = center_align
             cell.font = seat_font
-            
+
             # 仅对入座座位加边框
             if is_seat and seat.student:
                 cell.border = thin_border
-            
-            # 设置列宽（近似值）
-            ws.column_dimensions[get_column_letter(c)].width = 14
 
-    ws.column_dimensions[get_column_letter(c)].width = 14
-        
     # A4 横向打印
     from openpyxl.worksheet.page import PageMargins
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
@@ -3197,14 +3346,15 @@ def export_students(request, pk):
     ws.page_setup.margins = PageMargins(left=0.25, right=0.25, top=0.25, bottom=0.25, header=0, footer=0)
     ws.print_options.horizontalCentered = True
     ws.print_options.verticalCentered = True
-    
+
     # 适应页面
     ws.page_setup.fitToPage = True
     ws.page_setup.fitToHeight = 1
     ws.page_setup.fitToWidth = 1
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="{classroom.name}_座次图.xlsx"'
+    filename_suffix = "_座次图_180度翻转.xlsx" if rotate_180 else "_座次图.xlsx"
+    response['Content-Disposition'] = f'attachment; filename="{classroom.name}{filename_suffix}"'
     wb.save(response)
 
     return response

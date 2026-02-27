@@ -3,6 +3,33 @@ import shutil
 import subprocess
 import sys
 
+
+DB_FILE_MARKERS = {
+    'db.sqlite3',
+    'db.sqlite3-journal',
+    'db.sqlite3-shm',
+    'db.sqlite3-wal',
+}
+
+
+def _remove_embedded_databases(dist_root):
+    if not os.path.exists(dist_root):
+        return []
+
+    removed = []
+    for root, _, files in os.walk(dist_root):
+        for filename in files:
+            lowered = filename.lower()
+            if lowered in DB_FILE_MARKERS or lowered.endswith('.sqlite3'):
+                file_path = os.path.join(root, filename)
+                try:
+                    os.remove(file_path)
+                    removed.append(file_path)
+                except Exception as e:
+                    print(f"移除数据库文件失败: {file_path} ({e})", flush=True)
+    return removed
+
+
 def main():
     # 获取当前脚本所在目录
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -89,8 +116,13 @@ def main():
     
     try:
         subprocess.check_call(cmd, cwd=BASE_DIR)
+        removed_db_files = _remove_embedded_databases(DIST_DIR)
         print("-" * 30, flush=True)
         print("打包成功！", flush=True)
+        if removed_db_files:
+            print(f"已移除 {len(removed_db_files)} 个数据库文件，避免随安装包分发。", flush=True)
+        else:
+            print("未发现可执行目录中的数据库文件。", flush=True)
         exe_path = os.path.join(DIST_DIR, 'FuckSeats', 'FuckSeats.exe')
         print(f"可执行文件位置: {exe_path}", flush=True)
     except subprocess.CalledProcessError as e:

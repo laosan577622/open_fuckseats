@@ -1,9 +1,12 @@
 from django.test import TestCase
 from django.urls import reverse
 import json
+from io import BytesIO
+import openpyxl
+import pandas as pd
 
 from .models import Classroom, SeatConstraint, SeatCellType, SeatGroup
-from .views import _arrange_standard, _arrange_grouped, _apply_internal_policy
+from .views import _arrange_standard, _arrange_grouped, _apply_internal_policy, _process_import, IMPORT_MODE_MATCH, IMPORT_MODE_REPLACE
 
 
 class ConstraintArrangeTests(TestCase):
@@ -690,7 +693,108 @@ class GroupRotationTests(TestCase):
         self.assertIn("座位数量不一致", response.json().get("message", ""))
 
 
+class StudentImportTests(TestCase):
+    def test_process_import_match_updates_existing_students(self):
+        classroom = Classroom.objects.create(name="导入匹配", rows=2, cols=2)
+        stu_by_id = classroom.students.create(name="张三", student_id="1001", score=60)
+        stu_by_name = classroom.students.create(name="李四", score=55)
+
+        df = pd.DataFrame(
+            [
+                {"姓名": "张三", "学号": "1001", "总分": 95},
+                {"姓名": "李四", "总分": 88},
+                {"姓名": "王五", "总分": 77},
+            ]
+        )
+
+        result = _process_import(
+            classroom,
+            df,
+            "姓名",
+            "学号",
+            None,
+            "总分",
+            import_mode=IMPORT_MODE_MATCH,
+        )
+
+        stu_by_id.refresh_from_db()
+        stu_by_name.refresh_from_db()
+        self.assertEqual(stu_by_id.score, 95)
+        self.assertEqual(stu_by_name.score, 88)
+        self.assertEqual(classroom.students.count(), 3)
+        self.assertTrue(classroom.students.filter(name="王五", score=77).exists())
+        self.assertEqual(result["updated"], 2)
+        self.assertEqual(result["created"], 1)
+        self.assertEqual(result["skipped"], 0)
+
+    def test_process_import_replace_rebuilds_students(self):
+        classroom = Classroom.objects.create(name="导入清空", rows=2, cols=2)
+        classroom.students.create(name="旧学生", student_id="A01", score=30)
+
+        df = pd.DataFrame(
+            [
+                {"姓名": "新学生1", "学号": "N01", "总分": 91},
+                {"姓名": "新学生2", "学号": "N02", "总分": 85},
+            ]
+        )
+
+        result = _process_import(
+            classroom,
+            df,
+            "姓名",
+            "学号",
+            None,
+            "总分",
+            import_mode=IMPORT_MODE_REPLACE,
+        )
+
+        self.assertEqual(classroom.students.count(), 2)
+        self.assertFalse(classroom.students.filter(name="旧学生").exists())
+        self.assertEqual(result["created"], 2)
+        self.assertEqual(result["updated"], 0)
+        self.assertEqual(result["skipped"], 0)
+
+
 class ClassroomFeatureTests(TestCase):
+    def test_export_students_default_layout(self):
+        classroom = Classroom.objects.create(name="导出默认", rows=2, cols=2)
+        seat_a = classroom.seats.get(row=1, col=1)
+        seat_d = classroom.seats.get(row=2, col=2)
+        seat_a.student = classroom.students.create(name="A")
+        seat_d.student = classroom.students.create(name="D")
+        seat_a.save(update_fields=["student"])
+        seat_d.save(update_fields=["student"])
+
+        url = reverse("export_students", args=[classroom.pk])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        ws = wb.active
+        self.assertEqual(ws.cell(row=2, column=1).value, "讲台")
+        self.assertEqual(ws.cell(row=3, column=1).value, "A")
+        self.assertEqual(ws.cell(row=4, column=2).value, "D")
+
+    def test_export_students_rotate_180_layout(self):
+        classroom = Classroom.objects.create(name="导出翻转", rows=2, cols=2)
+        seat_a = classroom.seats.get(row=1, col=1)
+        seat_d = classroom.seats.get(row=2, col=2)
+        seat_a.student = classroom.students.create(name="A")
+        seat_d.student = classroom.students.create(name="D")
+        seat_a.save(update_fields=["student"])
+        seat_d.save(update_fields=["student"])
+
+        url = reverse("export_students", args=[classroom.pk]) + "?layout_transform=rotate_180"
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        ws = wb.active
+        self.assertIn("180°翻转", ws.cell(row=1, column=1).value or "")
+        self.assertEqual(ws.cell(row=4, column=1).value, "讲台")
+        self.assertEqual(ws.cell(row=2, column=1).value, "D")
+        self.assertEqual(ws.cell(row=3, column=2).value, "A")
+
     def test_export_students_svg_returns_svg_content(self):
         classroom = Classroom.objects.create(name="SVG班", rows=1, cols=2)
         student = classroom.students.create(name="Alice", score=95)
