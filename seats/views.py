@@ -4055,8 +4055,7 @@ def export_group_report(request, pk):
     center     = Alignment(horizontal='center', vertical='center')
 
     # 页眉
-    # &"Font,Bold"&Size Title
-    header_text = f"&\"{font_name},Bold\"&14{classroom.name} (          ) 登记表"
+    header_text = f"&\"{font_name},Bold\"&14 {classroom.name} (          ) 登记表"
     ws.oddHeader.center.text = header_text
     ws.evenHeader.center.text = header_text
 

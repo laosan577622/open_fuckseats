@@ -3,6 +3,7 @@ from django.urls import reverse
 import json
 import importlib.util
 import unittest
+import zipfile
 from io import BytesIO
 import openpyxl
 import pandas as pd
@@ -937,6 +938,19 @@ class ClassroomFeatureTests(TestCase):
         sample = payload.get("sample") or {}
         self.assertEqual(sample.get("classroom"), "SVG预览班")
         self.assertIn(sample.get("name"), ["Alice", "Bob"])
+
+    def test_export_group_report_header_font_size_code_is_delimited(self):
+        classroom = Classroom.objects.create(name="09班", rows=2, cols=2)
+
+        url = reverse("export_group_report", args=[classroom.pk])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        with zipfile.ZipFile(BytesIO(response.content)) as zf:
+            sheet_xml = zf.read("xl/worksheets/sheet1.xml").decode("utf-8")
+
+        self.assertIn("&amp;20 09", sheet_xml)
+        self.assertNotIn("&amp;1409", sheet_xml)
 
     def test_rename_classroom_success(self):
         classroom = Classroom.objects.create(name="原班级", rows=2, cols=2)
