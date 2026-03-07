@@ -13,7 +13,8 @@
     <div id="future-mode-root" style="display:none;" data-chat-url="{% url 'ai_chat' classroom.pk %}"
         data-chat-stream-url="{% url 'ai_chat_stream' classroom.pk %}"
         data-state-url="{% url 'classroom_state' classroom.pk %}"
-        data-detail-url="{% url 'classroom_detail' classroom.pk %}" data-csrf="{{ csrf_token }}">
+        data-detail-url="{% url 'classroom_detail' classroom.pk %}" data-classroom-id="{{ classroom.pk }}"
+        data-csrf="{{ csrf_token }}">
     </div>
 
 
@@ -94,6 +95,11 @@
                         <input type="password" id="future-api-key" placeholder="API Key (sk-...)">
                         <input type="url" id="future-base-url" placeholder="Base URL">
                         <input type="text" id="future-model-id" placeholder="Model ID">
+                        <select id="future-thinking-mode" aria-label="思考模式">
+                            <option value="">深度思索：跟随模型（默认）</option>
+                            <option value="enabled">深度思索：开启</option>
+                            <option value="disabled">深度思索：关闭</option>
+                        </select>
                         <div class="modal-actions">
                             <button type="submit" class="btn-capsule">保存</button>
                             <button type="button" id="future-config-reset" class="btn-capsule"
@@ -108,7 +114,7 @@
         </div>
 
         <!-- 引用重写后的脚本 -->
-        <script src="{% static 'js/ai_workspace.js' %}?v=3.5"></script>
+        <script src="{% static 'js/ai_workspace.js' %}?v=3.8"></script>
 </body>
 
 </html>

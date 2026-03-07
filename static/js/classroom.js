@@ -1566,6 +1566,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Context Menu Logic
     const contextMenu = document.getElementById('seat-context-menu');
+    if (contextMenu && contextMenu.parentNode !== document.body) {
+        document.body.appendChild(contextMenu);
+    }
     const ctxSetLeader = document.getElementById('ctx-set-leader');
     let ctxTargetStudentId = null;
 
@@ -1584,6 +1587,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
         contextMenu.style.display = 'block';
         contextMenu.style.visibility = 'hidden';
+
+        // 重置位置，防止前一次点击的位置影响元素的正常测量大小
+        contextMenu.style.left = '0px';
+        contextMenu.style.top = '0px';
 
         const gap = 8;
         const rect = contextMenu.getBoundingClientRect();

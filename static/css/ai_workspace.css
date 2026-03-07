@@ -541,7 +541,8 @@ body {
     font-weight: 600;
 }
 
-.config-modal input {
+.config-modal input,
+.config-modal select {
     width: 100%;
     min-height: 44px;
     padding: 0 16px;
@@ -554,7 +555,8 @@ body {
     margin-bottom: 12px;
 }
 
-.config-modal input:focus {
+.config-modal input:focus,
+.config-modal select:focus {
     border-color: var(--theme-color);
 }
 

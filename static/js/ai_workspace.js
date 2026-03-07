@@ -5,6 +5,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const chatUrl = root.dataset.chatUrl;
     const chatStreamUrl = root.dataset.chatStreamUrl || '';
     const csrf = root.dataset.csrf;
+    const classroomId = String(root.dataset.classroomId || '').trim();
 
     const appScreen = document.getElementById('appScreen');
     const glowContainer = document.getElementById('glowContainer');
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const apiKeyInput = document.getElementById('future-api-key');
     const baseUrlInput = document.getElementById('future-base-url');
     const modelIdInput = document.getElementById('future-model-id');
+    const thinkingModeSelect = document.getElementById('future-thinking-mode');
     const configResetBtn = document.getElementById('future-config-reset');
 
     const conversationSelect = document.getElementById('conversationSelect');
@@ -33,6 +35,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let isSiriActive = false;
     let pulseTimeout;
+    let siriDismissTimeout;
     let hasStartedTyping = false;
     let pendingNode = null;
     let activeConversationId = null;
@@ -42,6 +45,22 @@ document.addEventListener('DOMContentLoaded', () => {
         calls: [],
         decisions: {},
     };
+    const READ_PERMISSION_TOOLS = new Set([
+        'get_classroom_overview',
+        'get_student_info',
+        'get_group_scores',
+        'get_student_list',
+        'send_card_info',
+    ]);
+    const readPermissionStorageKey = classroomId
+        ? `future_mode_read_permission_class_${classroomId}`
+        : 'future_mode_read_permission_class_default';
+    let hasClassReadPermission = false;
+    try {
+        hasClassReadPermission = localStorage.getItem(readPermissionStorageKey) === '1';
+    } catch (_) {
+        hasClassReadPermission = false;
+    }
 
     const escapeHtml = (value) => String(value || '')
         .replace(/&/g, '&amp;')
@@ -55,6 +74,10 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const readClientConfig = () => ({
+        thinking_mode: (() => {
+            const mode = String(thinkingModeSelect?.value || '').trim().toLowerCase();
+            return (mode === 'enabled' || mode === 'disabled') ? mode : '';
+        })(),
         api_key: String(apiKeyInput?.value || '').trim(),
         base_url: String(baseUrlInput?.value || '').trim(),
         model: String(modelIdInput?.value || '').trim(),
@@ -64,23 +87,31 @@ document.addEventListener('DOMContentLoaded', () => {
         if (apiKeyInput) apiKeyInput.value = config.api_key || '';
         if (baseUrlInput) baseUrlInput.value = config.base_url || '';
         if (modelIdInput) modelIdInput.value = config.model || '';
+        if (thinkingModeSelect) {
+            const mode = String(config.thinking_mode || '').trim().toLowerCase();
+            thinkingModeSelect.value = (mode === 'enabled' || mode === 'disabled') ? mode : '';
+        }
     };
 
     const saveClientConfigToLocal = (config = {}) => {
+        const mode = String(config.thinking_mode || '').trim().toLowerCase();
         localStorage.setItem(configStorageKey, JSON.stringify({
             api_key: String(config.api_key || '').trim(),
             base_url: String(config.base_url || '').trim(),
             model: String(config.model || '').trim(),
+            thinking_mode: (mode === 'enabled' || mode === 'disabled') ? mode : '',
         }));
     };
 
     const isClientConfigEmpty = (config = {}) => {
+        const mode = String(config.thinking_mode || '').trim().toLowerCase();
         const normalized = {
             api_key: String(config.api_key || '').trim(),
             base_url: String(config.base_url || '').trim(),
             model: String(config.model || '').trim(),
+            thinking_mode: (mode === 'enabled' || mode === 'disabled') ? mode : '',
         };
-        return !(normalized.api_key || normalized.base_url || normalized.model);
+        return !(normalized.api_key || normalized.base_url || normalized.model || normalized.thinking_mode);
     };
 
     writeClientConfig(loadClientConfig());
@@ -90,6 +121,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const wakeSiri = () => {
+        clearTimeout(siriDismissTimeout);
+        siriDismissTimeout = null;
         if (isSiriActive) return;
         isSiriActive = true;
         glowContainer.classList.add('active');
@@ -116,6 +149,25 @@ document.addEventListener('DOMContentLoaded', () => {
             pendingNode.parentNode.removeChild(pendingNode);
         }
         pendingNode = null;
+    };
+
+    const isReadPermissionCall = (call) => READ_PERMISSION_TOOLS.has(String(call?.name || '').trim());
+
+    const grantClassReadPermission = () => {
+        if (hasClassReadPermission) return;
+        hasClassReadPermission = true;
+        try {
+            localStorage.setItem(readPermissionStorageKey, '1');
+        } catch (_) {
+            // ignore storage failures
+        }
+    };
+
+    const startThinkingAnimation = () => {
+        wakeSiri();
+        appScreen.classList.add('squeezed');
+        glowContainer.classList.add('animating');
+        document.documentElement.style.setProperty('--pulse-brightness', '1.2');
     };
 
     const renderSeatCard = (card) => {
@@ -250,10 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const typeAssistantMessage = async (text) => {
-        wakeSiri();
-        appScreen.classList.add('squeezed');
-        glowContainer.classList.add('animating');
-        document.documentElement.style.setProperty('--pulse-brightness', '1.2');
+        startThinkingAnimation();
 
         const msgDiv = document.createElement('div');
         msgDiv.className = 'message ai';
@@ -273,7 +322,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     msgDiv.textContent = content;
                     document.documentElement.style.setProperty('--pulse-brightness', '1');
                     glowContainer.classList.remove('animating');
-                    setTimeout(dismissSiri, 1200);
+                    clearTimeout(siriDismissTimeout);
+                    siriDismissTimeout = setTimeout(dismissSiri, 1200);
                     resolve(msgDiv);
                 }
             }, 22);
@@ -281,10 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const startAssistantStreamingMessage = () => {
-        wakeSiri();
-        appScreen.classList.add('squeezed');
-        glowContainer.classList.add('animating');
-        document.documentElement.style.setProperty('--pulse-brightness', '1.2');
+        startThinkingAnimation();
         const msgDiv = document.createElement('div');
         msgDiv.className = 'message ai';
         msgDiv.textContent = '';
@@ -296,7 +343,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const finishAssistantStreaming = () => {
         document.documentElement.style.setProperty('--pulse-brightness', '1');
         glowContainer.classList.remove('animating');
-        setTimeout(dismissSiri, 700);
+        clearTimeout(siriDismissTimeout);
+        siriDismissTimeout = setTimeout(dismissSiri, 700);
     };
 
     const postJson = async (payload) => {
@@ -401,11 +449,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const renderApprovalCards = async () => {
         if (!approvalState.calls.length) return;
+        const callById = new Map((approvalState.calls || []).map(call => [call.call_id, call]));
+        const autoApprovedReadCalls = [];
+        if (hasClassReadPermission) {
+            approvalState.calls.forEach(call => {
+                if (!call?.call_id || !isReadPermissionCall(call)) return;
+                approvalState.decisions[call.call_id] = true;
+                autoApprovedReadCalls.push(call);
+            });
+        }
+        const autoApprovedReadIds = new Set(autoApprovedReadCalls.map(call => call.call_id));
+        const interactiveCalls = approvalState.calls.filter(call => !autoApprovedReadIds.has(call.call_id));
+
+        if (!interactiveCalls.length) {
+            await handleApprovalSubmit();
+            return;
+        }
 
         const msgDiv = document.createElement('div');
         msgDiv.className = 'message approval-wrapper';
 
-        const callsHtml = approvalState.calls.map(call => `
+        const callsHtml = interactiveCalls.map(call => `
             <div class="approval-card">
                 <div class="approval-card-text">${escapeHtml(call.summary || call.label || call.name)}，允许吗？</div>
                 <div class="approval-card-actions">
@@ -431,6 +495,10 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.addEventListener('click', () => {
                 const callId = btn.dataset.callId;
                 approvalState.decisions[callId] = true;
+                const selectedCall = callById.get(callId);
+                if (selectedCall && isReadPermissionCall(selectedCall)) {
+                    grantClassReadPermission();
+                }
                 const statusDiv = btn.parentElement.nextElementSibling;
                 statusDiv.innerText = '已允许';
                 statusDiv.style.color = '#137333';
@@ -495,7 +563,9 @@ document.addEventListener('DOMContentLoaded', () => {
             approved: Boolean(approvalState.decisions[call.call_id]),
         }));
 
-        pendingNode = addMessage('正在根据你的授权继续思考...', 'ai', true);
+        startThinkingAnimation();
+        removePendingMessage();
+        pendingNode = addMessage('正在根据你的授权继续思考…', 'ai', true);
         try {
             const result = await postJson({
                 action: 'tool_approval',
@@ -519,8 +589,9 @@ document.addEventListener('DOMContentLoaded', () => {
         addMessage(cleaned, 'user');
         userInput.value = '';
         hasStartedTyping = false;
+        startThinkingAnimation();
 
-        pendingNode = addMessage('正在连接流式输出...', 'ai', true);
+        pendingNode = addMessage('正在思考…', 'ai', true);
         try {
             if (!chatStreamUrl) {
                 throw new Error('未配置流式接口地址');
@@ -546,6 +617,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     client_config: readClientConfig(),
                 });
                 removePendingMessage();
+                finishAssistantStreaming();
                 await processResult(fallbackResult);
                 return;
             }
@@ -751,7 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             await postJson({
                 action: 'config_save',
-                client_config: { api_key: '', base_url: '', model: '' },
+                client_config: { api_key: '', base_url: '', model: '', thinking_mode: '' },
             });
             localStorage.removeItem(configStorageKey);
             writeClientConfig({});

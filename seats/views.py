@@ -1295,10 +1295,14 @@ def _normalize_ai_client_config(payload):
     payload = payload or {}
     if not isinstance(payload, dict):
         payload = {}
+    thinking_mode = str(payload.get('thinking_mode') or '').strip().lower()
+    if thinking_mode not in {'enabled', 'disabled'}:
+        thinking_mode = ''
     return {
         'api_key': str(payload.get('api_key') or '').strip(),
         'base_url': str(payload.get('base_url') or '').strip(),
         'model': str(payload.get('model') or '').strip(),
+        'thinking_mode': thinking_mode,
     }
 
 
@@ -1306,13 +1310,14 @@ def _load_persisted_ai_client_config(classroom):
     try:
         config = FutureModeConfig.objects.filter(classroom=classroom).first()
     except (OperationalError, ProgrammingError):
-        return {'api_key': '', 'base_url': '', 'model': ''}
+        return {'api_key': '', 'base_url': '', 'model': '', 'thinking_mode': ''}
     if not config:
-        return {'api_key': '', 'base_url': '', 'model': ''}
+        return {'api_key': '', 'base_url': '', 'model': '', 'thinking_mode': ''}
     return {
         'api_key': str(config.api_key or '').strip(),
         'base_url': str(config.base_url or '').strip(),
         'model': str(config.model or '').strip(),
+        'thinking_mode': str(config.thinking_mode or '').strip().lower() if str(config.thinking_mode or '').strip().lower() in {'enabled', 'disabled'} else '',
     }
 
 
@@ -1320,7 +1325,7 @@ def _merge_ai_client_config(classroom, incoming=None):
     incoming_config = _normalize_ai_client_config(incoming)
     persisted = _load_persisted_ai_client_config(classroom)
     merged = {}
-    for key in ('api_key', 'base_url', 'model'):
+    for key in ('api_key', 'base_url', 'model', 'thinking_mode'):
         merged[key] = incoming_config[key] if incoming_config[key] else persisted[key]
     return merged
 
@@ -1336,7 +1341,8 @@ def _save_ai_client_config(classroom, payload):
         config.api_key = normalized['api_key']
         config.base_url = normalized['base_url']
         config.model = normalized['model']
-        config.save(update_fields=['api_key', 'base_url', 'model', 'updated_at'])
+        config.thinking_mode = normalized['thinking_mode']
+        config.save(update_fields=['api_key', 'base_url', 'model', 'thinking_mode', 'updated_at'])
     except (OperationalError, ProgrammingError) as exc:
         raise RuntimeError('数据库未完成迁移，请先执行 `python3 manage.py migrate`。') from exc
     return normalized
@@ -1375,6 +1381,14 @@ def _should_use_chat_completions(client_config=None):
     if not base_url:
         return False
     return 'api.openai.com' not in base_url
+
+
+def _build_chat_completion_extra_body(client_config=None):
+    client_config = _normalize_ai_client_config(client_config)
+    thinking_mode = client_config.get('thinking_mode')
+    if thinking_mode in {'enabled', 'disabled'}:
+        return {'thinking': {'type': thinking_mode}}
+    return None
 
 
 def _is_responses_not_supported_error(exc):
@@ -1504,6 +1518,20 @@ def _build_tool_events_success_reply(tool_events):
         else:
             lines.append(f'- {label}：{str(result.get("message") or "执行失败").strip()}')
     return '\n'.join(lines) if lines else '操作已完成。'
+
+
+def _build_ai_tool_error_result(tool_name, exc):
+    error_type = exc.__class__.__name__ if exc is not None else 'ToolExecutionError'
+    error_message = str(exc or '').strip() or '未知错误'
+    return {
+        'ok': False,
+        'tool': tool_name,
+        'message': f'工具执行失败：{error_message}',
+        'error': {
+            'type': error_type,
+            'message': error_message,
+        },
+    }
 
 
 def _extract_direct_swap_call(classroom, message):
@@ -1715,7 +1743,7 @@ def _future_mode_system_prompt():
         '涉及当前班级的事实信息时，优先调用工具，不要猜测。'
         '用户要求交换座位时，若信息足够，应直接调用 swap_students。'
         '用户要求名单筛选、学生列表、卡片图表时，应优先调用 get_student_list 或 send_card_info。'
-        '每次准备调用工具前，都只提出工具调用请求，等待用户授权。'
+        '一切切实改动都需要调用工具，请勿直接对用户说“已完成”之类的话，记住，一切完成的前提都是调用工具，请在你准备和用户说“完成/搞定”之前，先想想你是否真的调用了工具。'
         '禁止使用 Markdown 语法。'
         '只允许使用换行与数字序号（1. 2. 3.）进行简单排版。'
         '回复尽量简洁，并明确说明你做了什么。'
@@ -1826,6 +1854,22 @@ def _normalize_chat_text_content(content):
     return str(content or '').strip()
 
 
+def _normalize_chat_reasoning_content(content):
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get('text')
+            else:
+                text = getattr(item, 'text', '')
+            if text:
+                parts.append(str(text).strip())
+        return '\n'.join(part for part in parts if part)
+    return str(content or '').strip()
+
+
 def _extract_chat_function_calls(message):
     tool_calls = getattr(message, 'tool_calls', None)
     if tool_calls is None and isinstance(message, dict):
@@ -1884,6 +1928,7 @@ def _run_future_mode_chat(
     model,
     conversation,
     request=None,
+    client_config=None,
     tool_outputs=None,
     tool_events=None,
     chat_messages=None,
@@ -1905,12 +1950,18 @@ def _run_future_mode_chat(
     if tool_outputs:
         messages.extend(_tool_outputs_to_chat_messages(tool_outputs))
 
+    completion_kwargs = {
+        'model': model,
+        'messages': messages,
+        'tools': tools,
+        'tool_choice': 'auto',
+        'parallel_tool_calls': False,
+    }
+    extra_body = _build_chat_completion_extra_body(client_config=client_config)
+    if extra_body:
+        completion_kwargs['extra_body'] = extra_body
     completion = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        tools=tools,
-        tool_choice='auto',
-        parallel_tool_calls=False,
+        **completion_kwargs,
     )
     choice = (getattr(completion, 'choices', None) or [None])[0]
     assistant_message = getattr(choice, 'message', None) if choice is not None else None
@@ -1934,13 +1985,19 @@ def _run_future_mode_chat(
                 },
             })
 
-        assistant_content = _normalize_chat_text_content(getattr(assistant_message, 'content', None))
+        assistant_content_raw = assistant_message.get('content') if isinstance(assistant_message, dict) else getattr(assistant_message, 'content', None)
+        assistant_reasoning_raw = assistant_message.get('reasoning_content') if isinstance(assistant_message, dict) else getattr(assistant_message, 'reasoning_content', None)
+        assistant_content = _normalize_chat_text_content(assistant_content_raw)
+        assistant_reasoning_content = _normalize_chat_reasoning_content(assistant_reasoning_raw)
         pending_messages = list(messages)
-        pending_messages.append({
+        assistant_pending_message = {
             'role': 'assistant',
             'content': assistant_content or '',
             'tool_calls': assistant_tool_calls,
-        })
+        }
+        if assistant_reasoning_content:
+            assistant_pending_message['reasoning_content'] = assistant_reasoning_content
+        pending_messages.append(assistant_pending_message)
         token = _store_future_mode_pending(
             request,
             classroom.pk,
@@ -2003,6 +2060,7 @@ def _run_future_mode(
             model,
             conversation=conversation,
             request=request,
+            client_config=client_config,
             tool_outputs=tool_outputs,
             tool_events=tool_events,
             chat_messages=chat_messages,
@@ -2025,6 +2083,7 @@ def _run_future_mode(
                 model,
                 conversation=conversation,
                 request=request,
+                client_config=client_config,
                 tool_outputs=tool_outputs,
                 tool_events=tool_events,
                 chat_messages=chat_messages,
@@ -3157,7 +3216,10 @@ def ai_chat(request, pk):
             for call in pending_calls:
                 approved = bool(decision_map.get(call['call_id']))
                 if approved:
-                    result = _execute_ai_tool(classroom, call['name'], call['arguments'], request=request)
+                    try:
+                        result = _execute_ai_tool(classroom, call['name'], call['arguments'], request=request)
+                    except Exception as exc:
+                        result = _build_ai_tool_error_result(call['name'], exc)
                 else:
                     result = {
                         'ok': False,
@@ -3462,16 +3524,21 @@ def ai_chat_stream(request, pk):
                     continue
                 chat_messages.append({'role': role, 'content': content[:4000]})
 
-            stream = client.chat.completions.create(
-                model=model,
-                messages=chat_messages,
-                tools=tools,
-                tool_choice='auto',
-                parallel_tool_calls=False,
-                stream=True,
-            )
+            completion_kwargs = {
+                'model': model,
+                'messages': chat_messages,
+                'tools': tools,
+                'tool_choice': 'auto',
+                'parallel_tool_calls': False,
+                'stream': True,
+            }
+            extra_body = _build_chat_completion_extra_body(client_config=effective_client_config)
+            if extra_body:
+                completion_kwargs['extra_body'] = extra_body
+            stream = client.chat.completions.create(**completion_kwargs)
 
             reply_parts = []
+            reasoning_parts = []
             tool_call_buffer = {}
             for chunk in stream:
                 choices = getattr(chunk, 'choices', None) or []
@@ -3489,6 +3556,11 @@ def ai_chat_stream(request, pk):
                 if text_delta:
                     reply_parts.append(text_delta)
                     yield _sse_event('delta', {'text': text_delta})
+
+                delta_reasoning = delta.get('reasoning_content') if isinstance(delta, dict) else getattr(delta, 'reasoning_content', None)
+                reasoning_delta = _extract_chat_delta_text(delta_reasoning)
+                if reasoning_delta:
+                    reasoning_parts.append(reasoning_delta)
 
                 tool_calls = delta.get('tool_calls') if isinstance(delta, dict) else getattr(delta, 'tool_calls', None)
                 for tool_call in tool_calls or []:
@@ -3548,11 +3620,15 @@ def ai_chat_stream(request, pk):
 
                 if function_calls:
                     pending_messages = list(chat_messages)
-                    pending_messages.append({
+                    assistant_pending_message = {
                         'role': 'assistant',
                         'content': '',
                         'tool_calls': assistant_tool_calls,
-                    })
+                    }
+                    assistant_reasoning_content = ''.join(reasoning_parts).strip()
+                    if assistant_reasoning_content:
+                        assistant_pending_message['reasoning_content'] = assistant_reasoning_content
+                    pending_messages.append(assistant_pending_message)
                     token = _store_future_mode_pending(
                         request,
                         classroom.pk,

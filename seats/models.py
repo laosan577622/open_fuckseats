@@ -46,6 +46,7 @@ class FutureModeConfig(models.Model):
     api_key = models.CharField(max_length=512, blank=True, default='', verbose_name="OpenAI API Key")
     base_url = models.CharField(max_length=300, blank=True, default='', verbose_name="OpenAI Base URL")
     model = models.CharField(max_length=120, blank=True, default='', verbose_name="OpenAI Model")
+    thinking_mode = models.CharField(max_length=32, blank=True, default='', verbose_name="思考模式")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

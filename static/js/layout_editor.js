@@ -5,6 +5,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const cellUrl = root.dataset.cellUrl;
     const csrf = root.dataset.csrf;
     const contextMenu = document.getElementById('contextMenu');
+    if (contextMenu && contextMenu.parentNode !== document.body) {
+        document.body.appendChild(contextMenu);
+    }
     let activeTool = 'seat';
     let contextSeat = null;
 
@@ -127,11 +130,18 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             contextSeat = seat;
             if (!contextMenu) return;
+
+            // 重置位置，防止前一次点击的位置影响元素的正常测量大小
+            contextMenu.style.left = '0px';
+            contextMenu.style.top = '0px';
             contextMenu.style.display = 'flex';
-            const menuWidth = 140;
-            const menuHeight = 160;
-            const left = Math.min(e.pageX, window.innerWidth - menuWidth - 20);
-            const top = Math.min(e.pageY, window.innerHeight - menuHeight - 20);
+
+            const gap = 8;
+            const menuWidth = contextMenu.offsetWidth || 140;
+            const menuHeight = contextMenu.offsetHeight || 160;
+            const left = Math.min(e.clientX + gap, window.innerWidth - menuWidth - gap);
+            const top = Math.min(e.clientY + gap, window.innerHeight - menuHeight - gap);
+
             contextMenu.style.left = `${left}px`;
             contextMenu.style.top = `${top}px`;
         });
@@ -205,6 +215,6 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (document.fullscreenEnabled) {
-        document.documentElement.requestFullscreen().catch(() => {});
+        document.documentElement.requestFullscreen().catch(() => { });
     }
 });

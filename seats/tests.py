@@ -5,6 +5,7 @@ import importlib.util
 import unittest
 import zipfile
 from io import BytesIO
+from types import SimpleNamespace
 from unittest.mock import patch, Mock
 
 import httpx
@@ -13,7 +14,16 @@ import openpyxl
 import pandas as pd
 
 from .models import Classroom, SeatConstraint, SeatCellType, SeatGroup, FutureModeConfig, Seat
-from .views import _arrange_standard, _arrange_grouped, _apply_internal_policy, _process_import, IMPORT_MODE_MATCH, IMPORT_MODE_REPLACE, _create_future_mode_response
+from .views import (
+    _arrange_standard,
+    _arrange_grouped,
+    _apply_internal_policy,
+    _process_import,
+    IMPORT_MODE_MATCH,
+    IMPORT_MODE_REPLACE,
+    _create_future_mode_response,
+    _run_future_mode_chat,
+)
 
 
 class FutureModeErrorHandlingTests(TestCase):
@@ -119,6 +129,54 @@ class FutureModeErrorHandlingTests(TestCase):
         self.assertIn("工具已执行", payload.get("reply", ""))
         self.assertIn("读取当前班级概览", payload.get("reply", ""))
 
+    def test_tool_approval_returns_tool_error_to_ai_for_self_debugging(self):
+        url = reverse("ai_chat", args=[self.classroom.pk])
+        session = self.client.session
+        session["future_mode_pending_tools"] = {
+            "token_tool_err": {
+                "classroom_id": self.classroom.pk,
+                "response_id": "",
+                "mode": "chat",
+                "chat_messages": [{"role": "system", "content": "x"}],
+                "function_calls": [
+                    {
+                        "call_id": "call_bad_query",
+                        "name": "get_student_info",
+                        "arguments": {"student_query": "不存在的学生"},
+                    }
+                ],
+            }
+        }
+        session.save()
+
+        with patch(
+            "seats.views._run_future_mode",
+            return_value={"status": "completed", "reply": "我已根据工具报错调整查询。", "tool_events": []},
+        ) as mock_run:
+            resp = self.client.post(
+                url,
+                data=json.dumps(
+                    {
+                        "action": "tool_approval",
+                        "approval_token": "token_tool_err",
+                        "decisions": [{"call_id": "call_bad_query", "approved": True}],
+                    }
+                ),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload.get("status"), "success")
+
+        tool_outputs = mock_run.call_args.kwargs.get("tool_outputs") or []
+        self.assertEqual(len(tool_outputs), 1)
+        tool_output_payload = json.loads(tool_outputs[0].get("output") or "{}")
+        self.assertFalse(tool_output_payload.get("ok"))
+        self.assertEqual(tool_output_payload.get("tool"), "get_student_info")
+        self.assertIn("工具执行失败", tool_output_payload.get("message", ""))
+        self.assertEqual((tool_output_payload.get("error") or {}).get("type"), "ValueError")
+
 
 class FutureModeResponsesCompatibilityTests(TestCase):
     def test_create_future_mode_response_retries_with_content_parts(self):
@@ -146,6 +204,48 @@ class FutureModeResponsesCompatibilityTests(TestCase):
         self.assertEqual(second_input[0]["content"][0]["type"], "input_text")
 
 
+class FutureModeThinkingModeTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="思考模式测试班", rows=2, cols=2)
+
+    def _build_chat_completion(self, text="ok"):
+        assistant_message = SimpleNamespace(content=text, tool_calls=[])
+        choice = SimpleNamespace(message=assistant_message)
+        return SimpleNamespace(choices=[choice])
+
+    def test_run_future_mode_chat_includes_extra_body_when_thinking_enabled(self):
+        client = Mock()
+        client.chat.completions.create.return_value = self._build_chat_completion("开启思考")
+
+        result = _run_future_mode_chat(
+            classroom=self.classroom,
+            client=client,
+            model="glm-5",
+            conversation=[{"role": "user", "content": "你好"}],
+            client_config={"thinking_mode": "enabled"},
+        )
+
+        self.assertEqual(result.get("status"), "completed")
+        kwargs = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs.get("extra_body"), {"thinking": {"type": "enabled"}})
+
+    def test_run_future_mode_chat_includes_extra_body_when_thinking_disabled(self):
+        client = Mock()
+        client.chat.completions.create.return_value = self._build_chat_completion("关闭思考")
+
+        result = _run_future_mode_chat(
+            classroom=self.classroom,
+            client=client,
+            model="glm-5",
+            conversation=[{"role": "user", "content": "你好"}],
+            client_config={"thinking_mode": "disabled"},
+        )
+
+        self.assertEqual(result.get("status"), "completed")
+        kwargs = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs.get("extra_body"), {"thinking": {"type": "disabled"}})
+
+
 class FutureModeConfigPersistenceTests(TestCase):
     def setUp(self):
         self.classroom = Classroom.objects.create(name="配置测试班", rows=2, cols=2)
@@ -161,6 +261,7 @@ class FutureModeConfigPersistenceTests(TestCase):
                         "api_key": "sk-db-123",
                         "base_url": "https://api.openai.com/v1",
                         "model": "gpt-4.1-mini",
+                        "thinking_mode": "enabled",
                     },
                 }
             ),
@@ -173,6 +274,7 @@ class FutureModeConfigPersistenceTests(TestCase):
         self.assertEqual(db_config.api_key, "sk-db-123")
         self.assertEqual(db_config.base_url, "https://api.openai.com/v1")
         self.assertEqual(db_config.model, "gpt-4.1-mini")
+        self.assertEqual(db_config.thinking_mode, "enabled")
 
         get_resp = self.client.post(
             self.url,
@@ -185,6 +287,7 @@ class FutureModeConfigPersistenceTests(TestCase):
         self.assertEqual(payload.get("client_config", {}).get("api_key"), "sk-db-123")
         self.assertEqual(payload.get("client_config", {}).get("base_url"), "https://api.openai.com/v1")
         self.assertEqual(payload.get("client_config", {}).get("model"), "gpt-4.1-mini")
+        self.assertEqual(payload.get("client_config", {}).get("thinking_mode"), "enabled")
 
     def test_message_uses_persisted_config_when_payload_empty(self):
         FutureModeConfig.objects.create(
@@ -216,6 +319,7 @@ class FutureModeConfigPersistenceTests(TestCase):
             api_key="sk-db-y",
             base_url="https://api.openai.com/v1",
             model="gpt-4.1-mini",
+            thinking_mode="",
         )
 
         with patch(
@@ -239,6 +343,29 @@ class FutureModeConfigPersistenceTests(TestCase):
         self.assertEqual(called_config.get("api_key"), "sk-db-y")
         self.assertEqual(called_config.get("base_url"), "https://api.openai.com/v1")
         self.assertEqual(called_config.get("model"), "gpt-5-mini")
+
+    def test_message_uses_persisted_thinking_mode_when_payload_empty(self):
+        FutureModeConfig.objects.create(
+            classroom=self.classroom,
+            api_key="sk-db-z",
+            base_url="https://api.openai.com/v1",
+            model="gpt-4.1-mini",
+            thinking_mode="enabled",
+        )
+
+        with patch(
+            "seats.views._run_future_mode",
+            return_value={"status": "completed", "reply": "ok", "tool_events": []},
+        ) as mock_run:
+            resp = self.client.post(
+                self.url,
+                data=json.dumps({"action": "message", "message": "你好"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        called_config = mock_run.call_args.kwargs.get("client_config", {})
+        self.assertEqual(called_config.get("thinking_mode"), "enabled")
 
     def test_message_branch_uses_auto_mode(self):
         with patch(
