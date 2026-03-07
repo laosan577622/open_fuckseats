@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Window Inteligence ｜ 闻道智能 - {{ classroom.name }}</title>
+    {% load static %}
+    <link rel="stylesheet" href="{% static 'css/ai_workspace.css' %}?v=3.4">
+</head>
+
+<body>
+    <div id="future-mode-root" style="display:none;" data-chat-url="{% url 'ai_chat' classroom.pk %}"
+        data-chat-stream-url="{% url 'ai_chat_stream' classroom.pk %}"
+        data-state-url="{% url 'classroom_state' classroom.pk %}"
+        data-detail-url="{% url 'classroom_detail' classroom.pk %}" data-csrf="{{ csrf_token }}">
+    </div>
+
+
+    <svg style="display: none;" aria-hidden="true">
+        <defs>
+            <filter id="fluid-noise">
+                <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="3" result="noise" />
+                <feDisplacementMap in="SourceGraphic" in2="noise" scale="50" xChannelSelector="R"
+                    yChannelSelector="G" />
+            </filter>
+        </defs>
+    </svg>
+
+    <!-- 流体光效层 -->
+    <div class="fluid-glow-container" id="glowContainer">
+        <div class="fluid-glow"></div>
+    </div>
+
+    <!-- 整个应用的视口 -->
+    <div class="app-screen" id="appScreen">
+
+        <!-- 启动水波纹 -->
+        <div class="startup-ripple"></div>
+
+        <!-- 顶部通栏：半透明白色模糊特效 -->
+        <div class="topbar">
+            <a href="{% url 'classroom_detail' classroom.pk %}" class="btn-capsule back-btn">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="margin-right: 4px;">
+                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path>
+                </svg>
+                返回
+            </a>
+            <div class="header-title">Window Inteligence ｜ 闻道智能</div>
+            <button id="configBtn" class="btn-capsule config-btn">连接设置</button>
+        </div>
+
+        <div class="main-layout">
+            <!-- 左侧聊天区域 -->
+            <div class="chat-section">
+                <div class="conversation-toolbar">
+                    <select id="conversationSelect" class="conversation-select" aria-label="选择对话"></select>
+                    <button id="newConversationBtn" type="button" class="btn-capsule">新对话</button>
+                    <button id="deleteConversationBtn" type="button" class="btn-capsule"
+                        style="background:#E5E5EA; color:#1f2937;">删除</button>
+                </div>
+                <!-- 聊天区域 -->
+                <div class="chat-container" id="chatContainer">
+                    <div class="message ai">
+                        你好，我是 {{ classroom.name }} 的 Window Inteligence ｜
+                        闻道智能。<br>输入指令即可调度各项功能，例如：交换座位、查询小组评分等。<br>遇到需要数据操作时，我会先向你请求授权。
+                    </div>
+                </div>
+
+                <!-- 底部输入区域 -->
+                <div class="input-wrapper">
+                    <!-- 快捷提示词组 -->
+                    <div class="prompt-chips" id="promptChips">
+                        <button class="future-prompt-chip" data-prompt="帮我统计当前小组评分排行">小组评分排行</button>
+                        <button class="future-prompt-chip" data-prompt="有哪些人还没有排座位？">未排座名单</button>
+                        <button class="future-prompt-chip" data-prompt="按成绩降序给我前10名学生列表">成绩Top10</button>
+                        <button class="future-prompt-chip" data-prompt="给我发送一张班级报告图卡片">班级报告图</button>
+                    </div>
+
+                    <form id="future-chat-form" class="input-box" onsubmit="event.preventDefault();">
+                        <input type="text" id="userInput" placeholder="向闻道智能发送消息..." autocomplete="off">
+                        <button type="submit" class="send-btn btn-capsule" id="sendBtn">
+                            发送
+                        </button>
+                    </form>
+                </div>
+            </div>
+            <!-- 连接设置模态框 (使用绝对定位) -->
+            <div id="configModal" class="config-modal">
+                <div class="modal-content">
+                    <h3>OpenAI API 设置</h3>
+                    <p style="font-size:12px; color:#666; margin-bottom:12px;">保存后会写入数据库，并同步到当前浏览器，用于覆盖预设后端变量。</p>
+                    <form id="future-config-form">
+                        <input type="password" id="future-api-key" placeholder="API Key (sk-...)">
+                        <input type="url" id="future-base-url" placeholder="Base URL">
+                        <input type="text" id="future-model-id" placeholder="Model ID">
+                        <div class="modal-actions">
+                            <button type="submit" class="btn-capsule">保存</button>
+                            <button type="button" id="future-config-reset" class="btn-capsule"
+                                style="background:#E5E5EA; color:#333;">清空</button>
+                            <button type="button" id="configCloseBtn" class="btn-capsule"
+                                style="background:#F2F2F7; color:#333; border:1px solid #E5E5EA;">关闭</button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- 引用重写后的脚本 -->
+        <script src="{% static 'js/ai_workspace.js' %}?v=3.5"></script>
+</body>
+
+</html>

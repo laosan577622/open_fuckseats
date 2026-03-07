@@ -41,6 +41,68 @@ class Classroom(models.Model):
         verbose_name_plural = verbose_name
 
 
+class FutureModeConfig(models.Model):
+    classroom = models.OneToOneField(Classroom, on_delete=models.CASCADE, related_name='future_mode_config')
+    api_key = models.CharField(max_length=512, blank=True, default='', verbose_name="OpenAI API Key")
+    base_url = models.CharField(max_length=300, blank=True, default='', verbose_name="OpenAI Base URL")
+    model = models.CharField(max_length=120, blank=True, default='', verbose_name="OpenAI Model")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "Future Mode 配置"
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.classroom.name}-FutureModeConfig"
+
+
+class AIConversation(models.Model):
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='ai_conversations')
+    session_key = models.CharField(max_length=64, blank=True, default='', db_index=True, verbose_name="会话归属")
+    title = models.CharField(max_length=120, blank=True, default='新对话', verbose_name="对话标题")
+    last_mode = models.CharField(max_length=16, blank=True, default='', verbose_name="最近推理模式")
+    last_response_id = models.CharField(max_length=120, blank=True, default='', verbose_name="最近响应ID")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "AI 对话"
+        verbose_name_plural = verbose_name
+        ordering = ['-updated_at', '-pk']
+        indexes = [
+            models.Index(fields=['classroom', 'session_key', '-updated_at'], name='ai_conv_owner_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.classroom.name}-{self.title}"
+
+
+class AIConversationMessage(models.Model):
+    class MessageRole(models.TextChoices):
+        USER = 'user', '用户'
+        ASSISTANT = 'assistant', '助手'
+        SYSTEM = 'system', '系统'
+        TOOL = 'tool', '工具'
+
+    conversation = models.ForeignKey(AIConversation, on_delete=models.CASCADE, related_name='messages')
+    role = models.CharField(max_length=16, choices=MessageRole.choices, default=MessageRole.USER, verbose_name="角色")
+    content = models.TextField(blank=True, default='', verbose_name="消息正文")
+    payload = models.JSONField(blank=True, default=dict, verbose_name="扩展载荷")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "AI 对话消息"
+        verbose_name_plural = verbose_name
+        ordering = ['created_at', 'pk']
+        indexes = [
+            models.Index(fields=['conversation', 'created_at', 'id'], name='ai_msg_order_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.conversation_id}-{self.role}-{self.pk}"
+
+
 class SeatGroup(models.Model):
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='groups')
     name = models.CharField(max_length=50, verbose_name="小组名称")

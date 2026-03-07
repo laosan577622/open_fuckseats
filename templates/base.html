@@ -6,8 +6,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}不想排座位{% endblock %}</title>
     {% load static %}
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=1.5">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=1.9">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css" />
+    {% block extra_head %}{% endblock %}
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
 </head>
 
@@ -49,6 +50,7 @@
     <div id="toast-container"></div>
 
     <script src="{% static 'js/main.js' %}"></script>
+    {% block extra_scripts %}{% endblock %}
 </body>
 
 </html>

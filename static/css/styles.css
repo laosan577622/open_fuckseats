@@ -194,7 +194,7 @@ select {
     min-width: 0;
     flex-wrap: nowrap;
     white-space: nowrap;
-    overflow-x: auto;
+    overflow: visible;
     scrollbar-width: none;
     padding-right: 2px;
 }
@@ -243,6 +243,10 @@ select {
     align-items: center;
 }
 
+.ribbon-panel[data-ribbon-panel="file"] {
+    overflow: visible;
+}
+
 .ribbon-group {
     display: flex;
     flex-direction: row;
@@ -271,6 +275,24 @@ select {
 
 .ribbon-group-danger .ribbon-group-label {
     color: #c6423a;
+}
+
+.ai-ribbon-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    min-width: 0;
+}
+
+.ai-ribbon-copy strong {
+    font-size: 13px;
+    color: var(--text-primary);
+}
+
+.ai-ribbon-copy span {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.35;
 }
 
 /* Buttons (Capsule style) */
@@ -906,41 +928,121 @@ input:focus {
     color: var(--text-secondary);
 }
 
-/* Dropdown Menu */
-.dropdown-menu {
+/* File Menu Dropdown */
+.file-ribbon-group {
+    overflow: visible;
+}
+
+.menu-dropdown {
+    position: relative;
+    overflow: visible;
+}
+
+.menu-panel {
     display: none;
     position: absolute;
-    right: 0;
-    top: 100%;
-    margin-top: 8px;
-    background: white;
+    min-width: 196px;
+    padding: 6px;
     border-radius: 12px;
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-    padding: 8px;
-    min-width: 180px;
-    z-index: 100;
-    border: 1px solid var(--border-color);
+    border: 1px solid rgba(15, 23, 42, 0.1);
+    background: rgba(255, 255, 255, 0.94);
+    backdrop-filter: saturate(170%) blur(16px);
+    -webkit-backdrop-filter: saturate(170%) blur(16px);
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.14);
+    z-index: 1200;
 }
 
-.dropdown-menu.show {
-    display: block;
+.menu-panel-root {
+    left: 0;
+    top: calc(100% + 8px);
 }
 
-.dropdown-menu button {
-    display: block;
+.menu-panel-sub {
+    left: 100%;
+    top: 0;
+}
+
+.menu-dropdown.open>.menu-panel-root {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.menu-submenu {
+    position: relative;
+}
+
+.menu-submenu.open>.menu-panel-sub,
+.menu-submenu:hover>.menu-panel-sub,
+.menu-submenu:focus-within>.menu-panel-sub {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.menu-item-link,
+.menu-item-button {
     width: 100%;
-    text-align: left;
-    padding: 8px 12px;
-    background: none;
+    min-height: 34px;
     border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 13px;
+    border-radius: 9px;
+    background: transparent;
     color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 12px;
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
 }
 
-.dropdown-menu button:hover {
-    background: var(--bg-color);
+.app-header .btn.menu-trigger {
+    position: relative;
+    justify-content: flex-start;
+    min-width: 84px;
+    padding-left: 12px;
+    padding-right: 28px;
+    border: 1px solid rgba(10, 89, 247, 0.2);
+    background: rgba(255, 255, 255, 0.92);
+}
+
+.menu-trigger::after {
+    content: "";
+    position: absolute;
+    right: 10px;
+    top: 50%;
+    width: 7px;
+    height: 7px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: translateY(-70%) rotate(45deg);
+    opacity: 0.85;
+}
+
+.menu-dropdown.open .menu-trigger {
+    background: rgba(10, 89, 247, 0.14);
+    color: var(--primary-color);
+    border-color: rgba(10, 89, 247, 0.4);
+    box-shadow: inset 0 0 0 1px rgba(10, 89, 247, 0.08);
+}
+
+.menu-item-link:hover,
+.menu-item-button:hover {
+    background: rgba(10, 89, 247, 0.08);
+    color: var(--primary-color);
+}
+
+.menu-item-has-children::after {
+    content: "›";
+    font-size: 14px;
+    line-height: 1;
+    color: var(--text-secondary);
+}
+
+.menu-item-has-children:hover::after {
+    color: var(--primary-color);
 }
 
 /* Context Menu */
@@ -1258,6 +1360,11 @@ input:focus {
 
     .ribbon-group-label {
         display: none;
+    }
+
+    .menu-panel-sub {
+        left: 0;
+        top: calc(100% + 2px);
     }
 
     .form-grid-two {

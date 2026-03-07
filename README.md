@@ -14,6 +14,11 @@
 - 数据导出：座次 Excel、座次 SVG（可配置主题与显示内容，用于 PPT）、座次 PPTX（单页 16:9 横屏）、小组登记表 Excel、`.seats` 快照文件。
   - 导出 Excel / SVG / PPTX 时采用独立配置页面（非弹窗），左侧设置、右侧预览；确认导出或取消后自动返回班级页。
 - 历史操作：撤销/重做。
+- AI 未来模式：顶部 `AI` 选项卡可打开独立 Future Mode 页面，支持通过 OpenAI API + function calling 执行交换座位、查询学生信息、统计小组评分。
+  - 支持多轮对话、对话隔离（同班级可创建多个独立会话）与对话消息持久化入库（SQLite）。
+  - 新增学生工具：`get_student_list`（可选排序、排序方向、字段裁剪、分页、筛选器）。
+  - 新增卡片工具：`send_card_info`（部分座位图、学生详情图、整体座位图、班级报告图）。
+  - 支持 OpenAI Compatible：当 `Base URL` 不是 `api.openai.com` 时，自动切换到兼容的 `chat.completions + tools` 调用链。
 
 ## 技术栈
 - 后端：Django 6.0.1
@@ -57,6 +62,19 @@ python run_app.py
 python manage.py runserver 127.0.0.1:8000
 ```
 
+## OpenAI AI 未来模式配置
+- 服务端环境变量：
+```bash
+export OPENAI_API_KEY="你的 OpenAI API Key"
+export OPENAI_BASE_URL="https://api.openai.com/v1"
+export OPENAI_MODEL="gpt-4.1-mini"
+```
+- 浏览器前端配置：进入班级详情页顶部 `AI` 选项卡，点击 `使用未来模式（Beta)` 打开独立工作台；右侧可直接填写 `API Key`、`Base URL`、`Model ID`，保存后会写入数据库并同步到当前浏览器 `localStorage`。
+- 授权机制：AI 每次准备调用 tool（读取班级数据、学生信息、学生列表、小组评分、卡片发送、交换座位、班级动作）前，都会先请求用户授权；只有点允许后才会真正执行。
+- 留空策略：如果前端未填写配置，系统会自动回退到服务端环境变量。
+- 兼容策略：官方 OpenAI 地址默认走 Responses API；非官方 Compatible 地址默认走 Chat Completions Tool Calling。
+- 主要能力：交换两名已入座学生的座位、获取学生座位/分数/小组信息、按条件读取学生列表、统计小组评分排行、发送结构化图卡。
+
 ## 前端宣传站（可选）
 ``` bash
 cd website
@@ -93,6 +111,8 @@ python manage.py test
 ```bash
 python package.py
 ```
+- 打包脚本已包含 OpenAI Future Mode 依赖收集，支持 `openai/httpx/pydantic` 等运行时模块。
+- 打包后的程序可继续读取 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL` 环境变量；若未配置，也可以在 Future Mode 页面右侧直接填写连接参数并保存到数据库。
 
 ## 开发者
 - 名称：老三

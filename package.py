@@ -11,6 +11,12 @@ DB_FILE_MARKERS = {
     'db.sqlite3-wal',
 }
 
+OPENAI_ENV_NAMES = (
+    'OPENAI_API_KEY',
+    'OPENAI_BASE_URL',
+    'OPENAI_MODEL',
+)
+
 
 def _remove_embedded_databases(dist_root):
     if not os.path.exists(dist_root):
@@ -119,10 +125,21 @@ def main():
         '--hidden-import', 'django.contrib.messages',
         '--hidden-import', 'django.contrib.humanize',
         '--hidden-import', 'pandas',
+        '--hidden-import', 'openai',
+        '--hidden-import', 'httpx',
+        '--hidden-import', 'httpcore',
+        '--hidden-import', 'anyio',
+        '--hidden-import', 'sniffio',
+        '--hidden-import', 'jiter',
+        '--hidden-import', 'pydantic',
+        '--hidden-import', 'pydantic_core',
         '--hidden-import', 'openpyxl',
         '--hidden-import', 'xlrd',
         '--hidden-import', 'pptx',
         '--hidden-import', 'tzdata',
+        '--collect-all', 'openai',
+        '--collect-all', 'httpx',
+        '--collect-all', 'httpcore',
         '--collect-all', 'pptx',
         
         # 如果 run_app.py 里排除了这些模块，则需要在这里排除，或者让 pyinstaller 自动分析
@@ -151,6 +168,19 @@ def main():
             print(f"已移除 {len(removed_db_files)} 个数据库文件，避免随安装包分发。", flush=True)
         else:
             print("未发现可执行目录中的数据库文件。", flush=True)
+        configured_openai_envs = [name for name in OPENAI_ENV_NAMES if os.getenv(name)]
+        if configured_openai_envs:
+            print(
+                "检测到当前环境已配置 OpenAI 变量: "
+                + ", ".join(configured_openai_envs)
+                + "。打包后的程序运行时也可继续读取这些环境变量。",
+                flush=True
+            )
+        else:
+            print(
+                "当前环境未配置 OpenAI 变量。打包后的程序仍可在 Future Mode 页面中直接填写 API Key / Base URL / Model ID。",
+                flush=True
+            )
         exe_path = os.path.join(DIST_DIR, 'FuckSeats', 'FuckSeats.exe')
         print(f"可执行文件位置: {exe_path}", flush=True)
     except subprocess.CalledProcessError as e:

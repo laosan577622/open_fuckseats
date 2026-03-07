@@ -7,6 +7,7 @@
 <button type="button" class="ribbon-tab active" data-ribbon-tab="home">开始</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="view">视图</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="file">文件</button>
+<button type="button" class="ribbon-tab" data-ribbon-tab="ai">AI</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="help">帮助</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="class">班级</button>
 {% endblock %}
@@ -42,35 +43,133 @@
     </div>
 
     <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="file">
-        <div class="ribbon-group">
-            <a href="{% url 'import_students_options_page' classroom.pk %}" class="btn btn-secondary" id="btn-open-excel-import-modal">导入 Excel 成绩表</a>
-            <button type="button" class="btn btn-secondary" id="btn-open-seats-modal"
-                data-open-modal="seats-file-modal">导入/导出 .seats</button>
-            <a href="{% url 'import_layout_excel_options_page' classroom.pk %}" class="btn btn-secondary" id="btn-open-layout-import-modal">导入座位表</a>
-            <span class="ribbon-group-label">导入导出</span>
+        <div class="ribbon-group file-ribbon-group">
+            <div class="menu-dropdown" data-menu-root>
+                <button type="button" class="btn btn-secondary menu-trigger" id="btn-open-excel-import-modal"
+                    data-menu-toggle="file-import-menu" aria-haspopup="true" aria-expanded="false">导入</button>
+                <div class="menu-panel menu-panel-root" id="file-import-menu" role="menu">
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-import-third-party-menu" aria-haspopup="true" aria-expanded="false">
+                            第三方软件
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-import-third-party-menu" role="menu">
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-import-third-party-seat-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    座位表
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-import-third-party-seat-table-menu"
+                                    role="menu">
+                                    <a href="{% url 'import_layout_excel_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-open-layout-import-modal"
+                                        role="menuitem">导入座位表</a>
+                                </div>
+                            </div>
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-import-third-party-other-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    其他表格
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-import-third-party-other-table-menu"
+                                    role="menu">
+                                    <a href="{% url 'import_students_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-import-students" role="menuitem">导入 Excel 成绩表</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-import-system-menu" aria-haspopup="true" aria-expanded="false">
+                            系统操作
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-import-system-menu" role="menu">
+                            <button type="button" class="menu-item-button" id="btn-import-seats-file"
+                                data-seats-import-trigger="1">导入 .seats</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <span class="ribbon-group-label">导入</span>
         </div>
-        <div class="ribbon-group">
-            <a href="{% url 'export_students_options_page' classroom.pk %}" class="btn btn-secondary" id="btn-export"
-                data-default-filename="{{ classroom.name }}_座次图.xlsx"
-                data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                data-accept-ext=".xlsx">导出排座表</a>
-            <a href="{% url 'export_students_svg_options_page' classroom.pk %}" class="btn btn-secondary" id="btn-export-svg"
-                data-default-filename="{{ classroom.name }}_座次图.svg"
-                data-accept-mime="image/svg+xml" data-accept-ext=".svg">导出可放大不失真的无损图片</a>
-            <a href="{% url 'export_students_pptx_options_page' classroom.pk %}" class="btn btn-secondary" id="btn-export-pptx"
-                data-default-filename="{{ classroom.name }}_座次图.pptx"
-                data-accept-mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                data-accept-ext=".pptx">导出单页 PPT</a>
-            <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-secondary" id="btn-export-group-report"
-                data-system-save="1" data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
-                data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                data-accept-ext=".xlsx">导出小组登记表</a>
+        <div class="ribbon-group file-ribbon-group">
+            <div class="menu-dropdown" data-menu-root>
+                <button type="button" class="btn btn-secondary menu-trigger" id="btn-export"
+                    data-menu-toggle="file-export-menu" aria-haspopup="true" aria-expanded="false">导出</button>
+                <div class="menu-panel menu-panel-root" id="file-export-menu" role="menu">
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-export-third-party-menu" aria-haspopup="true" aria-expanded="false">
+                            第三方软件
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-export-third-party-menu" role="menu">
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-export-third-party-seat-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    座位表
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-export-third-party-seat-table-menu"
+                                    role="menu">
+                                    <a href="{% url 'export_students_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-export-excel" role="menuitem"
+                                        data-default-filename="{{ classroom.name }}_座次图.xlsx"
+                                        data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                        data-accept-ext=".xlsx">导出排座表</a>
+                                    <a href="{% url 'export_students_svg_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-export-svg" role="menuitem"
+                                        data-default-filename="{{ classroom.name }}_座次图.svg"
+                                        data-accept-mime="image/svg+xml" data-accept-ext=".svg">导出 SVG</a>
+                                    <a href="{% url 'export_students_pptx_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-export-pptx" role="menuitem"
+                                        data-default-filename="{{ classroom.name }}_座次图.pptx"
+                                        data-accept-mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                                        data-accept-ext=".pptx">导出单页 PPT</a>
+                                </div>
+                            </div>
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-export-third-party-other-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    其他表格
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-export-third-party-other-table-menu"
+                                    role="menu">
+                                    <a href="{% url 'export_group_report' classroom.pk %}" class="menu-item-link"
+                                        id="btn-export-group-report" role="menuitem" data-system-save="1"
+                                        data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
+                                        data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                        data-accept-ext=".xlsx">导出小组登记表</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-export-system-menu" aria-haspopup="true" aria-expanded="false">
+                            系统操作
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-export-system-menu" role="menu">
+                            <a href="{% url 'export_seats_file' classroom.pk %}" class="menu-item-link"
+                                id="btn-export-seats-file" role="menuitem" data-system-save="1"
+                                data-default-filename="{{ classroom.name }}.seats"
+                                data-accept-mime="application/octet-stream" data-accept-ext=".seats,.json">导出 .seats</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
             <span class="ribbon-group-label">导出</span>
         </div>
+    </div>
+
+    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="ai">
         <div class="ribbon-group">
-            <button type="button" class="btn btn-secondary" data-open-side-tab="files" id="btn-open-files-tab">文件面板</button>
-            <button type="button" class="btn btn-secondary" data-open-side-tab="constraints" id="btn-open-constraints-tab">约束管理</button>
-            <span class="ribbon-group-label">面板</span>
+            <a href="{% url 'ai_workspace' classroom.pk %}" class="btn btn-primary" id="btn-open-future-mode">闻道（Window
+                Inteligence）赋能模式（Beta）</a>
+            <span class="ribbon-group-label">AI</span>
         </div>
     </div>
 
@@ -201,7 +300,8 @@
                     <div class="panel-header">
                         <h3>小组管理</h3>
                     </div>
-                    <form method="post" action="{% url 'create_group' classroom.pk %}" class="inline-form" id="createGroupForm">
+                    <form method="post" action="{% url 'create_group' classroom.pk %}" class="inline-form"
+                        id="createGroupForm">
                         {% csrf_token %}
                         <input type="text" name="name" placeholder="小组名称" required>
                         <button type="submit" class="btn btn-primary">添加</button>
@@ -318,16 +418,40 @@
                     <div class="panel-header">
                         <h3>文件导入导出</h3>
                     </div>
-                    <div class="tool-row" style="margin-bottom: 8px;">
-                        <a href="{% url 'import_students_options_page' classroom.pk %}" class="btn btn-primary">导入 Excel 成绩表</a>
-                        <button type="button" class="btn btn-secondary" data-open-modal="seats-file-modal">导入/导出 .seats</button>
-                        <a href="{% url 'import_layout_excel_options_page' classroom.pk %}" class="btn btn-secondary">导入座位表</a>
+                    <div class="panel-header" style="margin-top: 2px;">
+                        <h3>导入</h3>
                     </div>
-                    <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-secondary"
-                        style="width: 100%;" data-system-save="1"
-                        data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
+                    <div class="tool-row" style="margin-bottom: 8px;">
+                        <a href="{% url 'import_students_options_page' classroom.pk %}" class="btn btn-primary">导入 Excel
+                            成绩表</a>
+                        <a href="{% url 'import_layout_excel_options_page' classroom.pk %}"
+                            class="btn btn-primary">导入座位表</a>
+                        <button type="button" class="btn btn-primary" data-seats-import-trigger="1">导入
+                            .seats（系统操作）</button>
+                    </div>
+
+                    <div class="panel-header" style="margin-top: 4px;">
+                        <h3>导出（第三方软件）</h3>
+                    </div>
+                    <div class="tool-row" style="margin-bottom: 8px;">
+                        <a href="{% url 'export_students_options_page' classroom.pk %}"
+                            class="btn btn-primary">导出排座表</a>
+                        <a href="{% url 'export_students_svg_options_page' classroom.pk %}" class="btn btn-primary">导出
+                            SVG</a>
+                        <a href="{% url 'export_students_pptx_options_page' classroom.pk %}"
+                            class="btn btn-primary">导出单页 PPT</a>
+                    </div>
+                    <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-primary" style="width: 100%;"
+                        data-system-save="1" data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
                         data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         data-accept-ext=".xlsx">导出小组登记表</a>
+
+                    <div class="panel-header" style="margin-top: 8px;">
+                        <h3>导出（系统操作）</h3>
+                    </div>
+                    <a href="{% url 'export_seats_file' classroom.pk %}" class="btn btn-primary" style="width: 100%;"
+                        data-system-save="1" data-default-filename="{{ classroom.name }}.seats"
+                        data-accept-mime="application/octet-stream" data-accept-ext=".seats,.json">导出 .seats</a>
 
                     <div class="panel-header" style="margin-top: 8px;">
                         <h3>布局快照</h3>
@@ -343,10 +467,10 @@
                             <span>{{ snap.name }}</span>
                             <div class="snapshot-actions">
                                 <a href="{% url 'load_layout_snapshot' classroom.pk snap.pk %}"
-                                    class="btn btn-secondary">加载</a>
+                                    class="btn btn-primary">加载</a>
                                 <form method="post" action="{% url 'delete_layout_snapshot' classroom.pk snap.pk %}">
                                     {% csrf_token %}
-                                    <button type="submit" class="btn btn-secondary">删除</button>
+                                    <button type="submit" class="btn btn-primary">删除</button>
                                 </form>
                             </div>
                         </div>
@@ -402,33 +526,11 @@
         </div>
     </div>
 
-    <div id="seats-file-modal" class="modal">
-        <div class="modal-content">
-            <h3 style="margin-bottom: 8px;">导入/导出 .seats 文件</h3>
-            <div class="modal-block">
-                <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 14px;">
-                    导入会用文件内容覆盖当前班级布局、学生、小组与约束。</p>
-                <form method="post" action="{% url 'import_seats_file' classroom.pk %}" enctype="multipart/form-data"
-                    class="stack-form">
-                    {% csrf_token %}
-                    <input type="file" name="seats_file" accept=".seats,application/json" required>
-                    <button type="submit" class="btn btn-primary">导入 .seats</button>
-                </form>
-            </div>
-            <div class="modal-divider"></div>
-            <div class="modal-block">
-                <p style="color: var(--text-secondary); margin-bottom: 10px; font-size: 14px;">
-                    导出当前班级完整快照，后续可直接导回系统。</p>
-                <a href="{% url 'export_seats_file' classroom.pk %}" class="btn btn-secondary"
-                    data-system-save="1" data-default-filename="{{ classroom.name }}.seats"
-                    data-accept-mime="application/octet-stream"
-                    data-accept-ext=".seats,.json">导出 .seats</a>
-            </div>
-            <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" data-close-modal="seats-file-modal">关闭</button>
-            </div>
-        </div>
-    </div>
+    <form id="seats-import-form" method="post" action="{% url 'import_seats_file' classroom.pk %}"
+        enctype="multipart/form-data" style="display: none;">
+        {% csrf_token %}
+        <input type="file" id="seats-import-input" name="seats_file" accept=".seats,application/json">
+    </form>
 
     <!-- Context Menu -->
     <div id="seat-context-menu" class="context-menu">
@@ -493,7 +595,7 @@
                     element: '#btn-open-excel-import-modal',
                     popover: {
                         title: '班级名单导入',
-                        description: '点击这里打开 Excel 导入窗口，上传后可批量导入学生数据，并按提示完成列映射。'
+                        description: '点击这里打开导入菜单，再选择 Excel 成绩表或座位表导入方式。'
                     },
                     onHighlightStarted: (element) => {
                         switchRibbon('file');
@@ -534,7 +636,7 @@
                     element: '#btn-export',
                     popover: {
                         title: '导出结果',
-                        description: '满意后，点击这里导出一份精美的 Excel 座位表，直接打印使用。'
+                        description: '满意后，点击这里打开导出菜单，可按“导出 > 第三方软件 > 座位表”导出结果。'
                     },
                     onHighlightStarted: () => {
                         switchRibbon('file');

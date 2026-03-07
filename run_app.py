@@ -36,6 +36,10 @@ def main():
     django.setup()
     
     from config.wsgi import application
+
+    openai_model = (os.getenv('OPENAI_MODEL') or 'gpt-4.1-mini').strip() or 'gpt-4.1-mini'
+    openai_base_url = (os.getenv('OPENAI_BASE_URL') or '').strip()
+    has_openai_key = bool((os.getenv('OPENAI_API_KEY') or '').strip())
     
     print("准备迁移数据库...", flush=True)
     try:
@@ -60,6 +64,11 @@ def main():
 
     PORT = 23948
     print(f"正在启动服务器 http://127.0.0.1:23948 ...", flush=True)
+    print(
+        f"AI Future Mode 配置: API Key={'已配置' if has_openai_key else '未配置'}"
+        f"，Base URL={openai_base_url or '默认官方接口'}，Model={openai_model}",
+        flush=True
+    )
     print("服务器已启动，请使用浏览器打开 http://127.0.0.1:23948 访问\n在使用期间，请不要关闭本窗口。", flush=True)
     serve(application, host='127.0.0.1', port=PORT)
 

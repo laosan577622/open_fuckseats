@@ -5,11 +5,361 @@ import importlib.util
 import unittest
 import zipfile
 from io import BytesIO
+from unittest.mock import patch, Mock
+
+import httpx
+import openai
 import openpyxl
 import pandas as pd
 
-from .models import Classroom, SeatConstraint, SeatCellType, SeatGroup
-from .views import _arrange_standard, _arrange_grouped, _apply_internal_policy, _process_import, IMPORT_MODE_MATCH, IMPORT_MODE_REPLACE
+from .models import Classroom, SeatConstraint, SeatCellType, SeatGroup, FutureModeConfig, Seat
+from .views import _arrange_standard, _arrange_grouped, _apply_internal_policy, _process_import, IMPORT_MODE_MATCH, IMPORT_MODE_REPLACE, _create_future_mode_response
+
+
+class FutureModeErrorHandlingTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="AI测试班", rows=2, cols=2)
+
+    def test_ai_chat_maps_authentication_error_to_bad_request(self):
+        url = reverse("ai_chat", args=[self.classroom.pk])
+        request = httpx.Request("POST", "https://api.openai.com/v1/responses")
+        response = httpx.Response(401, request=request)
+        auth_error = openai.AuthenticationError(
+            "Incorrect API key provided",
+            response=response,
+            body={"error": {"code": "invalid_api_key"}},
+        )
+
+        with patch("seats.views._run_future_mode", side_effect=auth_error):
+            resp = self.client.post(
+                url,
+                data=json.dumps({"action": "message", "message": "你好"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.json()
+        self.assertEqual(payload.get("status"), "error")
+        self.assertIn("鉴权失败", payload.get("message", ""))
+
+    def test_ai_chat_maps_not_found_responses_error_to_bad_request(self):
+        url = reverse("ai_chat", args=[self.classroom.pk])
+        request = httpx.Request("POST", "https://example.com/v1/responses")
+        response = httpx.Response(404, request=request)
+        not_found_error = openai.NotFoundError(
+            "No route for /responses",
+            response=response,
+            body={"error": {"message": "No route"}},
+        )
+
+        with patch("seats.views._run_future_mode", side_effect=not_found_error):
+            resp = self.client.post(
+                url,
+                data=json.dumps({"action": "message", "message": "你好"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.json()
+        self.assertEqual(payload.get("status"), "error")
+        self.assertIn("不支持 Responses API", payload.get("message", ""))
+
+    def test_ai_chat_maps_not_implemented_text_error_to_bad_request(self):
+        url = reverse("ai_chat", args=[self.classroom.pk])
+
+        with patch("seats.views._run_future_mode", side_effect=Exception("status_code=500, not implemented")):
+            resp = self.client.post(
+                url,
+                data=json.dumps({"action": "message", "message": "你好"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 400)
+        payload = resp.json()
+        self.assertEqual(payload.get("status"), "error")
+        self.assertIn("不支持 Responses API", payload.get("message", ""))
+
+    def test_tool_approval_falls_back_when_call_id_mismatch(self):
+        url = reverse("ai_chat", args=[self.classroom.pk])
+        session = self.client.session
+        session["future_mode_pending_tools"] = {
+            "token_1": {
+                "classroom_id": self.classroom.pk,
+                "response_id": "resp_123",
+                "function_calls": [
+                    {
+                        "call_id": "call_123",
+                        "name": "get_classroom_overview",
+                        "arguments": {},
+                    }
+                ],
+            }
+        }
+        session.save()
+
+        with patch(
+            "seats.views._run_future_mode",
+            side_effect=Exception("No tool call found for function call output with call_id call_123."),
+        ):
+            resp = self.client.post(
+                url,
+                data=json.dumps(
+                    {
+                        "action": "tool_approval",
+                        "approval_token": "token_1",
+                        "decisions": [{"call_id": "call_123", "approved": True}],
+                    }
+                ),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload.get("status"), "success")
+        self.assertIn("工具已执行", payload.get("reply", ""))
+        self.assertIn("读取当前班级概览", payload.get("reply", ""))
+
+
+class FutureModeResponsesCompatibilityTests(TestCase):
+    def test_create_future_mode_response_retries_with_content_parts(self):
+        client = Mock()
+        expected = object()
+        client.responses.create.side_effect = [
+            Exception("status_code=500, json: cannot unmarshal object into Go struct field ***.***.content of type []***.ResponsesOutputContent"),
+            expected,
+        ]
+
+        result = _create_future_mode_response(
+            client=client,
+            model="gpt-4.1-mini",
+            conversation=[{"role": "user", "content": "你好"}],
+        )
+
+        self.assertIs(result, expected)
+        self.assertEqual(client.responses.create.call_count, 2)
+
+        first_input = client.responses.create.call_args_list[0].kwargs["input"]
+        second_input = client.responses.create.call_args_list[1].kwargs["input"]
+
+        self.assertIsInstance(first_input[0]["content"], str)
+        self.assertIsInstance(second_input[0]["content"], list)
+        self.assertEqual(second_input[0]["content"][0]["type"], "input_text")
+
+
+class FutureModeConfigPersistenceTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="配置测试班", rows=2, cols=2)
+        self.url = reverse("ai_chat", args=[self.classroom.pk])
+
+    def test_config_save_and_get_roundtrip(self):
+        save_resp = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "config_save",
+                    "client_config": {
+                        "api_key": "sk-db-123",
+                        "base_url": "https://api.openai.com/v1",
+                        "model": "gpt-4.1-mini",
+                    },
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(save_resp.status_code, 200)
+        self.assertEqual(save_resp.json().get("status"), "success")
+
+        db_config = FutureModeConfig.objects.get(classroom=self.classroom)
+        self.assertEqual(db_config.api_key, "sk-db-123")
+        self.assertEqual(db_config.base_url, "https://api.openai.com/v1")
+        self.assertEqual(db_config.model, "gpt-4.1-mini")
+
+        get_resp = self.client.post(
+            self.url,
+            data=json.dumps({"action": "config_get"}),
+            content_type="application/json",
+        )
+        self.assertEqual(get_resp.status_code, 200)
+        payload = get_resp.json()
+        self.assertEqual(payload.get("status"), "success")
+        self.assertEqual(payload.get("client_config", {}).get("api_key"), "sk-db-123")
+        self.assertEqual(payload.get("client_config", {}).get("base_url"), "https://api.openai.com/v1")
+        self.assertEqual(payload.get("client_config", {}).get("model"), "gpt-4.1-mini")
+
+    def test_message_uses_persisted_config_when_payload_empty(self):
+        FutureModeConfig.objects.create(
+            classroom=self.classroom,
+            api_key="sk-db-x",
+            base_url="https://api.openai.com/v1",
+            model="gpt-4.1-mini",
+        )
+
+        with patch(
+            "seats.views._run_future_mode",
+            return_value={"status": "completed", "reply": "ok", "tool_events": []},
+        ) as mock_run:
+            resp = self.client.post(
+                self.url,
+                data=json.dumps({"action": "message", "message": "你好"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        called_config = mock_run.call_args.kwargs.get("client_config", {})
+        self.assertEqual(called_config.get("api_key"), "sk-db-x")
+        self.assertEqual(called_config.get("base_url"), "https://api.openai.com/v1")
+        self.assertEqual(called_config.get("model"), "gpt-4.1-mini")
+
+    def test_payload_config_can_override_persisted_model(self):
+        FutureModeConfig.objects.create(
+            classroom=self.classroom,
+            api_key="sk-db-y",
+            base_url="https://api.openai.com/v1",
+            model="gpt-4.1-mini",
+        )
+
+        with patch(
+            "seats.views._run_future_mode",
+            return_value={"status": "completed", "reply": "ok", "tool_events": []},
+        ) as mock_run:
+            resp = self.client.post(
+                self.url,
+                data=json.dumps(
+                    {
+                        "action": "message",
+                        "message": "你好",
+                        "client_config": {"model": "gpt-5-mini"},
+                    }
+                ),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        called_config = mock_run.call_args.kwargs.get("client_config", {})
+        self.assertEqual(called_config.get("api_key"), "sk-db-y")
+        self.assertEqual(called_config.get("base_url"), "https://api.openai.com/v1")
+        self.assertEqual(called_config.get("model"), "gpt-5-mini")
+
+    def test_message_branch_uses_auto_mode(self):
+        with patch(
+            "seats.views._run_future_mode",
+            return_value={"status": "completed", "reply": "ok", "tool_events": []},
+        ) as mock_run:
+            resp = self.client.post(
+                self.url,
+                data=json.dumps({"action": "message", "message": "你好"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(mock_run.call_args.kwargs.get("mode"), "auto")
+
+    def test_tool_approval_uses_pending_chat_mode(self):
+        session = self.client.session
+        session["future_mode_pending_tools"] = {
+            "token_chat": {
+                "classroom_id": self.classroom.pk,
+                "response_id": "",
+                "mode": "chat",
+                "chat_messages": [{"role": "system", "content": "x"}],
+                "function_calls": [
+                    {"call_id": "call_1", "name": "get_classroom_overview", "arguments": {}}
+                ],
+            }
+        }
+        session.save()
+
+        with patch(
+            "seats.views._run_future_mode",
+            return_value={"status": "completed", "reply": "ok", "tool_events": []},
+        ) as mock_run:
+            resp = self.client.post(
+                self.url,
+                data=json.dumps(
+                    {
+                        "action": "tool_approval",
+                        "approval_token": "token_chat",
+                        "decisions": [{"call_id": "call_1", "approved": True}],
+                    }
+                ),
+                content_type="application/json",
+            )
+
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(mock_run.call_args.kwargs.get("mode"), "chat")
+        self.assertIsNone(mock_run.call_args.kwargs.get("previous_response_id"))
+        self.assertEqual(mock_run.call_args.kwargs.get("chat_messages"), [{"role": "system", "content": "x"}])
+
+
+class FutureModeDirectSwapTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="换座测试班", rows=1, cols=2)
+        self.url = reverse("ai_chat", args=[self.classroom.pk])
+        self.student_a = self.classroom.students.create(name="张三")
+        self.student_b = self.classroom.students.create(name="李四")
+        seat_1 = self.classroom.seats.get(row=1, col=1)
+        seat_2 = self.classroom.seats.get(row=1, col=2)
+        seat_1.student = self.student_a
+        seat_1.save(update_fields=["student"])
+        seat_2.student = self.student_b
+        seat_2.save(update_fields=["student"])
+
+    def test_message_detects_direct_swap_intent(self):
+        resp = self.client.post(
+            self.url,
+            data=json.dumps({"action": "message", "message": "把张三和李四换位置"}),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload.get("status"), "needs_approval")
+        token = payload.get("approval_token")
+        self.assertTrue(token)
+
+        session_payload = self.client.session.get("future_mode_pending_tools", {}).get(token, {})
+        self.assertEqual(session_payload.get("mode"), "direct")
+        function_calls = session_payload.get("function_calls") or []
+        self.assertEqual(len(function_calls), 1)
+        self.assertEqual(function_calls[0].get("name"), "swap_students")
+
+    def test_tool_approval_executes_direct_swap(self):
+        session = self.client.session
+        session["future_mode_pending_tools"] = {
+            "token_swap": {
+                "classroom_id": self.classroom.pk,
+                "response_id": "",
+                "mode": "direct",
+                "chat_messages": [],
+                "function_calls": [
+                    {
+                        "call_id": "call_swap_1",
+                        "name": "swap_students",
+                        "arguments": {"student_a": "张三", "student_b": "李四"},
+                    }
+                ],
+            }
+        }
+        session.save()
+
+        resp = self.client.post(
+            self.url,
+            data=json.dumps(
+                {
+                    "action": "tool_approval",
+                    "approval_token": "token_swap",
+                    "decisions": [{"call_id": "call_swap_1", "approved": True}],
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        payload = resp.json()
+        self.assertEqual(payload.get("status"), "success")
+
+        self.student_a.refresh_from_db()
+        self.student_b.refresh_from_db()
+        self.assertEqual(self.student_a.assigned_seat.col, 2)
+        self.assertEqual(self.student_b.assigned_seat.col, 1)
 
 
 class ConstraintArrangeTests(TestCase):

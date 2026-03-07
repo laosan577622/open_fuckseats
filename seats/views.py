@@ -1,12 +1,24 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse
+from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_POST
-from django.db import transaction, models, IntegrityError
+from django.db import transaction, models, IntegrityError, OperationalError, ProgrammingError
 from django.utils import timezone
 from django.urls import reverse
 from django.utils.encoding import escape_uri_path
 from django.conf import settings
-from .models import Classroom, Student, Seat, SeatCellType, SeatGroup, LayoutSnapshot, SeatConstraint
+from django.test import RequestFactory
+from .models import (
+    Classroom,
+    Student,
+    Seat,
+    SeatCellType,
+    SeatGroup,
+    LayoutSnapshot,
+    SeatConstraint,
+    FutureModeConfig,
+    AIConversation,
+    AIConversationMessage,
+)
 import pandas as pd
 from io import BytesIO
 import json
@@ -14,6 +26,7 @@ import random
 import os
 import re
 import uuid
+import time
 import html
 import openpyxl
 import math
@@ -22,6 +35,279 @@ from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 DISABLED_SUGGESTION_TYPES = {'jqj_hzh'}
+DEFAULT_AI_CONVERSATION_TITLE = '新对话'
+AI_CONVERSATION_FETCH_LIMIT = 50
+AI_MESSAGE_FETCH_LIMIT = 120
+AI_CONTEXT_MESSAGE_LIMIT = 12
+FUTURE_MODE_PENDING_TTL_SECONDS = 1800
+FUTURE_MODE_PENDING_CACHE = {}
+
+AI_TOOL_DEFINITIONS = [
+    {
+        'type': 'function',
+        'name': 'get_classroom_overview',
+        'description': '获取当前班级的整体概览，包括总人数、已入座人数、未入座人数、小组数量与建议操作。',
+        'strict': True,
+        'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+            'additionalProperties': False,
+        },
+    },
+    {
+        'type': 'function',
+        'name': 'get_student_info',
+        'description': '按姓名、学号或系统内学生 ID 获取学生信息、座位位置、小组、成绩等。',
+        'strict': True,
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'student_query': {
+                    'type': 'string',
+                    'description': '学生姓名、学号或系统内数字 ID。',
+                },
+            },
+            'required': ['student_query'],
+            'additionalProperties': False,
+        },
+    },
+    {
+        'type': 'function',
+        'name': 'get_group_scores',
+        'description': '获取小组评分排行，返回每个小组的人数、总分、平均分、组长和成员名单。',
+        'strict': True,
+        'parameters': {
+            'type': 'object',
+            'properties': {},
+            'required': [],
+            'additionalProperties': False,
+        },
+    },
+    {
+        'type': 'function',
+        'name': 'get_student_list',
+        'description': '读取学生列表，支持排序、筛选、字段裁剪与分页，便于生成名单或核对数据。',
+        'strict': True,
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'sort_by': {
+                    'type': 'string',
+                    'enum': ['id', 'name', 'student_id', 'gender', 'score', 'seat_row', 'seat_col', 'group'],
+                },
+                'sort_order': {
+                    'type': 'string',
+                    'enum': ['asc', 'desc'],
+                },
+                'limit': {
+                    'type': 'integer',
+                    'minimum': 1,
+                    'maximum': 200,
+                },
+                'offset': {
+                    'type': 'integer',
+                    'minimum': 0,
+                    'maximum': 5000,
+                },
+                'fields': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'string',
+                        'enum': [
+                            'id',
+                            'name',
+                            'student_id',
+                            'gender',
+                            'score',
+                            'score_display',
+                            'seat',
+                            'group',
+                            'is_seated',
+                            'is_group_leader',
+                        ],
+                    },
+                    'uniqueItems': True,
+                },
+                'filters': {
+                    'type': 'object',
+                    'properties': {
+                        'keyword': {'type': 'string'},
+                        'seated': {'type': 'boolean'},
+                        'gender': {'type': 'string', 'enum': ['M', 'F']},
+                        'min_score': {'type': 'number'},
+                        'max_score': {'type': 'number'},
+                        'group_query': {'type': 'string'},
+                        'row': {'type': 'integer'},
+                        'col': {'type': 'integer'},
+                    },
+                    'required': [],
+                    'additionalProperties': False,
+                },
+            },
+            'required': [],
+            'additionalProperties': False,
+        },
+    },
+    {
+        'type': 'function',
+        'name': 'send_card_info',
+        'description': '发送结构化卡片信息，支持部分座位图、学生详情图、整体座位图、班级报告图。',
+        'strict': True,
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'card_type': {
+                    'type': 'string',
+                    'enum': ['partial_seat_map', 'student_detail', 'full_seat_map', 'class_report'],
+                },
+                'title': {'type': 'string'},
+                'student_query': {'type': 'string'},
+                'rows': {
+                    'type': 'array',
+                    'items': {'type': 'integer'},
+                },
+                'cols': {
+                    'type': 'array',
+                    'items': {'type': 'integer'},
+                },
+                'max_students': {
+                    'type': 'integer',
+                    'minimum': 1,
+                    'maximum': 40,
+                },
+                'max_groups': {
+                    'type': 'integer',
+                    'minimum': 1,
+                    'maximum': 30,
+                },
+                'include_fields': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'string',
+                        'enum': ['classroom', 'metrics', 'top_students', 'group_ranking', 'suggestions'],
+                    },
+                    'uniqueItems': True,
+                },
+            },
+            'required': ['card_type'],
+            'additionalProperties': False,
+        },
+    },
+    {
+        'type': 'function',
+        'name': 'swap_students',
+        'description': '交换两名已入座学生的座位，并自动校正约束。该工具会真实修改当前班级排座结果。',
+        'strict': True,
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'student_a': {
+                    'type': 'string',
+                    'description': '第一名学生的姓名、学号或系统内数字 ID。',
+                },
+                'student_b': {
+                    'type': 'string',
+                    'description': '第二名学生的姓名、学号或系统内数字 ID。',
+                },
+            },
+            'required': ['student_a', 'student_b'],
+            'additionalProperties': False,
+        },
+    },
+    {
+        'type': 'function',
+        'name': 'execute_classroom_action',
+        'description': '执行班级操作（与人工在页面点击的功能一致），如移动座位、分组、约束、快照、撤销重做、重命名等。该工具会真实修改数据。',
+        'strict': True,
+        'parameters': {
+            'type': 'object',
+            'properties': {
+                'action': {
+                    'type': 'string',
+                    'enum': [
+                        'move_student',
+                        'move_students_batch',
+                        'assign_student',
+                        'clear_seat',
+                        'update_cell_type',
+                        'create_group',
+                        'rename_group',
+                        'delete_group',
+                        'assign_group',
+                        'assign_group_batch',
+                        'set_group_leader',
+                        'auto_arrange',
+                        'create_constraint',
+                        'delete_constraint',
+                        'save_layout_snapshot',
+                        'load_layout_snapshot',
+                        'delete_layout_snapshot',
+                        'undo',
+                        'redo',
+                        'rename_classroom',
+                        'delete_student',
+                    ],
+                    'description': '要执行的动作名称。',
+                },
+                'student_query': {'type': 'string'},
+                'target_student_query': {'type': 'string'},
+                'group_query': {'type': 'string'},
+                'snapshot_query': {'type': 'string'},
+                'constraint_id': {'type': 'integer'},
+                'row': {'type': 'integer'},
+                'col': {'type': 'integer'},
+                'cell_type': {'type': 'string', 'enum': ['seat', 'aisle', 'podium', 'empty']},
+                'name': {'type': 'string'},
+                'new_name': {'type': 'string'},
+                'mode': {'type': 'string'},
+                'constraint_type': {
+                    'type': 'string',
+                    'enum': ['must_seat', 'forbid_seat', 'must_row', 'forbid_row', 'must_col', 'forbid_col', 'must_together', 'forbid_together'],
+                },
+                'distance': {'type': 'integer'},
+                'note': {'type': 'string'},
+                'moves': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'student_query': {'type': 'string'},
+                            'row': {'type': 'integer'},
+                            'col': {'type': 'integer'},
+                        },
+                        'required': ['student_query', 'row', 'col'],
+                        'additionalProperties': False,
+                    },
+                },
+                'seats': {
+                    'type': 'array',
+                    'items': {
+                        'type': 'object',
+                        'properties': {
+                            'row': {'type': 'integer'},
+                            'col': {'type': 'integer'},
+                        },
+                        'required': ['row', 'col'],
+                        'additionalProperties': False,
+                    },
+                },
+            },
+            'required': ['action'],
+            'additionalProperties': False,
+        },
+    },
+]
+
+AI_TOOL_LABELS = {
+    'get_classroom_overview': '读取班级概览',
+    'get_student_info': '读取学生信息',
+    'get_group_scores': '读取小组评分',
+    'get_student_list': '读取学生列表',
+    'send_card_info': '发送卡片信息',
+    'swap_students': '交换座位',
+    'execute_classroom_action': '执行班级操作',
+}
 
 
 def index(request):
@@ -45,6 +331,1740 @@ def _seat_key(row, col):
 
 def _build_seat_map(seats):
     return {(s.row, s.col): s for s in seats}
+
+
+def _coerce_score_value(score):
+    value = score or 0
+    try:
+        value = float(value)
+    except (TypeError, ValueError):
+        value = 0
+    return value
+
+
+def _serialize_student_profile(student):
+    seat = getattr(student, 'assigned_seat', None)
+    group = seat.group if seat else None
+    return {
+        'id': student.pk,
+        'name': student.name,
+        'student_id': student.student_id or '',
+        'gender': student.get_gender_display() if student.gender else '',
+        'score': _coerce_score_value(student.score),
+        'score_display': student.display_score if student.score is not None else '',
+        'seat': {
+            'row': seat.row,
+            'col': seat.col,
+        } if seat else None,
+        'group': {
+            'id': group.pk,
+            'name': group.name,
+            'is_leader': bool(group and group.leader_id == student.pk),
+        } if group else None,
+    }
+
+
+def _get_group_score_rows(classroom):
+    rows = []
+    groups = classroom.groups.all().order_by('order', 'created_at', 'pk')
+    for group in groups:
+        seats = list(group.seats.select_related('student').filter(student__isnull=False).order_by('row', 'col'))
+        members = [seat.student for seat in seats if seat.student]
+        total_score = round(sum(_coerce_score_value(member.score) for member in members), 2)
+        average_score = round(total_score / len(members), 2) if members else 0
+        rows.append({
+            'group_id': group.pk,
+            'group_name': group.name,
+            'member_count': len(members),
+            'total_score': total_score,
+            'average_score': average_score,
+            'leader_name': group.leader.name if group.leader else '',
+            'members': [
+                {
+                    'id': member.pk,
+                    'name': member.name,
+                    'student_id': member.student_id or '',
+                    'score': _coerce_score_value(member.score),
+                    'score_display': member.display_score if member.score is not None else '',
+                    'is_leader': bool(group.leader_id == member.pk),
+                }
+                for member in members
+            ],
+        })
+    rows.sort(key=lambda item: (-item['average_score'], -item['total_score'], item['group_name']))
+    return rows
+
+
+def _ensure_session_key(request):
+    if request.session.session_key:
+        return str(request.session.session_key)
+    request.session.save()
+    return str(request.session.session_key or '')
+
+
+def _conversation_owner_queryset(classroom, request):
+    owner_key = _ensure_session_key(request)
+    return classroom.ai_conversations.filter(session_key=owner_key), owner_key
+
+
+def _build_conversation_title_from_message(message):
+    text = str(message or '').strip()
+    if not text:
+        return DEFAULT_AI_CONVERSATION_TITLE
+    cleaned = re.sub(r'\s+', ' ', text)
+    title = cleaned[:24]
+    return title or DEFAULT_AI_CONVERSATION_TITLE
+
+
+def _extract_cards_from_payload(payload):
+    if not isinstance(payload, dict):
+        return []
+    cards = payload.get('cards')
+    if isinstance(cards, list):
+        return [item for item in cards if isinstance(item, dict)]
+    card = payload.get('card')
+    if isinstance(card, dict):
+        return [card]
+    return []
+
+
+def _serialize_ai_message(message):
+    payload = message.payload if isinstance(message.payload, dict) else {}
+    return {
+        'id': message.pk,
+        'role': message.role,
+        'content': str(message.content or ''),
+        'cards': _extract_cards_from_payload(payload),
+        'created_at': message.created_at.isoformat() if message.created_at else '',
+    }
+
+
+def _serialize_ai_conversation(conversation):
+    latest_message = conversation.messages.order_by('-created_at', '-pk').first()
+    preview = ''
+    if latest_message:
+        preview = str(latest_message.content or '').strip()
+        if not preview and _extract_cards_from_payload(latest_message.payload):
+            preview = '已发送卡片信息'
+    return {
+        'id': conversation.pk,
+        'title': conversation.title or DEFAULT_AI_CONVERSATION_TITLE,
+        'updated_at': conversation.updated_at.isoformat() if conversation.updated_at else '',
+        'preview': preview[:48],
+    }
+
+
+def _list_ai_conversations(classroom, request):
+    qs, _ = _conversation_owner_queryset(classroom, request)
+    return [_serialize_ai_conversation(item) for item in qs[:AI_CONVERSATION_FETCH_LIMIT]]
+
+
+def _load_ai_conversation_messages(conversation):
+    messages = conversation.messages.all().order_by('created_at', 'pk')[:AI_MESSAGE_FETCH_LIMIT]
+    return [_serialize_ai_message(item) for item in messages]
+
+
+def _touch_ai_conversation(conversation, *, mode=None, response_id=None):
+    update_fields = ['updated_at']
+    conversation.updated_at = timezone.now()
+    if mode is not None:
+        conversation.last_mode = str(mode or '').strip()
+        update_fields.append('last_mode')
+    if response_id is not None:
+        conversation.last_response_id = str(response_id or '').strip()
+        update_fields.append('last_response_id')
+    conversation.save(update_fields=update_fields)
+
+
+def _create_ai_conversation(classroom, request, title=''):
+    _, owner_key = _conversation_owner_queryset(classroom, request)
+    resolved_title = str(title or '').strip() or DEFAULT_AI_CONVERSATION_TITLE
+    return AIConversation.objects.create(
+        classroom=classroom,
+        session_key=owner_key,
+        title=resolved_title[:120],
+    )
+
+
+def _resolve_ai_conversation(classroom, request, conversation_id=None, create_if_missing=True):
+    qs, _ = _conversation_owner_queryset(classroom, request)
+    if conversation_id not in (None, ''):
+        try:
+            conv_id = int(conversation_id)
+        except (TypeError, ValueError):
+            raise ValueError('对话 ID 格式错误')
+        conversation = qs.filter(pk=conv_id).first()
+        if not conversation:
+            raise ValueError('未找到该对话，或无权限访问')
+        return conversation, False
+
+    conversation = qs.order_by('-updated_at', '-pk').first()
+    if conversation:
+        return conversation, False
+    if not create_if_missing:
+        raise ValueError('当前没有可用对话')
+    return _create_ai_conversation(classroom, request), True
+
+
+def _append_ai_conversation_message(conversation, role, content='', payload=None):
+    normalized_content = str(content or '').strip()
+    normalized_payload = payload if isinstance(payload, dict) else {}
+    if not normalized_content and not normalized_payload:
+        return None
+    message = AIConversationMessage.objects.create(
+        conversation=conversation,
+        role=str(role or AIConversationMessage.MessageRole.USER),
+        content=normalized_content[:4000],
+        payload=normalized_payload,
+    )
+    _touch_ai_conversation(conversation)
+    return message
+
+
+def _build_history_from_conversation(conversation, limit=AI_CONTEXT_MESSAGE_LIMIT):
+    rows = list(
+        conversation.messages
+        .filter(role__in=[AIConversationMessage.MessageRole.USER, AIConversationMessage.MessageRole.ASSISTANT])
+        .order_by('-created_at', '-pk')[:max(1, int(limit))]
+    )
+    rows.reverse()
+    history = []
+    for item in rows:
+        content = str(item.content or '').strip()
+        if not content:
+            continue
+        role = 'assistant' if item.role == AIConversationMessage.MessageRole.ASSISTANT else 'user'
+        history.append({'role': role, 'content': content[:4000]})
+    return history
+
+
+def _normalize_int_list(values, lower, upper):
+    result = []
+    if not isinstance(values, list):
+        return result
+    for value in values:
+        try:
+            current = int(value)
+        except (TypeError, ValueError):
+            continue
+        if current < lower or current > upper:
+            continue
+        if current in result:
+            continue
+        result.append(current)
+    result.sort()
+    return result
+
+
+def _safe_int(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return int(default)
+
+
+def _safe_float(value, default=0.0):
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _serialize_card_seat_cell(seat):
+    student = seat.student
+    group = seat.group
+    return {
+        'row': seat.row,
+        'col': seat.col,
+        'cell_type': seat.cell_type,
+        'student_name': student.name if student else '',
+        'student_id': student.student_id if student and student.student_id else '',
+        'group_name': group.name if group else '',
+    }
+
+
+def _build_partial_seat_map_card(classroom, arguments):
+    rows = _normalize_int_list(arguments.get('rows'), 1, classroom.rows)
+    cols = _normalize_int_list(arguments.get('cols'), 1, classroom.cols)
+    if not rows:
+        rows = list(range(1, classroom.rows + 1))
+    if not cols:
+        cols = list(range(1, classroom.cols + 1))
+    seats = list(
+        classroom.seats
+        .select_related('student', 'group')
+        .filter(row__in=rows, col__in=cols)
+        .order_by('row', 'col')
+    )
+    return {
+        'type': 'partial_seat_map',
+        'title': str(arguments.get('title') or '部分座位图'),
+        'classroom': {
+            'id': classroom.pk,
+            'name': classroom.name,
+        },
+        'rows': rows,
+        'cols': cols,
+        'cells': [_serialize_card_seat_cell(seat) for seat in seats],
+    }
+
+
+def _build_full_seat_map_card(classroom, arguments):
+    seats = list(classroom.seats.select_related('student', 'group').all().order_by('row', 'col'))
+    return {
+        'type': 'full_seat_map',
+        'title': str(arguments.get('title') or '整体座位图'),
+        'classroom': {
+            'id': classroom.pk,
+            'name': classroom.name,
+            'rows': classroom.rows,
+            'cols': classroom.cols,
+        },
+        'cells': [_serialize_card_seat_cell(seat) for seat in seats],
+    }
+
+
+def _build_student_detail_card(classroom, arguments):
+    student = _resolve_student_query(classroom, arguments.get('student_query'))
+    return {
+        'type': 'student_detail',
+        'title': str(arguments.get('title') or f'{student.name} 详情'),
+        'student': _serialize_student_profile(student),
+    }
+
+
+def _build_class_report_card(classroom, arguments):
+    include_fields = arguments.get('include_fields')
+    if not isinstance(include_fields, list):
+        include_fields = ['classroom', 'metrics', 'top_students', 'group_ranking', 'suggestions']
+
+    include_set = set(str(item or '').strip() for item in include_fields if str(item or '').strip())
+    max_students = max(1, min(40, _safe_int(arguments.get('max_students'), 10)))
+    max_groups = max(1, min(30, _safe_int(arguments.get('max_groups'), 10)))
+    overview = _get_classroom_overview_payload(classroom)
+
+    report = {'title': str(arguments.get('title') or '班级报告图')}
+    if 'classroom' in include_set:
+        report['classroom'] = overview.get('classroom') or {}
+    if 'metrics' in include_set:
+        report['metrics'] = overview.get('metrics') or {}
+    if 'top_students' in include_set:
+        report['top_students'] = (overview.get('top_students') or [])[:max_students]
+    if 'group_ranking' in include_set:
+        report['group_ranking'] = (overview.get('group_ranking') or [])[:max_groups]
+    if 'suggestions' in include_set:
+        report['suggestions'] = overview.get('suggestions') or []
+
+    return {
+        'type': 'class_report',
+        'title': report.pop('title'),
+        'report': report,
+    }
+
+
+def _build_student_list_payload(classroom, arguments):
+    arguments = arguments or {}
+    filters = arguments.get('filters') if isinstance(arguments.get('filters'), dict) else {}
+    queryset = classroom.students.select_related('assigned_seat__group').all()
+
+    keyword = str(filters.get('keyword') or '').strip()
+    if keyword:
+        queryset = queryset.filter(models.Q(name__icontains=keyword) | models.Q(student_id__icontains=keyword))
+
+    if 'seated' in filters:
+        seated_raw = filters.get('seated')
+        if isinstance(seated_raw, bool):
+            seated = seated_raw
+        else:
+            seated = str(seated_raw).strip().lower() in {'1', 'true', 'yes', 'y'}
+        queryset = queryset.filter(assigned_seat__isnull=not seated)
+
+    gender = str(filters.get('gender') or '').strip()
+    if gender in {'M', 'F'}:
+        queryset = queryset.filter(gender=gender)
+
+    if filters.get('min_score') not in (None, ''):
+        queryset = queryset.filter(score__gte=_safe_float(filters.get('min_score')))
+    if filters.get('max_score') not in (None, ''):
+        queryset = queryset.filter(score__lte=_safe_float(filters.get('max_score')))
+
+    if filters.get('group_query') not in (None, ''):
+        group = _resolve_group_query(classroom, filters.get('group_query'))
+        queryset = queryset.filter(assigned_seat__group=group)
+
+    if filters.get('row') not in (None, ''):
+        queryset = queryset.filter(assigned_seat__row=_safe_int(filters.get('row')))
+    if filters.get('col') not in (None, ''):
+        queryset = queryset.filter(assigned_seat__col=_safe_int(filters.get('col')))
+
+    sort_by = str(arguments.get('sort_by') or 'name').strip()
+    sort_order = str(arguments.get('sort_order') or 'asc').strip().lower()
+    sort_map = {
+        'id': 'pk',
+        'name': 'name',
+        'student_id': 'student_id',
+        'gender': 'gender',
+        'score': 'score',
+        'seat_row': 'assigned_seat__row',
+        'seat_col': 'assigned_seat__col',
+        'group': 'assigned_seat__group__name',
+    }
+    sort_field = sort_map.get(sort_by, 'name')
+    ordering = f'-{sort_field}' if sort_order == 'desc' else sort_field
+    queryset = queryset.order_by(ordering, 'pk')
+
+    total = queryset.count()
+    limit = max(1, min(200, _safe_int(arguments.get('limit'), 30)))
+    offset = max(0, _safe_int(arguments.get('offset'), 0))
+    students = list(queryset[offset: offset + limit])
+
+    requested_fields = arguments.get('fields') if isinstance(arguments.get('fields'), list) else []
+    allowed_fields = {
+        'id',
+        'name',
+        'student_id',
+        'gender',
+        'score',
+        'score_display',
+        'seat',
+        'group',
+        'is_seated',
+        'is_group_leader',
+    }
+    field_set = [item for item in requested_fields if item in allowed_fields]
+    if not field_set:
+        field_set = ['id', 'name', 'student_id', 'gender', 'score_display', 'seat', 'group', 'is_seated']
+
+    items = []
+    for student in students:
+        seat = getattr(student, 'assigned_seat', None)
+        group = seat.group if seat else None
+        row = {
+            'id': student.pk,
+            'name': student.name,
+            'student_id': student.student_id or '',
+            'gender': student.get_gender_display() if student.gender else '',
+            'score': _coerce_score_value(student.score),
+            'score_display': student.display_score if student.score is not None else '',
+            'seat': {'row': seat.row, 'col': seat.col} if seat else None,
+            'group': {'id': group.pk, 'name': group.name} if group else None,
+            'is_seated': bool(seat),
+            'is_group_leader': bool(group and group.leader_id == student.pk),
+        }
+        items.append({key: row.get(key) for key in field_set})
+
+    return {
+        'message': f'已读取学生列表，共 {total} 人，当前返回 {len(items)} 人。',
+        'total': total,
+        'offset': offset,
+        'limit': limit,
+        'sort_by': sort_by,
+        'sort_order': sort_order,
+        'fields': field_set,
+        'items': items,
+    }
+
+
+def _build_card_info_payload(classroom, arguments):
+    card_type = str(arguments.get('card_type') or '').strip()
+    if card_type == 'partial_seat_map':
+        card = _build_partial_seat_map_card(classroom, arguments)
+    elif card_type == 'student_detail':
+        card = _build_student_detail_card(classroom, arguments)
+    elif card_type == 'full_seat_map':
+        card = _build_full_seat_map_card(classroom, arguments)
+    elif card_type == 'class_report':
+        card = _build_class_report_card(classroom, arguments)
+    else:
+        raise ValueError(f'不支持的卡片类型：{card_type}')
+    return {
+        'message': f'已生成卡片：{card.get("title") or card_type}',
+        'cards': [card],
+    }
+
+
+def _collect_cards_from_tool_events(tool_events):
+    cards = []
+    for event in tool_events or []:
+        if not isinstance(event, dict):
+            continue
+        result = event.get('result')
+        if not isinstance(result, dict) or not result.get('ok'):
+            continue
+        data = result.get('data')
+        if not isinstance(data, dict):
+            continue
+        for card in _extract_cards_from_payload(data):
+            cards.append(card)
+    return cards
+
+
+def _resolve_student_query(classroom, query):
+    keyword = str(query or '').strip()
+    if not keyword:
+        raise ValueError('学生查询不能为空')
+
+    exact_candidates = []
+    if keyword.isdigit():
+        student = classroom.students.filter(pk=int(keyword)).first()
+        if student:
+            return student
+
+    direct_matches = list(
+        classroom.students.filter(
+            models.Q(name=keyword) | models.Q(student_id=keyword)
+        ).order_by('name', 'pk')[:6]
+    )
+    if len(direct_matches) == 1:
+        return direct_matches[0]
+    if len(direct_matches) > 1:
+        exact_candidates = direct_matches
+
+    fuzzy_matches = list(
+        classroom.students.filter(
+            models.Q(name__icontains=keyword) | models.Q(student_id__icontains=keyword)
+        ).order_by('name', 'pk')[:6]
+    )
+    if len(fuzzy_matches) == 1:
+        return fuzzy_matches[0]
+    if len(fuzzy_matches) > 1:
+        exact_candidates = fuzzy_matches
+
+    if exact_candidates:
+        raise ValueError('找到多名匹配学生：' + '、'.join(student.name for student in exact_candidates))
+    raise ValueError(f'未找到学生：{keyword}')
+
+
+def _resolve_group_query(classroom, query):
+    keyword = str(query or '').strip()
+    if not keyword:
+        raise ValueError('小组查询不能为空')
+    if keyword.isdigit():
+        group = classroom.groups.filter(pk=int(keyword)).first()
+        if group:
+            return group
+    matches = list(classroom.groups.filter(name=keyword).order_by('order', 'pk')[:3])
+    if len(matches) == 1:
+        return matches[0]
+    if len(matches) > 1:
+        raise ValueError('找到多个同名小组，请使用小组 ID')
+    fuzzy = list(classroom.groups.filter(name__icontains=keyword).order_by('order', 'pk')[:3])
+    if len(fuzzy) == 1:
+        return fuzzy[0]
+    if len(fuzzy) > 1:
+        raise ValueError('找到多个匹配小组，请使用更精确名称或小组 ID')
+    raise ValueError(f'未找到小组：{keyword}')
+
+
+def _resolve_snapshot_query(classroom, query):
+    keyword = str(query or '').strip()
+    if not keyword:
+        raise ValueError('快照查询不能为空')
+    if keyword.isdigit():
+        snapshot = classroom.layout_snapshots.filter(pk=int(keyword)).first()
+        if snapshot:
+            return snapshot
+    exact = list(classroom.layout_snapshots.filter(name=keyword).order_by('-created_at', '-pk')[:3])
+    if len(exact) == 1:
+        return exact[0]
+    if len(exact) > 1:
+        raise ValueError('存在同名快照，请使用快照 ID')
+    fuzzy = list(classroom.layout_snapshots.filter(name__icontains=keyword).order_by('-created_at', '-pk')[:3])
+    if len(fuzzy) == 1:
+        return fuzzy[0]
+    if len(fuzzy) > 1:
+        raise ValueError('找到多个匹配快照，请使用更精确名称或快照 ID')
+    raise ValueError(f'未找到快照：{keyword}')
+
+
+def _decode_json_response(response):
+    try:
+        return json.loads(response.content.decode('utf-8'))
+    except Exception:
+        return {}
+
+
+def _invoke_classroom_action_view(
+    classroom,
+    request,
+    view_func,
+    *,
+    json_payload=None,
+    form_payload=None,
+    extra_args=None,
+):
+    if request is None:
+        raise ValueError('当前上下文不支持执行写操作')
+
+    factory = RequestFactory()
+    if json_payload is not None:
+        fake_request = factory.post(
+            '/ai/tool/',
+            data=json.dumps(json_payload, ensure_ascii=False),
+            content_type='application/json',
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+    else:
+        fake_request = factory.post(
+            '/ai/tool/',
+            data=form_payload or {},
+            HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+        )
+
+    fake_request.session = request.session
+    fake_request.user = getattr(request, 'user', None)
+
+    args = [fake_request, classroom.pk]
+    if extra_args:
+        args.extend(extra_args)
+    response = view_func(*args)
+
+    if isinstance(response, JsonResponse):
+        payload = _decode_json_response(response)
+        if response.status_code >= 400 or payload.get('status') == 'error':
+            raise ValueError(payload.get('message') or f'操作失败（HTTP {response.status_code}）')
+        return payload
+
+    if 300 <= response.status_code < 400:
+        return {'status': 'success'}
+    if response.status_code >= 400:
+        text = response.content.decode('utf-8', errors='ignore') if hasattr(response, 'content') else ''
+        raise ValueError(text or f'操作失败（HTTP {response.status_code}）')
+    return {'status': 'success'}
+
+
+def _execute_classroom_action_tool(classroom, arguments, request=None):
+    action = str((arguments or {}).get('action') or '').strip()
+    if not action:
+        raise ValueError('缺少 action 参数')
+
+    if action == 'move_student':
+        student = _resolve_student_query(classroom, arguments.get('student_query'))
+        row = int(arguments.get('row'))
+        col = int(arguments.get('col'))
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            move_student,
+            json_payload={'student_id': student.pk, 'row': row, 'col': col},
+        )
+        return {'message': f'已移动 {student.name} 到 {row}-{col}', 'payload': payload}
+
+    if action == 'move_students_batch':
+        moves = arguments.get('moves') or []
+        payload_moves = []
+        for item in moves:
+            student = _resolve_student_query(classroom, item.get('student_query'))
+            payload_moves.append({
+                'student_id': student.pk,
+                'row': int(item.get('row')),
+                'col': int(item.get('col')),
+            })
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            move_students_batch,
+            json_payload={'moves': payload_moves},
+        )
+        return {'message': f'已批量移动 {len(payload_moves)} 名学生', 'payload': payload}
+
+    if action == 'assign_student':
+        student = _resolve_student_query(classroom, arguments.get('student_query'))
+        row = int(arguments.get('row'))
+        col = int(arguments.get('col'))
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            assign_student,
+            json_payload={'student_id': student.pk, 'row': row, 'col': col},
+        )
+        return {'message': f'已指派 {student.name} 到 {row}-{col}', 'payload': payload}
+
+    if action == 'clear_seat':
+        row = int(arguments.get('row'))
+        col = int(arguments.get('col'))
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            clear_seat,
+            json_payload={'row': row, 'col': col},
+        )
+        return {'message': f'已清空座位 {row}-{col}', 'payload': payload}
+
+    if action == 'update_cell_type':
+        row = int(arguments.get('row'))
+        col = int(arguments.get('col'))
+        cell_type = str(arguments.get('cell_type') or '').strip()
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            update_cell_type,
+            json_payload={'row': row, 'col': col, 'cell_type': cell_type},
+        )
+        return {'message': f'已将 {row}-{col} 类型改为 {cell_type}', 'payload': payload}
+
+    if action == 'create_group':
+        name = str(arguments.get('name') or '').strip()
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            create_group,
+            form_payload={'name': name},
+        )
+        return {'message': f'已创建小组：{name}', 'payload': payload}
+
+    if action == 'rename_group':
+        group = _resolve_group_query(classroom, arguments.get('group_query'))
+        new_name = str(arguments.get('new_name') or '').strip()
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            rename_group,
+            form_payload={'name': new_name},
+            extra_args=[group.pk],
+        )
+        return {'message': f'已将小组“{group.name}”重命名为“{new_name}”', 'payload': payload}
+
+    if action == 'delete_group':
+        group = _resolve_group_query(classroom, arguments.get('group_query'))
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            delete_group,
+            extra_args=[group.pk],
+        )
+        return {'message': f'已删除小组：{group.name}', 'payload': payload}
+
+    if action == 'assign_group':
+        row = int(arguments.get('row'))
+        col = int(arguments.get('col'))
+        group_query = arguments.get('group_query')
+        group_id = None
+        if group_query:
+            group_id = _resolve_group_query(classroom, group_query).pk
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            assign_group,
+            json_payload={'row': row, 'col': col, 'group_id': group_id},
+        )
+        return {'message': f'已更新座位 {row}-{col} 的小组归属', 'payload': payload}
+
+    if action == 'assign_group_batch':
+        group_query = arguments.get('group_query')
+        group_id = None
+        if group_query:
+            group_id = _resolve_group_query(classroom, group_query).pk
+        seats = arguments.get('seats') or []
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            assign_group_batch,
+            json_payload={'group_id': group_id, 'seats': seats},
+        )
+        return {'message': f'已批量更新 {len(seats)} 个座位的小组归属', 'payload': payload}
+
+    if action == 'set_group_leader':
+        student = _resolve_student_query(classroom, arguments.get('student_query'))
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            set_group_leader,
+            json_payload={'student_id': student.pk},
+        )
+        return {'message': f'已更新组长状态：{student.name}', 'payload': payload}
+
+    if action == 'auto_arrange':
+        method = str(arguments.get('mode') or 'random').strip() or 'random'
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            auto_arrange_seats,
+            form_payload={'method': method},
+        )
+        return {'message': f'已执行自动排座（{method}）', 'payload': payload}
+
+    if action == 'create_constraint':
+        student = _resolve_student_query(classroom, arguments.get('student_query'))
+        target_student_query = arguments.get('target_student_query')
+        target_student = _resolve_student_query(classroom, target_student_query) if target_student_query else None
+        form_payload = {
+            'constraint_type': str(arguments.get('constraint_type') or '').strip(),
+            'student_id': student.pk,
+            'target_student_id': target_student.pk if target_student else '',
+            'row': arguments.get('row') if arguments.get('row') is not None else '',
+            'col': arguments.get('col') if arguments.get('col') is not None else '',
+            'distance': int(arguments.get('distance') or 1),
+            'note': str(arguments.get('note') or ''),
+        }
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            create_constraint,
+            form_payload=form_payload,
+        )
+        return {'message': '已创建约束', 'payload': payload}
+
+    if action == 'delete_constraint':
+        constraint_id = int(arguments.get('constraint_id'))
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            delete_constraint,
+            extra_args=[constraint_id],
+        )
+        return {'message': f'已删除约束 #{constraint_id}', 'payload': payload}
+
+    if action == 'save_layout_snapshot':
+        name = str(arguments.get('name') or '').strip()
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            save_layout_snapshot,
+            form_payload={'snapshot_name': name},
+        )
+        return {'message': f'已保存布局快照：{name}', 'payload': payload}
+
+    if action == 'load_layout_snapshot':
+        snapshot = _resolve_snapshot_query(classroom, arguments.get('snapshot_query'))
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            load_layout_snapshot,
+            extra_args=[snapshot.pk],
+        )
+        return {'message': f'已加载布局快照：{snapshot.name}', 'payload': payload}
+
+    if action == 'delete_layout_snapshot':
+        snapshot = _resolve_snapshot_query(classroom, arguments.get('snapshot_query'))
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            delete_layout_snapshot,
+            extra_args=[snapshot.pk],
+        )
+        return {'message': f'已删除布局快照：{snapshot.name}', 'payload': payload}
+
+    if action == 'undo':
+        payload = _invoke_classroom_action_view(classroom, request, undo_action)
+        return {'message': '已执行撤销', 'payload': payload}
+
+    if action == 'redo':
+        payload = _invoke_classroom_action_view(classroom, request, redo_action)
+        return {'message': '已执行重做', 'payload': payload}
+
+    if action == 'rename_classroom':
+        new_name = str(arguments.get('new_name') or arguments.get('name') or '').strip()
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            rename_classroom,
+            json_payload={'name': new_name},
+        )
+        return {'message': f'已重命名班级为：{new_name}', 'payload': payload}
+
+    if action == 'delete_student':
+        student = _resolve_student_query(classroom, arguments.get('student_query'))
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            delete_student,
+            extra_args=[student.pk],
+        )
+        return {'message': f'已删除学生：{student.name}', 'payload': payload}
+
+    raise ValueError(f'不支持的 action：{action}')
+
+
+def _get_classroom_overview_payload(classroom):
+    students = list(classroom.students.all())
+    seated_count = sum(1 for student in students if getattr(student, 'assigned_seat', None))
+    suggestions = _evaluate_layout(classroom, None)
+    group_rows = _get_group_score_rows(classroom)
+    top_students = sorted(
+        (_serialize_student_profile(student) for student in students),
+        key=lambda item: (-item['score'], item['name'])
+    )[:5]
+    return {
+        'classroom': {
+            'id': classroom.pk,
+            'name': classroom.name,
+            'rows': classroom.rows,
+            'cols': classroom.cols,
+        },
+        'metrics': {
+            'student_count': len(students),
+            'seated_count': seated_count,
+            'unseated_count': max(0, len(students) - seated_count),
+            'group_count': classroom.groups.count(),
+            'constraint_count': classroom.constraints.count(),
+        },
+        'group_ranking': group_rows[:6],
+        'top_students': top_students,
+        'suggestions': [
+            {
+                'title': item.get('title') or '',
+                'message': item.get('message') or '',
+            }
+            for item in suggestions[:5]
+        ],
+    }
+
+
+def _build_swap_action(student_a, student_b):
+    return {
+        'type': 'swap',
+        'student_a_id': student_a.pk,
+        'student_b_id': student_b.pk,
+    }
+
+
+def _get_future_mode_pending_store(request):
+    store = request.session.get('future_mode_pending_tools', {})
+    request.session['future_mode_pending_tools'] = store
+    return store
+
+
+def _cleanup_future_mode_pending_cache():
+    now_ts = time.time()
+    expired_tokens = []
+    for token, payload in FUTURE_MODE_PENDING_CACHE.items():
+        created_at_ts = float(payload.get('_created_at_ts') or 0)
+        if created_at_ts <= 0 or (now_ts - created_at_ts) > FUTURE_MODE_PENDING_TTL_SECONDS:
+            expired_tokens.append(token)
+    for token in expired_tokens:
+        FUTURE_MODE_PENDING_CACHE.pop(token, None)
+
+
+def _store_future_mode_pending(
+    request,
+    classroom_id,
+    conversation_id,
+    response_id,
+    function_calls,
+    mode='responses',
+    chat_messages=None,
+):
+    _cleanup_future_mode_pending_cache()
+    owner_session_key = _ensure_session_key(request)
+    token = uuid.uuid4().hex
+    payload = {
+        'classroom_id': classroom_id,
+        'conversation_id': conversation_id,
+        'response_id': response_id,
+        'function_calls': function_calls,
+        'mode': mode or 'responses',
+        'chat_messages': chat_messages or [],
+        'session_key': owner_session_key,
+        '_created_at_ts': time.time(),
+    }
+    store = _get_future_mode_pending_store(request)
+    store[token] = payload
+    FUTURE_MODE_PENDING_CACHE[token] = payload
+    request.session.modified = True
+    return token
+
+
+def _consume_future_mode_pending(request, token, classroom_id, conversation_id=None):
+    _cleanup_future_mode_pending_cache()
+    store = _get_future_mode_pending_store(request)
+    payload = store.get(token) or FUTURE_MODE_PENDING_CACHE.get(token)
+    if not payload:
+        raise ValueError('授权请求已过期，请重新发送本次指令。')
+
+    owner_session_key = str(payload.get('session_key') or '').strip()
+    if owner_session_key:
+        current_session_key = _ensure_session_key(request)
+        if str(current_session_key or '').strip() != owner_session_key:
+            raise ValueError('授权请求与当前会话不匹配。')
+
+    if int(payload.get('classroom_id') or 0) != int(classroom_id):
+        raise ValueError('授权请求与当前班级不匹配。')
+    if conversation_id not in (None, ''):
+        if int(payload.get('conversation_id') or 0) != int(conversation_id):
+            raise ValueError('授权请求与当前对话不匹配。')
+
+    if token in store:
+        del store[token]
+        request.session.modified = True
+    FUTURE_MODE_PENDING_CACHE.pop(token, None)
+    return payload
+
+
+def _normalize_ai_client_config(payload):
+    payload = payload or {}
+    if not isinstance(payload, dict):
+        payload = {}
+    return {
+        'api_key': str(payload.get('api_key') or '').strip(),
+        'base_url': str(payload.get('base_url') or '').strip(),
+        'model': str(payload.get('model') or '').strip(),
+    }
+
+
+def _load_persisted_ai_client_config(classroom):
+    try:
+        config = FutureModeConfig.objects.filter(classroom=classroom).first()
+    except (OperationalError, ProgrammingError):
+        return {'api_key': '', 'base_url': '', 'model': ''}
+    if not config:
+        return {'api_key': '', 'base_url': '', 'model': ''}
+    return {
+        'api_key': str(config.api_key or '').strip(),
+        'base_url': str(config.base_url or '').strip(),
+        'model': str(config.model or '').strip(),
+    }
+
+
+def _merge_ai_client_config(classroom, incoming=None):
+    incoming_config = _normalize_ai_client_config(incoming)
+    persisted = _load_persisted_ai_client_config(classroom)
+    merged = {}
+    for key in ('api_key', 'base_url', 'model'):
+        merged[key] = incoming_config[key] if incoming_config[key] else persisted[key]
+    return merged
+
+
+def _save_ai_client_config(classroom, payload):
+    normalized = _normalize_ai_client_config(payload)
+    try:
+        if not any(normalized.values()):
+            FutureModeConfig.objects.filter(classroom=classroom).delete()
+            return normalized
+
+        config, _ = FutureModeConfig.objects.get_or_create(classroom=classroom)
+        config.api_key = normalized['api_key']
+        config.base_url = normalized['base_url']
+        config.model = normalized['model']
+        config.save(update_fields=['api_key', 'base_url', 'model', 'updated_at'])
+    except (OperationalError, ProgrammingError) as exc:
+        raise RuntimeError('数据库未完成迁移，请先执行 `python3 manage.py migrate`。') from exc
+    return normalized
+
+
+def _get_openai_client(client_config=None):
+    client_config = _normalize_ai_client_config(client_config)
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError('缺少 `openai` 依赖，请先执行 `pip install -r requirements.txt`。') from exc
+
+    api_key = client_config['api_key'] or os.getenv('OPENAI_API_KEY') or getattr(settings, 'OPENAI_API_KEY', '')
+    if not api_key:
+        raise RuntimeError('未配置 `OPENAI_API_KEY`，请先在页面右侧填写 API Key 或在服务端配置环境变量。')
+
+    client_kwargs = {'api_key': api_key}
+    base_url = client_config['base_url'] or os.getenv('OPENAI_BASE_URL') or getattr(settings, 'OPENAI_BASE_URL', '')
+    if base_url:
+        client_kwargs['base_url'] = base_url
+    return OpenAI(**client_kwargs)
+
+
+def _get_openai_model(client_config=None):
+    client_config = _normalize_ai_client_config(client_config)
+    return client_config['model'] or os.getenv('OPENAI_MODEL') or getattr(settings, 'OPENAI_MODEL', 'gpt-4.1-mini')
+
+
+def _resolve_openai_base_url(client_config=None):
+    client_config = _normalize_ai_client_config(client_config)
+    return client_config['base_url'] or os.getenv('OPENAI_BASE_URL') or getattr(settings, 'OPENAI_BASE_URL', '')
+
+
+def _should_use_chat_completions(client_config=None):
+    base_url = str(_resolve_openai_base_url(client_config) or '').strip().lower()
+    if not base_url:
+        return False
+    return 'api.openai.com' not in base_url
+
+
+def _is_responses_not_supported_error(exc):
+    message = str(exc or '').strip().lower()
+    if _is_responses_content_unmarshal_error(exc):
+        return True
+    return (
+        'not implemented' in message
+        or '/responses' in message
+        or 'responses api' in message
+    )
+
+
+def _normalize_future_mode_openai_exception(exc):
+    message = str(exc or '').strip()
+    lower_message = message.lower()
+    if isinstance(exc, NotImplementedError):
+        return 400, '当前 Base URL 或模型不支持 Responses API（Window Inteligence ｜ 闻道智能），请改用支持该接口的服务。'
+    if 'not implemented' in lower_message and ('status_code=500' in lower_message or 'status code: 500' in lower_message or 'responses' in lower_message):
+        return 400, '当前 Base URL 或模型不支持 Responses API（Window Inteligence ｜ 闻道智能），请改用支持该接口的服务。'
+    if _is_responses_content_unmarshal_error(exc):
+        return 400, '当前 Base URL 的 Responses API 与 Window Inteligence ｜ 闻道智能 消息格式不兼容（content 字段），请更换兼容接口或使用官方接口。'
+
+    try:
+        import openai
+    except Exception:
+        return None
+
+    if isinstance(exc, (openai.AuthenticationError, getattr(openai, 'PermissionDeniedError', tuple()))):
+        return 400, 'OpenAI 鉴权失败，请检查 API Key、Base URL 与 Model ID 配置。'
+
+    if isinstance(exc, openai.NotFoundError):
+        if 'responses' in lower_message:
+            return 400, '当前 Base URL 或模型不支持 Responses API（Window Inteligence ｜ 闻道智能），请改用支持该接口的服务。'
+        return 400, f'AI 接口不存在或模型不可用：{message or "Not Found"}'
+
+    if isinstance(exc, openai.BadRequestError):
+        return 400, f'AI 请求参数错误：{message or "Bad Request"}'
+
+    if isinstance(exc, openai.RateLimitError):
+        return 429, 'AI 请求过于频繁或额度不足，请稍后再试。'
+
+    if isinstance(exc, (openai.APIConnectionError, openai.APITimeoutError)):
+        return 502, 'AI 服务连接失败或超时，请检查网络后重试。'
+
+    if isinstance(exc, openai.APIStatusError):
+        status_code = getattr(exc, 'status_code', None)
+        if isinstance(status_code, int) and 400 <= status_code < 500:
+            return 400, f'AI 请求失败（HTTP {status_code}）：{message or "请求未成功"}'
+        if isinstance(status_code, int):
+            return 502, f'AI 服务异常（HTTP {status_code}），请稍后重试。'
+        return 502, 'AI 服务异常，请稍后重试。'
+
+    if isinstance(exc, openai.OpenAIError):
+        return 400, f'AI 请求失败：{message or "OpenAI 调用异常"}'
+
+    return None
+
+
+def _is_tool_output_call_mismatch_error(exc):
+    message = str(exc or '').strip().lower()
+    return 'no tool call found for function call output' in message
+
+
+def _is_responses_content_unmarshal_error(exc):
+    message = str(exc or '').strip().lower()
+    return (
+        'cannot unmarshal object into go struct field' in message
+        and '.content' in message
+        and 'responsesoutputcontent' in message
+    )
+
+
+def _build_tool_events_fallback_reply(tool_events):
+    if not tool_events:
+        return '工具调用已结束，但 AI 会话同步失败。请重试一次。'
+
+    lines = ['工具已执行，但 AI 会话续答失败。以下是本次执行结果：']
+    for event in tool_events:
+        name = str(event.get('name') or '').strip()
+        label = AI_TOOL_LABELS.get(name, name or '工具')
+        approved = bool(event.get('approved'))
+        result = event.get('result') if isinstance(event.get('result'), dict) else {}
+        if not approved:
+            lines.append(f'- {label}：你已拒绝执行。')
+            continue
+
+        if result.get('ok'):
+            data = result.get('data') if isinstance(result.get('data'), dict) else {}
+            message = str(data.get('message') or '').strip()
+            if message:
+                lines.append(f'- {label}：{message}')
+            elif name == 'get_classroom_overview':
+                lines.append(f'- {label}：已读取当前班级概览。')
+            elif name == 'get_student_info':
+                student = data.get('name') if isinstance(data, dict) else ''
+                lines.append(f'- {label}：已读取学生信息{f"（{student}）" if student else ""}。')
+            elif name == 'get_group_scores':
+                lines.append(f'- {label}：已读取小组评分数据。')
+            else:
+                lines.append(f'- {label}：执行完成。')
+            continue
+
+        error_message = str(result.get('message') or '执行失败').strip()
+        lines.append(f'- {label}：{error_message}')
+
+    lines.append('可继续发送下一条指令；如果你在使用第三方 Base URL，请确认其完整支持 Responses API 的工具调用链路。')
+    return '\n'.join(lines)
+
+
+def _build_tool_events_success_reply(tool_events):
+    if not tool_events:
+        return '操作已完成。'
+    lines = []
+    for event in tool_events:
+        name = str(event.get('name') or '').strip()
+        label = AI_TOOL_LABELS.get(name, name or '工具')
+        approved = bool(event.get('approved'))
+        result = event.get('result') if isinstance(event.get('result'), dict) else {}
+        if not approved:
+            lines.append(f'- {label}：已拒绝执行')
+            continue
+        if result.get('ok'):
+            data = result.get('data') if isinstance(result.get('data'), dict) else {}
+            message = str(data.get('message') or '').strip()
+            lines.append(f'- {label}：{message or "执行成功"}')
+        else:
+            lines.append(f'- {label}：{str(result.get("message") or "执行失败").strip()}')
+    return '\n'.join(lines) if lines else '操作已完成。'
+
+
+def _extract_direct_swap_call(classroom, message):
+    text = str(message or '').strip()
+    if not text:
+        return None
+    lower_text = text.lower()
+    keywords = ('交换', '对调', '互换', '换位置', '换座位')
+    if not any(word in text for word in keywords):
+        return None
+
+    patterns = [
+        r'(?:把)?\s*(.+?)\s*(?:和|与|跟)\s*(.+?)\s*(?:交换|对调|互换|换)(?:一下|下)?(?:座位|位置)?',
+        r'(?:交换|对调|互换|换)\s*(.+?)\s*(?:和|与|跟)\s*(.+?)(?:的)?(?:座位|位置)?(?:一下|下)?',
+    ]
+
+    def clean_name(raw):
+        name = str(raw or '').strip()
+        for suffix in ['同学', '同桌', '座位', '位置', '的座位', '一下', '下', '吗', '吧', '。', '，', ',', '？', '?']:
+            name = name.replace(suffix, '')
+        return name.strip()
+
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if not match:
+            continue
+        student_a = clean_name(match.group(1))
+        student_b = clean_name(match.group(2))
+        if not student_a or not student_b:
+            continue
+        try:
+            resolved_a = _resolve_student_query(classroom, student_a)
+            resolved_b = _resolve_student_query(classroom, student_b)
+        except ValueError:
+            continue
+        return {
+            'call_id': f'direct_swap_{uuid.uuid4().hex[:12]}',
+            'name': 'swap_students',
+            'arguments': {
+                'student_a': resolved_a.name,
+                'student_b': resolved_b.name,
+            },
+        }
+    return None
+
+
+def _execute_ai_tool(classroom, tool_name, arguments, request=None):
+    arguments = arguments or {}
+
+    if tool_name == 'get_classroom_overview':
+        overview = _get_classroom_overview_payload(classroom)
+        return {
+            'ok': True,
+            'tool': tool_name,
+            'data': {
+                'message': '已读取当前班级概览。',
+                **overview,
+            },
+        }
+
+    if tool_name == 'get_student_info':
+        student = _resolve_student_query(classroom, arguments.get('student_query'))
+        return {
+            'ok': True,
+            'tool': tool_name,
+            'data': {
+                'message': f'已读取学生信息：{student.name}',
+                **_serialize_student_profile(student),
+            },
+        }
+
+    if tool_name == 'get_group_scores':
+        group_rows = _get_group_score_rows(classroom)
+        return {
+            'ok': True,
+            'tool': tool_name,
+            'data': {
+                'message': f'已读取小组评分，共 {len(group_rows)} 组。',
+                'items': group_rows,
+            },
+        }
+
+    if tool_name == 'get_student_list':
+        return {
+            'ok': True,
+            'tool': tool_name,
+            'data': _build_student_list_payload(classroom, arguments),
+        }
+
+    if tool_name == 'send_card_info':
+        return {
+            'ok': True,
+            'tool': tool_name,
+            'data': _build_card_info_payload(classroom, arguments),
+        }
+
+    if tool_name == 'execute_classroom_action':
+        return {
+            'ok': True,
+            'tool': tool_name,
+            'data': _execute_classroom_action_tool(classroom, arguments, request=request),
+        }
+
+    if tool_name == 'swap_students':
+        student_a = _resolve_student_query(classroom, arguments.get('student_a'))
+        student_b = _resolve_student_query(classroom, arguments.get('student_b'))
+        if student_a.pk == student_b.pk:
+            raise ValueError('不能交换同一名学生')
+        seat_a = getattr(student_a, 'assigned_seat', None)
+        seat_b = getattr(student_b, 'assigned_seat', None)
+        if not seat_a or not seat_b:
+            raise ValueError('两名学生都需要先入座，才能交换座位')
+
+        with transaction.atomic():
+            _swap_seats(seat_a, seat_b)
+            violations = _stabilize_layout_with_rules(classroom, request)
+            if violations:
+                raise ValueError(f'交换失败：{_format_issues_preview(violations)}')
+        if request is not None:
+            _push_action(request, classroom.pk, _build_swap_action(student_a, student_b))
+        student_a = classroom.students.get(pk=student_a.pk)
+        student_b = classroom.students.get(pk=student_b.pk)
+        return {
+            'ok': True,
+            'tool': tool_name,
+            'data': {
+                'message': f'已交换 {student_a.name} 和 {student_b.name} 的座位',
+                'student_a': _serialize_student_profile(student_a),
+                'student_b': _serialize_student_profile(student_b),
+            },
+        }
+
+    raise ValueError(f'未知 AI 工具：{tool_name}')
+
+
+def _extract_function_calls(response):
+    def item_get(item, key, default=None):
+        if isinstance(item, dict):
+            return item.get(key, default)
+        return getattr(item, key, default)
+
+    calls = []
+    for item in getattr(response, 'output', []) or []:
+        if item_get(item, 'type', '') != 'function_call':
+            continue
+        arguments_raw = item_get(item, 'arguments', {}) or {}
+        if isinstance(arguments_raw, dict):
+            arguments = arguments_raw
+        elif isinstance(arguments_raw, str):
+            try:
+                arguments = json.loads(arguments_raw)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                arguments = {}
+        else:
+            arguments = {}
+        call_id = str(item_get(item, 'call_id', '') or item_get(item, 'id', '') or '').strip()
+        name = str(item_get(item, 'name', '') or '').strip()
+        if not call_id or not name:
+            continue
+        calls.append({
+            'call_id': call_id,
+            'name': name,
+            'arguments': arguments,
+        })
+    return calls
+
+
+def _describe_future_mode_call(tool_name, arguments):
+    arguments = arguments or {}
+    label = AI_TOOL_LABELS.get(tool_name, tool_name or '未知工具')
+    if tool_name == 'get_classroom_overview':
+        return f'{label}，用于读取当前班级整体状态。'
+    if tool_name == 'get_student_info':
+        return f'{label}：{arguments.get("student_query") or "未提供学生"}'
+    if tool_name == 'get_group_scores':
+        return f'{label}，用于统计当前小组平均分与总分。'
+    if tool_name == 'get_student_list':
+        return f'{label}，支持排序/筛选并返回名单。'
+    if tool_name == 'send_card_info':
+        return f'{label}：{arguments.get("card_type") or "未指定卡片类型"}'
+    if tool_name == 'execute_classroom_action':
+        return f'{label}：{arguments.get("action") or "未指定动作"}'
+    if tool_name == 'swap_students':
+        return f'{label}：{arguments.get("student_a") or "学生A"} ↔ {arguments.get("student_b") or "学生B"}'
+    return f'{label}，参数：{json.dumps(arguments, ensure_ascii=False)}'
+
+
+def _collect_response_text(response):
+    text = getattr(response, 'output_text', '') or ''
+    if text:
+        return text.strip()
+
+    parts = []
+    for item in getattr(response, 'output', []) or []:
+        if getattr(item, 'type', '') != 'message':
+            continue
+        for content in getattr(item, 'content', []) or []:
+            if getattr(content, 'type', '') in {'output_text', 'text'}:
+                parts.append(getattr(content, 'text', '') or '')
+    return '\n'.join(part.strip() for part in parts if str(part).strip()).strip()
+
+
+def _future_mode_system_prompt():
+    return (
+        '你是“不想排座位”的 Window Inteligence ｜ 闻道智能 助手，用简体中文回答。'
+        'Window Inteligence ｜ 闻道智能 是全球首个面向教师行业的通用型 Agent 应用，当前正处于内部封测阶段，你和整个“不想排座位“项目属于一个小 Demo'
+        'Window Inteligence 的开发者是 老三 ，他的个人网站是 www.577622.xyz ，Window Inteligence 的官网是window.577622.xyz'
+        '你服务于班主任/老师，回答必须准确、冷静、直接。'
+        '涉及当前班级的事实信息时，优先调用工具，不要猜测。'
+        '用户要求交换座位时，若信息足够，应直接调用 swap_students。'
+        '用户要求名单筛选、学生列表、卡片图表时，应优先调用 get_student_list 或 send_card_info。'
+        '每次准备调用工具前，都只提出工具调用请求，等待用户授权。'
+        '禁止使用 Markdown 语法。'
+        '只允许使用换行与数字序号（1. 2. 3.）进行简单排版。'
+        '回复尽量简洁，并明确说明你做了什么。'
+    )
+
+
+def _extract_chat_delta_text(content):
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get('text')
+            else:
+                text = getattr(item, 'text', '')
+            if text:
+                parts.append(str(text))
+        return ''.join(parts)
+    if hasattr(content, 'text'):
+        return str(getattr(content, 'text') or '')
+    return ''
+
+
+def _sse_event(event_name, payload):
+    return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
+
+
+def _create_future_mode_response(client, model, conversation=None, previous_response_id=None, tool_outputs=None):
+    if previous_response_id:
+        return client.responses.create(
+            model=model,
+            previous_response_id=previous_response_id,
+            input=tool_outputs or [],
+            tools=AI_TOOL_DEFINITIONS,
+            parallel_tool_calls=False,
+        )
+
+    system_prompt = _future_mode_system_prompt()
+    def build_input_items(use_content_parts=False):
+        input_items = [{
+            'role': 'system',
+            'content': [{'type': 'input_text', 'text': system_prompt}] if use_content_parts else system_prompt,
+        }]
+        for message in (conversation or [])[-AI_CONTEXT_MESSAGE_LIMIT:]:
+            role = 'assistant' if message.get('role') == 'assistant' else 'user'
+            content = str(message.get('content') or '').strip()
+            if not content:
+                continue
+            text = content[:4000]
+            input_items.append({
+                'role': role,
+                'content': [{'type': 'input_text', 'text': text}] if use_content_parts else text,
+            })
+        return input_items
+
+    try:
+        return client.responses.create(
+            model=model,
+            input=build_input_items(use_content_parts=False),
+            tools=AI_TOOL_DEFINITIONS,
+            parallel_tool_calls=False,
+        )
+    except Exception as exc:
+        if not _is_responses_content_unmarshal_error(exc):
+            raise
+        return client.responses.create(
+            model=model,
+            input=build_input_items(use_content_parts=True),
+            tools=AI_TOOL_DEFINITIONS,
+            parallel_tool_calls=False,
+        )
+
+
+def _build_chat_tools():
+    tools = []
+    for item in AI_TOOL_DEFINITIONS:
+        tools.append({
+            'type': 'function',
+            'function': {
+                'name': item.get('name'),
+                'description': item.get('description') or '',
+                'strict': bool(item.get('strict', True)),
+                'parameters': item.get('parameters') or {
+                    'type': 'object',
+                    'properties': {},
+                    'required': [],
+                    'additionalProperties': False,
+                },
+            },
+        })
+    return tools
+
+
+def _normalize_chat_text_content(content):
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, dict):
+                text = item.get('text')
+            else:
+                text = getattr(item, 'text', '')
+            if text:
+                parts.append(str(text).strip())
+        return '\n'.join(part for part in parts if part)
+    return str(content or '').strip()
+
+
+def _extract_chat_function_calls(message):
+    tool_calls = getattr(message, 'tool_calls', None)
+    if tool_calls is None and isinstance(message, dict):
+        tool_calls = message.get('tool_calls')
+    calls = []
+    for call in tool_calls or []:
+        call_id = str(getattr(call, 'id', None) or (call.get('id') if isinstance(call, dict) else '') or '').strip()
+        function = getattr(call, 'function', None) if not isinstance(call, dict) else call.get('function')
+        name = str(getattr(function, 'name', None) or (function.get('name') if isinstance(function, dict) else '') or '').strip()
+        arguments_raw = getattr(function, 'arguments', None) if not isinstance(function, dict) else function.get('arguments')
+        if isinstance(arguments_raw, dict):
+            arguments = arguments_raw
+            arguments_json = json.dumps(arguments_raw, ensure_ascii=False)
+        elif isinstance(arguments_raw, str):
+            arguments_json = arguments_raw
+            try:
+                arguments = json.loads(arguments_raw)
+            except (TypeError, ValueError, json.JSONDecodeError):
+                arguments = {}
+        else:
+            arguments = {}
+            arguments_json = '{}'
+        if not call_id or not name:
+            continue
+        calls.append({
+            'call_id': call_id,
+            'name': name,
+            'arguments': arguments,
+            'arguments_json': arguments_json,
+        })
+    return calls
+
+
+def _tool_outputs_to_chat_messages(tool_outputs):
+    messages = []
+    for item in tool_outputs or []:
+        if not isinstance(item, dict):
+            continue
+        call_id = str(item.get('call_id') or '').strip()
+        if not call_id:
+            continue
+        output = item.get('output')
+        if not isinstance(output, str):
+            output = json.dumps(output, ensure_ascii=False)
+        messages.append({
+            'role': 'tool',
+            'tool_call_id': call_id,
+            'content': output or '{}',
+        })
+    return messages
+
+
+def _run_future_mode_chat(
+    classroom,
+    client,
+    model,
+    conversation,
+    request=None,
+    tool_outputs=None,
+    tool_events=None,
+    chat_messages=None,
+    conversation_id=None,
+):
+    tools = _build_chat_tools()
+    if chat_messages is None:
+        system_prompt = _future_mode_system_prompt()
+        messages = [{'role': 'system', 'content': system_prompt}]
+        for message in (conversation or [])[-AI_CONTEXT_MESSAGE_LIMIT:]:
+            role = 'assistant' if message.get('role') == 'assistant' else 'user'
+            content = str(message.get('content') or '').strip()
+            if not content:
+                continue
+            messages.append({'role': role, 'content': content[:4000]})
+    else:
+        messages = list(chat_messages)
+
+    if tool_outputs:
+        messages.extend(_tool_outputs_to_chat_messages(tool_outputs))
+
+    completion = client.chat.completions.create(
+        model=model,
+        messages=messages,
+        tools=tools,
+        tool_choice='auto',
+        parallel_tool_calls=False,
+    )
+    choice = (getattr(completion, 'choices', None) or [None])[0]
+    assistant_message = getattr(choice, 'message', None) if choice is not None else None
+    if assistant_message is None:
+        return {
+            'status': 'completed',
+            'reply': 'AI 未返回有效消息，请稍后重试。',
+            'tool_events': tool_events or [],
+        }
+
+    function_calls = _extract_chat_function_calls(assistant_message)
+    if function_calls:
+        assistant_tool_calls = []
+        for call in function_calls:
+            assistant_tool_calls.append({
+                'id': call['call_id'],
+                'type': 'function',
+                'function': {
+                    'name': call['name'],
+                    'arguments': call.get('arguments_json') or json.dumps(call.get('arguments') or {}, ensure_ascii=False),
+                },
+            })
+
+        assistant_content = _normalize_chat_text_content(getattr(assistant_message, 'content', None))
+        pending_messages = list(messages)
+        pending_messages.append({
+            'role': 'assistant',
+            'content': assistant_content or '',
+            'tool_calls': assistant_tool_calls,
+        })
+        token = _store_future_mode_pending(
+            request,
+            classroom.pk,
+            conversation_id,
+            response_id='',
+            function_calls=[{
+                'call_id': call['call_id'],
+                'name': call['name'],
+                'arguments': call['arguments'],
+            } for call in function_calls],
+            mode='chat',
+            chat_messages=pending_messages,
+        ) if request is not None else ''
+        return {
+            'status': 'needs_approval',
+            'approval_token': token,
+            'pending_calls': [
+                {
+                    'call_id': call['call_id'],
+                    'name': call['name'],
+                    'label': AI_TOOL_LABELS.get(call['name'], call['name']),
+                    'arguments': call['arguments'],
+                    'summary': _describe_future_mode_call(call['name'], call['arguments']),
+                }
+                for call in function_calls
+            ],
+            'tool_events': tool_events or [],
+        }
+
+    reply = _normalize_chat_text_content(getattr(assistant_message, 'content', None)) or '已完成处理，但没有生成可展示的回复。'
+    return {
+        'status': 'completed',
+        'reply': reply,
+        'tool_events': tool_events or [],
+    }
+
+
+def _run_future_mode(
+    classroom,
+    conversation,
+    request=None,
+    client_config=None,
+    previous_response_id=None,
+    tool_outputs=None,
+    tool_events=None,
+    mode='responses',
+    chat_messages=None,
+    conversation_id=None,
+):
+    client = _get_openai_client(client_config=client_config)
+    model = _get_openai_model(client_config=client_config)
+    selected_mode = mode or 'responses'
+    if selected_mode == 'auto':
+        selected_mode = 'chat' if _should_use_chat_completions(client_config=client_config) else 'responses'
+
+    if selected_mode == 'chat':
+        return _run_future_mode_chat(
+            classroom,
+            client,
+            model,
+            conversation=conversation,
+            request=request,
+            tool_outputs=tool_outputs,
+            tool_events=tool_events,
+            chat_messages=chat_messages,
+            conversation_id=conversation_id,
+        )
+
+    try:
+        response = _create_future_mode_response(
+            client,
+            model,
+            conversation=conversation,
+            previous_response_id=previous_response_id,
+            tool_outputs=tool_outputs,
+        )
+    except Exception as exc:
+        if _is_responses_not_supported_error(exc) and not previous_response_id:
+            return _run_future_mode_chat(
+                classroom,
+                client,
+                model,
+                conversation=conversation,
+                request=request,
+                tool_outputs=tool_outputs,
+                tool_events=tool_events,
+                chat_messages=chat_messages,
+                conversation_id=conversation_id,
+            )
+        raise
+
+    function_calls = _extract_function_calls(response)
+    if function_calls:
+        token = _store_future_mode_pending(
+            request,
+            classroom.pk,
+            conversation_id,
+            getattr(response, 'id', ''),
+            function_calls,
+            mode='responses',
+            chat_messages=None,
+        ) if request is not None else ''
+        return {
+            'status': 'needs_approval',
+            'approval_token': token,
+            'pending_calls': [
+                {
+                    'call_id': call['call_id'],
+                    'name': call['name'],
+                    'label': AI_TOOL_LABELS.get(call['name'], call['name']),
+                    'arguments': call['arguments'],
+                    'summary': _describe_future_mode_call(call['name'], call['arguments']),
+                }
+                for call in function_calls
+            ],
+            'tool_events': tool_events or [],
+        }
+
+    reply = _collect_response_text(response) or '已完成处理，但没有生成可展示的回复。'
+    return {
+        'status': 'completed',
+        'reply': reply,
+        'tool_events': tool_events or [],
+    }
 
 
 SVG_EXPORT_THEME_MAP = {
@@ -445,6 +2465,19 @@ def _apply_move_batch_action(classroom, action, forward=True):
         if not ok:
             success = False
     return success
+
+
+def _apply_swap_action(classroom, action):
+    student_a = classroom.students.filter(pk=action.get('student_a_id')).first()
+    student_b = classroom.students.filter(pk=action.get('student_b_id')).first()
+    if not student_a or not student_b:
+        return False
+    seat_a = getattr(student_a, 'assigned_seat', None)
+    seat_b = getattr(student_b, 'assigned_seat', None)
+    if not seat_a or not seat_b:
+        return False
+    _swap_seats(seat_a, seat_b)
+    return True
 
 
 def _apply_cell_type_action(classroom, action, forward=True):
@@ -962,6 +2995,621 @@ def classroom_detail(request, pk):
         'constraints': constraints,
         'suggestions': suggestions
     })
+
+
+def ai_workspace(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    return render(request, 'seats/ai_workspace.html', {
+        'classroom': classroom,
+        'ai_overview': _get_classroom_overview_payload(classroom),
+    })
+
+
+@require_POST
+def ai_chat(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': '请求数据格式错误'}, status=400)
+
+    action = str(payload.get('action') or 'message').strip()
+    message = str(payload.get('message') or '').strip()
+    conversation_id = payload.get('conversation_id')
+    client_config = _normalize_ai_client_config(payload.get('client_config'))
+
+    if action == 'config_get':
+        return JsonResponse({
+            'status': 'success',
+            'client_config': _load_persisted_ai_client_config(classroom),
+        })
+
+    if action == 'config_save':
+        try:
+            saved_config = _save_ai_client_config(classroom, payload.get('client_config'))
+        except RuntimeError as exc:
+            return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+        return JsonResponse({
+            'status': 'success',
+            'message': '连接设置已保存到数据库。',
+            'client_config': saved_config,
+        })
+
+    if action == 'conversation_init':
+        try:
+            conversation, _ = _resolve_ai_conversation(
+                classroom,
+                request,
+                conversation_id=conversation_id,
+                create_if_missing=True,
+            )
+        except ValueError as exc:
+            return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+        return JsonResponse({
+            'status': 'success',
+            'conversation_id': conversation.pk,
+            'conversations': _list_ai_conversations(classroom, request),
+            'messages': _load_ai_conversation_messages(conversation),
+        })
+
+    if action == 'conversation_create':
+        conversation = _create_ai_conversation(
+            classroom,
+            request,
+            title=str(payload.get('title') or '').strip(),
+        )
+        return JsonResponse({
+            'status': 'success',
+            'conversation_id': conversation.pk,
+            'conversations': _list_ai_conversations(classroom, request),
+            'messages': [],
+        })
+
+    if action == 'conversation_switch':
+        try:
+            conversation, _ = _resolve_ai_conversation(
+                classroom,
+                request,
+                conversation_id=conversation_id,
+                create_if_missing=False,
+            )
+        except ValueError as exc:
+            return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+        return JsonResponse({
+            'status': 'success',
+            'conversation_id': conversation.pk,
+            'conversations': _list_ai_conversations(classroom, request),
+            'messages': _load_ai_conversation_messages(conversation),
+        })
+
+    if action == 'conversation_delete':
+        try:
+            conversation, _ = _resolve_ai_conversation(
+                classroom,
+                request,
+                conversation_id=conversation_id,
+                create_if_missing=False,
+            )
+        except ValueError as exc:
+            return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+        conversation.delete()
+        active_conversation, _ = _resolve_ai_conversation(classroom, request, create_if_missing=True)
+        return JsonResponse({
+            'status': 'success',
+            'conversation_id': active_conversation.pk,
+            'conversations': _list_ai_conversations(classroom, request),
+            'messages': _load_ai_conversation_messages(active_conversation),
+        })
+
+    effective_client_config = _merge_ai_client_config(classroom, client_config)
+
+    if action == 'tool_approval':
+        approval_token = str(payload.get('approval_token') or '').strip()
+        decisions = payload.get('decisions') or []
+        if not approval_token:
+            return JsonResponse({'status': 'error', 'message': '缺少授权令牌'}, status=400)
+        if not isinstance(decisions, list):
+            return JsonResponse({'status': 'error', 'message': '授权数据格式错误'}, status=400)
+
+        tool_events = []
+        try:
+            pending = _consume_future_mode_pending(
+                request,
+                approval_token,
+                pk,
+                conversation_id=conversation_id,
+            )
+            pending_conversation_id = int(pending.get('conversation_id') or 0)
+            if pending_conversation_id > 0:
+                conversation, _ = _resolve_ai_conversation(
+                    classroom,
+                    request,
+                    conversation_id=pending_conversation_id,
+                    create_if_missing=False,
+                )
+            else:
+                conversation, _ = _resolve_ai_conversation(
+                    classroom,
+                    request,
+                    conversation_id=conversation_id,
+                    create_if_missing=True,
+                )
+            decision_map = {}
+            for item in decisions:
+                if not isinstance(item, dict):
+                    continue
+                call_id = str(item.get('call_id') or '').strip()
+                if not call_id:
+                    continue
+                decision_map[call_id] = bool(item.get('approved'))
+
+            tool_outputs = []
+            pending_calls = pending.get('function_calls') or []
+            missing_decisions = [
+                call.get('call_id')
+                for call in pending_calls
+                if str(call.get('call_id') or '').strip() and str(call.get('call_id') or '').strip() not in decision_map
+            ]
+            if missing_decisions:
+                return JsonResponse({'status': 'error', 'message': '请先完成全部授权选择后再提交'}, status=400)
+
+            for call in pending_calls:
+                approved = bool(decision_map.get(call['call_id']))
+                if approved:
+                    result = _execute_ai_tool(classroom, call['name'], call['arguments'], request=request)
+                else:
+                    result = {
+                        'ok': False,
+                        'tool': call['name'],
+                        'denied': True,
+                        'message': '用户拒绝授权执行该工具',
+                    }
+                tool_events.append({
+                    'name': call['name'],
+                    'arguments': call['arguments'],
+                    'approved': approved,
+                    'result': result,
+                })
+                tool_outputs.append({
+                    'type': 'function_call_output',
+                    'call_id': call['call_id'],
+                    'output': json.dumps(result, ensure_ascii=False),
+                })
+
+            pending_mode = str(pending.get('mode') or 'responses').strip() or 'responses'
+            cards = _collect_cards_from_tool_events(tool_events)
+            if pending_mode == 'direct':
+                reply = _build_tool_events_success_reply(tool_events)
+                _append_ai_conversation_message(
+                    conversation,
+                    AIConversationMessage.MessageRole.ASSISTANT,
+                    reply,
+                    payload={'cards': cards} if cards else {},
+                )
+                return JsonResponse({
+                    'status': 'success',
+                    'reply': reply,
+                    'tool_events': tool_events,
+                    'cards': cards,
+                    'conversation_id': conversation.pk,
+                    'conversations': _list_ai_conversations(classroom, request),
+                    'overview': _get_classroom_overview_payload(classroom),
+                })
+            result = _run_future_mode(
+                classroom,
+                conversation=[],
+                request=request,
+                client_config=effective_client_config,
+                previous_response_id=pending.get('response_id') if pending_mode == 'responses' else None,
+                tool_outputs=tool_outputs,
+                tool_events=tool_events,
+                mode=pending_mode,
+                chat_messages=pending.get('chat_messages') or [],
+                conversation_id=conversation.pk,
+            )
+        except RuntimeError as exc:
+            return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+        except ValueError as exc:
+            return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+        except Exception as exc:
+            if _is_tool_output_call_mismatch_error(exc) and tool_events:
+                return JsonResponse({
+                    'status': 'success',
+                    'reply': _build_tool_events_fallback_reply(tool_events),
+                    'tool_events': tool_events,
+                    'overview': _get_classroom_overview_payload(classroom),
+                })
+            normalized = _normalize_future_mode_openai_exception(exc)
+            if normalized is not None:
+                status_code, error_message = normalized
+                return JsonResponse({'status': 'error', 'message': error_message}, status=status_code)
+            return JsonResponse({'status': 'error', 'message': f'工具授权处理失败：{exc}'}, status=500)
+
+        if result['status'] == 'needs_approval':
+            cards = _collect_cards_from_tool_events(result.get('tool_events') or [])
+            if cards:
+                _append_ai_conversation_message(
+                    conversation,
+                    AIConversationMessage.MessageRole.ASSISTANT,
+                    '',
+                    payload={'cards': cards},
+                )
+            return JsonResponse({
+                'status': 'needs_approval',
+                'approval_token': result.get('approval_token') or '',
+                'pending_calls': result.get('pending_calls') or [],
+                'tool_events': result.get('tool_events') or [],
+                'cards': cards,
+                'conversation_id': conversation.pk,
+                'conversations': _list_ai_conversations(classroom, request),
+                'overview': _get_classroom_overview_payload(classroom),
+            })
+        cards = _collect_cards_from_tool_events(result.get('tool_events') or [])
+        reply = result.get('reply') or ''
+        _append_ai_conversation_message(
+            conversation,
+            AIConversationMessage.MessageRole.ASSISTANT,
+            reply,
+            payload={'cards': cards} if cards else {},
+        )
+        return JsonResponse({
+            'status': 'success',
+            'reply': reply,
+            'tool_events': result.get('tool_events') or [],
+            'cards': cards,
+            'conversation_id': conversation.pk,
+            'conversations': _list_ai_conversations(classroom, request),
+            'overview': _get_classroom_overview_payload(classroom),
+        })
+
+    if not message:
+        return JsonResponse({'status': 'error', 'message': '请输入内容后再发送'}, status=400)
+
+    try:
+        conversation, _ = _resolve_ai_conversation(
+            classroom,
+            request,
+            conversation_id=conversation_id,
+            create_if_missing=True,
+        )
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+    _append_ai_conversation_message(
+        conversation,
+        AIConversationMessage.MessageRole.USER,
+        message,
+    )
+    if conversation.title == DEFAULT_AI_CONVERSATION_TITLE:
+        user_count = conversation.messages.filter(role=AIConversationMessage.MessageRole.USER).count()
+        if user_count <= 1:
+            conversation.title = _build_conversation_title_from_message(message)
+            conversation.updated_at = timezone.now()
+            conversation.save(update_fields=['title', 'updated_at'])
+
+    direct_swap_call = _extract_direct_swap_call(classroom, message)
+    if direct_swap_call:
+        token = _store_future_mode_pending(
+            request,
+            classroom.pk,
+            conversation.pk,
+            response_id='',
+            function_calls=[direct_swap_call],
+            mode='direct',
+            chat_messages=[],
+        )
+        return JsonResponse({
+            'status': 'needs_approval',
+            'approval_token': token,
+            'pending_calls': [
+                {
+                    'call_id': direct_swap_call['call_id'],
+                    'name': direct_swap_call['name'],
+                    'label': AI_TOOL_LABELS.get(direct_swap_call['name'], direct_swap_call['name']),
+                    'arguments': direct_swap_call['arguments'],
+                    'summary': _describe_future_mode_call(direct_swap_call['name'], direct_swap_call['arguments']),
+                }
+            ],
+            'tool_events': [],
+            'conversation_id': conversation.pk,
+            'conversations': _list_ai_conversations(classroom, request),
+            'overview': _get_classroom_overview_payload(classroom),
+        })
+
+    normalized_history = _build_history_from_conversation(conversation)
+
+    try:
+        result = _run_future_mode(
+            classroom,
+            normalized_history,
+            request=request,
+            client_config=effective_client_config,
+            mode='auto',
+            conversation_id=conversation.pk,
+        )
+    except RuntimeError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except Exception as exc:
+        normalized = _normalize_future_mode_openai_exception(exc)
+        if normalized is not None:
+            status_code, error_message = normalized
+            return JsonResponse({'status': 'error', 'message': error_message}, status=status_code)
+        return JsonResponse({'status': 'error', 'message': f'AI 处理失败：{exc}'}, status=500)
+
+    if result['status'] == 'needs_approval':
+        return JsonResponse({
+            'status': 'needs_approval',
+            'approval_token': result.get('approval_token') or '',
+            'pending_calls': result.get('pending_calls') or [],
+            'tool_events': result.get('tool_events') or [],
+            'conversation_id': conversation.pk,
+            'conversations': _list_ai_conversations(classroom, request),
+            'overview': _get_classroom_overview_payload(classroom),
+        })
+
+    cards = _collect_cards_from_tool_events(result.get('tool_events') or [])
+    reply = result.get('reply') or ''
+    _append_ai_conversation_message(
+        conversation,
+        AIConversationMessage.MessageRole.ASSISTANT,
+        reply,
+        payload={'cards': cards} if cards else {},
+    )
+    return JsonResponse({
+        'status': 'success',
+        'reply': reply,
+        'tool_events': result.get('tool_events') or [],
+        'cards': cards,
+        'conversation_id': conversation.pk,
+        'conversations': _list_ai_conversations(classroom, request),
+        'overview': _get_classroom_overview_payload(classroom),
+    })
+
+
+@require_POST
+def ai_chat_stream(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        payload = json.loads(request.body or '{}')
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': '请求数据格式错误'}, status=400)
+
+    action = str(payload.get('action') or 'message').strip()
+    if action != 'message':
+        return JsonResponse({'status': 'error', 'message': '流式接口仅支持 message 动作'}, status=400)
+
+    message = str(payload.get('message') or '').strip()
+    if not message:
+        return JsonResponse({'status': 'error', 'message': '请输入内容后再发送'}, status=400)
+
+    client_config = _normalize_ai_client_config(payload.get('client_config'))
+    effective_client_config = _merge_ai_client_config(classroom, client_config)
+    conversation_id = payload.get('conversation_id')
+
+    try:
+        conversation, _ = _resolve_ai_conversation(
+            classroom,
+            request,
+            conversation_id=conversation_id,
+            create_if_missing=True,
+        )
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+    _append_ai_conversation_message(
+        conversation,
+        AIConversationMessage.MessageRole.USER,
+        message,
+    )
+    if conversation.title == DEFAULT_AI_CONVERSATION_TITLE:
+        user_count = conversation.messages.filter(role=AIConversationMessage.MessageRole.USER).count()
+        if user_count <= 1:
+            conversation.title = _build_conversation_title_from_message(message)
+            conversation.updated_at = timezone.now()
+            conversation.save(update_fields=['title', 'updated_at'])
+
+    direct_swap_call = _extract_direct_swap_call(classroom, message)
+    if direct_swap_call:
+        token = _store_future_mode_pending(
+            request,
+            classroom.pk,
+            conversation.pk,
+            response_id='',
+            function_calls=[direct_swap_call],
+            mode='direct',
+            chat_messages=[],
+        )
+
+        def direct_swap_stream():
+            payload_data = {
+                'status': 'needs_approval',
+                'approval_token': token,
+                'pending_calls': [
+                    {
+                        'call_id': direct_swap_call['call_id'],
+                        'name': direct_swap_call['name'],
+                        'label': AI_TOOL_LABELS.get(direct_swap_call['name'], direct_swap_call['name']),
+                        'arguments': direct_swap_call['arguments'],
+                        'summary': _describe_future_mode_call(direct_swap_call['name'], direct_swap_call['arguments']),
+                    }
+                ],
+                'conversation_id': conversation.pk,
+                'conversations': _list_ai_conversations(classroom, request),
+                'cards': [],
+            }
+            yield _sse_event('done', payload_data)
+
+        response = StreamingHttpResponse(direct_swap_stream(), content_type='text/event-stream; charset=utf-8')
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
+
+    normalized_history = _build_history_from_conversation(conversation)
+
+    def event_stream():
+        try:
+            client = _get_openai_client(client_config=effective_client_config)
+            model = _get_openai_model(client_config=effective_client_config)
+            tools = _build_chat_tools()
+            chat_messages = [{'role': 'system', 'content': _future_mode_system_prompt()}]
+            for item in normalized_history[-AI_CONTEXT_MESSAGE_LIMIT:]:
+                role = 'assistant' if item.get('role') == 'assistant' else 'user'
+                content = str(item.get('content') or '').strip()
+                if not content:
+                    continue
+                chat_messages.append({'role': role, 'content': content[:4000]})
+
+            stream = client.chat.completions.create(
+                model=model,
+                messages=chat_messages,
+                tools=tools,
+                tool_choice='auto',
+                parallel_tool_calls=False,
+                stream=True,
+            )
+
+            reply_parts = []
+            tool_call_buffer = {}
+            for chunk in stream:
+                choices = getattr(chunk, 'choices', None) or []
+                if not choices:
+                    continue
+                choice = choices[0]
+                delta = getattr(choice, 'delta', None)
+                if delta is None and isinstance(choice, dict):
+                    delta = choice.get('delta')
+                if not delta:
+                    continue
+
+                delta_content = delta.get('content') if isinstance(delta, dict) else getattr(delta, 'content', None)
+                text_delta = _extract_chat_delta_text(delta_content)
+                if text_delta:
+                    reply_parts.append(text_delta)
+                    yield _sse_event('delta', {'text': text_delta})
+
+                tool_calls = delta.get('tool_calls') if isinstance(delta, dict) else getattr(delta, 'tool_calls', None)
+                for tool_call in tool_calls or []:
+                    call_index = tool_call.get('index') if isinstance(tool_call, dict) else getattr(tool_call, 'index', None)
+                    if call_index is None:
+                        call_index = 0
+                    call_index = int(call_index)
+                    buffer_item = tool_call_buffer.setdefault(call_index, {
+                        'call_id': '',
+                        'name': '',
+                        'arguments_parts': [],
+                    })
+
+                    call_id = tool_call.get('id') if isinstance(tool_call, dict) else getattr(tool_call, 'id', None)
+                    if call_id:
+                        buffer_item['call_id'] = str(call_id).strip()
+
+                    function_data = tool_call.get('function') if isinstance(tool_call, dict) else getattr(tool_call, 'function', None)
+                    if not function_data:
+                        continue
+
+                    function_name = function_data.get('name') if isinstance(function_data, dict) else getattr(function_data, 'name', None)
+                    if function_name:
+                        buffer_item['name'] = str(function_name).strip()
+
+                    function_arguments = function_data.get('arguments') if isinstance(function_data, dict) else getattr(function_data, 'arguments', None)
+                    if function_arguments:
+                        buffer_item['arguments_parts'].append(str(function_arguments))
+
+            if tool_call_buffer:
+                function_calls = []
+                assistant_tool_calls = []
+                for call_index in sorted(tool_call_buffer.keys()):
+                    item = tool_call_buffer[call_index]
+                    tool_name = str(item.get('name') or '').strip()
+                    if not tool_name:
+                        continue
+                    call_id = str(item.get('call_id') or f'stream_call_{uuid.uuid4().hex[:12]}').strip()
+                    arguments_json = ''.join(item.get('arguments_parts') or []).strip() or '{}'
+                    try:
+                        arguments = json.loads(arguments_json)
+                    except (TypeError, ValueError, json.JSONDecodeError):
+                        arguments = {}
+                    function_calls.append({
+                        'call_id': call_id,
+                        'name': tool_name,
+                        'arguments': arguments,
+                    })
+                    assistant_tool_calls.append({
+                        'id': call_id,
+                        'type': 'function',
+                        'function': {
+                            'name': tool_name,
+                            'arguments': arguments_json,
+                        },
+                    })
+
+                if function_calls:
+                    pending_messages = list(chat_messages)
+                    pending_messages.append({
+                        'role': 'assistant',
+                        'content': '',
+                        'tool_calls': assistant_tool_calls,
+                    })
+                    token = _store_future_mode_pending(
+                        request,
+                        classroom.pk,
+                        conversation.pk,
+                        response_id='',
+                        function_calls=function_calls,
+                        mode='chat',
+                        chat_messages=pending_messages,
+                    )
+                    yield _sse_event('done', {
+                        'status': 'needs_approval',
+                        'approval_token': token,
+                        'pending_calls': [
+                            {
+                                'call_id': call['call_id'],
+                                'name': call['name'],
+                                'label': AI_TOOL_LABELS.get(call['name'], call['name']),
+                                'arguments': call['arguments'],
+                                'summary': _describe_future_mode_call(call['name'], call['arguments']),
+                            }
+                            for call in function_calls
+                        ],
+                        'conversation_id': conversation.pk,
+                        'conversations': _list_ai_conversations(classroom, request),
+                        'cards': [],
+                    })
+                    return
+
+            reply = ''.join(reply_parts).strip() or '已完成处理，但没有生成可展示的回复。'
+            _append_ai_conversation_message(
+                conversation,
+                AIConversationMessage.MessageRole.ASSISTANT,
+                reply,
+            )
+            yield _sse_event('done', {
+                'status': 'success',
+                'reply': reply,
+                'conversation_id': conversation.pk,
+                'conversations': _list_ai_conversations(classroom, request),
+                'cards': [],
+            })
+        except RuntimeError as exc:
+            yield _sse_event('error', {'message': str(exc)})
+        except ValueError as exc:
+            yield _sse_event('error', {'message': str(exc)})
+        except Exception as exc:
+            normalized = _normalize_future_mode_openai_exception(exc)
+            if normalized is not None:
+                _, error_message = normalized
+                yield _sse_event('error', {'message': error_message})
+                return
+            yield _sse_event('error', {'message': f'AI 流式处理失败：{exc}'})
+
+    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream; charset=utf-8')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response
 
 
 def classroom_state(request, pk):
@@ -1874,6 +4522,7 @@ def _swap_seats(seat_a, seat_b):
         seat_b.student = student_a
         seat_a.save(update_fields=['student'])
         seat_b.save(update_fields=['student'])
+    _normalize_group_leaders(seat_a.classroom)
 
 
 def _get_adjacent_seats(classroom, seat):
@@ -4357,6 +7006,8 @@ def undo_action(request, pk):
         _apply_move_action(classroom, inverse)
     elif action['type'] == 'move_batch':
         _apply_move_batch_action(classroom, action, forward=False)
+    elif action['type'] == 'swap':
+        _apply_swap_action(classroom, action)
     elif action['type'] == 'cell_type':
         _apply_cell_type_action(classroom, action, forward=False)
     elif action['type'] == 'group':
@@ -4380,6 +7031,8 @@ def redo_action(request, pk):
         _apply_move_action(classroom, action)
     elif action['type'] == 'move_batch':
         _apply_move_batch_action(classroom, action, forward=True)
+    elif action['type'] == 'swap':
+        _apply_swap_action(classroom, action)
     elif action['type'] == 'cell_type':
         _apply_cell_type_action(classroom, action, forward=True)
     elif action['type'] == 'group':
@@ -4458,6 +7111,7 @@ def apply_suggestion(request, pk):
                 violations = _stabilize_layout_with_rules(classroom, request)
                 if violations:
                     raise ValueError(f'交换失败：{_format_issues_preview(violations)}')
+            _push_action(request, pk, _build_swap_action(s1, s2))
             return JsonResponse({'status': 'success', 'message': f'已执行交换并自动校正约束：{s1.name} / {s2.name}'})
         except ValueError as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
