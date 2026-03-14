@@ -1501,6 +1501,323 @@ input:focus {
     animation: fadeIn 0.3s;
 }
 
+
+.plugin-hub-modal-content {
+    width: min(1120px, 94vw);
+    max-width: 1120px;
+    margin: 5vh auto;
+    max-height: 88vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.plugin-hub-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+}
+
+.plugin-hub-header h3 {
+    margin: 0;
+    font-size: 24px;
+}
+
+.plugin-hub-header p {
+    margin: 6px 0 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
+.plugin-hub-header-actions {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.plugin-hub-grid {
+    min-height: 0;
+    flex: 1 1 auto;
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 12px;
+}
+
+.plugin-hub-section {
+    min-height: 0;
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.92);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.plugin-hub-section-title {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.plugin-hub-list {
+    min-height: 0;
+    overflow: auto;
+    display: grid;
+    gap: 10px;
+    padding-right: 4px;
+}
+
+.plugin-hub-card {
+    border: 1px solid rgba(10, 89, 247, 0.16);
+    border-radius: 12px;
+    background: rgba(10, 89, 247, 0.04);
+    padding: 10px;
+    display: grid;
+    gap: 8px;
+}
+
+.plugin-hub-card-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.plugin-hub-card-title {
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.plugin-hub-card-version {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.plugin-hub-card-desc {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.plugin-hub-card-row {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.plugin-hub-chip-btn {
+    border: 1px solid rgba(10, 89, 247, 0.22);
+    background: rgba(255, 255, 255, 0.92);
+    color: var(--text-primary);
+    border-radius: 999px;
+    min-height: 30px;
+    padding: 0 12px;
+    cursor: pointer;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.plugin-hub-chip-btn.primary {
+    background: #0a59f7;
+    border-color: #0a59f7;
+    color: #fff;
+}
+
+.plugin-hub-runtime-form {
+    display: grid;
+    gap: 8px;
+}
+
+.plugin-hub-runtime-form label {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.plugin-hub-runtime-form input,
+.plugin-hub-runtime-form select,
+.plugin-hub-runtime-form textarea {
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 8px 10px;
+    font-size: 13px;
+    background: #fff;
+}
+
+.plugin-hub-runtime-form textarea {
+    resize: vertical;
+    min-height: 110px;
+}
+
+.plugin-hub-runtime-response {
+    margin: 0;
+    flex: 1 1 auto;
+    min-height: 120px;
+    max-height: 260px;
+    overflow: auto;
+    border: 1px solid #d8e2ff;
+    border-radius: 12px;
+    background: #f7faff;
+    padding: 10px;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #1e293b;
+    white-space: pre-wrap;
+}
+
+
+.plugin-ribbon-quick-group {
+    min-width: min(56vw, 740px);
+    overflow: hidden;
+}
+
+.plugin-quick-launch-inline {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 2px;
+    min-height: 34px;
+    width: 100%;
+}
+
+.plugin-quick-launch-inline::-webkit-scrollbar {
+    display: none;
+}
+
+.plugin-quick-launch-empty {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.plugin-quick-launch-btn {
+    border: 1px solid rgba(10, 89, 247, 0.22);
+    background: #fff;
+    color: var(--text-primary);
+    border-radius: 999px;
+    min-height: 30px;
+    padding: 0 12px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+}
+
+.plugin-quick-launch-btn.primary {
+    background: #0a59f7;
+    color: #fff;
+    border-color: #0a59f7;
+}
+
+.plugin-command-modal-content {
+    width: min(760px, 92vw);
+    max-width: 760px;
+    margin: 8vh auto;
+    max-height: 84vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.plugin-command-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+}
+
+.plugin-command-header h3 {
+    margin: 0;
+    font-size: 22px;
+}
+
+.plugin-command-tip {
+    margin: 0;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+#pluginCommandInput {
+    border: 1px solid rgba(10, 89, 247, 0.25);
+    border-radius: 12px;
+    padding: 10px 12px;
+    font-size: 14px;
+}
+
+.plugin-command-list {
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow: auto;
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    background: #f8fbff;
+    padding: 8px;
+    display: grid;
+    gap: 8px;
+}
+
+.plugin-command-item {
+    border: 1px solid rgba(10, 89, 247, 0.15);
+    border-radius: 10px;
+    background: #fff;
+    padding: 10px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+}
+
+.plugin-command-item:hover {
+    border-color: rgba(10, 89, 247, 0.28);
+    box-shadow: 0 6px 14px rgba(10, 89, 247, 0.08);
+}
+
+.plugin-command-item-main {
+    display: grid;
+    gap: 4px;
+}
+
+.plugin-command-item-title {
+    font-size: 13px;
+    font-weight: 700;
+}
+
+.plugin-command-item-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+
+.plugin-command-item-kind {
+    font-size: 11px;
+    color: var(--primary-color);
+    border: 1px solid rgba(10, 89, 247, 0.2);
+    border-radius: 999px;
+    padding: 2px 10px;
+    white-space: nowrap;
+}
+
+@media (max-width: 980px) {
+    .plugin-ribbon-quick-group {
+        display: none;
+    }
+}
+
+@media (max-width: 980px) {
+    .plugin-hub-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .plugin-hub-modal-content {
+        max-height: 92vh;
+        margin: 3vh auto;
+    }
+}
+
 .table-container {
     overflow-x: auto;
     background: #f5f5f7;

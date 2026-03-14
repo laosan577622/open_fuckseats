@@ -1,0 +1,222 @@
+{% extends 'base.html' %}
+
+{% block title %}扩展清单{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="extensions">扩展清单</button>
+{% endblock %}
+
+{% block actions %}
+<div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="extensions">
+    <div class="ribbon-group">
+        <a href="{% url 'index' %}" class="btn btn-secondary">返回首页</a>
+        <a href="{% url 'plugins_overview' %}" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">插件 API</a>
+        <span class="ribbon-group-label">导航</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+.extensions-page {
+    min-height: calc(100vh - 140px);
+    padding: 18px 24px 28px;
+    display: grid;
+    gap: 14px;
+}
+.extensions-hero {
+    border: 1px solid rgba(10, 89, 247, 0.12);
+    background: linear-gradient(135deg, rgba(10, 89, 247, 0.08), rgba(10, 89, 247, 0.02));
+    border-radius: 18px;
+    padding: 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+.extensions-hero h2 {
+    margin: 0;
+    font-size: 24px;
+}
+.extensions-hero p {
+    margin: 4px 0 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+.extensions-count {
+    font-size: 12px;
+    color: var(--text-secondary);
+    border: 1px solid rgba(10, 89, 247, 0.2);
+    border-radius: 999px;
+    padding: 4px 10px;
+    background: #fff;
+    white-space: nowrap;
+}
+.extensions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+    gap: 12px;
+}
+.extension-card {
+    background: #fff;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    border-radius: 14px;
+    padding: 14px;
+    display: grid;
+    gap: 10px;
+}
+.extension-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 10px;
+}
+.extension-title {
+    margin: 0;
+    font-size: 17px;
+}
+.extension-version {
+    font-size: 12px;
+    color: var(--text-secondary);
+}
+.extension-id {
+    font-size: 12px;
+    color: var(--text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.extension-desc {
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
+}
+.extension-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.extension-meta-chip {
+    border: 1px solid rgba(10, 89, 247, 0.2);
+    color: #0a59f7;
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-size: 12px;
+    background: rgba(10, 89, 247, 0.06);
+}
+.extension-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+.extension-runtime {
+    margin: 0;
+    border-radius: 10px;
+    border: 1px solid rgba(15, 23, 42, 0.08);
+    background: #f8fbff;
+    font-size: 11px;
+    padding: 8px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+@media (max-width: 900px) {
+    .extensions-page {
+        padding: 12px;
+    }
+    .extensions-hero {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="extensions-page">
+    <section class="extensions-hero">
+        <div>
+            <h2>扩展清单</h2>
+            <p>浏览已安装插件、快速打开 UI 页面、复制 runtime.sendMessage 调用入口。支持页面改造插件授权状态查看。</p>
+        </div>
+        <div class="extensions-count">共 {{ count }} 个扩展</div>
+    </section>
+
+    <section class="extensions-grid">
+        {% for ext in extensions %}
+        <article class="extension-card">
+            <div class="extension-head">
+                <h3 class="extension-title">{{ ext.name }}</h3>
+                <span class="extension-version">v{{ ext.version }}</span>
+            </div>
+            <div class="extension-id">{{ ext.id }}</div>
+            <p class="extension-desc">{{ ext.description|default:'无描述' }}</p>
+
+            <div class="extension-meta">
+                <span class="extension-meta-chip">Action {{ ext.actions|length }}</span>
+                <span class="extension-meta-chip">UI {{ ext.ui_scripts|length }}</span>
+                <span class="extension-meta-chip">Workspace {{ ext.workspace_scripts|length }}</span>
+                {% if ext.workspace_permission_required %}
+                {% if ext.workspace_permission_granted %}
+                <span class="extension-meta-chip">页面改造已授权</span>
+                {% else %}
+                <span class="extension-meta-chip">页面改造待授权</span>
+                {% endif %}
+                {% endif %}
+            </div>
+
+            <div class="extension-actions">
+                <a href="{{ ext.manifest_url }}" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">Manifest</a>
+                {% if ext.first_ui_page_url %}
+                <a href="{{ ext.first_ui_page_url }}" class="btn btn-primary" target="_blank" rel="noopener noreferrer">打开默认 UI</a>
+                {% endif %}
+                <button type="button" class="btn btn-secondary" data-copy-url="{{ ext.send_message_url }}">复制 sendMessage 地址</button>
+            </div>
+
+            <pre class="extension-runtime">POST {{ ext.send_message_url }}
+{
+  "classroom_id": 1,
+  "message": {
+    "type": "action",
+    "name": "...",
+    "method": "POST",
+    "payload": {}
+  }
+}
+
+POST {{ ext.send_message_url }}
+{
+  "classroom_id": 1,
+  "message": {
+    "type": "workspace_script",
+    "name": "...",
+    "method": "GET"
+  }
+}</pre>
+        </article>
+        {% empty %}
+        <div class="empty-hint">当前没有可用扩展</div>
+        {% endfor %}
+    </section>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('click', async function (event) {
+    const btn = event.target.closest('[data-copy-url]');
+    if (!btn) return;
+    const endpoint = btn.getAttribute('data-copy-url') || '';
+    const absoluteUrl = endpoint ? `${window.location.origin}${endpoint}` : '';
+    if (!absoluteUrl) return;
+    try {
+        await navigator.clipboard.writeText(absoluteUrl);
+        btn.textContent = '已复制';
+        setTimeout(() => {
+            btn.textContent = '复制 sendMessage 地址';
+        }, 1200);
+    } catch (_) {
+        window.prompt('复制以下地址', absoluteUrl);
+    }
+});
+</script>
+{% endblock %}

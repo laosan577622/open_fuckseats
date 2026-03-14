@@ -14,7 +14,7 @@
 - 数据导出：座次 Excel、座次 SVG（可配置主题与显示内容，用于 PPT）、座次 PPTX（单页 16:9 横屏）、小组登记表 Excel、`.seats` 快照文件。
   - 导出 Excel / SVG / PPTX 时采用独立配置页面（非弹窗），左侧设置、右侧预览；确认导出或取消后自动返回班级页。
 - 历史操作：撤销/重做。
-- AI 未来模式：顶部 `AI` 选项卡可打开独立 Future Mode 页面，支持通过 OpenAI API + function calling 执行交换座位、查询学生信息、统计小组评分。
+- AI 赋能模式：顶部 `AI` 选项卡可打开闻道赋能页面，支持通过 OpenAI API + function calling 执行交换座位、查询学生信息、统计小组评分。
   - 支持多轮对话、对话隔离（同班级可创建多个独立会话）与对话消息持久化入库（SQLite）。
   - 新增学生工具：`get_student_list`（可选排序、排序方向、字段裁剪、分页、筛选器）。
   - 新增卡片工具：`send_card_info`（部分座位图、学生详情图、整体座位图、班级报告图）。
@@ -38,6 +38,7 @@
 - `static/`：CSS 与前端交互脚本
 - `website/`：独立 React 宣传站
 - `package.py`：PyInstaller 打包脚本
+
 
 ## 快速开始
 

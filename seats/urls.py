@@ -3,6 +3,16 @@ from . import views
 
 urlpatterns = [
     path('', views.index, name='index'),
+    path('plugins/', views.plugins_overview, name='plugins_overview'),
+    path('plugins/components/', views.plugin_components_overview, name='plugin_components_overview'),
+    path('plugins/<str:plugin_id>/ui/<str:ui_name>/page/', views.plugin_ui_page, name='plugin_ui_page'),
+    path('plugins/<str:plugin_id>/ui/<str:ui_name>/', views.plugin_ui_dispatch, name='plugin_ui_dispatch'),
+    path('plugins/<str:plugin_id>/<str:action>/', views.plugin_action_dispatch, name='plugin_action_dispatch'),
+    path('extensions/', views.extensions_overview, name='extensions_overview'),
+    path('extensions/<str:plugin_id>/manifest.json', views.extension_manifest, name='extension_manifest'),
+    path('extensions/<str:plugin_id>/permissions/', views.extension_workspace_permission, name='extension_workspace_permission'),
+    path('extensions/<str:plugin_id>/runtime/send-message/', views.extension_send_message, name='extension_send_message'),
+    path('extensions/<str:plugin_id>/runtime/sendMessage/', views.extension_send_message, name='extension_send_message_compat'),
     path('create/', views.create_classroom, name='create_classroom'),
     path('classroom/<int:pk>/', views.classroom_detail, name='classroom_detail'),
     path('classroom/<int:pk>/ai/', views.ai_workspace, name='ai_workspace'),

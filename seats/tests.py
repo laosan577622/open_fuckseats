@@ -1,10 +1,12 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.urls import reverse
 import json
 import importlib.util
 import unittest
 import zipfile
+import tempfile
 from io import BytesIO
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch, Mock
 
@@ -14,6 +16,7 @@ import openpyxl
 import pandas as pd
 
 from .models import Classroom, SeatConstraint, SeatCellType, SeatGroup, FutureModeConfig, Seat
+from .plugin_system import plugin_registry
 from .views import (
     _arrange_standard,
     _arrange_grouped,
@@ -1460,3 +1463,238 @@ class ClassroomFeatureTests(TestCase):
         self.assertEqual(response.json().get("status"), "error")
         classroom.refresh_from_db()
         self.assertEqual(classroom.name, "原班级2")
+
+
+class PluginSystemTests(TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp_dir.cleanup)
+        self.addCleanup(plugin_registry.reset_for_tests)
+
+        plugin_code = """
+PLUGIN_META = {
+    'id': 'test_plugin',
+    'name': '测试插件',
+    'version': '1.0.0',
+}
+
+HOOK_EVENTS = []
+
+
+def _on_classroom_created(context):
+    classroom = context.get('classroom')
+    HOOK_EVENTS.append({
+        'event': 'classroom_created',
+        'classroom_id': classroom.pk if classroom else None,
+    })
+
+
+def _echo(context):
+    payload = context.get('payload') or {}
+    classroom = context.get('classroom')
+    return {
+        'echo': payload,
+        'classroom_id': classroom.pk if classroom else None,
+    }
+
+
+def _hook_count(context):
+    return {
+        'count': len(HOOK_EVENTS),
+        'events': HOOK_EVENTS,
+    }
+
+
+UI_SCRIPT = "count = classroom.students.count() if classroom else 0\\nui = components.page(title='测试UI', blocks=[components.metric('学生人数', count)])"
+WORKSPACE_SCRIPT = "const marker = document.createElement('div'); marker.id = 'plugin-workspace-test'; document.body.appendChild(marker); return () => marker.remove();"
+
+
+def register(registry):
+    registry.register_hook('classroom_created', _on_classroom_created)
+    registry.register_action('echo', _echo, methods=('POST',))
+    registry.register_action('hook_count', _hook_count, methods=('GET',))
+    registry.register_ui_script('dashboard', UI_SCRIPT, methods=('GET', 'POST'))
+    registry.register_workspace_script('inject_marker', WORKSPACE_SCRIPT, methods=('GET',), requires_permission=True, auto_run=True)
+""".strip()
+
+        plugin_file = Path(self.temp_dir.name) / 'test_plugin.py'
+        plugin_file.write_text(plugin_code, encoding='utf-8')
+
+    @override_settings(PLUGIN_DIRS=[])
+    def test_plugins_overview_and_action_dispatch(self):
+        with self.settings(PLUGIN_DIRS=[self.temp_dir.name]):
+            plugin_registry.reset_for_tests()
+
+            overview_url = reverse('plugins_overview')
+            overview_resp = self.client.get(overview_url)
+            self.assertEqual(overview_resp.status_code, 200)
+            payload = overview_resp.json()
+            self.assertEqual(payload.get('status'), 'success')
+
+            components_resp = self.client.get(reverse('plugin_components_overview'))
+            self.assertEqual(components_resp.status_code, 200)
+            components_payload = components_resp.json()
+            self.assertEqual(components_payload.get('status'), 'success')
+            self.assertIn('metric', components_payload.get('components') or [])
+
+            plugins = payload.get('plugins') or []
+            plugin_ids = [item.get('id') for item in plugins]
+            self.assertIn('test_plugin', plugin_ids)
+            plugin_row = next(item for item in plugins if item.get('id') == 'test_plugin')
+            ui_scripts = plugin_row.get('ui_scripts') or []
+            ui_script_names = [item.get('name') for item in ui_scripts]
+            self.assertIn('dashboard', ui_script_names)
+
+            create_url = reverse('create_classroom')
+            create_resp = self.client.post(create_url, {'name': '插件班级', 'rows': 2, 'cols': 2})
+            self.assertEqual(create_resp.status_code, 302)
+
+            classroom = Classroom.objects.get(name='插件班级')
+            hook_resp = self.client.get(reverse('plugin_action_dispatch', args=['test_plugin', 'hook_count']))
+            self.assertEqual(hook_resp.status_code, 200)
+            hook_payload = hook_resp.json().get('result') or {}
+            self.assertEqual(hook_payload.get('count'), 1)
+            self.assertEqual((hook_payload.get('events') or [])[0].get('classroom_id'), classroom.pk)
+
+            echo_resp = self.client.post(
+                reverse('plugin_action_dispatch', args=['test_plugin', 'echo']),
+                data=json.dumps({'classroom_id': classroom.pk, 'hello': 'world'}),
+                content_type='application/json',
+            )
+            self.assertEqual(echo_resp.status_code, 200)
+            echo_payload = echo_resp.json().get('result') or {}
+            self.assertEqual(echo_payload.get('classroom_id'), classroom.pk)
+            self.assertEqual((echo_payload.get('echo') or {}).get('hello'), 'world')
+
+            ui_resp = self.client.get(
+                reverse('plugin_ui_dispatch', args=['test_plugin', 'dashboard']) + f'?classroom_id={classroom.pk}'
+            )
+            self.assertEqual(ui_resp.status_code, 200)
+            ui_payload = ui_resp.json().get('ui') or {}
+            self.assertEqual(ui_payload.get('type'), 'page')
+            self.assertEqual(ui_payload.get('title'), '测试UI')
+            blocks = ui_payload.get('blocks') or []
+            self.assertTrue(blocks)
+            self.assertEqual(blocks[0].get('type'), 'metric')
+            self.assertEqual(blocks[0].get('value'), 0)
+
+            ui_page_resp = self.client.get(
+                reverse('plugin_ui_page', args=['test_plugin', 'dashboard']) + f'?classroom_id={classroom.pk}'
+            )
+            self.assertEqual(ui_page_resp.status_code, 200)
+            page_html = ui_page_resp.content.decode('utf-8')
+            self.assertIn('id="plugin-ui-root"', page_html)
+            self.assertIn('data-plugin-id="test_plugin"', page_html)
+
+            ext_page_resp = self.client.get(reverse('extensions_overview'))
+            self.assertEqual(ext_page_resp.status_code, 200)
+            self.assertContains(ext_page_resp, '扩展清单')
+
+            ext_list_resp = self.client.get(
+                reverse('extensions_overview') + f'?classroom_id={classroom.pk}',
+                HTTP_X_REQUESTED_WITH='XMLHttpRequest',
+            )
+            self.assertEqual(ext_list_resp.status_code, 200)
+            ext_payload = ext_list_resp.json()
+            self.assertEqual(ext_payload.get('status'), 'success')
+            ext_rows = ext_payload.get('extensions') or []
+            ext_ids = [item.get('id') for item in ext_rows]
+            self.assertIn('test_plugin', ext_ids)
+            test_ext_row = next(item for item in ext_rows if item.get('id') == 'test_plugin')
+            self.assertTrue(test_ext_row.get('workspace_permission_required'))
+            self.assertFalse(test_ext_row.get('workspace_permission_granted'))
+
+            manifest_resp = self.client.get(reverse('extension_manifest', args=['test_plugin']))
+            self.assertEqual(manifest_resp.status_code, 200)
+            manifest_payload = manifest_resp.json()
+            self.assertEqual(manifest_payload.get('manifest_version'), 3)
+            self.assertEqual(manifest_payload.get('short_name'), 'test_plugin')
+            self.assertIn('components_library', manifest_payload.get('endpoints') or {})
+
+            runtime_action_resp = self.client.post(
+                reverse('extension_send_message', args=['test_plugin']),
+                data=json.dumps({
+                    'classroom_id': classroom.pk,
+                    'message': {
+                        'type': 'action',
+                        'name': 'echo',
+                        'method': 'POST',
+                        'payload': {'k': 'v'},
+                    }
+                }),
+                content_type='application/json',
+            )
+            self.assertEqual(runtime_action_resp.status_code, 200)
+            runtime_action_payload = runtime_action_resp.json()
+            self.assertEqual(runtime_action_payload.get('status'), 'success')
+            runtime_action_result = runtime_action_payload.get('result') or {}
+            self.assertEqual((runtime_action_result.get('echo') or {}).get('k'), 'v')
+
+            runtime_ui_resp = self.client.post(
+                reverse('extension_send_message', args=['test_plugin']),
+                data=json.dumps({
+                    'classroom_id': classroom.pk,
+                    'message': {
+                        'type': 'ui',
+                        'name': 'dashboard',
+                        'method': 'GET',
+                    }
+                }),
+                content_type='application/json',
+            )
+            self.assertEqual(runtime_ui_resp.status_code, 200)
+            runtime_ui_payload = runtime_ui_resp.json()
+            self.assertEqual(runtime_ui_payload.get('status'), 'success')
+            self.assertEqual((runtime_ui_payload.get('result') or {}).get('type'), 'page')
+
+            runtime_workspace_forbidden = self.client.post(
+                reverse('extension_send_message', args=['test_plugin']),
+                data=json.dumps({
+                    'classroom_id': classroom.pk,
+                    'message': {
+                        'type': 'workspace_script',
+                        'name': 'inject_marker',
+                        'method': 'GET',
+                    }
+                }),
+                content_type='application/json',
+            )
+            self.assertEqual(runtime_workspace_forbidden.status_code, 403)
+
+            permission_grant_resp = self.client.post(
+                reverse('extension_workspace_permission', args=['test_plugin']),
+                data=json.dumps({'classroom_id': classroom.pk, 'granted': True}),
+                content_type='application/json',
+            )
+            self.assertEqual(permission_grant_resp.status_code, 200)
+            self.assertTrue(permission_grant_resp.json().get('granted'))
+
+            runtime_workspace_resp = self.client.post(
+                reverse('extension_send_message', args=['test_plugin']),
+                data=json.dumps({
+                    'classroom_id': classroom.pk,
+                    'message': {
+                        'type': 'workspace_script',
+                        'name': 'inject_marker',
+                        'method': 'GET',
+                    }
+                }),
+                content_type='application/json',
+            )
+            self.assertEqual(runtime_workspace_resp.status_code, 200)
+            workspace_payload = runtime_workspace_resp.json()
+            self.assertEqual(workspace_payload.get('status'), 'success')
+            self.assertEqual((workspace_payload.get('result') or {}).get('name'), 'inject_marker')
+            self.assertIn('source', workspace_payload.get('result') or {})
+
+            permission_query_resp = self.client.get(
+                reverse('extension_workspace_permission', args=['test_plugin']) + f'?classroom_id={classroom.pk}'
+            )
+            self.assertEqual(permission_query_resp.status_code, 200)
+            self.assertTrue(permission_query_resp.json().get('granted'))
+
+            workspace_resp = self.client.get(reverse('classroom_detail', args=[classroom.pk]))
+            self.assertEqual(workspace_resp.status_code, 200)
+            workspace_html = workspace_resp.content.decode('utf-8')
+            self.assertIn('id="btn-open-plugin-hub"', workspace_html)
+            self.assertIn('data-extensions-list-url="/extensions/"', workspace_html)

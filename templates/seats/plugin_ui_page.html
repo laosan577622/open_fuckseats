@@ -1,0 +1,44 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ plugin_name }} · {{ ui_name }}{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/plugin_ui.css' %}?v=1.0">
+{% endblock %}
+
+{% block actions %}
+<div class="header-action-row office-ribbon-row">
+    <div class="ribbon-group">
+        <button type="button" class="btn btn-primary" id="plugin-ui-refresh-btn">刷新界面</button>
+        <a class="btn btn-secondary" href="{% url 'plugin_ui_dispatch' plugin_id ui_name %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" target="_blank" rel="noopener noreferrer">查看原始 JSON</a>
+        <span class="ribbon-group-label">插件 UI</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="plugin-ui-page" data-plugin-ui-page>
+    <header class="plugin-ui-page-header">
+        <div class="plugin-ui-meta">
+            <h1>{{ plugin_name }}</h1>
+            <p>UI 脚本：{{ ui_name }}</p>
+        </div>
+        <a class="plugin-ui-api-link" href="{% url 'plugin_ui_dispatch' plugin_id ui_name %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" target="_blank" rel="noopener noreferrer">API</a>
+    </header>
+
+    <div id="plugin-ui-feedback" class="plugin-ui-feedback" hidden></div>
+
+    <div
+        id="plugin-ui-root"
+        class="plugin-ui-root"
+        data-plugin-id="{{ plugin_id }}"
+        data-ui-name="{{ ui_name }}"
+        data-ui-endpoint="{% url 'plugin_ui_dispatch' plugin_id ui_name %}"
+    ></div>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="{% static 'js/plugin_ui_renderer.js' %}?v=1.0"></script>
+{% endblock %}

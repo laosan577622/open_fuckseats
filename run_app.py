@@ -64,11 +64,6 @@ def main():
 
     PORT = 23948
     print(f"正在启动服务器 http://127.0.0.1:23948 ...", flush=True)
-    print(
-        f"AI Future Mode 配置: API Key={'已配置' if has_openai_key else '未配置'}"
-        f"，Base URL={openai_base_url or '默认官方接口'}，Model={openai_model}",
-        flush=True
-    )
     print("服务器已启动，请使用浏览器打开 http://127.0.0.1:23948 访问\n在使用期间，请不要关闭本窗口。", flush=True)
     serve(application, host='127.0.0.1', port=PORT)
 

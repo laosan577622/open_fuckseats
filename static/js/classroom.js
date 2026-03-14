@@ -204,6 +204,1150 @@ document.addEventListener('DOMContentLoaded', () => {
         }, 2200);
     };
 
+    const classroomId = root.dataset.classroomId || '';
+    const extensionsListUrl = root.dataset.extensionsListUrl || '/extensions/';
+    const pluginHubModal = document.getElementById('plugin-hub-modal');
+    const pluginHubList = document.getElementById('pluginHubList');
+    const pluginHubRefreshBtn = document.getElementById('pluginHubRefreshBtn');
+    const openPluginHubBtn = document.getElementById('btn-open-plugin-hub');
+    const openPluginCommandBtn = document.getElementById('btn-open-plugin-command');
+    const pluginQuickLaunch = document.getElementById('pluginQuickLaunch');
+    const pluginCommandModal = document.getElementById('plugin-command-modal');
+    const pluginCommandInput = document.getElementById('pluginCommandInput');
+    const pluginCommandList = document.getElementById('pluginCommandList');
+    const pluginRuntimeExtension = document.getElementById('pluginRuntimeExtension');
+    const pluginRuntimeType = document.getElementById('pluginRuntimeType');
+    const pluginRuntimeName = document.getElementById('pluginRuntimeName');
+    const pluginRuntimeMethod = document.getElementById('pluginRuntimeMethod');
+    const pluginRuntimePayload = document.getElementById('pluginRuntimePayload');
+    const pluginRuntimeSendBtn = document.getElementById('pluginRuntimeSendBtn');
+    const pluginRuntimeResponse = document.getElementById('pluginRuntimeResponse');
+    const DEFAULT_EXTENSION_STORAGE_KEY = 'seats_default_extension';
+
+    let cachedExtensions = [];
+    let cachedPluginCommands = [];
+    const workspaceScriptRuntime = new Map();
+    const workspaceScriptCleanup = new Map();
+
+    const setRuntimeResponse = (value) => {
+        if (!pluginRuntimeResponse) return;
+        let text = '';
+        try {
+            text = typeof value === 'string' ? value : JSON.stringify(value, null, 2);
+        } catch (_) {
+            text = String(value || '');
+        }
+        pluginRuntimeResponse.textContent = text;
+    };
+
+    const getStoredDefaultExtension = () => {
+        try {
+            return localStorage.getItem(DEFAULT_EXTENSION_STORAGE_KEY) || '';
+        } catch (_) {
+            return '';
+        }
+    };
+
+    const setStoredDefaultExtension = (extensionId) => {
+        if (!extensionId) return;
+        try {
+            localStorage.setItem(DEFAULT_EXTENSION_STORAGE_KEY, extensionId);
+        } catch (_) {
+            // ignore storage errors
+        }
+    };
+
+    const getExtensionById = (extensionId) => {
+        const id = String(extensionId || '').trim();
+        if (!id) return null;
+        return cachedExtensions.find((item) => item.id === id) || null;
+    };
+
+    const getDefaultExtensionId = () => {
+        const preferred = pluginRuntimeExtension && pluginRuntimeExtension.value ? pluginRuntimeExtension.value : '';
+        if (preferred) return preferred;
+        const stored = getStoredDefaultExtension();
+        if (stored && getExtensionById(stored)) return stored;
+        return cachedExtensions.length ? cachedExtensions[0].id : '';
+    };
+
+    const buildExtensionsListUrl = () => {
+        const base = new URL(extensionsListUrl, window.location.origin);
+        if (classroomId) {
+            base.searchParams.set('classroom_id', classroomId);
+        }
+        return `${base.pathname}${base.search}`;
+    };
+
+    const requestJsonWithStatus = async (url, options = {}) => {
+        const method = String(options.method || 'GET').toUpperCase();
+        const headers = Object.assign({}, options.headers || {});
+        if (!headers['X-Requested-With']) {
+            headers['X-Requested-With'] = 'XMLHttpRequest';
+        }
+
+        const fetchOptions = {
+            method,
+            headers,
+            credentials: 'same-origin',
+        };
+
+        if (method !== 'GET') {
+            headers['Content-Type'] = 'application/json';
+            headers['X-CSRFToken'] = csrf;
+            fetchOptions.body = JSON.stringify(options.body || {});
+        }
+
+        const response = await fetch(url, fetchOptions);
+        let data = null;
+        try {
+            data = await response.json();
+        } catch (_) {
+            data = null;
+        }
+        return { ok: response.ok, status: response.status, data };
+    };
+
+    const buildUiPageUrl = (extensionId, uiName) => {
+        const base = `/plugins/${encodeURIComponent(extensionId)}/ui/${encodeURIComponent(uiName)}/page/`;
+        if (!classroomId) return base;
+        return `${base}?classroom_id=${encodeURIComponent(classroomId)}`;
+    };
+
+    const buildManifestUrl = (extensionId) => `/extensions/${encodeURIComponent(extensionId)}/manifest.json`;
+    const buildSendMessageUrl = (extensionId) => `/extensions/${encodeURIComponent(extensionId)}/runtime/send-message/`;
+    const buildPermissionUrl = (extensionId) => `/extensions/${encodeURIComponent(extensionId)}/permissions/`;
+
+    const sendRuntimeMessage = async (extensionId, message) => {
+        const id = String(extensionId || '').trim() || getDefaultExtensionId();
+        if (!id) {
+            throw new Error('当前没有可用扩展');
+        }
+        const body = {
+            classroom_id: classroomId || null,
+            message,
+        };
+        const { ok, status, data } = await requestJsonWithStatus(buildSendMessageUrl(id), {
+            method: 'POST',
+            body,
+        });
+        if (!ok) {
+            const msg = (data && data.message) ? data.message : `请求失败（${status}）`;
+            throw new Error(msg);
+        }
+        return data;
+    };
+
+    const setWorkspacePermission = async (extensionId, granted, options = {}) => {
+        if (!classroomId) {
+            throw new Error('当前页面缺少 classroom_id，无法授权');
+        }
+        const { ok, status, data } = await requestJsonWithStatus(buildPermissionUrl(extensionId), {
+            method: 'POST',
+            body: {
+                classroom_id: classroomId,
+                granted: !!granted,
+            },
+        });
+        if (!ok) {
+            const msg = (data && data.message) ? data.message : `授权请求失败（${status}）`;
+            throw new Error(msg);
+        }
+
+        const ext = getExtensionById(extensionId);
+        if (ext) {
+            ext.workspace_permission_granted = !!data.granted;
+        }
+
+        if (!options.silent) {
+            showInlineToast(data.granted ? `已授权 ${extensionId} 修改页面` : `已撤销 ${extensionId} 页面修改授权`);
+        }
+        return !!data.granted;
+    };
+
+    const ensureWorkspacePermission = async (extensionId, options = {}) => {
+        const ext = getExtensionById(extensionId);
+        if (!ext) throw new Error(`扩展不存在：${extensionId}`);
+
+        const requiresPermission = !!ext.workspace_permission_required;
+        if (!requiresPermission) return true;
+        if (ext.workspace_permission_granted) return true;
+        if (!options.interactive) return false;
+
+        const title = ext.name || ext.id;
+        const confirmed = window.confirm(`插件“${title}”请求修改当前工作页面，是否授权？`);
+        if (!confirmed) return false;
+        return setWorkspacePermission(extensionId, true, { silent: true });
+    };
+
+    const fillRuntimeExtensionSelect = () => {
+        if (!pluginRuntimeExtension) return;
+        const current = getDefaultExtensionId();
+        pluginRuntimeExtension.innerHTML = '';
+        cachedExtensions.forEach((ext) => {
+            const option = document.createElement('option');
+            option.value = ext.id;
+            option.textContent = `${ext.name || ext.id} (${ext.id})`;
+            pluginRuntimeExtension.appendChild(option);
+        });
+        if (current && getExtensionById(current)) {
+            pluginRuntimeExtension.value = current;
+            setStoredDefaultExtension(current);
+        }
+    };
+
+    const updateRuntimeFieldState = () => {
+        if (!pluginRuntimeType || !pluginRuntimeName || !pluginRuntimeMethod || !pluginRuntimePayload) return;
+        const type = pluginRuntimeType.value;
+        const hideName = type === 'manifest';
+        pluginRuntimeName.disabled = hideName;
+        pluginRuntimeMethod.disabled = hideName;
+        if (hideName) {
+            pluginRuntimeName.value = '';
+            pluginRuntimeMethod.value = 'GET';
+        }
+    };
+
+    const createPluginChip = (label, className, dataset) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = `plugin-hub-chip-btn ${className || ''}`.trim();
+        btn.textContent = label;
+        Object.keys(dataset || {}).forEach((key) => {
+            btn.dataset[key] = dataset[key];
+        });
+        return btn;
+    };
+
+    const teardownWorkspaceScriptsForExtension = (extensionId) => {
+        const prefix = `${extensionId}:`;
+        Array.from(workspaceScriptRuntime.keys()).forEach((key) => {
+            if (!key.startsWith(prefix)) return;
+            const cleanup = workspaceScriptCleanup.get(key);
+            if (typeof cleanup === 'function') {
+                try {
+                    cleanup();
+                } catch (_) {
+                    // ignore cleanup failures
+                }
+            }
+            workspaceScriptCleanup.delete(key);
+            workspaceScriptRuntime.delete(key);
+        });
+    };
+
+    const buildPluginCommands = () => {
+        const rows = [];
+        cachedExtensions.forEach((ext) => {
+            const extName = ext.name || ext.id;
+
+            rows.push({
+                id: `${ext.id}:manifest`,
+                kind: 'manifest',
+                extensionId: ext.id,
+                title: `${extName} · Manifest`,
+                description: '查看扩展 manifest.json',
+            });
+
+            (ext.ui_scripts || []).forEach((ui) => {
+                rows.push({
+                    id: `${ext.id}:ui-open:${ui.name}`,
+                    kind: 'uiOpen',
+                    extensionId: ext.id,
+                    uiName: ui.name,
+                    title: `${extName} · 打开 UI · ${ui.name}`,
+                    description: '打开插件界面（page 渲染）',
+                });
+                rows.push({
+                    id: `${ext.id}:ui-json:${ui.name}`,
+                    kind: 'uiJson',
+                    extensionId: ext.id,
+                    uiName: ui.name,
+                    title: `${extName} · 读取 UI JSON · ${ui.name}`,
+                    description: '调用 runtime.sendMessage(type=ui)',
+                });
+            });
+
+            (ext.actions || []).forEach((action) => {
+                rows.push({
+                    id: `${ext.id}:action:${action.name}`,
+                    kind: 'action',
+                    extensionId: ext.id,
+                    actionName: action.name,
+                    title: `${extName} · 执行动作 · ${action.name}`,
+                    description: action.description || '调用 runtime.sendMessage(type=action)',
+                });
+            });
+
+            (ext.workspace_scripts || []).forEach((script) => {
+                rows.push({
+                    id: `${ext.id}:workspace:${script.name}`,
+                    kind: 'workspaceApply',
+                    extensionId: ext.id,
+                    scriptName: script.name,
+                    title: `${extName} · 页面改造 · ${script.name}`,
+                    description: script.description || '执行页面增强脚本（需授权）',
+                });
+            });
+        });
+        cachedPluginCommands = rows;
+    };
+
+    const getPluginCommandById = (commandId) => cachedPluginCommands.find((item) => item.id === commandId) || null;
+
+    const getFilteredPluginCommands = (keyword) => {
+        const text = String(keyword || '').trim().toLowerCase();
+        if (!text) return cachedPluginCommands;
+        return cachedPluginCommands.filter((item) => {
+            const base = `${item.title || ''} ${item.description || ''} ${item.extensionId || ''} ${item.uiName || ''} ${item.actionName || ''} ${item.scriptName || ''}`.toLowerCase();
+            return base.includes(text);
+        });
+    };
+
+    const renderPluginCommandList = (keyword = '') => {
+        if (!pluginCommandList) return;
+        pluginCommandList.innerHTML = '';
+
+        const rows = getFilteredPluginCommands(keyword).slice(0, 60);
+        if (!rows.length) {
+            pluginCommandList.innerHTML = '<div class="empty-hint">未匹配到任何插件命令</div>';
+            return;
+        }
+
+        rows.forEach((cmd) => {
+            const row = document.createElement('button');
+            row.type = 'button';
+            row.className = 'plugin-command-item';
+            row.dataset.commandId = cmd.id;
+            row.innerHTML = `
+                <div class="plugin-command-item-main">
+                    <div class="plugin-command-item-title">${cmd.title}</div>
+                    <div class="plugin-command-item-desc">${cmd.description}</div>
+                </div>
+                <span class="plugin-command-item-kind">${cmd.kind}</span>
+            `;
+            pluginCommandList.appendChild(row);
+        });
+    };
+
+    const renderPluginQuickLaunch = () => {
+        if (!pluginQuickLaunch) return;
+        pluginQuickLaunch.innerHTML = '';
+
+        if (!cachedExtensions.length) {
+            pluginQuickLaunch.innerHTML = '<span class="plugin-quick-launch-empty">暂无插件快捷入口</span>';
+            return;
+        }
+
+        cachedExtensions.forEach((ext) => {
+            const firstUi = (ext.ui_scripts || [])[0];
+            const firstAction = (ext.actions || [])[0];
+            let commandId = '';
+            let label = ext.name || ext.id;
+            let primary = true;
+
+            if (firstUi && firstUi.name) {
+                commandId = `${ext.id}:ui-open:${firstUi.name}`;
+                label = `${ext.name || ext.id} · UI`;
+            } else if (firstAction && firstAction.name) {
+                commandId = `${ext.id}:action:${firstAction.name}`;
+                label = `${ext.name || ext.id} · 运行`;
+                primary = false;
+            } else if ((ext.workspace_scripts || []).length) {
+                commandId = `${ext.id}:workspace:${ext.workspace_scripts[0].name}`;
+                label = `${ext.name || ext.id} · 增强`;
+                primary = false;
+            }
+
+            if (!commandId) {
+                commandId = `${ext.id}:manifest`;
+                label = `${ext.name || ext.id} · Manifest`;
+                primary = false;
+            }
+
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.className = `plugin-quick-launch-btn ${primary ? 'primary' : ''}`.trim();
+            btn.dataset.commandId = commandId;
+            btn.textContent = label;
+            pluginQuickLaunch.appendChild(btn);
+        });
+    };
+
+    const workspaceComponentNames = ['card', 'title', 'text', 'pill_button', 'stack', 'badge'];
+
+    const createWorkspaceComponent = (name, props = {}) => {
+        const key = String(name || '').trim().toLowerCase();
+        const payload = (props && typeof props === 'object') ? props : {};
+
+        if (key === 'card') {
+            const card = document.createElement('section');
+            card.style.border = '1px solid rgba(10, 89, 247, 0.18)';
+            card.style.borderRadius = '14px';
+            card.style.background = 'rgba(255, 255, 255, 0.94)';
+            card.style.backdropFilter = 'blur(12px)';
+            card.style.boxShadow = '0 8px 20px rgba(15, 23, 42, 0.12)';
+            card.style.padding = '12px';
+            if (payload.className) card.className = String(payload.className);
+            if (payload.style && typeof payload.style === 'object') {
+                Object.assign(card.style, payload.style);
+            }
+            return card;
+        }
+
+        if (key === 'title') {
+            const title = document.createElement(payload.level === 1 ? 'h1' : payload.level === 2 ? 'h2' : 'h3');
+            title.textContent = String(payload.text || '');
+            title.style.margin = '0';
+            title.style.fontSize = payload.level === 1 ? '22px' : payload.level === 2 ? '18px' : '15px';
+            title.style.fontWeight = '700';
+            return title;
+        }
+
+        if (key === 'text') {
+            const p = document.createElement('p');
+            p.textContent = String(payload.text || '');
+            p.style.margin = '0';
+            p.style.fontSize = '13px';
+            p.style.color = '#475569';
+            return p;
+        }
+
+        if (key === 'pill_button') {
+            const btn = document.createElement('button');
+            btn.type = 'button';
+            btn.textContent = String(payload.label || '按钮');
+            btn.style.border = 'none';
+            btn.style.borderRadius = '999px';
+            btn.style.minHeight = '34px';
+            btn.style.padding = '0 14px';
+            btn.style.background = payload.variant === 'secondary' ? 'rgba(10, 89, 247, 0.12)' : '#0a59f7';
+            btn.style.color = payload.variant === 'secondary' ? '#0a59f7' : '#fff';
+            btn.style.cursor = 'pointer';
+            btn.style.fontWeight = '600';
+            if (typeof payload.onClick === 'function') {
+                btn.addEventListener('click', payload.onClick);
+            }
+            return btn;
+        }
+
+        if (key === 'badge') {
+            const chip = document.createElement('span');
+            chip.textContent = String(payload.text || '标签');
+            chip.style.border = '1px solid rgba(10, 89, 247, 0.22)';
+            chip.style.borderRadius = '999px';
+            chip.style.padding = '2px 10px';
+            chip.style.fontSize = '11px';
+            chip.style.color = '#0a59f7';
+            chip.style.background = 'rgba(10, 89, 247, 0.08)';
+            return chip;
+        }
+
+        if (key === 'stack') {
+            const wrap = document.createElement('div');
+            wrap.style.display = 'grid';
+            wrap.style.gap = `${Number(payload.gap || 8)}px`;
+            return wrap;
+        }
+
+        return null;
+    };
+
+    const createWorkspaceApi = (extensionId) => {
+        const callSendMessage = async (message) => sendRuntimeMessage(extensionId, message || {});
+
+        const componentApi = {
+            names: () => workspaceComponentNames.slice(),
+            create: (name, props = {}) => createWorkspaceComponent(name, props),
+            card: (props = {}) => createWorkspaceComponent('card', props),
+            title: (text, level = 3) => createWorkspaceComponent('title', { text, level }),
+            text: (text) => createWorkspaceComponent('text', { text }),
+            pillButton: (label, onClick = null, variant = 'primary') => createWorkspaceComponent('pill_button', {
+                label,
+                onClick,
+                variant,
+            }),
+            badge: (text) => createWorkspaceComponent('badge', { text }),
+            stack: (gap = 8) => createWorkspaceComponent('stack', { gap }),
+        };
+
+        return {
+            extensionId,
+            classroomId,
+            toast: (message) => showInlineToast(message),
+            runtime: {
+                sendMessage: callSendMessage,
+                runAction: async (actionName, payload = {}) => {
+                    return callSendMessage({
+                        type: 'action',
+                        name: actionName,
+                        method: 'POST',
+                        payload,
+                    });
+                },
+                getUI: async (uiName, payload = {}) => {
+                    return callSendMessage({
+                        type: 'ui',
+                        name: uiName,
+                        method: 'GET',
+                        payload,
+                    });
+                },
+            },
+            components: componentApi,
+            dom: {
+                query: (selector, parent = document) => parent.querySelector(selector),
+                queryAll: (selector, parent = document) => Array.from(parent.querySelectorAll(selector)),
+                create: (tag, attrs = {}, children = []) => {
+                    const element = document.createElement(tag);
+                    Object.keys(attrs).forEach((key) => {
+                        const value = attrs[key];
+                        if (key === 'style' && value && typeof value === 'object') {
+                            Object.assign(element.style, value);
+                            return;
+                        }
+                        if (key === 'className') {
+                            element.className = value;
+                            return;
+                        }
+                        if (key.startsWith('on') && typeof value === 'function') {
+                            element.addEventListener(key.slice(2).toLowerCase(), value);
+                            return;
+                        }
+                        if (value !== undefined && value !== null) {
+                            element.setAttribute(key, String(value));
+                        }
+                    });
+                    (Array.isArray(children) ? children : [children]).forEach((child) => {
+                        if (child == null) return;
+                        if (child instanceof Node) {
+                            element.appendChild(child);
+                        } else {
+                            element.appendChild(document.createTextNode(String(child)));
+                        }
+                    });
+                    return element;
+                },
+            },
+        };
+    };
+
+    const executeWorkspaceScriptSource = async (extensionId, scriptResult, options = {}) => {
+        const scriptName = String(scriptResult.name || '').trim();
+        if (!scriptName) {
+            throw new Error('workspace script 名称无效');
+        }
+        const source = String(scriptResult.source || '').trim();
+        if (!source) {
+            throw new Error('workspace script 内容为空');
+        }
+
+        const runtimeKey = `${extensionId}:${scriptName}`;
+        if (options.force && workspaceScriptRuntime.get(runtimeKey)) {
+            teardownWorkspaceScriptsForExtension(extensionId);
+        }
+        if (workspaceScriptRuntime.get(runtimeKey)) {
+            return;
+        }
+
+        const api = createWorkspaceApi(extensionId);
+        const context = {
+            extensionId,
+            classroomId,
+            scriptName,
+        };
+
+        const runner = new Function('api', 'context', source);
+        const cleanup = runner(api, context);
+
+        workspaceScriptRuntime.set(runtimeKey, true);
+        if (typeof cleanup === 'function') {
+            workspaceScriptCleanup.set(runtimeKey, cleanup);
+        }
+    };
+
+    const runWorkspaceScriptByName = async (extensionId, scriptName, options = {}) => {
+        const ext = getExtensionById(extensionId);
+        if (!ext) {
+            throw new Error(`扩展不存在：${extensionId}`);
+        }
+
+        const scriptMeta = (ext.workspace_scripts || []).find((item) => item.name === scriptName);
+        if (!scriptMeta) {
+            throw new Error(`页面改造脚本不存在：${extensionId}.${scriptName}`);
+        }
+
+        const allowed = await ensureWorkspacePermission(extensionId, { interactive: !!options.interactivePermission });
+        if (!allowed && scriptMeta.requires_permission) {
+            if (!options.silent) showInlineToast('未授权，已取消页面改造');
+            return;
+        }
+
+        const response = await sendRuntimeMessage(extensionId, {
+            type: 'workspace_script',
+            name: scriptName,
+            method: 'GET',
+        });
+        const scriptResult = response && response.result ? response.result : {};
+        await executeWorkspaceScriptSource(extensionId, scriptResult, { force: !!options.force });
+
+        if (!options.silent) {
+            showInlineToast(`页面增强已应用：${extensionId}.${scriptName}`);
+            setRuntimeResponse(response);
+        }
+    };
+
+    const runAutoWorkspaceScripts = async () => {
+        for (const ext of cachedExtensions) {
+            const scripts = Array.isArray(ext.workspace_scripts) ? ext.workspace_scripts : [];
+            for (const script of scripts) {
+                if (!script.auto_run) continue;
+                try {
+                    await runWorkspaceScriptByName(ext.id, script.name, {
+                        interactivePermission: false,
+                        silent: true,
+                    });
+                } catch (_) {
+                    // keep auto-run silent
+                }
+            }
+        }
+    };
+
+    const executePluginCommand = async (cmd, options = {}) => {
+        if (!cmd) return;
+
+        if (cmd.kind === 'uiOpen') {
+            window.open(buildUiPageUrl(cmd.extensionId, cmd.uiName), '_blank', 'noopener,noreferrer');
+            if (!options.silent) showInlineToast(`已打开 ${cmd.extensionId}.${cmd.uiName}`);
+            return;
+        }
+
+        if (cmd.kind === 'manifest') {
+            const { ok, status, data } = await requestJsonWithStatus(buildManifestUrl(cmd.extensionId), { method: 'GET' });
+            if (!ok) {
+                throw new Error((data && data.message) ? data.message : `请求失败（${status}）`);
+            }
+            setRuntimeResponse(data);
+            if (!options.silent) showInlineToast(`已获取 ${cmd.extensionId} manifest`);
+            return;
+        }
+
+        if (cmd.kind === 'uiJson') {
+            const result = await sendRuntimeMessage(cmd.extensionId, {
+                type: 'ui',
+                name: cmd.uiName,
+                method: 'GET',
+                payload: {},
+            });
+            setRuntimeResponse(result);
+            if (!options.silent) showInlineToast(`已读取 ${cmd.extensionId}.${cmd.uiName} UI`);
+            return;
+        }
+
+        if (cmd.kind === 'workspaceApply') {
+            await runWorkspaceScriptByName(cmd.extensionId, cmd.scriptName, {
+                interactivePermission: true,
+                silent: !!options.silent,
+            });
+            return;
+        }
+
+        if (cmd.kind === 'action') {
+            const result = await sendRuntimeMessage(cmd.extensionId, {
+                type: 'action',
+                name: cmd.actionName,
+                method: 'POST',
+                payload: {},
+            });
+            setRuntimeResponse(result);
+            if (!options.silent) showInlineToast(`已执行 ${cmd.extensionId}.${cmd.actionName}`);
+        }
+    };
+
+    const renderPluginHubCards = () => {
+        if (!pluginHubList) return;
+        pluginHubList.innerHTML = '';
+
+        if (!cachedExtensions.length) {
+            pluginHubList.innerHTML = '<div class="empty-hint">当前没有可用插件</div>';
+            return;
+        }
+
+        cachedExtensions.forEach((ext) => {
+            const card = document.createElement('article');
+            card.className = 'plugin-hub-card';
+
+            const head = document.createElement('div');
+            head.className = 'plugin-hub-card-head';
+            head.innerHTML = `
+                <div class="plugin-hub-card-title">${ext.name || ext.id}</div>
+                <div class="plugin-hub-card-version">v${ext.version || '0.0.1'}</div>
+            `;
+            card.appendChild(head);
+
+            const desc = document.createElement('div');
+            desc.className = 'plugin-hub-card-desc';
+            desc.textContent = ext.description || '无描述';
+            card.appendChild(desc);
+
+            const basicRow = document.createElement('div');
+            basicRow.className = 'plugin-hub-card-row';
+            basicRow.appendChild(createPluginChip('查看 Manifest', '', {
+                commandId: `${ext.id}:manifest`,
+            }));
+            card.appendChild(basicRow);
+
+            if (Array.isArray(ext.ui_scripts) && ext.ui_scripts.length) {
+                const uiRow = document.createElement('div');
+                uiRow.className = 'plugin-hub-card-row';
+                ext.ui_scripts.forEach((ui) => {
+                    uiRow.appendChild(createPluginChip(`打开 UI: ${ui.name}`, 'primary', {
+                        commandId: `${ext.id}:ui-open:${ui.name}`,
+                    }));
+                    uiRow.appendChild(createPluginChip(`取 UI JSON: ${ui.name}`, '', {
+                        commandId: `${ext.id}:ui-json:${ui.name}`,
+                    }));
+                });
+                card.appendChild(uiRow);
+            }
+
+            if (Array.isArray(ext.actions) && ext.actions.length) {
+                const actionRow = document.createElement('div');
+                actionRow.className = 'plugin-hub-card-row';
+                ext.actions.forEach((action) => {
+                    actionRow.appendChild(createPluginChip(`执行 ${action.name}`, '', {
+                        commandId: `${ext.id}:action:${action.name}`,
+                    }));
+                });
+                card.appendChild(actionRow);
+            }
+
+            if (Array.isArray(ext.workspace_scripts) && ext.workspace_scripts.length) {
+                const workspaceRow = document.createElement('div');
+                workspaceRow.className = 'plugin-hub-card-row';
+
+                const allowBtn = createPluginChip(
+                    ext.workspace_permission_granted ? '撤销页面改造授权' : '授权页面改造',
+                    ext.workspace_permission_granted ? '' : 'primary',
+                    {
+                        grantPluginId: ext.id,
+                        grantValue: ext.workspace_permission_granted ? '0' : '1',
+                    }
+                );
+                workspaceRow.appendChild(allowBtn);
+
+                ext.workspace_scripts.forEach((script) => {
+                    workspaceRow.appendChild(createPluginChip(`应用增强: ${script.name}`, '', {
+                        commandId: `${ext.id}:workspace:${script.name}`,
+                    }));
+                });
+
+                card.appendChild(workspaceRow);
+            }
+
+            pluginHubList.appendChild(card);
+        });
+    };
+
+    const openPluginCommandModal = () => {
+        if (!pluginCommandModal) return;
+        pluginCommandModal.style.display = 'block';
+        renderPluginCommandList(pluginCommandInput ? pluginCommandInput.value : '');
+        if (pluginCommandInput) {
+            setTimeout(() => {
+                pluginCommandInput.focus();
+                pluginCommandInput.select();
+            }, 0);
+        }
+    };
+
+    const closePluginCommandModal = () => {
+        if (!pluginCommandModal) return;
+        pluginCommandModal.style.display = 'none';
+    };
+
+    const initChromeLikePluginApi = () => {
+        const sendWithDefault = async (extensionId, message = {}) => {
+            const targetId = String(extensionId || '').trim() || getDefaultExtensionId();
+            if (!targetId) {
+                throw new Error('无可用扩展，请先安装插件');
+            }
+            return sendRuntimeMessage(targetId, message || {});
+        };
+
+        window.chrome = window.chrome || {};
+        window.chrome.runtime = window.chrome.runtime || {};
+        window.chrome.runtime.sendMessage = (extensionOrMessage, maybeMessage, maybeCallback) => {
+            let extensionId = '';
+            let message = {};
+            let callback = null;
+
+            if (typeof extensionOrMessage === 'string') {
+                extensionId = extensionOrMessage;
+                message = maybeMessage || {};
+                callback = typeof maybeCallback === 'function' ? maybeCallback : null;
+            } else {
+                message = extensionOrMessage || {};
+                callback = typeof maybeMessage === 'function' ? maybeMessage : null;
+                extensionId = message.extensionId || message.extension_id || '';
+                if (message.extensionId) delete message.extensionId;
+                if (message.extension_id) delete message.extension_id;
+            }
+
+            const promise = sendWithDefault(extensionId, message)
+                .then((result) => {
+                    if (callback) callback(result);
+                    return result;
+                })
+                .catch((error) => {
+                    const payload = { status: 'error', message: String(error) };
+                    if (callback) callback(payload);
+                    throw error;
+                });
+
+            return promise;
+        };
+
+        window.SeatsComponentLibrary = {
+            names() {
+                return workspaceComponentNames.slice();
+            },
+            create(name, props = {}) {
+                return createWorkspaceComponent(name, props);
+            },
+            card(props = {}) {
+                return createWorkspaceComponent('card', props);
+            },
+            title(text, level = 3) {
+                return createWorkspaceComponent('title', { text, level });
+            },
+            text(text) {
+                return createWorkspaceComponent('text', { text });
+            },
+            pillButton(label, onClick = null, variant = 'primary') {
+                return createWorkspaceComponent('pill_button', { label, onClick, variant });
+            },
+            badge(text) {
+                return createWorkspaceComponent('badge', { text });
+            },
+            stack(gap = 8) {
+                return createWorkspaceComponent('stack', { gap });
+            },
+        };
+
+        window.SeatsPlugins = {
+            listExtensions() {
+                return cachedExtensions.slice();
+            },
+            use(extensionId) {
+                if (!getExtensionById(extensionId)) return false;
+                setStoredDefaultExtension(extensionId);
+                if (pluginRuntimeExtension) pluginRuntimeExtension.value = extensionId;
+                return true;
+            },
+            async sendMessage(message = {}, extensionId = '') {
+                return sendWithDefault(extensionId, message);
+            },
+            async runAction(actionName, payload = {}, extensionId = '') {
+                return sendWithDefault(extensionId, {
+                    type: 'action',
+                    name: actionName,
+                    method: 'POST',
+                    payload: payload || {},
+                });
+            },
+            async getUI(uiName, payload = {}, extensionId = '') {
+                return sendWithDefault(extensionId, {
+                    type: 'ui',
+                    name: uiName,
+                    method: 'GET',
+                    payload: payload || {},
+                });
+            },
+            openUI(uiName, extensionId = '') {
+                const targetId = String(extensionId || '').trim() || getDefaultExtensionId();
+                if (!targetId) return false;
+                window.open(buildUiPageUrl(targetId, uiName), '_blank', 'noopener,noreferrer');
+                return true;
+            },
+            async runWorkspace(scriptName, extensionId = '', options = {}) {
+                const targetId = String(extensionId || '').trim() || getDefaultExtensionId();
+                if (!targetId) {
+                    throw new Error('无可用扩展');
+                }
+                return runWorkspaceScriptByName(targetId, scriptName, {
+                    interactivePermission: !!options.interactivePermission,
+                    silent: !!options.silent,
+                    force: !!options.force,
+                });
+            },
+        };
+
+        document.dispatchEvent(new CustomEvent('seats:plugins-ready', {
+            detail: {
+                extensions: cachedExtensions.slice(),
+                defaultExtension: getDefaultExtensionId(),
+            },
+        }));
+    };
+
+    const loadExtensionList = async () => {
+        if (pluginHubList) {
+            pluginHubList.innerHTML = '<div class="empty-hint">正在加载插件...</div>';
+        }
+        try {
+            const { ok, status, data } = await requestJsonWithStatus(buildExtensionsListUrl(), { method: 'GET' });
+            if (!ok || !data || data.status !== 'success') {
+                const msg = (data && data.message) ? data.message : `加载失败（${status}）`;
+                if (pluginHubList) {
+                    pluginHubList.innerHTML = `<div class="empty-hint">${msg}</div>`;
+                }
+                if (pluginQuickLaunch) {
+                    pluginQuickLaunch.innerHTML = `<span class="plugin-quick-launch-empty">${msg}</span>`;
+                }
+                return;
+            }
+
+            cachedExtensions = Array.isArray(data.extensions) ? data.extensions : [];
+            buildPluginCommands();
+            fillRuntimeExtensionSelect();
+            renderPluginQuickLaunch();
+            renderPluginHubCards();
+            renderPluginCommandList(pluginCommandInput ? pluginCommandInput.value : '');
+            initChromeLikePluginApi();
+
+            if (cachedExtensions.length) {
+                setRuntimeResponse({
+                    status: 'ready',
+                    extension: getDefaultExtensionId(),
+                    tips: '快捷入口、命令面板与无感调用 API 已就绪。',
+                });
+                await runAutoWorkspaceScripts();
+            } else {
+                setRuntimeResponse('暂无扩展可调用');
+            }
+        } catch (error) {
+            if (pluginHubList) {
+                pluginHubList.innerHTML = `<div class="empty-hint">加载失败：${error}</div>`;
+            }
+            if (pluginQuickLaunch) {
+                pluginQuickLaunch.innerHTML = `<span class="plugin-quick-launch-empty">加载失败：${error}</span>`;
+            }
+        }
+    };
+
+    const initPluginHub = () => {
+        if (!pluginHubModal) return;
+
+        if (openPluginHubBtn) {
+            openPluginHubBtn.addEventListener('click', () => {
+                loadExtensionList();
+            });
+        }
+
+        if (openPluginCommandBtn) {
+            openPluginCommandBtn.addEventListener('click', () => {
+                openPluginCommandModal();
+            });
+        }
+
+        if (pluginHubRefreshBtn) {
+            pluginHubRefreshBtn.addEventListener('click', () => {
+                loadExtensionList();
+            });
+        }
+
+        if (pluginRuntimeExtension) {
+            pluginRuntimeExtension.addEventListener('change', () => {
+                if (pluginRuntimeExtension.value) {
+                    setStoredDefaultExtension(pluginRuntimeExtension.value);
+                }
+            });
+        }
+
+        if (pluginRuntimeType) {
+            pluginRuntimeType.addEventListener('change', () => {
+                updateRuntimeFieldState();
+            });
+            updateRuntimeFieldState();
+        }
+
+        if (pluginHubList) {
+            pluginHubList.addEventListener('click', async (event) => {
+                const grantBtn = event.target.closest('button[data-grant-plugin-id]');
+                if (grantBtn) {
+                    const extensionId = grantBtn.dataset.grantPluginId;
+                    const shouldGrant = grantBtn.dataset.grantValue === '1';
+                    try {
+                        await setWorkspacePermission(extensionId, shouldGrant);
+                        if (shouldGrant) {
+                            const ext = getExtensionById(extensionId);
+                            const scripts = Array.isArray(ext && ext.workspace_scripts) ? ext.workspace_scripts : [];
+                            for (const script of scripts) {
+                                if (!script.auto_run) continue;
+                                await runWorkspaceScriptByName(extensionId, script.name, {
+                                    interactivePermission: false,
+                                    silent: true,
+                                });
+                            }
+                        } else {
+                            teardownWorkspaceScriptsForExtension(extensionId);
+                        }
+                        buildPluginCommands();
+                        renderPluginHubCards();
+                        renderPluginCommandList(pluginCommandInput ? pluginCommandInput.value : '');
+                    } catch (error) {
+                        setRuntimeResponse({ status: 'error', message: String(error) });
+                        showInlineToast(`授权更新失败：${error}`);
+                    }
+                    return;
+                }
+
+                const btn = event.target.closest('button[data-command-id]');
+                if (!btn) return;
+                const cmd = getPluginCommandById(btn.dataset.commandId);
+                if (!cmd) return;
+                try {
+                    await executePluginCommand(cmd);
+                } catch (error) {
+                    setRuntimeResponse({ status: 'error', message: String(error) });
+                    showInlineToast(`插件调用失败：${error}`);
+                }
+            });
+        }
+
+        if (pluginQuickLaunch) {
+            pluginQuickLaunch.addEventListener('click', async (event) => {
+                const btn = event.target.closest('button[data-command-id]');
+                if (!btn) return;
+                const cmd = getPluginCommandById(btn.dataset.commandId);
+                if (!cmd) return;
+                try {
+                    await executePluginCommand(cmd);
+                } catch (error) {
+                    setRuntimeResponse({ status: 'error', message: String(error) });
+                    showInlineToast(`插件调用失败：${error}`);
+                }
+            });
+        }
+
+        if (pluginRuntimeSendBtn) {
+            pluginRuntimeSendBtn.addEventListener('click', async () => {
+                if (!pluginRuntimeType) return;
+                const extensionId = getDefaultExtensionId();
+                if (!extensionId) {
+                    showInlineToast('请先选择扩展');
+                    return;
+                }
+
+                const type = pluginRuntimeType.value;
+                const name = pluginRuntimeName ? pluginRuntimeName.value.trim() : '';
+                const method = pluginRuntimeMethod ? pluginRuntimeMethod.value : 'POST';
+
+                let messagePayload = {};
+                if (pluginRuntimePayload && pluginRuntimePayload.value.trim()) {
+                    try {
+                        messagePayload = JSON.parse(pluginRuntimePayload.value.trim());
+                    } catch (_) {
+                        showInlineToast('payload 不是合法 JSON');
+                        return;
+                    }
+                }
+
+                const message = {
+                    type,
+                    method,
+                };
+                if (type === 'action') {
+                    if (!name) {
+                        showInlineToast('action 类型必须填写名称');
+                        return;
+                    }
+                    message.name = name;
+                }
+                if (type === 'ui' || type === 'workspace_script') {
+                    if (!name) {
+                        showInlineToast(`${type} 类型必须填写名称`);
+                        return;
+                    }
+                    message.name = name;
+                }
+                if (Object.keys(messagePayload || {}).length) {
+                    message.payload = messagePayload;
+                }
+
+                try {
+                    const result = await sendRuntimeMessage(extensionId, message);
+                    setRuntimeResponse(result);
+                    showInlineToast('runtime.sendMessage 调用成功');
+                } catch (error) {
+                    setRuntimeResponse({ status: 'error', message: String(error) });
+                    showInlineToast(`runtime.sendMessage 调用失败：${error}`);
+                }
+            });
+        }
+
+        if (pluginCommandInput) {
+            pluginCommandInput.addEventListener('input', () => {
+                renderPluginCommandList(pluginCommandInput.value);
+            });
+            pluginCommandInput.addEventListener('keydown', async (event) => {
+                if (event.key === 'Escape') {
+                    closePluginCommandModal();
+                    return;
+                }
+                if (event.key !== 'Enter') return;
+                event.preventDefault();
+                const rows = getFilteredPluginCommands(pluginCommandInput.value);
+                if (!rows.length) return;
+                try {
+                    await executePluginCommand(rows[0]);
+                    closePluginCommandModal();
+                } catch (error) {
+                    setRuntimeResponse({ status: 'error', message: String(error) });
+                    showInlineToast(`插件调用失败：${error}`);
+                }
+            });
+        }
+
+        if (pluginCommandList) {
+            pluginCommandList.addEventListener('click', async (event) => {
+                const row = event.target.closest('[data-command-id]');
+                if (!row) return;
+                const cmd = getPluginCommandById(row.dataset.commandId);
+                if (!cmd) return;
+                try {
+                    await executePluginCommand(cmd);
+                    closePluginCommandModal();
+                } catch (error) {
+                    setRuntimeResponse({ status: 'error', message: String(error) });
+                    showInlineToast(`插件调用失败：${error}`);
+                }
+            });
+        }
+
+        document.addEventListener('keydown', (event) => {
+            if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') {
+                return;
+            }
+            const target = event.target;
+            if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) {
+                return;
+            }
+            event.preventDefault();
+            openPluginCommandModal();
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && pluginCommandModal && pluginCommandModal.style.display === 'block') {
+                closePluginCommandModal();
+            }
+        });
+
+        loadExtensionList();
+    };
+
     const excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
     const sanitizeFilename = (name, fallback = '导出文件') => {
@@ -1431,6 +2575,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initFileMenus();
     initSeatsImport();
     bindSystemSaveLinks();
+    initPluginHub();
 
     if (seatStage) {
         seatStage.addEventListener('mousedown', (e) => {

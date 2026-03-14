@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_POST, require_http_methods
 from django.db import transaction, models, IntegrityError, OperationalError, ProgrammingError
 from django.utils import timezone
 from django.urls import reverse
@@ -33,6 +33,17 @@ import math
 from collections import defaultdict
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from .plugin_components import plugin_component_library
+from .plugin_system import (
+    plugin_registry,
+    PluginActionMethodNotAllowedError,
+    PluginActionNotFoundError,
+    PluginNotFoundError,
+    PluginUIScriptMethodNotAllowedError,
+    PluginUIScriptNotFoundError,
+    PluginWorkspaceScriptMethodNotAllowedError,
+    PluginWorkspaceScriptNotFoundError,
+)
 
 DISABLED_SUGGESTION_TYPES = {'jqj_hzh'}
 DEFAULT_AI_CONVERSATION_TITLE = '新对话'
@@ -320,9 +331,580 @@ def create_classroom(request):
         name = request.POST.get('name')
         rows = int(request.POST.get('rows', 6))
         cols = int(request.POST.get('cols', 8))
-        Classroom.objects.create(name=name, rows=rows, cols=cols)
+        classroom = Classroom.objects.create(name=name, rows=rows, cols=cols)
+        _emit_plugin_hook(
+            'classroom_created',
+            request=request,
+            classroom=classroom,
+            payload={'name': name, 'rows': rows, 'cols': cols},
+        )
         return redirect('index')
     return render(request, 'seats/create_classroom.html')
+
+
+def _emit_plugin_hook(event_name, *, request=None, classroom=None, payload=None):
+    plugin_registry.emit(
+        event_name,
+        hook=event_name,
+        request=request,
+        classroom=classroom,
+        payload=payload if isinstance(payload, dict) else {},
+        timestamp=timezone.now().isoformat(),
+    )
+
+
+def _extract_plugin_payload(request):
+    if request.method == 'GET':
+        return dict(request.GET.items())
+
+    content_type = str(request.content_type or '').split(';', 1)[0].strip().lower()
+    if content_type == 'application/json':
+        raw = request.body or b''
+        if not raw:
+            return {}
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError('JSON 数据格式错误') from exc
+        if not isinstance(data, dict):
+            raise ValueError('JSON 请求体必须为对象')
+        return data
+    return dict(request.POST.items())
+
+
+def _resolve_plugin_classroom(payload):
+    if not isinstance(payload, dict):
+        return None
+    classroom_id = payload.get('classroom_id')
+    if classroom_id in (None, ''):
+        return None
+    try:
+        return Classroom.objects.get(pk=int(classroom_id))
+    except (TypeError, ValueError) as exc:
+        raise ValueError('classroom_id 必须为整数') from exc
+    except Classroom.DoesNotExist as exc:
+        raise ValueError('classroom_id 不存在') from exc
+
+
+PLUGIN_WORKSPACE_GRANTS_SESSION_KEY = 'plugin_workspace_dom_grants_v1'
+
+
+def _normalize_plugin_workspace_grants(raw):
+    if not isinstance(raw, dict):
+        return {}
+    normalized = {}
+    for classroom_key, plugin_ids in raw.items():
+        key = str(classroom_key or '').strip()
+        if not key:
+            continue
+        values = set()
+        if isinstance(plugin_ids, (list, tuple, set)):
+            for item in plugin_ids:
+                plugin_id = str(item or '').strip()
+                if plugin_id:
+                    values.add(plugin_id)
+        normalized[key] = values
+    return normalized
+
+
+def _get_workspace_grants_from_session(request):
+    raw = request.session.get(PLUGIN_WORKSPACE_GRANTS_SESSION_KEY, {})
+    return _normalize_plugin_workspace_grants(raw)
+
+
+def _save_workspace_grants_to_session(request, grants):
+    payload = {
+        classroom_key: sorted(plugin_ids)
+        for classroom_key, plugin_ids in grants.items()
+        if plugin_ids
+    }
+    request.session[PLUGIN_WORKSPACE_GRANTS_SESSION_KEY] = payload
+    request.session.modified = True
+
+
+def _resolve_classroom_id_int(raw_value):
+    try:
+        return int(raw_value)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('classroom_id 必须为整数') from exc
+
+
+def _is_workspace_plugin_granted(request, classroom_id, plugin_id):
+    if classroom_id in (None, ''):
+        return False
+    grants = _get_workspace_grants_from_session(request)
+    granted = grants.get(str(classroom_id), set())
+    return str(plugin_id or '').strip() in granted
+
+
+def _set_workspace_plugin_grant(request, classroom_id, plugin_id, granted):
+    cid = str(classroom_id)
+    pid = str(plugin_id or '').strip()
+    grants = _get_workspace_grants_from_session(request)
+    rows = grants.setdefault(cid, set())
+    if granted:
+        rows.add(pid)
+    else:
+        rows.discard(pid)
+    if not rows and cid in grants:
+        grants.pop(cid, None)
+    _save_workspace_grants_to_session(request, grants)
+    return _is_workspace_plugin_granted(request, classroom_id, plugin_id)
+
+
+@require_http_methods(['GET'])
+def plugins_overview(request):
+    plugin_registry.ensure_loaded()
+    return JsonResponse({
+        'status': 'success',
+        'plugins': plugin_registry.list_plugins(),
+        'load_errors': plugin_registry.load_errors,
+    })
+
+
+@require_http_methods(['GET'])
+def plugin_components_overview(request):
+    return JsonResponse({
+        'status': 'success',
+        'components': plugin_component_library.names(),
+        'count': len(plugin_component_library.names()),
+    })
+
+
+def _get_plugin_row(plugin_id):
+    plugin_registry.ensure_loaded()
+    key = str(plugin_id or '').strip()
+    for row in plugin_registry.list_plugins():
+        if row.get('id') == key:
+            return row
+    return None
+
+
+def _build_extension_manifest(plugin_row):
+    plugin_id = str(plugin_row.get('id') or '').strip()
+    actions = plugin_row.get('actions') or []
+    ui_scripts = plugin_row.get('ui_scripts') or []
+    workspace_scripts = plugin_row.get('workspace_scripts') or []
+
+    popup_url = ''
+    if ui_scripts:
+        popup_name = ui_scripts[0].get('name')
+        if popup_name:
+            popup_url = reverse('plugin_ui_page', args=[plugin_id, popup_name])
+
+    workspace_requires_permission = any(bool(item.get('requires_permission')) for item in workspace_scripts)
+    permissions = ['plugin.runtime', 'classroom.read']
+    if workspace_requires_permission:
+        permissions.append('workspace.dom.write')
+
+    manifest = {
+        'manifest_version': 3,
+        'name': plugin_row.get('name') or plugin_id,
+        'short_name': plugin_id,
+        'version': plugin_row.get('version') or '0.0.1',
+        'description': plugin_row.get('description') or '',
+        'author': plugin_row.get('author') or '',
+        'homepage_url': plugin_row.get('website') or '',
+        'action': {
+            'default_title': plugin_row.get('name') or plugin_id,
+            **({'default_popup': popup_url} if popup_url else {}),
+        },
+        'permissions': permissions,
+        'host_permissions': ['/plugins/*', '/extensions/*'],
+        'commands': {
+            item.get('name'): {
+                'description': item.get('description') or '',
+                'methods': item.get('methods') or [],
+            }
+            for item in actions
+            if item.get('name')
+        },
+        'plugin_actions': actions,
+        'plugin_ui_scripts': [
+            {
+                **item,
+                'data_url': reverse('plugin_ui_dispatch', args=[plugin_id, item.get('name')]),
+                'page_url': reverse('plugin_ui_page', args=[plugin_id, item.get('name')]),
+            }
+            for item in ui_scripts
+            if item.get('name')
+        ],
+        'plugin_workspace_scripts': workspace_scripts,
+        'endpoints': {
+            'manifest': reverse('extension_manifest', args=[plugin_id]),
+            'send_message': reverse('extension_send_message', args=[plugin_id]),
+            'permissions': reverse('extension_workspace_permission', args=[plugin_id]),
+            'plugin_api_root': reverse('plugins_overview'),
+            'components_library': reverse('plugin_components_overview'),
+        },
+        'externally_connectable': {
+            'matches': ['<all_urls>'],
+        },
+    }
+    return manifest
+
+
+def _request_prefers_json(request):
+    format_value = str(request.GET.get('format') or '').strip().lower()
+    if format_value == 'json':
+        return True
+
+    requested_with = str(request.headers.get('X-Requested-With') or '').strip().lower()
+    if requested_with == 'xmlhttprequest':
+        return True
+
+    accept = str(request.headers.get('Accept') or '').strip().lower()
+    return 'application/json' in accept and 'text/html' not in accept
+
+
+@require_http_methods(['GET'])
+def extensions_overview(request):
+    plugin_registry.ensure_loaded()
+
+    classroom_id_value = request.GET.get('classroom_id')
+    classroom_id = None
+    if classroom_id_value not in (None, ''):
+        try:
+            classroom_id = _resolve_classroom_id_int(classroom_id_value)
+        except ValueError as exc:
+            if _request_prefers_json(request):
+                return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+    rows = []
+    for plugin_row in plugin_registry.list_plugins():
+        plugin_id = plugin_row.get('id')
+        ui_scripts = plugin_row.get('ui_scripts') or []
+        actions = plugin_row.get('actions') or []
+        workspace_scripts = plugin_row.get('workspace_scripts') or []
+
+        first_ui_page_url = ''
+        if ui_scripts:
+            first_ui_name = ui_scripts[0].get('name')
+            if first_ui_name:
+                first_ui_page_url = reverse('plugin_ui_page', args=[plugin_id, first_ui_name])
+
+        workspace_permission_required = any(bool(item.get('requires_permission')) for item in workspace_scripts)
+        workspace_permission_granted = bool(
+            workspace_permission_required and classroom_id and _is_workspace_plugin_granted(request, classroom_id, plugin_id)
+        )
+
+        rows.append({
+            'id': plugin_id,
+            'name': plugin_row.get('name') or plugin_id,
+            'version': plugin_row.get('version') or '0.0.1',
+            'description': plugin_row.get('description') or '',
+            'manifest_url': reverse('extension_manifest', args=[plugin_id]),
+            'send_message_url': reverse('extension_send_message', args=[plugin_id]),
+            'permissions_url': reverse('extension_workspace_permission', args=[plugin_id]),
+            'first_ui_page_url': first_ui_page_url,
+            'ui_scripts': ui_scripts,
+            'actions': actions,
+            'workspace_scripts': workspace_scripts,
+            'workspace_permission_required': workspace_permission_required,
+            'workspace_permission_granted': workspace_permission_granted,
+        })
+
+    payload = {
+        'status': 'success',
+        'extensions': rows,
+        'count': len(rows),
+        'classroom_id': classroom_id,
+    }
+
+    if _request_prefers_json(request):
+        return JsonResponse(payload)
+
+    return render(request, 'seats/extensions_overview.html', payload)
+
+
+@require_http_methods(['GET'])
+def extension_manifest(request, plugin_id):
+    plugin_row = _get_plugin_row(plugin_id)
+    if not plugin_row:
+        return JsonResponse({'status': 'error', 'message': '扩展不存在'}, status=404)
+    return JsonResponse(_build_extension_manifest(plugin_row))
+
+
+@require_http_methods(['GET', 'POST'])
+def extension_workspace_permission(request, plugin_id):
+    plugin_row = _get_plugin_row(plugin_id)
+    if not plugin_row:
+        return JsonResponse({'status': 'error', 'message': '扩展不存在'}, status=404)
+
+    raw_classroom_id = request.GET.get('classroom_id') if request.method == 'GET' else None
+
+    if request.method == 'POST':
+        try:
+            payload = _extract_plugin_payload(request)
+        except ValueError as exc:
+            return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+        raw_classroom_id = payload.get('classroom_id')
+        if raw_classroom_id in (None, ''):
+            return JsonResponse({'status': 'error', 'message': '缺少 classroom_id'}, status=400)
+
+        granted_value = payload.get('granted')
+        if isinstance(granted_value, str):
+            granted = granted_value.strip().lower() in {'1', 'true', 'yes', 'on'}
+        else:
+            granted = bool(granted_value)
+    else:
+        granted = None
+
+    if raw_classroom_id in (None, ''):
+        return JsonResponse({'status': 'error', 'message': '缺少 classroom_id'}, status=400)
+
+    try:
+        classroom_id = _resolve_classroom_id_int(raw_classroom_id)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+    if request.method == 'POST':
+        current = _set_workspace_plugin_grant(request, classroom_id, plugin_id, granted)
+    else:
+        current = _is_workspace_plugin_granted(request, classroom_id, plugin_id)
+
+    return JsonResponse({
+        'status': 'success',
+        'plugin_id': plugin_id,
+        'classroom_id': classroom_id,
+        'granted': bool(current),
+        'workspace_scripts': plugin_row.get('workspace_scripts') or [],
+    })
+
+
+def _normalize_extension_result(result):
+    if isinstance(result, HttpResponse):
+        content_type = result.get('Content-Type', '')
+        body = ''
+        try:
+            body = result.content.decode('utf-8', errors='replace')
+        except Exception:
+            body = ''
+        return {
+            'http_response': True,
+            'status_code': result.status_code,
+            'content_type': content_type,
+            'body': body,
+        }
+    return result
+
+
+@require_http_methods(['POST'])
+def extension_send_message(request, plugin_id):
+    plugin_row = _get_plugin_row(plugin_id)
+    if not plugin_row:
+        return JsonResponse({'status': 'error', 'message': '扩展不存在'}, status=404)
+
+    try:
+        payload = _extract_plugin_payload(request)
+        classroom_id_value = payload.get('classroom_id') if isinstance(payload, dict) else None
+        classroom = _resolve_plugin_classroom(payload)
+        payload.pop('classroom_id', None)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+    message = payload.get('message') if isinstance(payload, dict) else None
+    if not isinstance(message, dict):
+        message = payload if isinstance(payload, dict) else {}
+
+    message_type = str(message.get('type') or message.get('target') or 'action').strip().lower()
+
+    try:
+        if message_type in {'action', 'command'}:
+            action_name = str(message.get('name') or message.get('action') or '').strip()
+            if not action_name:
+                return JsonResponse({'status': 'error', 'message': '缺少 action 名称'}, status=400)
+            call_method = str(message.get('method') or 'POST').upper()
+            action_payload = message.get('payload') if isinstance(message.get('payload'), dict) else {}
+            result = plugin_registry.run_action(
+                plugin_id,
+                action_name,
+                method=call_method,
+                request=request,
+                classroom=classroom,
+                payload=action_payload,
+                action_name=action_name,
+                plugin_name=plugin_id,
+                runtime_message=message,
+            )
+            return JsonResponse({
+                'status': 'success',
+                'extension': plugin_id,
+                'message_type': 'action',
+                'name': action_name,
+                'result': _normalize_extension_result(result),
+            })
+
+        if message_type == 'ui':
+            ui_name = str(message.get('name') or message.get('ui_name') or '').strip()
+            if not ui_name:
+                return JsonResponse({'status': 'error', 'message': '缺少 ui 名称'}, status=400)
+            call_method = str(message.get('method') or 'GET').upper()
+            ui_payload = message.get('payload') if isinstance(message.get('payload'), dict) else {}
+            ui = plugin_registry.run_ui_script(
+                plugin_id,
+                ui_name,
+                method=call_method,
+                request=request,
+                classroom=classroom,
+                payload=ui_payload,
+                plugin_name=plugin_id,
+                runtime_message=message,
+            )
+            return JsonResponse({
+                'status': 'success',
+                'extension': plugin_id,
+                'message_type': 'ui',
+                'name': ui_name,
+                'result': ui,
+            })
+
+        if message_type == 'workspace_script':
+            script_name = str(message.get('name') or message.get('script_name') or '').strip()
+            if not script_name:
+                return JsonResponse({'status': 'error', 'message': '缺少 workspace script 名称'}, status=400)
+            call_method = str(message.get('method') or 'GET').upper()
+            script = plugin_registry.run_workspace_script(plugin_id, script_name, method=call_method)
+
+            if script.get('requires_permission'):
+                resolved_classroom_id = classroom.pk if classroom else None
+                if resolved_classroom_id is None and classroom_id_value not in (None, ''):
+                    try:
+                        resolved_classroom_id = _resolve_classroom_id_int(classroom_id_value)
+                    except ValueError as exc:
+                        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+                if resolved_classroom_id is None:
+                    return JsonResponse({'status': 'error', 'message': 'workspace script 需要 classroom_id 以校验授权'}, status=400)
+                if not _is_workspace_plugin_granted(request, resolved_classroom_id, plugin_id):
+                    return JsonResponse({'status': 'error', 'message': '插件尚未获得页面修改授权'}, status=403)
+
+            return JsonResponse({
+                'status': 'success',
+                'extension': plugin_id,
+                'message_type': 'workspace_script',
+                'name': script_name,
+                'result': script,
+            })
+
+        if message_type == 'manifest':
+            return JsonResponse({
+                'status': 'success',
+                'extension': plugin_id,
+                'message_type': 'manifest',
+                'result': _build_extension_manifest(plugin_row),
+            })
+
+        return JsonResponse({'status': 'error', 'message': f'不支持的消息类型：{message_type}'}, status=400)
+
+    except PluginNotFoundError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=404)
+    except PluginActionNotFoundError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=404)
+    except PluginActionMethodNotAllowedError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=405)
+    except PluginUIScriptNotFoundError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=404)
+    except PluginUIScriptMethodNotAllowedError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=405)
+    except PluginWorkspaceScriptNotFoundError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=404)
+    except PluginWorkspaceScriptMethodNotAllowedError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=405)
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': f'runtime.sendMessage 执行失败：{exc}'}, status=500)
+
+
+@require_http_methods(['GET'])
+def plugin_ui_page(request, plugin_id, ui_name):
+    plugin_row = _get_plugin_row(plugin_id)
+    if not plugin_row:
+        return HttpResponse('插件不存在', status=404)
+
+    ui_script_names = {item.get('name') for item in (plugin_row.get('ui_scripts') or [])}
+    if ui_name not in ui_script_names:
+        return HttpResponse('插件 UI 不存在', status=404)
+
+    return render(request, 'seats/plugin_ui_page.html', {
+        'plugin_id': plugin_id,
+        'plugin_name': plugin_row.get('name') or plugin_id,
+        'ui_name': ui_name,
+    })
+
+
+@require_http_methods(['GET', 'POST'])
+def plugin_action_dispatch(request, plugin_id, action):
+    try:
+        payload = _extract_plugin_payload(request)
+        classroom = _resolve_plugin_classroom(payload)
+        payload.pop('classroom_id', None)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+    try:
+        result = plugin_registry.run_action(
+            plugin_id,
+            action,
+            method=request.method,
+            request=request,
+            classroom=classroom,
+            payload=payload,
+            action_name=action,
+            plugin_name=plugin_id,
+        )
+    except PluginNotFoundError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=404)
+    except PluginActionNotFoundError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=404)
+    except PluginActionMethodNotAllowedError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=405)
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': f'插件执行失败：{exc}'}, status=500)
+
+    if isinstance(result, HttpResponse):
+        return result
+
+    return JsonResponse({
+        'status': 'success',
+        'plugin': plugin_id,
+        'action': action,
+        'result': result,
+    })
+
+
+@require_http_methods(['GET', 'POST'])
+def plugin_ui_dispatch(request, plugin_id, ui_name):
+    try:
+        payload = _extract_plugin_payload(request)
+        classroom = _resolve_plugin_classroom(payload)
+        payload.pop('classroom_id', None)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+    try:
+        ui = plugin_registry.run_ui_script(
+            plugin_id,
+            ui_name,
+            method=request.method,
+            request=request,
+            classroom=classroom,
+            payload=payload,
+            plugin_name=plugin_id,
+        )
+    except PluginNotFoundError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=404)
+    except PluginUIScriptNotFoundError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=404)
+    except PluginUIScriptMethodNotAllowedError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=405)
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': f'插件 UI 生成失败：{exc}'}, status=500)
+
+    return JsonResponse({
+        'status': 'success',
+        'plugin': plugin_id,
+        'ui_name': ui_name,
+        'ui': ui,
+    })
 
 
 def _seat_key(row, col):
@@ -4294,6 +4876,12 @@ def import_students(request, pk):
                         score_col,
                         import_mode
                     )
+                    _emit_plugin_hook(
+                        'students_imported',
+                        request=request,
+                        classroom=classroom,
+                        payload={'import_mode': import_mode, 'result': result},
+                    )
                     return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
                 
                 # 自动识别失败，保存临时文件并返回预览数据
@@ -4368,7 +4956,13 @@ def import_students(request, pk):
                 
                 # 清理文件
                 os.remove(temp_path)
-                
+
+                _emit_plugin_hook(
+                    'students_imported',
+                    request=request,
+                    classroom=classroom,
+                    payload={'import_mode': import_mode, 'result': result},
+                )
                 return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
             except Exception as e:
                 return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -4966,12 +5560,24 @@ def auto_arrange_seats(request, pk):
             # 自动尝试修复，不直接失败
             if _attempt_auto_constraint_fix(classroom, preferred_method=method):
                 _reset_history(request, pk)
+                _emit_plugin_hook(
+                    'seats_arranged',
+                    request=request,
+                    classroom=classroom,
+                    payload={'method': method, 'auto_fixed': True},
+                )
                 if is_ajax:
                     return JsonResponse({'status': 'success', 'message': '已自动调整并满足约束'})
                 return redirect('classroom_detail', pk=pk)
             return _arrange_error(str(e), status=400)
 
         _reset_history(request, pk)
+        _emit_plugin_hook(
+            'seats_arranged',
+            request=request,
+            classroom=classroom,
+            payload={'method': method, 'auto_fixed': False},
+        )
         if is_ajax:
             return JsonResponse({'status': 'success'})
         return redirect('classroom_detail', pk=pk)
@@ -5056,6 +5662,12 @@ def move_student(request, pk):
                 if violations:
                     raise ValueError(f'移动失败：{_format_issues_preview(violations)}')
             _push_action(request, pk, action)
+            _emit_plugin_hook(
+                'student_moved',
+                request=request,
+                classroom=classroom,
+                payload=action,
+            )
             return JsonResponse({'status': 'success'})
         except ValueError as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -5129,6 +5741,12 @@ def move_students_batch(request, pk):
                 raise ValueError(f'批量移动失败：{_format_issues_preview(violations)}')
 
         _push_action(request, pk, {'type': 'move_batch', 'items': actions})
+        _emit_plugin_hook(
+            'students_moved_batch',
+            request=request,
+            classroom=classroom,
+            payload={'moved': len(actions), 'items': actions},
+        )
         return JsonResponse({'status': 'success', 'moved': len(actions)})
     except ValueError as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -5195,6 +5813,12 @@ def assign_student(request, pk):
             if violations:
                 raise ValueError(f'指派失败：{_format_issues_preview(violations)}')
         _push_action(request, pk, action)
+        _emit_plugin_hook(
+            'student_assigned',
+            request=request,
+            classroom=classroom,
+            payload=action,
+        )
         return JsonResponse({'status': 'success'})
     except ValueError as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -5256,6 +5880,13 @@ def create_group(request, pk):
         if _is_ajax_request(request):
             return JsonResponse({'status': 'error', 'message': '小组名称已存在'}, status=400)
         return redirect('classroom_detail', pk=pk)
+
+    _emit_plugin_hook(
+        'group_created',
+        request=request,
+        classroom=classroom,
+        payload={'group_id': group.pk, 'group_name': group.name},
+    )
     if _is_ajax_request(request):
         return JsonResponse({'status': 'success', 'group': {'id': group.pk, 'name': group.name}})
     return redirect('classroom_detail', pk=pk)

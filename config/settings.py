@@ -38,7 +38,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'seats',
+    'seats.apps.SeatsConfig',
 ]
 
 MIDDLEWARE = [
@@ -124,6 +124,9 @@ STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
+
+# Plugin System
+PLUGIN_DIRS = [str(BASE_DIR / 'plugins')]
 
 # OpenAI Future Mode
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
