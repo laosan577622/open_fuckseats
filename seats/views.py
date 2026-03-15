@@ -19,7 +19,6 @@ from .models import (
     AIConversation,
     AIConversationMessage,
 )
-import pandas as pd
 from io import BytesIO
 import json
 import random
@@ -44,6 +43,34 @@ from .plugin_system import (
     PluginWorkspaceScriptMethodNotAllowedError,
     PluginWorkspaceScriptNotFoundError,
 )
+
+try:
+    import pandas as pd
+    _PANDAS_IMPORT_ERROR = None
+except Exception as exc:  # pragma: no cover - triggered only in broken runtime env
+    pd = None
+    _PANDAS_IMPORT_ERROR = exc
+
+
+def _require_pandas():
+    if pd is None:
+        detail = str(_PANDAS_IMPORT_ERROR) if _PANDAS_IMPORT_ERROR else 'unknown error'
+        raise RuntimeError(f'当前运行环境无法加载 pandas：{detail}')
+    return pd
+
+
+def _is_missing_import_value(value):
+    if pd is not None:
+        try:
+            return bool(pd.isna(value))
+        except Exception:
+            pass
+
+    if value is None:
+        return True
+    if isinstance(value, float):
+        return math.isnan(value)
+    return False
 
 DISABLED_SUGGESTION_TYPES = {'jqj_hzh'}
 DEFAULT_AI_CONVERSATION_TITLE = '新对话'
@@ -1759,9 +1786,24 @@ def _execute_classroom_action_tool(classroom, arguments, request=None):
 
 
 def _get_classroom_overview_payload(classroom):
+    def _normalize_overview_suggestion(item):
+        if isinstance(item, dict):
+            title = str(item.get('title') or '').strip()
+            message = str(item.get('message') or '').strip()
+            return {'title': title, 'message': message}
+        message = str(item or '').strip()
+        if not message:
+            return None
+        return {'title': '', 'message': message}
+
     students = list(classroom.students.all())
     seated_count = sum(1 for student in students if getattr(student, 'assigned_seat', None))
     suggestions = _evaluate_layout(classroom, None)
+    normalized_suggestions = []
+    for item in suggestions[:5]:
+        normalized = _normalize_overview_suggestion(item)
+        if normalized:
+            normalized_suggestions.append(normalized)
     group_rows = _get_group_score_rows(classroom)
     top_students = sorted(
         (_serialize_student_profile(student) for student in students),
@@ -1783,13 +1825,7 @@ def _get_classroom_overview_payload(classroom):
         },
         'group_ranking': group_rows[:6],
         'top_students': top_students,
-        'suggestions': [
-            {
-                'title': item.get('title') or '',
-                'message': item.get('message') or '',
-            }
-            for item in suggestions[:5]
-        ],
+        'suggestions': normalized_suggestions,
     }
 
 
@@ -4832,6 +4868,12 @@ def import_students(request, pk):
     
     if request.method == 'POST':
         action = request.POST.get('action', 'upload')
+        pd_module = None
+        if action in {'upload', 'confirm'}:
+            try:
+                pd_module = _require_pandas()
+            except RuntimeError as e:
+                return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
         
         # 处理第一次上传
         if action == 'upload' and request.FILES.get('excel_file'):
@@ -4841,7 +4883,7 @@ def import_students(request, pk):
             
             try:
                 # 先读取一次尝试自动识别
-                df = pd.read_excel(excel_file)
+                df = pd_module.read_excel(excel_file)
                 columns = list(df.columns)
 
                 def find_column(keys):
@@ -4900,7 +4942,7 @@ def import_students(request, pk):
                         destination.write(chunk)
                 
                 # 读取前20行（无标题模式）返回给前端预览
-                df_preview = pd.read_excel(temp_path, header=None)
+                df_preview = pd_module.read_excel(temp_path, header=None)
                 preview_data = df_preview.head(20).fillna('').values.tolist()
                 
                 return JsonResponse({
@@ -4931,7 +4973,7 @@ def import_students(request, pk):
                 
             try:
                 # 读取原始文件（无header）
-                df = pd.read_excel(temp_path, header=None)
+                df = pd_module.read_excel(temp_path, header=None)
                 
                 # 切片获取数据区域
                 # start_row 是用户选择的标题行，数据从下一行开始
@@ -4990,7 +5032,7 @@ def _resolve_student_import_mode(raw_mode, clear_existing=False):
 
 
 def _normalize_import_text(value):
-    if value is None or pd.isna(value):
+    if _is_missing_import_value(value):
         return ''
     return str(value).strip()
 
@@ -5005,10 +5047,16 @@ def _parse_import_gender(value):
 
 
 def _parse_import_score(value):
-    if value is None or pd.isna(value):
+    if _is_missing_import_value(value):
         return 0
-    numeric_value = pd.to_numeric(value, errors='coerce')
-    if pd.isna(numeric_value):
+    if pd is not None:
+        numeric_value = pd.to_numeric(value, errors='coerce')
+    else:
+        try:
+            numeric_value = float(value)
+        except (TypeError, ValueError):
+            numeric_value = float('nan')
+    if _is_missing_import_value(numeric_value):
         return 0
     return float(numeric_value)
 

@@ -18,6 +18,17 @@ OPENAI_ENV_NAMES = (
 )
 
 
+def _ensure_utf8_stdio():
+    """在部分 Windows CI 环境中，默认输出编码可能是 cp1252，中文打印会报错。"""
+    for stream_name in ('stdout', 'stderr'):
+        stream = getattr(sys, stream_name, None)
+        if stream and hasattr(stream, 'reconfigure'):
+            try:
+                stream.reconfigure(encoding='utf-8', errors='replace')
+            except Exception:
+                pass
+
+
 def _remove_embedded_databases(dist_root):
     if not os.path.exists(dist_root):
         return []
@@ -37,6 +48,8 @@ def _remove_embedded_databases(dist_root):
 
 
 def main():
+    _ensure_utf8_stdio()
+
     # 获取当前脚本所在目录
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     
@@ -130,17 +143,21 @@ def main():
         '--hidden-import', 'httpcore',
         '--hidden-import', 'anyio',
         '--hidden-import', 'sniffio',
-        '--hidden-import', 'jiter',
         '--hidden-import', 'pydantic',
         '--hidden-import', 'pydantic_core',
         '--hidden-import', 'openpyxl',
         '--hidden-import', 'xlrd',
         '--hidden-import', 'pptx',
+        '--hidden-import', 'pytz',
         '--hidden-import', 'tzdata',
         '--collect-all', 'openai',
         '--collect-all', 'httpx',
         '--collect-all', 'httpcore',
         '--collect-all', 'pptx',
+        '--copy-metadata', 'pandas',
+        '--copy-metadata', 'pytz',
+        '--copy-metadata', 'python-dateutil',
+        '--copy-metadata', 'tzdata',
         
         # 如果 run_app.py 里排除了这些模块，则需要在这里排除，或者让 pyinstaller 自动分析
         # 用户之前的指令排除了它们，可能是因为包含在 add-data 中了。

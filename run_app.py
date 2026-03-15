@@ -29,7 +29,6 @@ def _filter_migration_noise(text):
 
 
 def main():
-    # Setup Django environment
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
     
     import django
