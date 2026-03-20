@@ -32,6 +32,7 @@ urlpatterns = [
     path('classroom/<int:pk>/export/pptx/options/', views.export_students_pptx_options_page, name='export_students_pptx_options_page'),
     path('classroom/<int:pk>/move/', views.move_student, name='move_student'),
     path('classroom/<int:pk>/move/batch/', views.move_students_batch, name='move_students_batch'),
+    path('classroom/<int:pk>/search-students/', views.search_students, name='search_students'),
     path('classroom/<int:pk>/seat/clear/', views.clear_seat, name='clear_seat'),
     path('classroom/<int:pk>/seat/assign/', views.assign_student, name='assign_student'),
     path('classroom/<int:pk>/student/<int:student_id>/delete/', views.delete_student, name='delete_student'),

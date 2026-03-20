@@ -802,6 +802,34 @@ class GroupInteractionTests(TestCase):
         self.assertEqual((s1.assigned_seat.row, s1.assigned_seat.col), (2, 1))
         self.assertEqual((s2.assigned_seat.row, s2.assigned_seat.col), (2, 2))
 
+    def test_move_students_batch_supports_clear_then_assign(self):
+        classroom = Classroom.objects.create(name="C5B-QuickSwap", rows=1, cols=2)
+        s1 = classroom.students.create(name="A")
+        s2 = classroom.students.create(name="B")
+        seat_a = classroom.seats.get(row=1, col=1)
+        seat_a.student = s1
+        seat_a.save(update_fields=["student"])
+
+        url = reverse("move_students_batch", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps(
+                {
+                    "moves": [
+                        {"student_id": s1.pk, "row": None, "col": None},
+                        {"student_id": s2.pk, "row": 1, "col": 1},
+                    ]
+                }
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+
+        seat_a.refresh_from_db()
+        self.assertEqual(seat_a.student_id, s2.pk)
+        self.assertFalse(classroom.seats.filter(student=s1).exists())
+
     def test_move_students_batch_rejects_duplicate_target(self):
         classroom = Classroom.objects.create(name="C5C", rows=2, cols=2)
         s1 = classroom.students.create(name="A")
@@ -1239,6 +1267,19 @@ class StudentImportTests(TestCase):
 
 
 class ClassroomFeatureTests(TestCase):
+    def test_search_students_supports_pinyin_initials(self):
+        classroom = Classroom.objects.create(name="首字母搜索班", rows=1, cols=2)
+        zhangsan = classroom.students.create(name="张三")
+        classroom.students.create(name="李四")
+
+        url = reverse("search_students", args=[classroom.pk])
+        response = self.client.get(url, {"q": "zs"})
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        student_ids = [item.get("id") for item in payload.get("students", [])]
+        self.assertIn(zhangsan.pk, student_ids)
+
     def test_export_options_pages_render(self):
         classroom = Classroom.objects.create(name="导出配置页", rows=2, cols=2)
 

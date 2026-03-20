@@ -150,6 +150,7 @@ def main():
         '--hidden-import', 'pptx',
         '--hidden-import', 'pytz',
         '--hidden-import', 'tzdata',
+        '--hidden-import', 'pypinyin',
         '--collect-all', 'openai',
         '--collect-all', 'httpx',
         '--collect-all', 'httpcore',

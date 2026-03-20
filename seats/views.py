@@ -7,6 +7,7 @@ from django.urls import reverse
 from django.utils.encoding import escape_uri_path
 from django.conf import settings
 from django.test import RequestFactory
+from pypinyin import lazy_pinyin
 from .models import (
     Classroom,
     Student,
@@ -5412,9 +5413,13 @@ def _arrange_grouped(classroom, students, method):
     group_buckets = {group.pk: [] for group in groups}
 
     if method == 'group_balanced':
-        for student in students_sorted:
-            target_group = min(groups, key=lambda g: sum(s.score or 0 for s in group_buckets[g.pk]) / max(len(group_buckets[g.pk]), 1))
-            group_buckets[target_group.pk].append(student)
+        # 组内方差小、组间差距大：按成绩分段，同水平学生分到同一组
+        num_groups = len(groups)
+        students_per_group = len(students_sorted) // num_groups
+        for i, group in enumerate(groups):
+            start = i * students_per_group
+            end = start + students_per_group if i < num_groups - 1 else len(students_sorted)
+            group_buckets[group.pk] = students_sorted[start:end]
     elif method == 'group_mentor':
         # 高级分组：平衡各组的高低分学生配对
         # 1. 首尾配对
@@ -5507,7 +5512,12 @@ def _arrange_grouped(classroom, students, method):
 
 def _run_arrangement(classroom, method):
     students = list(classroom.students.all())
-    seats = list(classroom.seats.select_related('student'))
+    # 按成绩排座时使用竖排（先列后行），其他情况使用横排
+    if method in ['score_desc', 'score_asc', 'good_front', 'good_back']:
+        seats = list(classroom.seats.select_related('student').order_by('col', 'row'))
+    else:
+        seats = list(classroom.seats.select_related('student').order_by('row', 'col'))
+
     seat_cells = [s for s in seats if s.cell_type == SeatCellType.SEAT]
     if len(seat_cells) < len(students):
         return False
@@ -5733,6 +5743,7 @@ def move_students_batch(request, pk):
         if not isinstance(moves, list) or not moves:
             return JsonResponse({'status': 'error', 'message': '缺少批量移动数据'}, status=400)
 
+        parsed_moves = []
         student_ids = []
         target_coords = []
         seen_students = set()
@@ -5740,16 +5751,35 @@ def move_students_batch(request, pk):
 
         for item in moves:
             sid = int(item.get('student_id'))
-            row = int(item.get('row'))
-            col = int(item.get('col'))
+            row_value = item.get('row')
+            col_value = item.get('col')
+            is_clear_move = row_value in (None, '') and col_value in (None, '')
+
+            if not is_clear_move and (row_value in (None, '') or col_value in (None, '')):
+                raise ValueError('批量移动参数错误：row/col 需同时提供或同时为空')
+
+            row = None
+            col = None
+            if not is_clear_move:
+                row = int(row_value)
+                col = int(col_value)
+
             if sid in seen_students:
                 raise ValueError('同一学生重复出现在批量移动中')
-            if (row, col) in seen_targets:
+            if not is_clear_move and (row, col) in seen_targets:
                 raise ValueError('目标座位存在重复')
             seen_students.add(sid)
-            seen_targets.add((row, col))
+            if not is_clear_move:
+                seen_targets.add((row, col))
             student_ids.append(sid)
-            target_coords.append((row, col))
+            if not is_clear_move:
+                target_coords.append((row, col))
+            parsed_moves.append({
+                'student_id': sid,
+                'row': row,
+                'col': col,
+                'is_clear_move': is_clear_move,
+            })
 
         students_map = classroom.students.in_bulk(student_ids)
         if len(students_map) != len(student_ids):
@@ -5773,13 +5803,41 @@ def move_students_batch(request, pk):
         actions = []
         trigger_student_id = None
         with transaction.atomic():
-            for item in moves:
-                sid = int(item.get('student_id'))
-                row = int(item.get('row'))
-                col = int(item.get('col'))
+            for item in parsed_moves:
+                sid = item.get('student_id')
+                row = item.get('row')
+                col = item.get('col')
+                is_clear_move = bool(item.get('is_clear_move'))
                 student = students_map.get(sid)
-                target_seat = seat_map.get((row, col))
-                action = _perform_move(classroom, student, target_seat)
+                if not student:
+                    raise ValueError('存在不属于当前班级的学生')
+
+                if is_clear_move:
+                    current_seat = getattr(student, 'assigned_seat', None)
+                    from_row = current_seat.row if current_seat else None
+                    from_col = current_seat.col if current_seat else None
+
+                    if current_seat:
+                        current_seat.student = None
+                        current_seat.save(update_fields=['student'])
+
+                    led_group = getattr(student, 'led_group', None)
+                    if led_group:
+                        led_group.leader = None
+                        led_group.save(update_fields=['leader'])
+
+                    action = {
+                        'type': 'move',
+                        'student_id': student.pk,
+                        'from_row': from_row,
+                        'from_col': from_col,
+                        'to_row': None,
+                        'to_col': None,
+                        'target_student_id': None,
+                    }
+                else:
+                    target_seat = seat_map.get((row, col))
+                    action = _perform_move(classroom, student, target_seat)
                 actions.append(action)
                 if trigger_student_id is None:
                     trigger_student_id = sid
@@ -5800,6 +5858,35 @@ def move_students_batch(request, pk):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
+def search_students(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    query = request.GET.get('q', '').strip().lower()
+    if not query:
+        return JsonResponse({'students': []})
+
+    all_students = list(classroom.students.select_related('assigned_seat').all())
+    matches = []
+
+    for student in all_students:
+        name_lower = student.name.lower()
+        pinyin_parts = [part.lower() for part in lazy_pinyin(student.name) if part]
+        pinyin = ''.join(pinyin_parts)
+        pinyin_initials = ''.join(part[0] for part in pinyin_parts if part)
+
+        if query in name_lower or query in pinyin or query in pinyin_initials:
+            seat_info = None
+            assigned_seat = getattr(student, 'assigned_seat', None)
+            if assigned_seat:
+                seat_info = {'row': assigned_seat.row, 'col': assigned_seat.col}
+            matches.append({
+                'id': student.pk,
+                'name': student.name,
+                'seat': seat_info
+            })
+
+    return JsonResponse({'students': matches})
 
 
 @require_POST

@@ -1685,6 +1685,114 @@ document.addEventListener('DOMContentLoaded', () => {
     const getSeatByKey = (key) => document.querySelector(`.seat[data-seat-key="${key}"]`);
     const getSeatByCoord = (row, col) => document.querySelector(`.seat[data-row="${row}"][data-col="${col}"]`);
 
+    const showQuickSwapInput = (seat) => {
+        const existing = seat.querySelector('.quick-swap-input');
+        if (existing) existing.remove();
+
+        const input = document.createElement('input');
+        input.className = 'quick-swap-input';
+        input.placeholder = '输入姓名首字母';
+        input.autocomplete = 'off';
+        seat.appendChild(input);
+
+        setTimeout(() => input.focus(), 10);
+
+        const cleanup = () => {
+            if (input.parentNode) input.remove();
+        };
+
+        input.addEventListener('blur', () => setTimeout(cleanup, 200));
+        input.addEventListener('keydown', async (e) => {
+            if (e.key === 'Escape') {
+                cleanup();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                const query = input.value.trim();
+                if (!query) return cleanup();
+
+                try {
+                    const res = await fetch(`${window.location.pathname}search-students/?q=${encodeURIComponent(query)}`);
+                    const data = await res.json();
+                    const matches = data.students || [];
+
+                    if (matches.length === 0) {
+                        input.style.borderColor = '#ef4444';
+                        setTimeout(() => input.style.borderColor = '', 300);
+                    } else if (matches.length === 1) {
+                        cleanup();
+                        await swapStudents(seat, matches[0].id);
+                    } else {
+                        cleanup();
+                        showQuickSwapModal(seat, matches);
+                    }
+                } catch (err) {
+                    input.style.borderColor = '#ef4444';
+                    setTimeout(() => input.style.borderColor = '', 300);
+                }
+            }
+        });
+    };
+
+    const swapStudents = async (seat, targetStudentId) => {
+        const currentStudentId = seat.dataset.studentId;
+        if (currentStudentId === targetStudentId) return;
+
+        const row = parseInt(seat.dataset.row, 10);
+        const col = parseInt(seat.dataset.col, 10);
+
+        if (!currentStudentId) {
+            handleResponse(postJson(urls.assign, {
+                student_id: targetStudentId,
+                row,
+                col
+            }));
+            return;
+        }
+
+        handleResponse(postJson(urls.move, {
+            student_id: targetStudentId,
+            row,
+            col
+        }));
+    };
+
+    const showQuickSwapModal = (seat, matches) => {
+        const modal = document.createElement('div');
+        modal.className = 'quick-swap-modal';
+        modal.innerHTML = `
+            <div class="quick-swap-content">
+                <div class="quick-swap-title">选择学生</div>
+                <div class="quick-swap-list">
+                    ${matches.map((m, i) => `<div class="quick-swap-item" data-student-id="${m.id}"><span class="quick-swap-num">${i + 1}</span>${m.name}</div>`).join('')}
+                </div>
+            </div>
+        `;
+        document.body.appendChild(modal);
+
+        const cleanup = () => modal.remove();
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) cleanup();
+            const item = e.target.closest('.quick-swap-item');
+            if (item) {
+                cleanup();
+                swapStudents(seat, item.dataset.studentId);
+            }
+        });
+
+        document.addEventListener('keydown', function handler(e) {
+            const num = parseInt(e.key);
+            if (num >= 1 && num <= matches.length) {
+                cleanup();
+                swapStudents(seat, matches[num - 1].id);
+                document.removeEventListener('keydown', handler);
+            } else if (e.key === 'Escape') {
+                cleanup();
+                document.removeEventListener('keydown', handler);
+            }
+        });
+    };
+
+
     const clearDragFeedback = () => {
         document.querySelectorAll('.seat.drag-origin, .seat.drag-target, .seat.drop-preview-valid, .seat.drop-preview-invalid').forEach((seat) => {
             seat.classList.remove('drag-origin', 'drag-target', 'drop-preview-valid', 'drop-preview-invalid');
@@ -2092,6 +2200,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
             setSelectedSeat(seat);
+        });
+        seat.addEventListener('dblclick', (e) => {
+            if (seat.dataset.cellType !== 'seat') return;
+            e.preventDefault();
+            showQuickSwapInput(seat);
         });
         seat.addEventListener('dragover', (e) => {
             if (seat.dataset.cellType !== 'seat') return;
@@ -2628,6 +2741,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', (e) => {
         if (isEditableTarget()) return;
         const key = e.key.toLowerCase();
+        if (key === 'escape') {
+            e.preventDefault();
+            clearMultiSelection();
+            return;
+        }
         if (e.ctrlKey && key === 'z') {
             e.preventDefault();
             handleResponse(postJson(urls.undo, {}));
