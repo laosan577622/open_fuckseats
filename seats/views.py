@@ -19,6 +19,7 @@ from .models import (
     FutureModeConfig,
     AIConversation,
     AIConversationMessage,
+    FrontendKVStore,
 )
 from io import BytesIO
 import json
@@ -7546,7 +7547,7 @@ def export_group_report(request, pk):
     center     = Alignment(horizontal='center', vertical='center')
 
     # 页眉
-    header_text = f"&\"{font_name},Bold\"&14 {classroom.name} (          ) 登记表"
+    header_text = f"&\"{font_name},Bold\"&20 {classroom.name} (          ) 登记表"
     ws.oddHeader.center.text = header_text
     ws.evenHeader.center.text = header_text
 
@@ -7999,3 +8000,86 @@ def set_group_leader(request, pk):
         return JsonResponse({'status': 'success'})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+from django.views.decorators.csrf import csrf_exempt
+
+def frontend_store_js(request):
+    kvs = FrontendKVStore.objects.all()
+    store_dict = {kv.key: kv.value for kv in kvs}
+    js_code = f"""
+    window.BACKEND_STORE = {json.dumps(store_dict)};
+    try {{
+        const oldSetItem = Storage.prototype.setItem;
+        const oldGetItem = Storage.prototype.getItem;
+        const oldRemoveItem = Storage.prototype.removeItem;
+
+        Storage.prototype.setItem = function(key, val) {{
+            try {{ oldSetItem.call(this, key, val); }} catch(e) {{}}
+            if (this === window.localStorage) {{
+                window.BACKEND_STORE[key] = String(val);
+                fetch('/api/store/set/', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{key: key, value: String(val)}})
+                }}).catch(e=>console.log(e));
+            }}
+        }};
+        
+        Storage.prototype.getItem = function(key) {{
+            if (this === window.localStorage && window.BACKEND_STORE.hasOwnProperty(key)) {{
+                return window.BACKEND_STORE[key];
+            }}
+            try {{ return oldGetItem.call(this, key); }} catch(e) {{ return null; }}
+        }};
+        
+        Storage.prototype.removeItem = function(key) {{
+            try {{ oldRemoveItem.call(this, key); }} catch(e) {{}}
+            if (this === window.localStorage) {{
+                delete window.BACKEND_STORE[key];
+                fetch('/api/store/delete/', {{
+                    method: 'POST',
+                    headers: {{'Content-Type': 'application/json'}},
+                    body: JSON.stringify({{key: key}})
+                }}).catch(e=>console.log(e));
+            }}
+        }};
+    }} catch(e) {{
+        console.error("Storage prototype override failed:", e);
+    }}
+
+    window.addEventListener('DOMContentLoaded', () => {{
+        if (navigator.userAgent.includes('Mac OS X') || navigator.platform.toUpperCase().indexOf('MAC') >= 0) {{
+            if (!localStorage.getItem('mac_os_warning_seen')) {{
+                localStorage.setItem('mac_os_warning_seen', 'true');
+                alert("当前系统可能部分动效、功能不稳定，若您有相关需要，可以前往 Windows/使用 Chrome 打开http://127.0.0.1:23948");
+            }}
+        }}
+    }});
+    """
+    return HttpResponse(js_code, content_type="application/javascript")
+
+@csrf_exempt
+@require_POST
+def frontend_store_set(request):
+    try:
+        data = json.loads(request.body)
+        key = data.get('key')
+        value = data.get('value', '')
+        if key:
+            FrontendKVStore.objects.update_or_create(key=key, defaults={'value': value})
+        return JsonResponse({'status': 'success'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+@csrf_exempt
+@require_POST
+def frontend_store_delete(request):
+    try:
+        data = json.loads(request.body)
+        key = data.get('key')
+        if key:
+            FrontendKVStore.objects.filter(key=key).delete()
+        return JsonResponse({'status': 'success'})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+

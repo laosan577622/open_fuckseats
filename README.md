@@ -1,6 +1,6 @@
 # 不想排座位
 
-不想排座位是一个基于 Django 的教室排座系统，覆盖班级管理、名单导入、布局编辑、自动排座、约束规则、小组管理和多格式导出。
+不想排座位是一个基于 Django 的教室排座系统，覆盖班级管理、名单导入、布局编辑、自动排座、约束规则、小组管理和多格式导出。当前桌面版默认通过 `pywebview` 打开本地工作区，不再要求用户手动打开浏览器。
 
 ## 核心能力
 - 班级管理：新建、重命名、删除班级。
@@ -13,6 +13,7 @@
   - 导入 Excel 成绩 / 导入座位表均采用独立配置页面，左侧设置、右侧预览；成功或取消后自动返回班级页。
 - 数据导出：座次 Excel、座次 SVG（可配置主题与显示内容，用于 PPT）、座次 PPTX（单页 16:9 横屏）、小组登记表 Excel、`.seats` 快照文件。
   - 导出 Excel / SVG / PPTX 时采用独立配置页面（非弹窗），左侧设置、右侧预览；确认导出或取消后自动返回班级页。
+  - 桌面版导出统一调用后端原生保存对话框，保存位置由系统 API 选择；当前至少覆盖 Windows 与 macOS。
 - 历史操作：撤销/重做。
 - AI 赋能模式：顶部 `AI` 选项卡可打开闻道赋能页面，支持通过 OpenAI API + function calling 执行交换座位、查询学生信息、统计小组评分。
   - 支持多轮对话、对话隔离（同班级可创建多个独立会话）与对话消息持久化入库（SQLite）。
@@ -24,6 +25,7 @@
 - 后端：Django 6.0.1
 - 数据库：SQLite3
 - 生产服务：Waitress
+- 桌面壳：pywebview
 - 静态文件：WhiteNoise
 - 数据处理：pandas、openpyxl、python-pptx、xlrd
 - 前端：Django Template + 原生 JavaScript
@@ -31,7 +33,8 @@
 
 ## 项目结构
 - `manage.py`：Django 管理入口
-- `run_app.py`：生产启动脚本（自动迁移 + Waitress，端口 `23948`）
+- `run_app.py`：桌面启动脚本（自动迁移 + Waitress + pywebview，端口 `23948`）
+- `desktop_shell.py`：桌面桥接层，负责原生保存对话框与本地导出写盘
 - `config/`：Django 配置（settings/urls/wsgi/asgi）
 - `seats/`：业务模型、视图、路由、测试与迁移
 - `templates/`：页面模板
@@ -56,12 +59,13 @@ python manage.py migrate
 ```bash
 python run_app.py
 ```
-默认地址：`http://127.0.0.1:23948`
+默认行为：启动本地服务并直接打开原生桌面窗口。
 
 4. 开发模式启动
 ```bash
-python manage.py runserver 127.0.0.1:8000
+python run_app.py -dev
 ```
+开发模式会保留浏览器访问，便于调试前端与网络请求。
 
 ## OpenAI AI 未来模式配置
 - 服务端环境变量：
@@ -92,6 +96,7 @@ npm run dev
 - 座位表 Excel 导入：支持自动识别合并单元格、讲台/走廊/空位/姓名，并支持手工词典覆盖。
 - `.seats` 导入：会覆盖当前班级的学生、座位、小组和约束。
 - 导出支持：`xlsx`、`svg`、`pptx`、`.seats`。
+- 桌面模式下，所有导出都由后端桥接到系统“另存为”对话框，不再依赖浏览器 Blob 下载。
 
 ## 快捷键
 - `Ctrl+Z`：撤销
@@ -113,6 +118,7 @@ python manage.py test
 python package.py
 ```
 - 打包脚本已包含 OpenAI Future Mode 依赖收集，支持 `openai/httpx/pydantic` 等运行时模块。
+- 打包脚本已包含 `pywebview` 依赖收集，用于桌面壳与原生保存对话框。
 - 打包后的程序可继续读取 `OPENAI_API_KEY`、`OPENAI_BASE_URL`、`OPENAI_MODEL` 环境变量；若未配置，也可以在 Future Mode 页面右侧直接填写连接参数并保存到数据库。
 
 ## 开发者

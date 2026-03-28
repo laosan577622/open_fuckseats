@@ -163,8 +163,18 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const startThinkingAnimation = () => {
+    const fireMessageRipple = () => {
+        const ripple = document.createElement('div');
+        ripple.className = 'message-ripple';
+        appScreen.appendChild(ripple);
+        ripple.addEventListener('animationend', () => ripple.remove(), { once: true });
+    };
+
+    const startThinkingAnimation = (withRipple = false) => {
         wakeSiri();
+        if (withRipple) {
+            fireMessageRipple();
+        }
         appScreen.classList.add('squeezed');
         glowContainer.classList.add('animating');
         document.documentElement.style.setProperty('--pulse-brightness', '1.2');
@@ -589,7 +599,7 @@ document.addEventListener('DOMContentLoaded', () => {
         addMessage(cleaned, 'user');
         userInput.value = '';
         hasStartedTyping = false;
-        startThinkingAnimation();
+        startThinkingAnimation(true);
 
         pendingNode = addMessage('正在思考…', 'ai', true);
         try {

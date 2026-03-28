@@ -9,3 +9,4 @@ whitenoise
 tzdata
 pytz
 pypinyin
+pywebview

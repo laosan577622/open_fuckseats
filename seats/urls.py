@@ -63,4 +63,8 @@ urlpatterns = [
     path('classroom/<int:pk>/delete/', views.delete_classroom, name='delete_classroom'),
     path('classroom/<int:pk>/suggestion/apply/', views.apply_suggestion, name='apply_suggestion'),
     path('classroom/<int:pk>/suggestion/dismiss/', views.dismiss_suggestion, name='dismiss_suggestion'),
+    
+    path('api/store/js/', views.frontend_store_js, name='frontend_store_js'),
+    path('api/store/set/', views.frontend_store_set, name='frontend_store_set'),
+    path('api/store/delete/', views.frontend_store_delete, name='frontend_store_delete'),
 ]

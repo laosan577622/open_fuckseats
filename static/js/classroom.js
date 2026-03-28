@@ -200,7 +200,10 @@ document.addEventListener('DOMContentLoaded', () => {
         `;
         container.appendChild(toast);
         setTimeout(() => {
-            if (toast.parentNode) toast.parentNode.removeChild(toast);
+            toast.classList.add('toast-exit');
+            toast.addEventListener('animationend', () => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            });
         }, 2200);
     };
 
@@ -874,6 +877,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
+        const isDevMode = document.getElementById('pluginHubDevMode')?.checked;
+
         cachedExtensions.forEach((ext) => {
             const card = document.createElement('article');
             card.className = 'plugin-hub-card';
@@ -891,23 +896,29 @@ document.addEventListener('DOMContentLoaded', () => {
             desc.textContent = ext.description || '无描述';
             card.appendChild(desc);
 
-            const basicRow = document.createElement('div');
-            basicRow.className = 'plugin-hub-card-row';
-            basicRow.appendChild(createPluginChip('查看 Manifest', '', {
-                commandId: `${ext.id}:manifest`,
-            }));
-            card.appendChild(basicRow);
+            if (isDevMode) {
+                const basicRow = document.createElement('div');
+                basicRow.className = 'plugin-hub-card-row';
+                basicRow.appendChild(createPluginChip('查看 Manifest', '', {
+                    commandId: `${ext.id}:manifest`,
+                }));
+                card.appendChild(basicRow);
+            }
 
             if (Array.isArray(ext.ui_scripts) && ext.ui_scripts.length) {
                 const uiRow = document.createElement('div');
                 uiRow.className = 'plugin-hub-card-row';
                 ext.ui_scripts.forEach((ui) => {
-                    uiRow.appendChild(createPluginChip(`打开 UI: ${ui.name}`, 'primary', {
-                        commandId: `${ext.id}:ui-open:${ui.name}`,
-                    }));
-                    uiRow.appendChild(createPluginChip(`取 UI JSON: ${ui.name}`, '', {
-                        commandId: `${ext.id}:ui-json:${ui.name}`,
-                    }));
+                    uiRow.appendChild(createPluginChip(
+                        isDevMode ? `打开 UI: ${ui.name}` : `打开 ${ui.name}`,
+                        'primary',
+                        { commandId: `${ext.id}:ui-open:${ui.name}` }
+                    ));
+                    if (isDevMode) {
+                        uiRow.appendChild(createPluginChip(`取 UI JSON: ${ui.name}`, '', {
+                            commandId: `${ext.id}:ui-json:${ui.name}`,
+                        }));
+                    }
                 });
                 card.appendChild(uiRow);
             }
@@ -916,9 +927,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 const actionRow = document.createElement('div');
                 actionRow.className = 'plugin-hub-card-row';
                 ext.actions.forEach((action) => {
-                    actionRow.appendChild(createPluginChip(`执行 ${action.name}`, '', {
-                        commandId: `${ext.id}:action:${action.name}`,
-                    }));
+                    actionRow.appendChild(createPluginChip(
+                        isDevMode ? `执行 ${action.name}` : action.name,
+                        isDevMode ? '' : 'primary',
+                        { commandId: `${ext.id}:action:${action.name}` }
+                    ));
                 });
                 card.appendChild(actionRow);
             }
@@ -928,7 +941,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 workspaceRow.className = 'plugin-hub-card-row';
 
                 const allowBtn = createPluginChip(
-                    ext.workspace_permission_granted ? '撤销页面改造授权' : '授权页面改造',
+                    ext.workspace_permission_granted
+                        ? (isDevMode ? '撤销页面改造授权' : '已启用页面增强')
+                        : (isDevMode ? '授权页面改造' : '启用页面增强'),
                     ext.workspace_permission_granted ? '' : 'primary',
                     {
                         grantPluginId: ext.id,
@@ -937,11 +952,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 );
                 workspaceRow.appendChild(allowBtn);
 
-                ext.workspace_scripts.forEach((script) => {
-                    workspaceRow.appendChild(createPluginChip(`应用增强: ${script.name}`, '', {
-                        commandId: `${ext.id}:workspace:${script.name}`,
-                    }));
-                });
+                if (isDevMode) {
+                    ext.workspace_scripts.forEach((script) => {
+                        workspaceRow.appendChild(createPluginChip(`应用增强: ${script.name}`, '', {
+                            commandId: `${ext.id}:workspace:${script.name}`,
+                        }));
+                    });
+                }
 
                 card.appendChild(workspaceRow);
             }
@@ -1139,6 +1156,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const initPluginHub = () => {
         if (!pluginHubModal) return;
+
+        const pluginHubDevMode = document.getElementById('pluginHubDevMode');
+        const pluginHubGrid = document.querySelector('.plugin-hub-grid');
+        if (pluginHubDevMode && pluginHubGrid) {
+            const savedMode = localStorage.getItem('seats_plugin_dev_mode') === '1';
+            pluginHubDevMode.checked = savedMode;
+            if (savedMode) pluginHubGrid.classList.add('dev-mode');
+            pluginHubDevMode.addEventListener('change', () => {
+                pluginHubGrid.classList.toggle('dev-mode', pluginHubDevMode.checked);
+                localStorage.setItem('seats_plugin_dev_mode', pluginHubDevMode.checked ? '1' : '0');
+                renderPluginHubCards();
+            });
+        }
 
         if (openPluginHubBtn) {
             openPluginHubBtn.addEventListener('click', () => {
@@ -1349,43 +1379,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const excelMime = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-
-    const sanitizeFilename = (name, fallback = '导出文件') => {
-        const normalized = String(name || '')
-            .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-            .replace(/[. ]+$/g, '')
-            .trim();
-        return normalized || fallback;
-    };
-
-    const parseContentDispositionFilename = (contentDisposition) => {
-        if (!contentDisposition) return '';
-        const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
-        if (utf8Match && utf8Match[1]) {
-            try {
-                return decodeURIComponent(utf8Match[1]);
-            } catch (_) {
-                return utf8Match[1];
-            }
-        }
-        const plainMatch = contentDisposition.match(/filename\s*=\s*"([^"]+)"|filename\s*=\s*([^;]+)/i);
-        if (!plainMatch) return '';
-        return (plainMatch[1] || plainMatch[2] || '').trim();
-    };
-
-    const inferFilenameFromUrl = (url, fallback = '导出文件') => {
-        try {
-            const parsed = new URL(url, window.location.origin);
-            const lastPart = parsed.pathname.split('/').filter(Boolean).pop() || '';
-            if (!lastPart) return fallback;
-            if (lastPart.includes('.')) return lastPart;
-            return fallback;
-        } catch (_) {
-            return fallback;
-        }
-    };
+    const exportBridge = window.FuckSeatsDesktop || {};
 
     const parseAcceptExtensions = (raw = '') => {
+        if (typeof exportBridge.parseAcceptExtensions === 'function') {
+            return exportBridge.parseAcceptExtensions(raw);
+        }
         return String(raw)
             .split(',')
             .map((item) => item.trim())
@@ -1393,87 +1392,11 @@ document.addEventListener('DOMContentLoaded', () => {
             .map((item) => (item.startsWith('.') ? item : `.${item}`));
     };
 
-    const buildSavePickerTypes = (acceptMime, extensions, filename) => {
-        const extList = [...(extensions || [])];
-        if (!extList.length && filename.includes('.')) {
-            const suffix = filename.slice(filename.lastIndexOf('.'));
-            if (suffix && suffix.length <= 10) {
-                extList.push(suffix);
-            }
-        }
-        if (!extList.length) return [];
-        const mime = acceptMime || 'application/octet-stream';
-        return [{
-            description: '导出文件',
-            accept: {
-                [mime]: extList
-            }
-        }];
-    };
-
-    const triggerBrowserDownload = (blob, filename) => {
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-            URL.revokeObjectURL(blobUrl);
-            link.remove();
-        }, 1000);
-    };
-
-    const openSaveFileHandle = async (filename, acceptMime, extensions) => {
-        if (!window.isSecureContext || typeof window.showSaveFilePicker !== 'function') return null;
-        const pickerOptions = {
-            suggestedName: filename
-        };
-        const types = buildSavePickerTypes(acceptMime, extensions, filename);
-        if (types.length) pickerOptions.types = types;
-        return window.showSaveFilePicker(pickerOptions);
-    };
-
     const saveExportFromUrl = async (url, options = {}) => {
-        if (!url) throw new Error('导出地址无效');
-        const fallbackFilename = sanitizeFilename(
-            options.fallbackFilename || inferFilenameFromUrl(url),
-            '导出文件'
-        );
-        const acceptMime = options.acceptMime || '';
-        const acceptExtensions = options.acceptExtensions || [];
-
-        let fileHandle = null;
-        try {
-            fileHandle = await openSaveFileHandle(fallbackFilename, acceptMime, acceptExtensions);
-        } catch (error) {
-            if (error?.name === 'AbortError') {
-                return { status: 'cancelled', filename: fallbackFilename };
-            }
+        if (typeof exportBridge.saveExportFromUrl === 'function') {
+            return exportBridge.saveExportFromUrl(url, options);
         }
-
-        const response = await fetch(url, {
-            method: 'GET',
-            credentials: 'same-origin'
-        });
-        if (!response.ok) {
-            throw new Error(`导出失败（${response.status}）`);
-        }
-
-        const headerFilename = parseContentDispositionFilename(response.headers.get('Content-Disposition') || '');
-        const finalFilename = sanitizeFilename(headerFilename || fallbackFilename, fallbackFilename);
-        const blob = await response.blob();
-
-        if (fileHandle) {
-            const writable = await fileHandle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            return { status: 'saved', filename: finalFilename };
-        }
-
-        triggerBrowserDownload(blob, finalFilename);
-        return { status: 'downloaded', filename: finalFilename };
+        throw new Error('导出桥接未加载');
     };
 
     const setExportAnchorPending = (anchor, pending) => {
@@ -1922,13 +1845,42 @@ document.addEventListener('DOMContentLoaded', () => {
         markSeatPreview(seat, 'valid', label);
     };
 
-    const setDragGhost = (e, label) => {
+    const setDragGhost = (e, label, sourceEl = null) => {
         const ghost = document.createElement('div');
         ghost.className = 'drag-ghost';
-        ghost.textContent = label;
-        document.body.appendChild(ghost);
-        e.dataTransfer.setDragImage(ghost, 20, 20);
-        requestAnimationFrame(() => ghost.remove());
+        
+        if (sourceEl) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'drag-preview-clone';
+            wrapper.style.width = sourceEl.offsetWidth + 'px';
+            wrapper.style.height = sourceEl.offsetHeight + 'px';
+            
+            const clone = sourceEl.cloneNode(true);
+            clone.style.margin = '0';
+            clone.style.transform = 'none';
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+            
+            wrapper.appendChild(clone);
+            ghost.appendChild(wrapper);
+            
+            if (label && label !== '移动' && label !== '安排入座') {
+                const badge = document.createElement('div');
+                badge.className = 'drag-ghost-badge';
+                badge.textContent = label;
+                ghost.appendChild(badge);
+            }
+            document.body.appendChild(ghost);
+            // Center the drag image to the pointer
+            e.dataTransfer.setDragImage(ghost, sourceEl.offsetWidth / 2, sourceEl.offsetHeight / 2);
+        } else {
+            ghost.classList.add('drag-ghost-text');
+            ghost.textContent = label;
+            document.body.appendChild(ghost);
+            e.dataTransfer.setDragImage(ghost, 20, 20);
+        }
+        
+        setTimeout(() => ghost.remove(), 0);
     };
 
     const setDragEnabled = (enabled) => {
@@ -2284,11 +2236,11 @@ document.addEventListener('DOMContentLoaded', () => {
             if (canMultiDrag) {
                 dragState.mode = 'multi';
                 dragState.sourceKeys = selectedMovableSeats.map((seat) => seatKey(seat));
-                setDragGhost(e, `移动 ${dragState.sourceKeys.length} 人`);
+                setDragGhost(e, `移动 ${dragState.sourceKeys.length} 人`, sourceSeat);
             } else {
                 dragState.mode = 'single';
                 dragState.sourceKeys = [sourceKey];
-                setDragGhost(e, '移动');
+                setDragGhost(e, '移动', sourceSeat);
             }
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', seatContent.dataset.studentId);
@@ -2299,7 +2251,7 @@ document.addEventListener('DOMContentLoaded', () => {
             dragState.anchorKey = null;
             dragState.sourceKeys = [];
             dragState.sourceStudentId = unseatedItem.dataset.studentId;
-            setDragGhost(e, '安排入座');
+            setDragGhost(e, '安排入座', unseatedItem);
             e.dataTransfer.effectAllowed = 'move';
             e.dataTransfer.setData('text/plain', unseatedItem.dataset.studentId);
         }
@@ -2656,13 +2608,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const modal = document.getElementById(modalId);
         if (!modal) return;
         modal.style.display = 'block';
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                modal.classList.add('modal-visible');
+            });
+        });
     };
 
     const closeModal = (modalId) => {
         if (!modalId) return;
         const modal = document.getElementById(modalId);
         if (!modal) return;
-        modal.style.display = 'none';
+        modal.classList.remove('modal-visible');
+        const onEnd = () => {
+            modal.style.display = 'none';
+            modal.removeEventListener('transitionend', onEnd);
+        };
+        modal.addEventListener('transitionend', onEnd);
     };
 
     document.querySelectorAll('[data-open-modal]').forEach((btn) => {
@@ -2680,7 +2642,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.modal').forEach((modal) => {
         modal.addEventListener('click', (e) => {
             if (e.target === modal) {
-                modal.style.display = 'none';
+                closeModal(modal.id);
             }
         });
     });
@@ -2834,6 +2796,68 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     const ctxSetLeader = document.getElementById('ctx-set-leader');
     let ctxTargetStudentId = null;
+    let contextMenuJustOpenedAt = 0;
+    let blockedContextMenuTipAt = 0;
+
+    const contextDebug = (source, payload = {}) => {
+        const data = payload && typeof payload === 'object' ? payload : { value: payload };
+        console.log('[classroom-context-menu]', source, data);
+        try {
+            const api = window.pywebview?.api;
+            if (api && typeof api.log_context_menu_debug === 'function') {
+                api.log_context_menu_debug(`classroom:${source}`, data);
+            }
+        } catch (_) {
+            // ignore bridge logging failures
+        }
+    };
+
+    const describeSeatForContextMenu = (seat) => {
+        if (!seat) {
+            return {
+                exists: false,
+            };
+        }
+        return {
+            exists: true,
+            row: seat.dataset.row || '',
+            col: seat.dataset.col || '',
+            cellType: seat.dataset.cellType || '',
+            studentId: seat.dataset.studentId || '',
+            hasGroupTag: !!seat.querySelector('.seat-group-tag'),
+            isLeader: seat.classList.contains('is-leader'),
+            className: seat.className || '',
+        };
+    };
+
+    const isSecondaryMouseButton = (event) => {
+        if (!event) return false;
+        if (event.button === 2 || event.which === 3) return true;
+        const isMacLike = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '');
+        return Boolean(isMacLike && event.ctrlKey && event.button === 0);
+    };
+
+    const shouldSuppressNativeSeatContextMenu = (target) => {
+        if (!target || !target.closest) return false;
+        if (contextMenu && contextMenu.contains(target)) return true;
+        return Boolean(target.closest('.seat-stage'));
+    };
+
+    const canOpenSeatContextMenu = (seat) => {
+        if (!seat || seat.dataset.cellType !== 'seat' || !seat.dataset.studentId) return false;
+        return seat.querySelector('.seat-group-tag') !== null;
+    };
+
+    const showBlockedContextMenuReason = (seat) => {
+        const now = Date.now();
+        if (now - blockedContextMenuTipAt < 800) return;
+        blockedContextMenuTipAt = now;
+
+        if (!seat || !seat.dataset || !seat.dataset.studentId) return;
+        if (!seat.querySelector('.seat-group-tag')) {
+            showInlineToast('该学生尚未加入任何小组，先分组后才能设为组长');
+        }
+    };
 
     const hideContextMenu = () => {
         if (!contextMenu) return;
@@ -2872,32 +2896,96 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.style.visibility = 'visible';
     };
 
-    document.addEventListener('click', () => {
+    const openSeatContextMenu = (event, seat) => {
+        const seatInfo = describeSeatForContextMenu(seat);
+        if (!contextMenu || !ctxSetLeader || !canOpenSeatContextMenu(seat)) {
+            showBlockedContextMenuReason(seat);
+            contextDebug('open-blocked', {
+                seat: seatInfo,
+                hasMenu: !!contextMenu,
+                hasAction: !!ctxSetLeader,
+            });
+            return false;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        ctxTargetStudentId = seat.dataset.studentId;
+        contextMenuJustOpenedAt = Date.now();
+        showContextMenu(event, seat);
+        contextDebug('open-success', {
+            seat: seatInfo,
+            point: { x: event.clientX, y: event.clientY },
+        });
+        return true;
+    };
+
+    const openSeatContextMenuFromTarget = (event, target) => {
+        if (!target || !target.closest) return false;
+        const seat = target.closest('.seat');
+        if (!seat) return false;
+        return openSeatContextMenu(event, seat);
+    };
+
+    document.addEventListener('fuckseats:windows-contextmenu', (event) => {
+        const detail = event.detail || {};
+        const x = Number(detail.x);
+        const y = Number(detail.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        const target = document.elementFromPoint(x, y);
+        const seat = target && target.closest ? target.closest('.seat') : null;
+        contextDebug('windows-event', {
+            point: { x, y },
+            targetClass: target && target.className ? String(target.className) : '',
+            seat: describeSeatForContextMenu(seat),
+        });
+        detail.handled = openSeatContextMenuFromTarget({
+            clientX: x,
+            clientY: y,
+            preventDefault() { },
+            stopPropagation() { },
+        }, target);
+        if (!detail.handled) {
+            hideContextMenu();
+        }
+        contextDebug('windows-event-result', {
+            point: { x, y },
+            handled: !!detail.handled,
+        });
+    });
+
+    document.addEventListener('pointerdown', (event) => {
+        if (!contextMenu || contextMenu.style.display !== 'block') return;
+        if (contextMenu.contains(event.target)) return;
+        if (isSecondaryMouseButton(event) && Date.now() - contextMenuJustOpenedAt < 180) {
+            return;
+        }
         hideContextMenu();
     });
 
-    if (contextMenu && ctxSetLeader) {
-        seatElements.forEach(seat => {
-            seat.addEventListener('contextmenu', (e) => {
-                if (seat.dataset.cellType !== 'seat' || !seat.dataset.studentId) return;
-
-                // 检查是否有小组
-                // 这里我们假设 seat 元素如果有 group tag 或者从 dataset 中能知道 group
-                // 简单点：只有占座且在组里的才能设为组长
-                // 需要 updateSeatElement 更新时把 group_id 也存一下，或者直接判断 DOM
-                const hasGroup = seat.querySelector('.seat-group-tag') !== null;
-
-                if (!hasGroup) return;
-
-                e.preventDefault();
-                e.stopPropagation();
-                ctxTargetStudentId = seat.dataset.studentId;
-                showContextMenu(e, seat);
+    document.addEventListener('contextmenu', (event) => {
+        if (contextMenu && contextMenu.contains(event.target)) {
+            event.preventDefault();
+            contextDebug('native-menu-self', {
+                targetClass: event.target && event.target.className ? String(event.target.className) : '',
             });
+            return;
+        }
+        const seat = event.target && event.target.closest ? event.target.closest('.seat') : null;
+        const handled = openSeatContextMenuFromTarget(event, event.target);
+        contextDebug('document-contextmenu', {
+            handled,
+            defaultPrevented: !!event.defaultPrevented,
+            targetClass: event.target && event.target.className ? String(event.target.className) : '',
+            seat: describeSeatForContextMenu(seat),
         });
+    }, true);
 
+    if (contextMenu && ctxSetLeader) {
         ctxSetLeader.addEventListener('click', () => {
             if (!ctxTargetStudentId) return;
+            contextDebug('action-click', {
+                studentId: ctxTargetStudentId,
+            });
             handleResponse(postJson(urls.setLeader, {
                 student_id: ctxTargetStudentId
             }));

@@ -9,10 +9,11 @@
     <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=1.9">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css" />
     {% block extra_head %}{% endblock %}
+    <script src="{% url 'frontend_store_js' %}?v=1.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
 </head>
 
-<body>
+<body data-app-shell="{{ app_runtime.shell }}">
     <header class="app-header">
         <div class="header-content">
             <div class="header-titlebar">
@@ -49,6 +50,7 @@
 
     <div id="toast-container"></div>
 
+    <script src="{% static 'js/desktop_bridge.js' %}?v=20260327"></script>
     <script src="{% static 'js/main.js' %}"></script>
     {% block extra_scripts %}{% endblock %}
 </body>

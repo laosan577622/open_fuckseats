@@ -15,7 +15,14 @@ import openai
 import openpyxl
 import pandas as pd
 
-from .models import Classroom, SeatConstraint, SeatCellType, SeatGroup, FutureModeConfig, Seat
+from desktop_shell import (
+    build_file_dialog_types,
+    ensure_allowed_extension,
+    normalize_accept_extensions,
+    parse_content_disposition_filename,
+    resolve_local_export_url,
+)
+from .models import Classroom, FrontendKVStore, SeatConstraint, SeatCellType, SeatGroup, FutureModeConfig, Seat
 from .plugin_system import plugin_registry
 from .views import (
     _arrange_standard,
@@ -1472,6 +1479,89 @@ class ClassroomFeatureTests(TestCase):
 
         self.assertIn("&amp;20 09", sheet_xml)
         self.assertNotIn("&amp;1409", sheet_xml)
+
+
+class DesktopExportBridgeTests(TestCase):
+    def test_parse_content_disposition_filename_supports_utf8(self):
+        value = "attachment; filename*=UTF-8''%E5%BA%A7%E6%AC%A1%E5%9B%BE.svg"
+        self.assertEqual(parse_content_disposition_filename(value), "座次图.svg")
+
+    def test_resolve_local_export_url_rejects_external_origin(self):
+        with self.assertRaises(ValueError):
+            resolve_local_export_url("http://127.0.0.1:23948", "https://example.com/test.xlsx")
+
+    def test_normalize_accept_extensions_falls_back_to_filename_suffix(self):
+        self.assertEqual(normalize_accept_extensions([], "示例.pptx"), [".pptx"])
+
+    def test_ensure_allowed_extension_preserves_known_suffix(self):
+        self.assertEqual(
+            ensure_allowed_extension("/tmp/export.json", [".seats", ".json"]),
+            "/tmp/export.json",
+        )
+
+    def test_build_file_dialog_types_uses_expected_mask(self):
+        file_types = build_file_dialog_types(
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            [".xlsx"],
+        )
+        self.assertEqual(file_types[0], "Excel 文件 (*.xlsx)")
+
+
+class FrontendStoreTests(TestCase):
+    def test_frontend_store_js_embeds_backend_store_and_runtime_patch(self):
+        FrontendKVStore.objects.create(key="seats_plugin_dev_mode", value="1")
+
+        response = self.client.get(reverse("frontend_store_js"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response["Content-Type"], "application/javascript")
+        content = response.content.decode("utf-8")
+        self.assertIn('"seats_plugin_dev_mode": "1"', content)
+        self.assertIn("Storage.prototype.setItem", content)
+        self.assertIn("mac_os_warning_seen", content)
+
+    def test_frontend_store_set_upserts_value(self):
+        url = reverse("frontend_store_set")
+
+        response = self.client.post(
+            url,
+            data=json.dumps({"key": "plugin_mode", "value": "teacher"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "success")
+        self.assertEqual(FrontendKVStore.objects.get(key="plugin_mode").value, "teacher")
+
+        response = self.client.post(
+            url,
+            data=json.dumps({"key": "plugin_mode", "value": "dev"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(FrontendKVStore.objects.count(), 1)
+        self.assertEqual(FrontendKVStore.objects.get(key="plugin_mode").value, "dev")
+
+    def test_frontend_store_delete_removes_value(self):
+        FrontendKVStore.objects.create(key="plugin_mode", value="dev")
+
+        response = self.client.post(
+            reverse("frontend_store_delete"),
+            data=json.dumps({"key": "plugin_mode"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "success")
+        self.assertFalse(FrontendKVStore.objects.filter(key="plugin_mode").exists())
+
+    @override_settings(APP_SHELL="webview")
+    def test_index_template_exposes_app_shell_runtime(self):
+        response = self.client.get(reverse("index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'data-app-shell="webview"')
 
     def test_rename_classroom_success(self):
         classroom = Classroom.objects.create(name="原班级", rows=2, cols=2)

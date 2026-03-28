@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     let activeTool = 'seat';
     let contextSeat = null;
+    let contextMenuJustOpenedAt = 0;
 
     const selectedSeats = new Set();
     let selecting = false;
@@ -30,6 +31,13 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             body: JSON.stringify(payload)
         }).then(res => res.json());
+    };
+
+    const isSecondaryMouseButton = (event) => {
+        if (!event) return false;
+        if (event.button === 2 || event.which === 3) return true;
+        const isMacLike = /Mac|iPhone|iPad|iPod/i.test(navigator.platform || '');
+        return Boolean(isMacLike && event.ctrlKey && event.button === 0);
     };
 
     const seatKey = (seat) => `${seat.dataset.row}-${seat.dataset.col}`;
@@ -116,6 +124,49 @@ document.addEventListener('DOMContentLoaded', () => {
         clearSelectedBtn.addEventListener('click', clearSelection);
     }
 
+    const openSeatContextMenu = (event, seat) => {
+        if (!contextMenu || !seat) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        contextSeat = seat;
+        contextMenuJustOpenedAt = Date.now();
+
+        contextMenu.style.left = '0px';
+        contextMenu.style.top = '0px';
+        contextMenu.style.display = 'flex';
+
+        const gap = 8;
+        const menuWidth = contextMenu.offsetWidth || 140;
+        const menuHeight = contextMenu.offsetHeight || 160;
+        const left = Math.min(event.clientX + gap, window.innerWidth - menuWidth - gap);
+        const top = Math.min(event.clientY + gap, window.innerHeight - menuHeight - gap);
+
+        contextMenu.style.left = `${left}px`;
+        contextMenu.style.top = `${top}px`;
+        return true;
+    };
+
+    const openSeatContextMenuFromTarget = (event, target) => {
+        if (!target || !target.closest) return false;
+        const seat = target.closest('.seat');
+        if (!seat) return false;
+        return openSeatContextMenu(event, seat);
+    };
+
+    document.addEventListener('fuckseats:windows-contextmenu', (event) => {
+        const detail = event.detail || {};
+        const x = Number(detail.x);
+        const y = Number(detail.y);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return;
+        const target = document.elementFromPoint(x, y);
+        detail.handled = openSeatContextMenuFromTarget({
+            clientX: x,
+            clientY: y,
+            preventDefault() { },
+            stopPropagation() { },
+        }, target);
+    });
+
     document.querySelectorAll('.seat').forEach(seat => {
         seat.dataset.seatKey = seatKey(seat);
         seat.addEventListener('click', (e) => {
@@ -125,25 +176,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearSelection();
                 addToSelection(seat);
             }
-        });
-        seat.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            contextSeat = seat;
-            if (!contextMenu) return;
-
-            // 重置位置，防止前一次点击的位置影响元素的正常测量大小
-            contextMenu.style.left = '0px';
-            contextMenu.style.top = '0px';
-            contextMenu.style.display = 'flex';
-
-            const gap = 8;
-            const menuWidth = contextMenu.offsetWidth || 140;
-            const menuHeight = contextMenu.offsetHeight || 160;
-            const left = Math.min(e.clientX + gap, window.innerWidth - menuWidth - gap);
-            const top = Math.min(e.clientY + gap, window.innerHeight - menuHeight - gap);
-
-            contextMenu.style.left = `${left}px`;
-            contextMenu.style.top = `${top}px`;
         });
     });
 
@@ -158,9 +190,21 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    document.addEventListener('click', () => {
-        if (contextMenu) contextMenu.style.display = 'none';
+    document.addEventListener('pointerdown', (event) => {
+        if (!contextMenu || contextMenu.style.display === 'none') return;
+        if (contextMenu.contains(event.target)) return;
+        if (isSecondaryMouseButton(event) && Date.now() - contextMenuJustOpenedAt < 180) return;
+        contextMenu.style.display = 'none';
     });
+
+    document.addEventListener('contextmenu', (event) => {
+        if (!event.target || !event.target.closest) return;
+        if (contextMenu && contextMenu.contains(event.target)) {
+            event.preventDefault();
+            return;
+        }
+        openSeatContextMenuFromTarget(event, event.target);
+    }, true);
 
     if (seatStage) {
         seatStage.addEventListener('mousedown', (e) => {

@@ -41,6 +41,8 @@ INSTALLED_APPS = [
     'seats.apps.SeatsConfig',
 ]
 
+APP_SHELL = os.getenv('FUCKSEATS_APP_SHELL', 'browser').strip() or 'browser'
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
@@ -61,9 +63,10 @@ TEMPLATES = [
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
-                'django.template.context_processors.request',
-                'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
+            'django.template.context_processors.request',
+            'django.contrib.auth.context_processors.auth',
+            'django.contrib.messages.context_processors.messages',
+            'seats.context_processors.app_runtime',
             ],
         },
     },

@@ -39,100 +39,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!hint) return;
         hint.textContent = text || '';
     };
-
-    const sanitizeFilename = (name, fallback = '导出文件') => {
-        const normalized = String(name || '')
-            .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
-            .replace(/[. ]+$/g, '')
-            .trim();
-        return normalized || fallback;
-    };
-
-    const parseContentDispositionFilename = (contentDisposition) => {
-        if (!contentDisposition) return '';
-        const utf8Match = contentDisposition.match(/filename\*\s*=\s*UTF-8''([^;]+)/i);
-        if (utf8Match && utf8Match[1]) {
-            try {
-                return decodeURIComponent(utf8Match[1]);
-            } catch (_) {
-                return utf8Match[1];
-            }
-        }
-        const plainMatch = contentDisposition.match(/filename\s*=\s*"([^"]+)"|filename\s*=\s*([^;]+)/i);
-        if (!plainMatch) return '';
-        return (plainMatch[1] || plainMatch[2] || '').trim();
-    };
-
-    const triggerBrowserDownload = (blob, filename) => {
-        const blobUrl = URL.createObjectURL(blob);
-        const link = document.createElement('a');
-        link.href = blobUrl;
-        link.download = filename;
-        link.style.display = 'none';
-        document.body.appendChild(link);
-        link.click();
-        setTimeout(() => {
-            URL.revokeObjectURL(blobUrl);
-            link.remove();
-        }, 1000);
-    };
-
-    const buildSavePickerTypes = (mime, extensions, filename) => {
-        const extList = [...(extensions || [])];
-        if (!extList.length && filename.includes('.')) {
-            const suffix = filename.slice(filename.lastIndexOf('.'));
-            if (suffix && suffix.length <= 10) extList.push(suffix);
-        }
-        if (!extList.length) return [];
-        return [{
-            description: '导出文件',
-            accept: {
-                [mime || 'application/octet-stream']: extList
-            }
-        }];
-    };
-
-    const openSaveFileHandle = async (filename, mime, extensions) => {
-        if (!window.isSecureContext || typeof window.showSaveFilePicker !== 'function') return null;
-        const pickerOptions = { suggestedName: filename };
-        const types = buildSavePickerTypes(mime, extensions, filename);
-        if (types.length) pickerOptions.types = types;
-        return window.showSaveFilePicker(pickerOptions);
-    };
+    const exportBridge = window.FuckSeatsDesktop || {};
 
     const saveExportFromUrl = async (url, options = {}) => {
-        const fallback = sanitizeFilename(options.fallbackFilename || '导出文件', '导出文件');
-
-        let fileHandle = null;
-        try {
-            fileHandle = await openSaveFileHandle(fallback, options.acceptMime || '', options.acceptExtensions || []);
-        } catch (error) {
-            if (error?.name === 'AbortError') {
-                return { status: 'cancelled', filename: fallback };
-            }
+        if (typeof exportBridge.saveExportFromUrl === 'function') {
+            return exportBridge.saveExportFromUrl(url, options);
         }
-
-        const response = await fetch(url, {
-            method: 'GET',
-            credentials: 'same-origin'
-        });
-        if (!response.ok) {
-            throw new Error(`导出失败（${response.status}）`);
-        }
-
-        const headerFilename = parseContentDispositionFilename(response.headers.get('Content-Disposition') || '');
-        const finalFilename = sanitizeFilename(headerFilename || fallback, fallback);
-        const blob = await response.blob();
-
-        if (fileHandle) {
-            const writable = await fileHandle.createWritable();
-            await writable.write(blob);
-            await writable.close();
-            return { status: 'saved', filename: finalFilename };
-        }
-
-        triggerBrowserDownload(blob, finalFilename);
-        return { status: 'downloaded', filename: finalFilename };
+        throw new Error('导出桥接未加载');
     };
 
     const buildUrlWithQuery = (url, query = {}) => {

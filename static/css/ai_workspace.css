@@ -54,6 +54,8 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+    user-select: none;
+    -webkit-user-select: none;
 }
 
 @keyframes app-startup {
@@ -753,8 +755,9 @@ body {
     }
 }
 
-/* 启动水波纹动画 */
-.startup-ripple {
+/* 水波纹动画（启动 + 发送消息共用） */
+.startup-ripple,
+.message-ripple {
     position: absolute;
     left: -20%;
     right: -20%;
@@ -767,7 +770,15 @@ body {
     opacity: 0.8;
     z-index: 9999;
     pointer-events: none;
+}
+
+.startup-ripple {
     animation: startup-ripple-slide 2.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.message-ripple {
+    opacity: 0;
+    animation: message-ripple-slide 1.6s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
 }
 
 @keyframes startup-ripple-slide {
@@ -782,6 +793,23 @@ body {
 
     100% {
         transform: translateY(-250vh);
+        opacity: 0;
+        visibility: hidden;
+    }
+}
+
+@keyframes message-ripple-slide {
+    0% {
+        transform: translateY(40vh);
+        opacity: 0;
+    }
+
+    8% {
+        opacity: 0.6;
+    }
+
+    100% {
+        transform: translateY(-220vh);
         opacity: 0;
         visibility: hidden;
     }

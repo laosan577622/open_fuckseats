@@ -1,8 +1,15 @@
 import os
 import sys
+import threading
+import time
+import urllib.request
+import webbrowser
 from io import StringIO
 from django.core.management import call_command
 from waitress import serve
+
+HOST = '127.0.0.1'
+PORT = 23948
 
 
 def _filter_migration_noise(text):
@@ -28,7 +35,84 @@ def _filter_migration_noise(text):
     return '\n'.join(filtered).strip()
 
 
+def _is_dev_mode(argv):
+    return any(arg in {'-dev', '--dev'} for arg in argv[1:])
+
+
+def _wait_for_server_ready(url, timeout=20):
+    deadline = time.time() + timeout
+    last_error = None
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(url, timeout=1) as response:
+                status = getattr(response, 'status', 200)
+                if status < 500:
+                    return
+        except Exception as exc:
+            last_error = exc
+            time.sleep(0.15)
+            continue
+        time.sleep(0.05)
+    raise RuntimeError(f'本地服务启动超时: {last_error}')
+
+
+def _start_waitress(application):
+    serve(application, host=HOST, port=PORT)
+
+
+def _open_browser(url):
+    try:
+        webbrowser.open(url)
+    except Exception:
+        pass
+
+
+def _configure_windows_webview(bridge):
+    if not sys.platform.startswith('win'):
+        return
+
+    try:
+        bridge._enable_windows_context_menu_bridge()
+    except Exception as exc:
+        print(f'Windows WebView 右键补丁加载失败: {exc}', file=sys.stderr, flush=True)
+
+
+def _start_desktop_window(url):
+    try:
+        import webview
+    except Exception as exc:
+        raise RuntimeError(f'当前环境缺少 pywebview 依赖: {exc}') from exc
+
+    from desktop_shell import DesktopBridge
+
+    bridge = DesktopBridge(url)
+    window = webview.create_window(
+        '不想排座位',
+        url,
+        js_api=bridge,
+        width=1440,
+        height=920,
+        min_size=(1180, 760),
+        background_color='#FFFFFF',
+        text_select=True,
+    )
+    bridge._attach_window(window)
+
+    start_kwargs = {'debug': False}
+    if sys.platform.startswith('win'):
+        start_kwargs['gui'] = 'edgechromium'
+
+    try:
+        webview.start(_configure_windows_webview, bridge, **start_kwargs)
+    except Exception as exc:
+        if sys.platform.startswith('win'):
+            raise RuntimeError(f'启动 WebView 失败，请确认系统已安装 WebView2 Runtime：{exc}') from exc
+        raise RuntimeError(f'启动 WebView 失败：{exc}') from exc
+
+
 def main():
+    dev_mode = _is_dev_mode(sys.argv)
+    os.environ['FUCKSEATS_APP_SHELL'] = 'browser' if dev_mode else 'webview'
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
     
     import django
@@ -61,10 +145,31 @@ def main():
         print(f"数据库迁移出错: {e}", file=sys.stderr, flush=True)
 
 
-    PORT = 23948
-    print(f"正在启动服务器 http://127.0.0.1:23948 ...", flush=True)
-    print("服务器已启动，请使用浏览器打开 http://127.0.0.1:23948 访问\n在使用期间，请不要关闭本窗口。", flush=True)
-    serve(application, host='127.0.0.1', port=PORT)
+    app_url = f'http://{HOST}:{PORT}'
+    print(f"正在启动服务器 {app_url} ...", flush=True)
+
+    server_thread = threading.Thread(
+        target=_start_waitress,
+        args=(application,),
+        daemon=True,
+        name='fuckseats-waitress',
+    )
+    server_thread.start()
+    _wait_for_server_ready(app_url)
+
+    if dev_mode:
+        print(f"开发模式已启动，请使用浏览器访问 {app_url}", flush=True)
+        print("当前模式不会打开桌面壳，便于调试前端与网络请求。", flush=True)
+        _open_browser(app_url)
+        try:
+            while server_thread.is_alive():
+                server_thread.join(timeout=1)
+        except KeyboardInterrupt:
+            print("\n开发模式已停止。", flush=True)
+        return
+
+    print("桌面模式已启动，正在打开原生 WebView 窗口...", flush=True)
+    _start_desktop_window(app_url)
 
 if __name__ == '__main__':
     main()

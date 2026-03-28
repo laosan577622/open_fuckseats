@@ -523,6 +523,10 @@
                     <p>支持 chrome.runtime.sendMessage 风格调用，快速运行插件动作、界面与页面增强脚本（需授权）。</p>
                 </div>
                 <div class="plugin-hub-header-actions">
+                    <label class="plugin-hub-mode-toggle">
+                        <input type="checkbox" id="pluginHubDevMode">
+                        <span>开发者模式</span>
+                    </label>
                     <button type="button" class="btn btn-secondary" id="pluginHubRefreshBtn">刷新列表</button>
                     <button type="button" class="btn btn-secondary" data-close-modal="plugin-hub-modal">关闭</button>
                 </div>
@@ -536,7 +540,7 @@
                     </div>
                 </section>
 
-                <section class="plugin-hub-section">
+                <section class="plugin-hub-section plugin-hub-dev-only">
                     <div class="plugin-hub-section-title">Runtime 调用</div>
                     <div class="plugin-hub-runtime-form">
                         <label>扩展 ID</label>

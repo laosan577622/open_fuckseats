@@ -206,3 +206,15 @@ class SeatConstraint(models.Model):
 
     def __str__(self):
         return f"{self.classroom.name}-{self.get_constraint_type_display()}-{self.student.name}"
+
+class FrontendKVStore(models.Model):
+    key = models.CharField(max_length=255, unique=True, verbose_name="键")
+    value = models.TextField(blank=True, default='', verbose_name="值")
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "前端配置"
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return self.key
