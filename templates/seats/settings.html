@@ -1,0 +1,261 @@
+{% extends 'base.html' %}
+
+{% block title %}设置{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="settings">设置</button>
+{% endblock %}
+
+{% block actions %}
+<div class="header-action-row office-ribbon-row">
+    <div class="ribbon-group">
+        <a href="{% url 'index' %}" class="btn btn-secondary">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path d="M10.7 5.3a1 1 0 0 1 0 1.4L6.4 11H20a1 1 0 1 1 0 2H6.4l4.3 4.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z" fill="currentColor"/>
+            </svg>
+            返回主页
+        </a>
+        <span class="ribbon-group-label">导航</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="settings-container animate-fade-in">
+    <div class="settings-header">
+        <h1>应用设置</h1>
+        <p>管理应用的各项配置和偏好设置</p>
+    </div>
+
+    <div class="settings-sections">
+        <!-- 更新设置 -->
+        <div class="settings-section">
+            <div class="section-header">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12 2a10 10 0 0 0-7.35 16.76l.02.02A10 10 0 1 0 12 2zm0 2a8 8 0 0 1 5.9 2.64l-2.19 2.19A5 5 0 0 0 12 7a5 5 0 0 0-3.71 1.66L6.1 6.47A8 8 0 0 1 12 4zM7 12a5 5 0 0 1 .29-1.66L4.47 7.52A7.96 7.96 0 0 0 4 12c0 1.66.5 3.2 1.37 4.48l2.34-2.34A5 5 0 0 1 7 12zm5 5a5 5 0 0 1-3.14-1.1l-2.34 2.34A8 8 0 0 0 12 20a8 8 0 0 0 5.9-2.64l-2.19-2.19A5 5 0 0 1 12 17zm5-5c0 .53-.08 1.04-.23 1.52l2.76 1.6A7.96 7.96 0 0 0 20 12a7.96 7.96 0 0 0-1.37-4.48l-2.34 2.34c.18.66.28 1.37.28 2.14z" fill="#0a59f7"/>
+                    <path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" fill="#0a59f7" fill-opacity="0.5"/>
+                </svg>
+                <div>
+                    <h2>软件更新</h2>
+                    <p>检查并安装应用更新</p>
+                </div>
+            </div>
+            <div class="section-content">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label>当前版本</label>
+                        <span class="setting-value" id="current-version-display">{{ app_runtime.version }}</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label>检查更新</label>
+                        <span class="setting-description">手动检查是否有新版本可用</span>
+                    </div>
+                    <button id="manual-check-update-btn" class="btn btn-primary">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M12 2a1 1 0 0 1 1 1v3.06A7 7 0 0 1 18.94 12H22a1 1 0 1 1 0 2h-3.06A7 7 0 0 1 13 19.94V22a1 1 0 1 1-2 0v-2.06A7 7 0 0 1 5.06 14H2a1 1 0 1 1 0-2h3.06A7 7 0 0 1 11 6.06V3a1 1 0 0 1 1-1zm0 6a5 5 0 1 0 0 10 5 5 0 0 0 0-10z" fill="currentColor"/>
+                        </svg>
+                        检查更新
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 关于 -->
+        <div class="settings-section">
+            <div class="section-header">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="12" cy="12" r="10" fill="#0a59f7" fill-opacity="0.12"/>
+                    <circle cx="12" cy="12" r="10" stroke="#0a59f7" stroke-width="1.5"/>
+                    <rect x="11" y="11" width="2" height="5" rx="1" fill="#0a59f7"/>
+                    <circle cx="12" cy="8.5" r="1.2" fill="#0a59f7"/>
+                </svg>
+                <div>
+                    <h2>关于</h2>
+                    <p>应用信息</p>
+                </div>
+            </div>
+            <div class="section-content">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label>应用名称</label>
+                        <span class="setting-value">不想排座位</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label>开发者</label>
+                        <span class="setting-value">老三</span>
+                    </div>
+                </div>
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label>官网</label>
+                        <a href="http://www.577622.xyz" target="_blank" class="setting-link">www.577622.xyz</a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<style>
+.settings-container {
+    max-width: 900px;
+    margin: 0 auto;
+    padding: 40px 20px;
+}
+
+.settings-header {
+    margin-bottom: 40px;
+}
+
+.settings-header h1 {
+    font-size: 32px;
+    font-weight: 700;
+    color: #0a59f7;
+    margin: 0 0 8px 0;
+}
+
+.settings-header p {
+    color: #666;
+    margin: 0;
+}
+
+.settings-sections {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+}
+
+.settings-section {
+    background: white;
+    border-radius: 16px;
+    overflow: hidden;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 24px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.section-header svg {
+    color: #0a59f7;
+    flex-shrink: 0;
+}
+
+.section-header h2 {
+    font-size: 18px;
+    font-weight: 600;
+    margin: 0 0 4px 0;
+    color: #333;
+}
+
+.section-header p {
+    font-size: 14px;
+    color: #666;
+    margin: 0;
+}
+
+.section-content {
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+.setting-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 20px;
+}
+
+.setting-info {
+    flex: 1;
+}
+
+.setting-info label {
+    display: block;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 4px;
+}
+
+.setting-description {
+    display: block;
+    font-size: 14px;
+    color: #666;
+}
+
+.setting-value {
+    display: block;
+    color: #666;
+    font-size: 14px;
+}
+
+.setting-link {
+    color: #0a59f7;
+    text-decoration: none;
+    font-size: 14px;
+}
+
+.setting-link:hover {
+    text-decoration: underline;
+}
+
+#manual-check-update-btn {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    white-space: nowrap;
+}
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const checkBtn = document.getElementById('manual-check-update-btn');
+
+    checkBtn.addEventListener('click', async () => {
+        checkBtn.disabled = true;
+        checkBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation: spin 1s linear infinite;"><path d="M12 2a1 1 0 0 1 1 1v3.06A7 7 0 0 1 18.94 12H22a1 1 0 1 1 0 2h-3.06A7 7 0 0 1 13 19.94V22a1 1 0 1 1-2 0v-2.06A7 7 0 0 1 5.06 14H2a1 1 0 1 1 0-2h3.06A7 7 0 0 1 11 6.06V3a1 1 0 0 1 1-1zm0 6a5 5 0 1 0 0 10 5 5 0 0 0 0-10z" fill="currentColor"/></svg>检查中...';
+
+        try {
+            const response = await fetch('/api/update/check/');
+            const data = await response.json();
+
+            if (data.status !== 'success') {
+                showToast(data.message || '检查更新失败');
+            } else if (!data.supported) {
+                showToast(data.message || '当前平台暂不支持自动更新');
+            } else if (data.update_available) {
+                window.updateInfo = data;
+                if (window.showUpdateModal) {
+                    window.showUpdateModal();
+                }
+            } else {
+                showToast('当前已是最新版本 ' + data.current_version);
+            }
+        } catch (error) {
+            showToast('检查更新失败，请稍后重试');
+            console.error('Update check error:', error);
+        } finally {
+            checkBtn.disabled = false;
+            checkBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a1 1 0 0 1 1 1v3.06A7 7 0 0 1 18.94 12H22a1 1 0 1 1 0 2h-3.06A7 7 0 0 1 13 19.94V22a1 1 0 1 1-2 0v-2.06A7 7 0 0 1 5.06 14H2a1 1 0 1 1 0-2h3.06A7 7 0 0 1 11 6.06V3a1 1 0 0 1 1-1zm0 6a5 5 0 1 0 0 10 5 5 0 0 0 0-10z" fill="currentColor"/></svg>检查更新';
+        }
+    });
+});
+</script>
+
+<style>
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+</style>
+{% endblock %}

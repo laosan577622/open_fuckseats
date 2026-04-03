@@ -62,7 +62,8 @@ def main():
     BUILD_DIR = os.path.join(BASE_DIR, 'build')
     SPEC_FILE = os.path.join(BASE_DIR, 'FuckSeats.spec')
     STAGE_DIR = os.path.join(BASE_DIR, '_data_stage')
-    DATA_DIRS = ['templates', 'static', 'seats', 'website', 'config']
+    # 桌面端不依赖宣传站资源，只带运行时版本文件与 Django 所需目录。
+    DATA_DIRS = ['templates', 'static', 'seats', 'runtime', 'config']
     DB_EXCLUDE_PATTERNS = ['*.sqlite3', '*.sqlite', '*.db']
     
     # 清理旧的构建文件

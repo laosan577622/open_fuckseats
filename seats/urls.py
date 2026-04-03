@@ -3,6 +3,7 @@ from . import views
 
 urlpatterns = [
     path('', views.index, name='index'),
+    path('settings/', views.settings_page, name='settings'),
     path('plugins/', views.plugins_overview, name='plugins_overview'),
     path('plugins/components/', views.plugin_components_overview, name='plugin_components_overview'),
     path('plugins/<str:plugin_id>/ui/<str:ui_name>/page/', views.plugin_ui_page, name='plugin_ui_page'),
@@ -20,6 +21,9 @@ urlpatterns = [
     path('classroom/<int:pk>/ai/chat/stream/', views.ai_chat_stream, name='ai_chat_stream'),
     path('classroom/<int:pk>/layout/', views.layout_editor, name='layout_editor'),
     path('classroom/<int:pk>/layout/grid/', views.update_layout_grid, name='update_layout_grid'),
+    path('classroom/<int:pk>/layout/shift/', views.shift_layout, name='shift_layout'),
+    path('classroom/<int:pk>/layout/shift/options/', views.shift_layout_options_page, name='shift_layout_options_page'),
+    path('classroom/<int:pk>/layout/row-col-op/', views.insert_delete_row_col, name='insert_delete_row_col'),
     path('classroom/<int:pk>/state/', views.classroom_state, name='classroom_state'),
     path('classroom/<int:pk>/import/', views.import_students, name='import_students'),
     path('classroom/<int:pk>/import/options/', views.import_students_options_page, name='import_students_options_page'),
@@ -67,4 +71,7 @@ urlpatterns = [
     path('api/store/js/', views.frontend_store_js, name='frontend_store_js'),
     path('api/store/set/', views.frontend_store_set, name='frontend_store_set'),
     path('api/store/delete/', views.frontend_store_delete, name='frontend_store_delete'),
+    path('api/update/check/', views.desktop_update_check, name='desktop_update_check'),
+    path('api/update/start/', views.desktop_update_start, name='desktop_update_start'),
+    path('api/update/status/', views.desktop_update_status, name='desktop_update_status'),
 ]

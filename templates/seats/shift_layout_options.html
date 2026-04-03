@@ -1,0 +1,83 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{{ classroom.name }} - 布局轮换选项{% endblock %}
+
+{% block actions %}
+<div class="header-action-row office-ribbon-row">
+    <div class="ribbon-group">
+        <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回排座</a>
+        <span class="ribbon-group-label">导航</span>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<main class="form-page animate-fade-in">
+    <div class="form-card card" style="max-width: 500px;">
+        <h2 class="mb-4 text-center">高级布局轮换</h2>
+        <form method="post" action="{% url 'shift_layout' classroom.pk %}" id="shiftForm">
+            {% csrf_token %}
+            <div class="form-group">
+                <label>轮换方向</label>
+                <div style="display: flex; gap: 16px; margin-top: 8px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-primary);">
+                        <input type="radio" name="direction" value="left" checked> 左移
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; color: var(--text-primary);">
+                        <input type="radio" name="direction" value="right"> 右移
+                    </label>
+                </div>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">左移时，最左侧列的座位将循环移动至最右侧。</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="steps">移动列数</label>
+                <input type="number" id="steps" name="steps" min="1" value="1" required>
+            </div>
+            
+            <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 16px;">执行轮换</button>
+        </form>
+    </div>
+</main>
+<script>
+document.getElementById('shiftForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    const btn = this.querySelector('button[type="submit"]');
+    const originalText = btn.textContent;
+    btn.textContent = '执行中...';
+    btn.disabled = true;
+
+    const fd = new FormData(this);
+    const payload = {
+        direction: fd.get('direction'),
+        steps: parseInt(fd.get('steps'), 10)
+    };
+    
+    fetch(this.action, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': fd.get('csrfmiddlewaretoken')
+        },
+        body: JSON.stringify(payload)
+    })
+    .then(r => r.json())
+    .then(data => {
+        if (data.status === 'success') {
+            window.location.href = "{% url 'classroom_detail' classroom.pk %}";
+        } else {
+            alert(data.message || '操作失败');
+        }
+    })
+    .catch(err => {
+        alert('请求出错，请重试');
+        console.error(err);
+    })
+    .finally(() => {
+        btn.textContent = originalText;
+        btn.disabled = false;
+    });
+});
+</script>
+{% endblock %}

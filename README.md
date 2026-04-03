@@ -29,7 +29,6 @@
 - 静态文件：WhiteNoise
 - 数据处理：pandas、openpyxl、python-pptx、xlrd
 - 前端：Django Template + 原生 JavaScript
-- 宣传站：React 19 + Vite 7（`website/`）
 
 ## 项目结构
 - `manage.py`：Django 管理入口
@@ -90,6 +89,9 @@ cd website
 npm install
 npm run dev
 ```
+
+- 参考稿资源位于 `website/stitch/`，实际宣传页源码位于 `website/src/`。
+- 本地图片资源位于 `website/public/img/`，构建时会直接作为静态资源引用。
 
 ## 常用导入导出说明
 - 学生 Excel 导入：需包含“姓名”列；“总分/学生总分”可自动识别，否则进入手动映射；支持“匹配现有学生更新成绩（未匹配自动新增）”与“清空后全量导入”两种模式。

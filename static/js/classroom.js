@@ -12,6 +12,7 @@ document.addEventListener('DOMContentLoaded', () => {
         groupAuto: root.dataset.groupAutoUrl,
         groupMerge: root.dataset.groupMergeUrl,
         groupRotate: root.dataset.groupRotateUrl,
+        shiftLayout: root.dataset.shiftLayoutUrl,
         renameClassroom: root.dataset.renameClassroomUrl,
         state: root.dataset.stateUrl,
         undo: root.dataset.undoUrl,
@@ -52,6 +53,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const groupClearSelectBtn = document.getElementById('groupClearSelectBtn');
     const groupMergeFromSelect = document.getElementById('groupMergeFromSelect');
     const groupMergeToSelect = document.getElementById('groupMergeToSelect');
+
+    const shiftLayoutLeftBtn = document.getElementById('btn-shift-layout-left');
+    const shiftLayoutRightBtn = document.getElementById('btn-shift-layout-right');
+    const shiftLayoutSteps = document.getElementById('shiftLayoutSteps');
     const createGroupForm = document.getElementById('createGroupForm');
     const groupList = document.getElementById('groupList');
     const unseatedSearch = document.getElementById('unseatedSearch');
@@ -1848,7 +1853,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const setDragGhost = (e, label, sourceEl = null) => {
         const ghost = document.createElement('div');
         ghost.className = 'drag-ghost';
-        
+
         if (sourceEl) {
             const wrapper = document.createElement('div');
             wrapper.className = 'drag-preview-clone';
@@ -1879,7 +1884,7 @@ document.addEventListener('DOMContentLoaded', () => {
             document.body.appendChild(ghost);
             e.dataTransfer.setDragImage(ghost, 20, 20);
         }
-        
+
         setTimeout(() => ghost.remove(), 0);
     };
 
@@ -2440,6 +2445,44 @@ document.addEventListener('DOMContentLoaded', () => {
                     groupRotateBtn.disabled = false;
                 });
         });
+    }
+
+    const handleShiftLayout = (direction) => {
+        if (!urls.shiftLayout) return;
+        const steps = 1;
+
+        const btn = direction === 'left' ? shiftLayoutLeftBtn : shiftLayoutRightBtn;
+        if (!btn) return;
+
+        const originalText = btn.textContent;
+        btn.textContent = '执行中...';
+        btn.disabled = true;
+
+        postJson(urls.shiftLayout, { direction, steps })
+            .then(data => {
+                if (data && data.status === 'success') {
+                    showInlineToast(data.message || '布局轮换成功');
+                    refreshState();
+                } else {
+                    throw new Error(data?.message || '布局轮换失败');
+                }
+            })
+            .catch(err => {
+                console.error('Shift layout error:', err);
+                alert(err.message || '请求出错，请重试');
+            })
+            .finally(() => {
+                btn.textContent = originalText;
+                btn.disabled = false;
+            });
+    };
+
+    if (shiftLayoutLeftBtn) {
+        shiftLayoutLeftBtn.addEventListener('click', () => handleShiftLayout('left'));
+    }
+
+    if (shiftLayoutRightBtn) {
+        shiftLayoutRightBtn.addEventListener('click', () => handleShiftLayout('right'));
     }
 
     if (renameClassroomBtn) {

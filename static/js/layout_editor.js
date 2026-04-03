@@ -10,6 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     let activeTool = 'seat';
     let contextSeat = null;
+    let contextRowCol = null;  // {row, col} for empty-space right-click
     let contextMenuJustOpenedAt = 0;
 
     const selectedSeats = new Set();
@@ -21,6 +22,91 @@ document.addEventListener('DOMContentLoaded', () => {
     selectionBox.className = 'selection-box';
     selectionBox.style.display = 'none';
     document.body.appendChild(selectionBox);
+
+    // Crosshair overlays for row/col targeting
+    const crosshairRow = document.createElement('div');
+    crosshairRow.className = 'rc-crosshair-row';
+    crosshairRow.style.display = 'none';
+    const crosshairCol = document.createElement('div');
+    crosshairCol.className = 'rc-crosshair-col';
+    crosshairCol.style.display = 'none';
+    const seatGrid = document.querySelector('.seat-grid');
+    if (seatGrid) {
+        seatGrid.style.position = 'relative';
+        seatGrid.appendChild(crosshairRow);
+        seatGrid.appendChild(crosshairCol);
+    }
+
+    const hideCrosshair = () => {
+        crosshairRow.style.display = 'none';
+        crosshairCol.style.display = 'none';
+    };
+
+    const showCrosshair = (targetRow, targetCol) => {
+        if (!seatGrid) return;
+        const rows = seatGrid.querySelectorAll('.seat-row');
+        const gridRect = seatGrid.getBoundingClientRect();
+
+        // Find the row element
+        if (targetRow >= 1 && targetRow <= rows.length) {
+            const rowEl = rows[targetRow - 1];
+            const rowRect = rowEl.getBoundingClientRect();
+            crosshairRow.style.display = 'block';
+            crosshairRow.style.top = `${rowRect.top - gridRect.top}px`;
+            crosshairRow.style.height = `${rowRect.height}px`;
+        } else {
+            crosshairRow.style.display = 'none';
+        }
+
+        // Find a seat in the target column to get its horizontal position
+        const colSeat = seatGrid.querySelector(`.seat[data-col="${targetCol}"]`);
+        if (colSeat) {
+            const colRect = colSeat.getBoundingClientRect();
+            crosshairCol.style.display = 'block';
+            crosshairCol.style.left = `${colRect.left - gridRect.left}px`;
+            crosshairCol.style.width = `${colRect.width}px`;
+        } else {
+            crosshairCol.style.display = 'none';
+        }
+    };
+
+    // Find nearest row/col from a click position within the grid
+    const findNearestRowCol = (clientX, clientY) => {
+        if (!seatGrid) return null;
+        const rows = seatGrid.querySelectorAll('.seat-row');
+        if (!rows.length) return null;
+
+        let nearestRow = 1;
+        let minRowDist = Infinity;
+        rows.forEach((rowEl, i) => {
+            const rect = rowEl.getBoundingClientRect();
+            const centerY = rect.top + rect.height / 2;
+            const dist = Math.abs(clientY - centerY);
+            if (dist < minRowDist) {
+                minRowDist = dist;
+                nearestRow = i + 1;
+            }
+        });
+
+        let nearestCol = 1;
+        let minColDist = Infinity;
+        const allSeats = seatGrid.querySelectorAll('.seat');
+        const seenCols = new Set();
+        allSeats.forEach(seat => {
+            const col = parseInt(seat.dataset.col, 10);
+            if (seenCols.has(col)) return;
+            seenCols.add(col);
+            const rect = seat.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const dist = Math.abs(clientX - centerX);
+            if (dist < minColDist) {
+                minColDist = dist;
+                nearestCol = col;
+            }
+        });
+
+        return { row: nearestRow, col: nearestCol };
+    };
 
     const postJson = (payload) => {
         return fetch(cellUrl, {
@@ -124,12 +210,25 @@ document.addEventListener('DOMContentLoaded', () => {
         clearSelectedBtn.addEventListener('click', clearSelection);
     }
 
+    const setContextMenuMode = (mode) => {
+        // mode: 'seat' (right-click on seat) or 'empty' (right-click on empty space)
+        if (!contextMenu) return;
+        contextMenu.querySelectorAll('button[data-tool]').forEach(btn => {
+            btn.style.display = mode === 'seat' ? '' : 'none';
+        });
+        const divider = contextMenu.querySelector('.context-menu-divider');
+        if (divider) divider.style.display = mode === 'seat' ? '' : 'none';
+    };
+
     const openSeatContextMenu = (event, seat) => {
         if (!contextMenu || !seat) return false;
         event.preventDefault();
         event.stopPropagation();
         contextSeat = seat;
+        contextRowCol = null;
         contextMenuJustOpenedAt = Date.now();
+        setContextMenuMode('seat');
+        showCrosshair(parseInt(seat.dataset.row, 10), parseInt(seat.dataset.col, 10));
 
         contextMenu.style.left = '0px';
         contextMenu.style.top = '0px';
@@ -186,6 +285,45 @@ document.addEventListener('DOMContentLoaded', () => {
                     applyTool(contextSeat, btn.dataset.tool);
                 }
                 contextMenu.style.display = 'none';
+                hideCrosshair();
+            });
+        });
+
+        const rcOpUrl = root.dataset.rowColOpUrl;
+        contextMenu.querySelectorAll('button[data-rc-action]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!rcOpUrl) return;
+                const action = btn.dataset.rcAction;
+                let row, col;
+                if (contextSeat) {
+                    row = parseInt(contextSeat.dataset.row, 10);
+                    col = parseInt(contextSeat.dataset.col, 10);
+                } else if (contextRowCol) {
+                    row = contextRowCol.row;
+                    col = contextRowCol.col;
+                } else {
+                    return;
+                }
+                const index = action.includes('row') ? row : col;
+                contextMenu.style.display = 'none';
+                hideCrosshair();
+                fetch(rcOpUrl, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-CSRFToken': csrf,
+                    },
+                    body: JSON.stringify({ action, index })
+                })
+                .then(res => res.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        window.location.reload();
+                    } else {
+                        alert(data.message || '操作失败');
+                    }
+                })
+                .catch(() => alert('请求出错，请重试'));
             });
         });
     }
@@ -195,7 +333,34 @@ document.addEventListener('DOMContentLoaded', () => {
         if (contextMenu.contains(event.target)) return;
         if (isSecondaryMouseButton(event) && Date.now() - contextMenuJustOpenedAt < 180) return;
         contextMenu.style.display = 'none';
+        hideCrosshair();
     });
+
+    const openEmptyContextMenu = (event) => {
+        if (!contextMenu) return false;
+        event.preventDefault();
+        event.stopPropagation();
+        contextSeat = null;
+        const rc = findNearestRowCol(event.clientX, event.clientY);
+        if (!rc) return false;
+        contextRowCol = rc;
+        contextMenuJustOpenedAt = Date.now();
+        setContextMenuMode('empty');
+        showCrosshair(rc.row, rc.col);
+
+        contextMenu.style.left = '0px';
+        contextMenu.style.top = '0px';
+        contextMenu.style.display = 'flex';
+
+        const gap = 8;
+        const menuWidth = contextMenu.offsetWidth || 140;
+        const menuHeight = contextMenu.offsetHeight || 160;
+        const left = Math.min(event.clientX + gap, window.innerWidth - menuWidth - gap);
+        const top = Math.min(event.clientY + gap, window.innerHeight - menuHeight - gap);
+        contextMenu.style.left = `${left}px`;
+        contextMenu.style.top = `${top}px`;
+        return true;
+    };
 
     document.addEventListener('contextmenu', (event) => {
         if (!event.target || !event.target.closest) return;
@@ -203,7 +368,12 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             return;
         }
-        openSeatContextMenuFromTarget(event, event.target);
+        // Try seat first
+        if (openSeatContextMenuFromTarget(event, event.target)) return;
+        // Then try empty space in seat-stage
+        if (event.target.closest('.seat-stage') || event.target.closest('.seat-grid')) {
+            openEmptyContextMenu(event);
+        }
     }, true);
 
     if (seatStage) {
@@ -255,10 +425,50 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', (e) => {
         if (e.key === 'Escape' && contextMenu) {
             contextMenu.style.display = 'none';
+            hideCrosshair();
         }
     });
 
     if (document.fullscreenEnabled) {
         document.documentElement.requestFullscreen().catch(() => { });
     }
+
+    const shiftUrl = root.dataset.shiftUrl;
+    const shiftLeftBtn = document.getElementById('shiftLeftBtn');
+    const shiftRightBtn = document.getElementById('shiftRightBtn');
+    const shiftStepsInput = document.getElementById('shiftStepsInput');
+
+    const shiftLayout = (direction) => {
+        if (!shiftUrl) return;
+        const steps = parseInt(shiftStepsInput.value, 10);
+        if (isNaN(steps) || steps <= 0) {
+            alert('移动列数必须大于 0');
+            return;
+        }
+
+        fetch(shiftUrl, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CSRFToken': csrf,
+            },
+            body: JSON.stringify({ direction: direction, steps: steps })
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert('移动成功');
+                window.location.reload();
+            } else {
+                alert(data.message || '移动失败');
+            }
+        })
+        .catch(err => {
+            alert('请求出错，请重试');
+            console.error(err);
+        });
+    };
+
+    if (shiftLeftBtn) shiftLeftBtn.addEventListener('click', () => shiftLayout('left'));
+    if (shiftRightBtn) shiftRightBtn.addEventListener('click', () => shiftLayout('right'));
 });

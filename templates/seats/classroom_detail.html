@@ -7,6 +7,7 @@
 <button type="button" class="ribbon-tab active" data-ribbon-tab="home">开始</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="view">视图</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="file">文件</button>
+<button type="button" class="ribbon-tab" data-ribbon-tab="transform">变换</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="ai">AI</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="plugins">插件</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="help">帮助</button>
@@ -40,6 +41,21 @@
             <a href="{% url 'layout_editor' classroom.pk %}" class="btn btn-secondary" id="btn-layout-editor">布局编辑</a>
             <button type="button" class="btn btn-secondary" onclick="toggleFullScreen()" id="btn-fullscreen">全屏</button>
             <span class="ribbon-group-label">视图</span>
+        </div>
+    </div>
+
+    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="transform">
+        <div class="ribbon-group">
+            <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
+                <input type="number" id="shiftLayoutSteps" value="1" min="1" style="width: 54px; padding: 4px 8px; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 6px; font-size: 12px; outline: none;" title="移动列数">
+                <button type="button" class="btn btn-secondary" id="btn-shift-layout-left">左移</button>
+                <button type="button" class="btn btn-secondary" id="btn-shift-layout-right">右移</button>
+            </div>
+            <span class="ribbon-group-label">集体左右移动</span>
+        </div>
+        <div class="ribbon-group">
+            <a href="{% url 'shift_layout_options_page' classroom.pk %}" class="btn btn-secondary">移动选项</a>
+            <span class="ribbon-group-label">详细操作</span>
         </div>
     </div>
 
@@ -223,6 +239,7 @@
     data-group-auto-url="{% url 'auto_group_from_reference' classroom.pk %}"
     data-group-merge-url="{% url 'merge_groups' classroom.pk %}"
     data-group-rotate-url="{% url 'rotate_groups' classroom.pk %}"
+    data-shift-layout-url="{% url 'shift_layout' classroom.pk %}"
     data-rename-classroom-url="{% url 'rename_classroom' classroom.pk %}" data-classroom-name="{{ classroom.name }}"
     data-state-url="{% url 'classroom_state' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
     data-redo-url="{% url 'redo_action' classroom.pk %}" data-set-leader-url="{% url 'set_group_leader' classroom.pk %}"

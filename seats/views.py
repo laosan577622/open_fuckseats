@@ -8,6 +8,8 @@ from django.utils.encoding import escape_uri_path
 from django.conf import settings
 from django.test import RequestFactory
 from pypinyin import lazy_pinyin
+import desktop_runtime
+import copy
 from .models import (
     Classroom,
     Student,
@@ -81,6 +83,7 @@ AI_MESSAGE_FETCH_LIMIT = 120
 AI_CONTEXT_MESSAGE_LIMIT = 12
 FUTURE_MODE_PENDING_TTL_SECONDS = 1800
 FUTURE_MODE_PENDING_CACHE = {}
+MAX_LAYOUT_GRID_SIZE = 30
 
 AI_TOOL_DEFINITIONS = [
     {
@@ -353,6 +356,10 @@ AI_TOOL_LABELS = {
 def index(request):
     classrooms = Classroom.objects.all().order_by('-created_at')
     return render(request, 'seats/index.html', {'classrooms': classrooms})
+
+
+def settings_page(request):
+    return render(request, 'seats/settings.html')
 
 
 def create_classroom(request):
@@ -2838,6 +2845,82 @@ def _sync_seats(classroom, rows, cols):
     classroom.generate_seats()
 
 
+def _empty_layout_cell_payload(row, col):
+    return {
+        'row': row,
+        'col': col,
+        'cell_type': SeatCellType.EMPTY,
+        'student_pk': None,
+        'student_id': None,
+        'student_name': None,
+        'group_name': None,
+    }
+
+
+def _sort_layout_seats(seats):
+    return sorted(
+        list(seats),
+        key=lambda item: (
+            int(item.get('row') or 0),
+            int(item.get('col') or 0),
+        )
+    )
+
+
+def _is_blank_layout_cell(cell):
+    return (
+        str(cell.get('cell_type') or SeatCellType.SEAT) == SeatCellType.EMPTY
+        and not cell.get('student_pk')
+        and not cell.get('student_id')
+        and not cell.get('student_name')
+        and not cell.get('group_name')
+    )
+
+
+def _shift_layout_constraints(constraints, delta, cols):
+    shifted = []
+    for raw in constraints:
+        item = dict(raw)
+        col = item.get('col')
+        if col in (None, ''):
+            shifted.append(item)
+            continue
+        next_col = (int(col) - 1 + int(delta)) % cols + 1
+        item['col'] = next_col
+        shifted.append(item)
+    return shifted
+
+
+def _build_shifted_layout_payload(classroom, direction, steps):
+    normalized_direction = str(direction or '').strip().lower()
+    if normalized_direction not in {'left', 'right'}:
+        raise ValueError('移动方向不合法')
+
+    normalized_steps = _safe_int(steps, 0)
+    if normalized_steps < 1:
+        raise ValueError('移动列数必须大于 0')
+
+    payload = copy.deepcopy(
+        _snapshot_payload(classroom, include_students=False, include_constraints=True)
+    )
+
+    delta = normalized_steps if normalized_direction == 'right' else -normalized_steps
+    cols = classroom.cols
+
+    shifted_seats = []
+    for seat in payload.get('seats', []):
+        item = dict(seat)
+        current_col = int(item.get('col') or 0)
+        if current_col > 0:
+            item['col'] = (current_col - 1 + delta) % cols + 1
+        shifted_seats.append(item)
+
+    payload['seats'] = _sort_layout_seats(shifted_seats)
+    payload['constraints'] = _shift_layout_constraints(payload.get('constraints', []), delta, cols)
+
+    return payload
+
+
 def _snapshot_payload(classroom, include_students=True, include_constraints=True):
     seats = list(classroom.seats.select_related('student', 'group'))
     groups = list(classroom.groups.all())
@@ -3291,6 +3374,15 @@ def _apply_seat_layout_action(classroom, action, forward=True):
 
     if affected_group_ids:
         _normalize_group_leaders(classroom, affected_group_ids)
+    return True
+
+
+def _apply_layout_snapshot_action(classroom, action, forward=True):
+    data = action.get('after_data') if forward else action.get('before_data')
+    if not isinstance(data, dict):
+        return False
+    _apply_layout_data(classroom, data, replace_students=False)
+    _normalize_group_leaders(classroom)
     return True
 
 
@@ -4375,10 +4467,136 @@ def update_layout_grid(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     rows = int(request.POST.get('rows', classroom.rows))
     cols = int(request.POST.get('cols', classroom.cols))
-    rows = max(1, min(rows, 30))
-    cols = max(1, min(cols, 30))
+    rows = max(1, min(rows, MAX_LAYOUT_GRID_SIZE))
+    cols = max(1, min(cols, MAX_LAYOUT_GRID_SIZE))
     _sync_seats(classroom, rows, cols)
     return redirect('layout_editor', pk=pk)
+
+
+@require_POST
+def shift_layout(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            payload = json.loads(request.body or '{}')
+        else:
+            payload = request.POST
+
+        direction = payload.get('direction')
+        steps = payload.get('steps')
+        before_data = _snapshot_payload(classroom, include_students=False, include_constraints=True)
+        after_data = _build_shifted_layout_payload(classroom, direction, steps)
+        action = {
+            'type': 'layout_snapshot',
+            'before_data': before_data,
+            'after_data': after_data,
+            'direction': direction,
+            'steps': _safe_int(steps, 0),
+        }
+        with transaction.atomic():
+            if not _apply_layout_snapshot_action(classroom, action, forward=True):
+                raise ValueError('整体平移失败')
+            _push_action(request, pk, action)
+        return JsonResponse({
+            'status': 'success',
+            'message': f"已整体{'右移' if str(direction).lower() == 'right' else '左移'} {action['steps']} 列"
+        })
+    except ValueError as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'整体平移失败：{e}'}, status=400)
+
+
+@require_POST
+def insert_delete_row_col(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        data = json.loads(request.body or '{}')
+        action_type = data.get('action')
+        index = _safe_int(data.get('index'), 0)
+
+        if action_type not in ('insert_row', 'delete_row', 'insert_col', 'delete_col'):
+            raise ValueError('操作类型不合法')
+        if index < 1:
+            raise ValueError('索引必须大于 0')
+
+        before_data = _snapshot_payload(classroom, include_students=True, include_constraints=True)
+
+        with transaction.atomic():
+            if action_type == 'insert_row':
+                if index > classroom.rows + 1:
+                    raise ValueError('行索引超出范围')
+                affected = classroom.seats.filter(row__gte=index)
+                affected.update(row=models.F('row') + 1000000)
+                classroom.seats.filter(row__gte=1000000).update(row=models.F('row') - 999999)
+                classroom.rows += 1
+                classroom.save(update_fields=['rows'])
+                for c in range(1, classroom.cols + 1):
+                    Seat.objects.create(classroom=classroom, row=index, col=c, cell_type=SeatCellType.SEAT)
+
+            elif action_type == 'delete_row':
+                if index > classroom.rows:
+                    raise ValueError('行索引超出范围')
+                if classroom.rows <= 1:
+                    raise ValueError('至少保留一行')
+                classroom.seats.filter(row=index).update(student=None, group=None)
+                classroom.seats.filter(row=index).delete()
+                affected = classroom.seats.filter(row__gt=index)
+                affected.update(row=models.F('row') + 1000000)
+                classroom.seats.filter(row__gte=1000000).update(row=models.F('row') - 1000001)
+                classroom.rows -= 1
+                classroom.save(update_fields=['rows'])
+
+            elif action_type == 'insert_col':
+                if index > classroom.cols + 1:
+                    raise ValueError('列索引超出范围')
+                affected = classroom.seats.filter(col__gte=index)
+                affected.update(col=models.F('col') + 1000000)
+                classroom.seats.filter(col__gte=1000000).update(col=models.F('col') - 999999)
+                classroom.cols += 1
+                classroom.save(update_fields=['cols'])
+                for r in range(1, classroom.rows + 1):
+                    Seat.objects.create(classroom=classroom, row=r, col=index, cell_type=SeatCellType.SEAT)
+
+            elif action_type == 'delete_col':
+                if index > classroom.cols:
+                    raise ValueError('列索引超出范围')
+                if classroom.cols <= 1:
+                    raise ValueError('至少保留一列')
+                classroom.seats.filter(col=index).update(student=None, group=None)
+                classroom.seats.filter(col=index).delete()
+                affected = classroom.seats.filter(col__gt=index)
+                affected.update(col=models.F('col') + 1000000)
+                classroom.seats.filter(col__gte=1000000).update(col=models.F('col') - 1000001)
+                classroom.cols -= 1
+                classroom.save(update_fields=['cols'])
+
+            after_data = _snapshot_payload(classroom, include_students=True, include_constraints=True)
+            undo_action = {
+                'type': 'layout_snapshot',
+                'before_data': before_data,
+                'after_data': after_data,
+            }
+            _push_action(request, pk, undo_action)
+
+        labels = {
+            'insert_row': f'已在第 {index} 行上方插入新行',
+            'delete_row': f'已删除第 {index} 行',
+            'insert_col': f'已在第 {index} 列左侧插入新列',
+            'delete_col': f'已删除第 {index} 列',
+        }
+        return JsonResponse({'status': 'success', 'message': labels[action_type]})
+    except ValueError as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'操作失败：{e}'}, status=400)
+
+
+def shift_layout_options_page(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    return render(request, 'seats/shift_layout_options.html', {
+        'classroom': classroom
+    })
 
 
 def _ensure_temp_import_dir():
@@ -7859,6 +8077,8 @@ def undo_action(request, pk):
         _apply_group_batch_action(classroom, action, forward=False)
     elif action['type'] == 'seat_layout_batch':
         _apply_seat_layout_action(classroom, action, forward=False)
+    elif action['type'] == 'layout_snapshot':
+        _apply_layout_snapshot_action(classroom, action, forward=False)
     history['redo'].append(action)
     request.session.modified = True
     return JsonResponse({'status': 'success'})
@@ -7884,6 +8104,8 @@ def redo_action(request, pk):
         _apply_group_batch_action(classroom, action, forward=True)
     elif action['type'] == 'seat_layout_batch':
         _apply_seat_layout_action(classroom, action, forward=True)
+    elif action['type'] == 'layout_snapshot':
+        _apply_layout_snapshot_action(classroom, action, forward=True)
     history['undo'].append(action)
     request.session.modified = True
     return JsonResponse({'status': 'success'})
@@ -8083,3 +8305,61 @@ def frontend_store_delete(request):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
+
+@require_http_methods(['GET'])
+def desktop_update_check(request):
+    try:
+        payload = desktop_runtime.check_for_updates()
+        return JsonResponse({'status': 'success', **payload})
+    except Exception as exc:
+        return JsonResponse({
+            'status': 'error',
+            'state': 'error',
+            'platform': desktop_runtime.get_platform_name(),
+            'supported': desktop_runtime.is_update_api_supported(),
+            'message': str(exc),
+        }, status=502)
+
+
+@csrf_exempt
+@require_POST
+def desktop_update_start(request):
+    try:
+        payload = json.loads(request.body or b'{}')
+    except Exception:
+        return JsonResponse({
+            'status': 'error',
+            'state': 'invalid_json',
+            'message': '请求数据格式错误',
+        }, status=400)
+
+    try:
+        result = desktop_runtime.start_manual_update(payload.get('target_version'))
+        return JsonResponse({'status': 'success', **result})
+    except ValueError as exc:
+        return JsonResponse({
+            'status': 'error',
+            'state': 'version_mismatch',
+            'message': str(exc),
+        }, status=409)
+    except RuntimeError as exc:
+        return JsonResponse({
+            'status': 'error',
+            'state': 'unsupported',
+            'platform': desktop_runtime.get_platform_name(),
+            'supported': desktop_runtime.is_update_api_supported(),
+            'message': str(exc),
+        }, status=400)
+    except Exception as exc:
+        return JsonResponse({
+            'status': 'error',
+            'state': 'error',
+            'platform': desktop_runtime.get_platform_name(),
+            'supported': desktop_runtime.is_update_api_supported(),
+            'message': str(exc),
+        }, status=500)
+
+
+@require_http_methods(['GET'])
+def desktop_update_status(request):
+    return JsonResponse({'status': 'success', **desktop_runtime.get_update_status()})

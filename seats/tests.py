@@ -14,6 +14,7 @@ import httpx
 import openai
 import openpyxl
 import pandas as pd
+import desktop_runtime
 
 from desktop_shell import (
     build_file_dialog_types,
@@ -1211,6 +1212,129 @@ class GroupRotationTests(TestCase):
         self.assertIn("座位数量不一致", response.json().get("message", ""))
 
 
+class LayoutShiftTests(TestCase):
+    def test_shift_layout_right_expands_grid_and_preserves_layout_data(self):
+        classroom = Classroom.objects.create(name="LS1", rows=2, cols=3)
+        student = classroom.students.create(name="张三")
+        group = SeatGroup.objects.create(classroom=classroom, name="第1组", order=1)
+
+        seat_a = classroom.seats.get(row=1, col=1)
+        seat_a.student = student
+        seat_a.group = group
+        seat_a.save(update_fields=["student", "group"])
+
+        seat_b = classroom.seats.get(row=1, col=2)
+        seat_b.cell_type = SeatCellType.AISLE
+        seat_b.save(update_fields=["cell_type"])
+
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+            student=student,
+            row=1,
+            col=1,
+        )
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "right", "steps": 2}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+
+        classroom.refresh_from_db()
+        self.assertEqual(classroom.cols, 5)
+        self.assertEqual(classroom.seats.get(row=1, col=1).cell_type, SeatCellType.EMPTY)
+
+        shifted = classroom.seats.get(row=1, col=3)
+        self.assertEqual(shifted.student_id, student.pk)
+        self.assertEqual(shifted.group_id, group.pk)
+        self.assertEqual(classroom.seats.get(row=1, col=4).cell_type, SeatCellType.AISLE)
+
+        constraint = classroom.constraints.get(student=student)
+        self.assertEqual((constraint.row, constraint.col), (1, 3))
+
+    def test_shift_layout_left_supports_undo_and_redo(self):
+        classroom = Classroom.objects.create(name="LS2", rows=1, cols=4)
+        student = classroom.students.create(name="李四")
+
+        classroom.seats.filter(row=1, col=1).update(cell_type=SeatCellType.EMPTY)
+
+        seat = classroom.seats.get(row=1, col=2)
+        seat.student = student
+        seat.save(update_fields=["student"])
+
+        classroom.seats.filter(row=1, col=3).update(cell_type=SeatCellType.PODIUM)
+
+        shift_url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            shift_url,
+            data=json.dumps({"direction": "left", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        classroom.refresh_from_db()
+        student.refresh_from_db()
+        self.assertEqual(classroom.cols, 3)
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
+        self.assertEqual(classroom.seats.get(row=1, col=2).cell_type, SeatCellType.PODIUM)
+
+        undo_url = reverse("undo_action", args=[classroom.pk])
+        redo_url = reverse("redo_action", args=[classroom.pk])
+
+        undo_response = self.client.post(undo_url)
+        self.assertEqual(undo_response.status_code, 200)
+        classroom.refresh_from_db()
+        student.refresh_from_db()
+        self.assertEqual(classroom.cols, 4)
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 2))
+        self.assertEqual(classroom.seats.get(row=1, col=1).cell_type, SeatCellType.EMPTY)
+
+        redo_response = self.client.post(redo_url)
+        self.assertEqual(redo_response.status_code, 200)
+        classroom.refresh_from_db()
+        student.refresh_from_db()
+        self.assertEqual(classroom.cols, 3)
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
+
+    def test_shift_layout_left_rejects_non_empty_leading_columns(self):
+        classroom = Classroom.objects.create(name="LS3", rows=1, cols=3)
+        url = reverse("shift_layout", args=[classroom.pk])
+
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "left", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("status"), "error")
+        self.assertIn("仍有布局内容", response.json().get("message", ""))
+
+    def test_shift_layout_left_rejects_out_of_range_column_constraints(self):
+        classroom = Classroom.objects.create(name="LS4", rows=1, cols=3)
+        student = classroom.students.create(name="王五")
+        classroom.seats.filter(row=1, col=1).update(cell_type=SeatCellType.EMPTY)
+
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_COL,
+            student=student,
+            col=1,
+        )
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "left", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("status"), "error")
+        self.assertIn("列约束越界", response.json().get("message", ""))
+
+
 class StudentImportTests(TestCase):
     def test_process_import_match_updates_existing_students(self):
         classroom = Classroom.objects.create(name="导入匹配", rows=2, cols=2)
@@ -1829,3 +1953,62 @@ def register(registry):
             workspace_html = workspace_resp.content.decode('utf-8')
             self.assertIn('id="btn-open-plugin-hub"', workspace_html)
             self.assertIn('data-extensions-list-url="/extensions/"', workspace_html)
+
+
+class RuntimeReleaseManifestTests(unittest.TestCase):
+    def test_get_current_version_prefers_runtime_release_manifest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            runtime_manifest = root / 'runtime' / 'release.json'
+            runtime_manifest.parent.mkdir(parents=True, exist_ok=True)
+            runtime_manifest.write_text(
+                json.dumps({'version': '2.3.4'}, ensure_ascii=False),
+                encoding='utf-8',
+            )
+
+            legacy_manifest = root / 'website' / 'public' / 'api.json'
+            legacy_manifest.parent.mkdir(parents=True, exist_ok=True)
+            legacy_manifest.write_text(
+                json.dumps({'version': '1.0.0'}, ensure_ascii=False),
+                encoding='utf-8',
+            )
+
+            with patch.object(desktop_runtime, 'iter_runtime_roots', return_value=[root]):
+                with patch.dict('os.environ', {'FUCKSEATS_APP_VERSION': ''}, clear=False):
+                    self.assertEqual(desktop_runtime.get_current_version(), '2.3.4')
+
+    def test_get_current_version_falls_back_to_legacy_website_manifest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            legacy_manifest = root / 'website' / 'public' / 'api.json'
+            legacy_manifest.parent.mkdir(parents=True, exist_ok=True)
+            legacy_manifest.write_text(
+                json.dumps({'version': '1.9.8'}, ensure_ascii=False),
+                encoding='utf-8',
+            )
+
+            with patch.object(desktop_runtime, 'iter_runtime_roots', return_value=[root]):
+                with patch.dict('os.environ', {'FUCKSEATS_APP_VERSION': ''}, clear=False):
+                    self.assertEqual(desktop_runtime.get_current_version(), '1.9.8')
+
+    def test_get_current_version_prefers_env_over_manifest(self):
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            runtime_manifest = root / 'runtime' / 'release.json'
+            runtime_manifest.parent.mkdir(parents=True, exist_ok=True)
+            runtime_manifest.write_text(
+                json.dumps({'version': '2.3.4'}, ensure_ascii=False),
+                encoding='utf-8',
+            )
+
+            with patch.object(desktop_runtime, 'iter_runtime_roots', return_value=[root]):
+                with patch.dict('os.environ', {'FUCKSEATS_APP_VERSION': '9.9.9'}, clear=False):
+                    self.assertEqual(desktop_runtime.get_current_version(), '9.9.9')
+
+
+class SettingsPageVersionTests(TestCase):
+    @patch('seats.context_processors.desktop_runtime.get_current_version', return_value='7.8.9')
+    def test_settings_page_renders_current_version(self, _mock_get_current_version):
+        response = self.client.get(reverse('settings'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '7.8.9')

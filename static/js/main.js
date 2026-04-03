@@ -17,7 +17,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const initRibbonTabs = () => {
-        const hosts = document.querySelectorAll('.header-ribbon[data-ribbon-host]');
+        const hosts = document.querySelectorAll('[data-ribbon-host]');
         hosts.forEach((host, idx) => {
             const tabs = Array.from(host.querySelectorAll('.ribbon-tab[data-ribbon-tab]'));
             const panels = Array.from(host.querySelectorAll('.ribbon-panel[data-ribbon-panel]'));
