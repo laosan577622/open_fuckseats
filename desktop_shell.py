@@ -273,6 +273,42 @@ class DesktopBridge:
     def _attach_window(self, window):
         self._window = window
 
+    def close_app_for_update(self):
+        if self._window is None:
+            raise RuntimeError("桌面窗口尚未准备完成")
+
+        self._close_active_context_menu()
+
+        def _close():
+            native_window = getattr(self._window, "native", None) if self._window is not None else None
+            if native_window is not None:
+                try:
+                    native_window.Close()
+                    return True
+                except Exception:
+                    pass
+
+            destroy = getattr(self._window, "destroy", None) if self._window is not None else None
+            if callable(destroy):
+                try:
+                    destroy()
+                    return True
+                except Exception:
+                    pass
+
+            return False
+
+        def _close_later():
+            try:
+                self._invoke_on_ui(_close)
+            except Exception:
+                pass
+
+        timer = threading.Timer(0.08, _close_later)
+        timer.daemon = True
+        timer.start()
+        return {"status": "closing"}
+
     def _debug_context_menu(self, source, payload=None):
         try:
             if isinstance(payload, str):

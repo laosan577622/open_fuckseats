@@ -8360,6 +8360,30 @@ def desktop_update_start(request):
         }, status=500)
 
 
+@csrf_exempt
+@require_POST
+def desktop_update_install(request):
+    try:
+        result = desktop_runtime.launch_prepared_update()
+        return JsonResponse({'status': 'success', **result})
+    except RuntimeError as exc:
+        return JsonResponse({
+            'status': 'error',
+            'state': 'not_ready',
+            'platform': desktop_runtime.get_platform_name(),
+            'supported': desktop_runtime.is_update_api_supported(),
+            'message': str(exc),
+        }, status=409)
+    except Exception as exc:
+        return JsonResponse({
+            'status': 'error',
+            'state': 'error',
+            'platform': desktop_runtime.get_platform_name(),
+            'supported': desktop_runtime.is_update_api_supported(),
+            'message': str(exc),
+        }, status=500)
+
+
 @require_http_methods(['GET'])
 def desktop_update_status(request):
     return JsonResponse({'status': 'success', **desktop_runtime.get_update_status()})

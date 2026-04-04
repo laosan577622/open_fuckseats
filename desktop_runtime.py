@@ -19,14 +19,17 @@ LOCAL_RELEASE_MANIFEST_RELATIVE_PATHS = (
     ("website", "public", "api.json"),
 )
 DEFAULT_WINDOWS_INSTALLER_ARGS = (
-    "/SP- /VERYSILENT /SUPPRESSMSGBOXES /NORESTART "
-    "/CLOSEAPPLICATIONS /FORCECLOSEAPPLICATIONS"
+    "/SP- /NORESTART"
 )
 DOWNLOAD_CHUNK_SIZE = 1024 * 128
 VERSION_PART_RE = re.compile(r"\d+")
+BLOCKED_INSTALLER_FLAG_RE = re.compile(
+    r"(?i)(?:^|\s)/(?:verysilent|silent|suppressmsgboxes|closeapplications|forcecloseapplications)(?=\s|$)"
+)
 UPDATE_STATE_LOCK = threading.Lock()
 UPDATE_THREAD_LOCK = threading.Lock()
 UPDATE_THREAD = None
+PREPARED_INSTALLER_PATH = ""
 UPDATE_STATE = {
     "state": "idle",
     "message": "",
@@ -229,7 +232,22 @@ def get_update_status():
     return payload
 
 
+def _set_prepared_installer_path(path=""):
+    global PREPARED_INSTALLER_PATH
+    resolved = ""
+    if path:
+        resolved = str(Path(path).resolve())
+    with UPDATE_STATE_LOCK:
+        PREPARED_INSTALLER_PATH = resolved
+
+
+def _get_prepared_installer_path():
+    with UPDATE_STATE_LOCK:
+        return PREPARED_INSTALLER_PATH
+
+
 def reset_update_state():
+    _set_prepared_installer_path("")
     _update_state(
         state="idle",
         message="",
@@ -358,6 +376,8 @@ def launch_installer_as_admin(installer_path, installer_args=None):
         or (os.getenv("FUCKSEATS_INSTALLER_ARGS") or "").strip()
         or DEFAULT_WINDOWS_INSTALLER_ARGS
     )
+    installer_args = BLOCKED_INSTALLER_FLAG_RE.sub(" ", installer_args)
+    installer_args = " ".join(installer_args.split())
     shell_execute_windows(
         "runas",
         Path(installer_path).resolve(),
@@ -427,17 +447,14 @@ def _run_manual_update_task(manifest):
             manifest["latest_version"],
             progress_callback=_on_progress,
         )
+        _set_prepared_installer_path(installer_path)
         _update_state(
-            state="downloaded",
-            message="更新安装包已下载完成",
+            state="ready_to_install",
+            message="更新安装包已准备完成，请点击开始安装",
             progress=_build_progress_payload(installer_path.stat().st_size, installer_path.stat().st_size),
         )
-        launch_installer_as_admin(installer_path)
-        _update_state(
-            state="installer_started",
-            message="安装器已启动，请按系统提示完成更新",
-        )
     except Exception as exc:
+        _set_prepared_installer_path("")
         _update_state(
             state="error",
             message=str(exc),
@@ -460,6 +477,7 @@ def start_manual_update(target_version=""):
         raise ValueError("目标版本与远端最新版本不一致，请重新检查更新。")
 
     if not is_newer_version(latest_version, current_version):
+        _set_prepared_installer_path("")
         _update_state(
             state="up_to_date",
             message="当前已是最新版本",
@@ -477,6 +495,7 @@ def start_manual_update(target_version=""):
         if UPDATE_THREAD is not None and UPDATE_THREAD.is_alive():
             return get_update_status()
 
+        _set_prepared_installer_path("")
         _update_state(
             state="downloading",
             message="已开始下载更新安装包",
@@ -497,6 +516,45 @@ def start_manual_update(target_version=""):
         UPDATE_THREAD.start()
 
     return get_update_status()
+
+
+def launch_prepared_update():
+    if not is_update_api_supported():
+        raise RuntimeError("仅 Windows 桌面端支持自动更新。")
+
+    current_status = get_update_status()
+    state = str(current_status.get("state") or "").strip().lower()
+    installer_path_text = _get_prepared_installer_path()
+
+    if not installer_path_text:
+        if state == "downloading":
+            raise RuntimeError("更新安装包仍在下载，请稍后再试。")
+        if state == "installer_started":
+            return current_status
+        raise RuntimeError("更新安装包尚未准备完成，请稍后重试。")
+
+    installer_path = Path(installer_path_text).resolve()
+    if not installer_path.exists():
+        _set_prepared_installer_path("")
+        raise RuntimeError("更新安装包不存在，请重新下载更新。")
+
+    try:
+        launch_installer_as_admin(installer_path)
+        _set_prepared_installer_path("")
+        _update_state(
+            state="installer_started",
+            message="安装器已启动，桌面程序即将退出",
+            progress=_build_progress_payload(installer_path.stat().st_size, installer_path.stat().st_size),
+            last_error="",
+        )
+        return get_update_status()
+    except Exception as exc:
+        _update_state(
+            state="error",
+            message=str(exc),
+            last_error=str(exc),
+        )
+        raise
 
 
 reset_update_state()

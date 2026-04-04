@@ -73,5 +73,6 @@ urlpatterns = [
     path('api/store/delete/', views.frontend_store_delete, name='frontend_store_delete'),
     path('api/update/check/', views.desktop_update_check, name='desktop_update_check'),
     path('api/update/start/', views.desktop_update_start, name='desktop_update_start'),
+    path('api/update/install/', views.desktop_update_install, name='desktop_update_install'),
     path('api/update/status/', views.desktop_update_status, name='desktop_update_status'),
 ]
