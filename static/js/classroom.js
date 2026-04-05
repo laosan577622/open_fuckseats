@@ -38,6 +38,8 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const seatElements = Array.from(document.querySelectorAll('.seat'));
+    const quickArrangeForm = document.querySelector('.quick-arrange-form');
+    const autoArrangeBtn = document.getElementById('btn-auto-arrange');
     const undoBtn = document.getElementById('undoBtn');
     const redoBtn = document.getElementById('redoBtn');
     const renameClassroomBtn = document.getElementById('btn-rename-classroom');
@@ -210,6 +212,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (toast.parentNode) toast.parentNode.removeChild(toast);
             });
         }, 2200);
+    };
+    const notify = (message) => {
+        showInlineToast(message);
     };
 
     const classroomId = root.dataset.classroomId || '';
@@ -1444,7 +1449,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         showInlineToast(`已开始下载：${result.filename}`);
                     }
                 } catch (error) {
-                    alert(error?.message || '导出失败');
+                    notify(error?.message || '导出失败');
                 } finally {
                     setExportAnchorPending(anchor, false);
                 }
@@ -1472,12 +1477,12 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleResponse = (promise, onSuccess = null) => {
         promise.then(data => {
             if (data && data.status && data.status !== 'success') {
-                alert(data.message || '操作失败');
+                notify(data.message || '操作失败');
                 return;
             }
             if (onSuccess) onSuccess(data);
             refreshState();
-        }).catch((err) => alert(err?.message || '操作失败'));
+        }).catch((err) => notify(err?.message || '操作失败'));
     };
 
     const applyUnseatedFilter = () => {
@@ -1986,12 +1991,12 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const refreshState = () => {
-        if (!urls.state) return;
+        if (!urls.state) return Promise.resolve();
         const selectedSeatKey = selectedSeat ? seatKey(selectedSeat) : null;
         const selectedUnseatedId = selectedUnseated ? selectedUnseated.dataset.studentId : null;
 
         const stateUrl = `${urls.state}?t=${Date.now()}`;
-        fetch(stateUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        return fetch(stateUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(res => res.json())
             .then(data => {
                 const seatMap = new Map();
@@ -2086,7 +2091,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     }
                                     btn.closest('.toast-notification')?.remove();
                                 }).catch((error) => {
-                                    alert(error?.message || '导出失败');
+                                    notify(error?.message || '导出失败');
                                 }).finally(() => {
                                     if (!btn.isConnected) return;
                                     btn.disabled = false;
@@ -2136,7 +2141,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearDragFeedback();
                 setDragEnabled(!groupMode);
             })
-            .catch(() => alert('刷新失败'));
+            .catch(() => notify('刷新失败'));
     };
 
 
@@ -2177,14 +2182,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 const plan = buildMultiDropPlan(seat);
                 clearDragFeedback();
                 if (!plan.ok) {
-                    alert(plan.reason || '批量拖拽失败');
+                    notify(plan.reason || '批量拖拽失败');
                     return;
                 }
                 if (plan.deltaRow === 0 && plan.deltaCol === 0) {
                     return;
                 }
                 if (!urls.moveBatch) {
-                    alert('当前版本不支持多选拖拽');
+                    notify('当前版本不支持多选拖拽');
                     return;
                 }
                 handleResponse(postJson(urls.moveBatch, { moves: plan.moves }), () => {
@@ -2280,7 +2285,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (groupApplyBtn) {
         groupApplyBtn.addEventListener('click', () => {
             if (!selectedSeats.size) {
-                alert('请先选择座位');
+                notify('请先选择座位');
                 return;
             }
             const groupId = groupSelect ? groupSelect.value : '';
@@ -2294,6 +2299,35 @@ document.addEventListener('DOMContentLoaded', () => {
             }), () => {
                 clearMultiSelection();
             });
+        });
+    }
+
+    if (quickArrangeForm) {
+        quickArrangeForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const formData = new FormData(quickArrangeForm);
+            const submitBtn = autoArrangeBtn || quickArrangeForm.querySelector('button[type="submit"]');
+            const originalText = submitBtn ? submitBtn.textContent : '';
+
+            if (submitBtn) {
+                submitBtn.disabled = true;
+                submitBtn.textContent = '排座中...';
+            }
+
+            postForm(quickArrangeForm.action, formData)
+                .then((data) => {
+                    return refreshState().finally(() => {
+                        showInlineToast(data?.message || '排座完成');
+                    });
+                })
+                .catch((err) => {
+                    showInlineToast(err?.message || '排座失败');
+                })
+                .finally(() => {
+                    if (!submitBtn) return;
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
+                });
         });
     }
 
@@ -2315,11 +2349,11 @@ document.addEventListener('DOMContentLoaded', () => {
         groupAutoConfirmBtn.addEventListener('click', () => {
             const referenceGroupId = groupAutoReferenceSelect ? groupAutoReferenceSelect.value : '';
             if (!referenceGroupId) {
-                alert('请先选择参考小组');
+                notify('请先选择参考小组');
                 return;
             }
             if (!urls.groupAuto) {
-                alert('当前版本不支持自动编组');
+                notify('当前版本不支持自动编组');
                 return;
             }
             const strategyInput = document.querySelector('input[name="group_auto_remainder_strategy"]:checked');
@@ -2352,7 +2386,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     refreshState();
                 })
                 .catch((err) => {
-                    alert(err.message || '自动编组失败');
+                    notify(err.message || '自动编组失败');
                 })
                 .finally(() => {
                     groupAutoConfirmBtn.textContent = originalText;
@@ -2366,15 +2400,15 @@ document.addEventListener('DOMContentLoaded', () => {
             const sourceGroupId = groupMergeFromSelect ? groupMergeFromSelect.value : '';
             const targetGroupId = groupMergeToSelect ? groupMergeToSelect.value : '';
             if (!sourceGroupId || !targetGroupId) {
-                alert('请选择来源组和目标组');
+                notify('请选择来源组和目标组');
                 return;
             }
             if (sourceGroupId === targetGroupId) {
-                alert('来源组和目标组不能相同');
+                notify('来源组和目标组不能相同');
                 return;
             }
             if (!urls.groupMerge) {
-                alert('当前版本不支持合并组');
+                notify('当前版本不支持合并组');
                 return;
             }
             const sourceName = groupMergeFromSelect?.selectedOptions?.[0]?.textContent?.trim() || '来源组';
@@ -2408,7 +2442,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     refreshState();
                 })
                 .catch((err) => {
-                    alert(err.message || '合并组失败');
+                    notify(err.message || '合并组失败');
                 })
                 .finally(() => {
                     groupMergeBtn.textContent = originalText;
@@ -2420,7 +2454,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (groupRotateBtn) {
         groupRotateBtn.addEventListener('click', () => {
             if (!urls.groupRotate) {
-                alert('当前版本不支持小组轮换');
+                notify('当前版本不支持小组轮换');
                 return;
             }
             if (!confirm('确定执行小组平移轮换吗？将按当前小组顺序整体交换位置。')) {
@@ -2438,7 +2472,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     refreshState();
                 })
                 .catch((err) => {
-                    alert(err.message || '小组轮换失败');
+                    notify(err.message || '小组轮换失败');
                 })
                 .finally(() => {
                     groupRotateBtn.textContent = originalText;
@@ -2469,7 +2503,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(err => {
                 console.error('Shift layout error:', err);
-                alert(err.message || '请求出错，请重试');
+                notify(err.message || '请求出错，请重试');
             })
             .finally(() => {
                 btn.textContent = originalText;
@@ -2488,7 +2522,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (renameClassroomBtn) {
         renameClassroomBtn.addEventListener('click', () => {
             if (!urls.renameClassroom) {
-                alert('当前版本不支持修改班级名称');
+                notify('当前版本不支持修改班级名称');
                 return;
             }
             const currentName = root.dataset.classroomName || '';
@@ -2496,7 +2530,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (newName === null) return;
             const trimmed = newName.trim();
             if (!trimmed) {
-                alert('班级名称不能为空');
+                notify('班级名称不能为空');
                 return;
             }
 
@@ -2513,7 +2547,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     window.location.reload();
                 })
                 .catch((err) => {
-                    alert(err.message || '修改班级名称失败');
+                    notify(err.message || '修改班级名称失败');
                 })
                 .finally(() => {
                     renameClassroomBtn.textContent = originalText;
@@ -2533,7 +2567,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const nameInput = createGroupForm.querySelector('input[name="name"]');
             if (!nameInput || !nameInput.value.trim()) {
-                alert('请输入小组名称');
+                notify('请输入小组名称');
                 return;
             }
             const formData = new FormData();
@@ -2552,7 +2586,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     showInlineToast(`已创建小组：${data.group.name}`);
                     nameInput.value = '';
                 })
-                .catch((err) => alert(err.message || '创建小组失败'));
+                .catch((err) => notify(err.message || '创建小组失败'));
         });
     }
 
@@ -2566,7 +2600,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (newName === null) return;
                 const trimmed = newName.trim();
                 if (!trimmed) {
-                    alert('小组名称不能为空');
+                    notify('小组名称不能为空');
                     return;
                 }
                 const formData = new FormData();
@@ -2584,7 +2618,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         showInlineToast('小组已重命名');
                         refreshState();
                     })
-                    .catch((err) => alert(err.message || '重命名失败'));
+                    .catch((err) => notify(err.message || '重命名失败'));
                 return;
             }
 
@@ -2601,7 +2635,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         showInlineToast('小组已删除');
                         refreshState();
                     })
-                    .catch((err) => alert(err.message || '删除失败'));
+                    .catch((err) => notify(err.message || '删除失败'));
             }
         });
     }

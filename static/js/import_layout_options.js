@@ -14,6 +14,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let seatLayoutFileId = null;
     let seatLayoutTransform = 'none';
+    const notify = (message) => {
+        if (!message) return;
+        if (typeof window.showToast === 'function') {
+            window.showToast(message);
+            return;
+        }
+        console.warn(message);
+    };
 
     const setHint = (text) => {
         if (!hint) return;
@@ -182,7 +190,7 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch((error) => {
                 setHint('');
-                alert(error?.message || '预览失败');
+                notify(error?.message || '预览失败');
             })
             .finally(() => {
                 if (previewBtn) {
@@ -243,7 +251,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setHint(data.message || '文件解析完成，请确认范围后导入。');
             } catch (error) {
                 setHint('');
-                alert(error?.message || '识别失败');
+                notify(error?.message || '识别失败');
             } finally {
                 if (uploadBtn) {
                     uploadBtn.textContent = originalText;
@@ -273,7 +281,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 })
                 .catch((error) => {
                     setHint('');
-                    alert(error?.message || '导入失败');
+                    notify(error?.message || '导入失败');
                 })
                 .finally(() => {
                     confirmBtn.textContent = originalText;

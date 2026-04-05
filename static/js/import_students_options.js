@@ -21,6 +21,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let currentImportData = null;
     let currentImportFileId = null;
+    const notify = (message) => {
+        if (!message) return;
+        if (typeof window.showToast === 'function') {
+            window.showToast(message);
+            return;
+        }
+        console.warn(message);
+    };
 
     const exitPage = () => {
         window.location.href = backUrl;
@@ -208,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 throw new Error(data.message || '导入失败');
             } catch (error) {
                 setHint('');
-                alert(error?.message || '导入失败');
+                notify(error?.message || '导入失败');
             } finally {
                 if (uploadBtn) {
                     uploadBtn.textContent = originalText;
@@ -221,11 +229,11 @@ document.addEventListener('DOMContentLoaded', () => {
     if (confirmBtn) {
         confirmBtn.addEventListener('click', async () => {
             if (!currentImportFileId) {
-                alert('缺少临时文件，请重新上传');
+                notify('缺少临时文件，请重新上传');
                 return;
             }
             if (!nameColSelect || nameColSelect.value === '') {
-                alert('请选择姓名列');
+                notify('请选择姓名列');
                 return;
             }
             const originalText = confirmBtn.textContent;
@@ -261,7 +269,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(exitPage, 220);
             } catch (error) {
                 setHint('');
-                alert(error?.message || '导入失败');
+                notify(error?.message || '导入失败');
             } finally {
                 confirmBtn.textContent = originalText;
                 confirmBtn.disabled = false;

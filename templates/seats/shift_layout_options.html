@@ -43,6 +43,14 @@
 <script>
 document.getElementById('shiftForm').addEventListener('submit', function(e) {
     e.preventDefault();
+    const notify = (message) => {
+        if (!message) return;
+        if (typeof window.showToast === 'function') {
+            window.showToast(message);
+            return;
+        }
+        console.warn(message);
+    };
     const btn = this.querySelector('button[type="submit"]');
     const originalText = btn.textContent;
     btn.textContent = '执行中...';
@@ -67,11 +75,11 @@ document.getElementById('shiftForm').addEventListener('submit', function(e) {
         if (data.status === 'success') {
             window.location.href = "{% url 'classroom_detail' classroom.pk %}";
         } else {
-            alert(data.message || '操作失败');
+            notify(data.message || '操作失败');
         }
     })
     .catch(err => {
-        alert('请求出错，请重试');
+        notify('请求出错，请重试');
         console.error(err);
     })
     .finally(() => {

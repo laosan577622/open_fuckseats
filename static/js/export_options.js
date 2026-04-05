@@ -18,6 +18,14 @@ document.addEventListener('DOMContentLoaded', () => {
         .map((item) => item.trim())
         .filter(Boolean)
         .map((item) => (item.startsWith('.') ? item : `.${item}`));
+    const notify = (message) => {
+        if (!message) return;
+        if (typeof window.showToast === 'function') {
+            window.showToast(message);
+            return;
+        }
+        console.warn(message);
+    };
 
     const exitPage = () => {
         window.location.href = backUrl;
@@ -382,7 +390,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (confirmBtn.dataset.pending === '1') return;
             const payload = getExportPayload();
             if (!payload.url) {
-                alert('导出地址无效');
+                notify('导出地址无效');
                 return;
             }
 
@@ -406,7 +414,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 setTimeout(exitPage, 220);
             } catch (error) {
                 setHint('');
-                alert(error?.message || '导出失败');
+                notify(error?.message || '导出失败');
             } finally {
                 confirmBtn.dataset.pending = '';
                 confirmBtn.textContent = confirmBtn.dataset.prevText || '开始导出';

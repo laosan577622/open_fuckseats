@@ -8273,7 +8273,12 @@ def frontend_store_js(request):
         if (navigator.userAgent.includes('Mac OS X') || navigator.platform.toUpperCase().indexOf('MAC') >= 0) {{
             if (!localStorage.getItem('mac_os_warning_seen')) {{
                 localStorage.setItem('mac_os_warning_seen', 'true');
-                alert("当前系统可能部分动效、功能不稳定，若您有相关需要，可以前往 Windows/使用 Chrome 打开http://127.0.0.1:23948");
+                const message = "当前系统可能部分动效、功能不稳定，若您有相关需要，可以前往 Windows/使用 Chrome 打开http://127.0.0.1:23948";
+                if (typeof window.showToast === 'function') {{
+                    window.showToast(message);
+                }} else {{
+                    console.warn(message);
+                }}
             }}
         }}
     }});

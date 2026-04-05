@@ -16,6 +16,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const selectedSeats = new Set();
     let selecting = false;
     let selectStart = null;
+    const notify = (message) => {
+        if (!message) return;
+        if (typeof window.showToast === 'function') {
+            window.showToast(message);
+            return;
+        }
+        console.warn(message);
+    };
 
     const seatStage = document.querySelector('.seat-stage');
     const selectionBox = document.createElement('div');
@@ -162,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
             cell_type: tool
         }))).then(() => {
             window.location.reload();
-        }).catch(() => alert('操作失败'));
+        }).catch(() => notify('操作失败'));
     };
 
     const applyTool = (seat, tool) => {
@@ -173,11 +181,11 @@ document.addEventListener('DOMContentLoaded', () => {
             cell_type: tool
         }).then(data => {
             if (data && data.status && data.status !== 'success') {
-                alert(data.message || '操作失败');
+                notify(data.message || '操作失败');
                 return;
             }
             window.location.reload();
-        }).catch(() => alert('操作失败'));
+        }).catch(() => notify('操作失败'));
     };
 
     document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
@@ -199,7 +207,7 @@ document.addEventListener('DOMContentLoaded', () => {
         applySelectedBtn.addEventListener('click', () => {
             const seats = Array.from(selectedSeats).map(key => document.querySelector(`.seat[data-seat-key="${key}"]`)).filter(Boolean);
             if (!seats.length) {
-                alert('请先选择座位');
+                notify('请先选择座位');
                 return;
             }
             applyToolToSeats(activeTool, seats);
@@ -320,10 +328,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (data.status === 'success') {
                         window.location.reload();
                     } else {
-                        alert(data.message || '操作失败');
+                        notify(data.message || '操作失败');
                     }
                 })
-                .catch(() => alert('请求出错，请重试'));
+                .catch(() => notify('请求出错，请重试'));
             });
         });
     }
@@ -442,7 +450,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!shiftUrl) return;
         const steps = parseInt(shiftStepsInput.value, 10);
         if (isNaN(steps) || steps <= 0) {
-            alert('移动列数必须大于 0');
+            notify('移动列数必须大于 0');
             return;
         }
 
@@ -457,14 +465,14 @@ document.addEventListener('DOMContentLoaded', () => {
         .then(res => res.json())
         .then(data => {
             if (data.status === 'success') {
-                alert('移动成功');
-                window.location.reload();
+                notify('移动成功');
+                setTimeout(() => window.location.reload(), 220);
             } else {
-                alert(data.message || '移动失败');
+                notify(data.message || '移动失败');
             }
         })
         .catch(err => {
-            alert('请求出错，请重试');
+            notify('请求出错，请重试');
             console.error(err);
         });
     };
