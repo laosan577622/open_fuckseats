@@ -61,6 +61,10 @@
                     <p class="version-info">
                         <span id="current-version"></span> → <span id="latest-version"></span>
                     </p>
+                    <div class="update-details-block" aria-live="polite">
+                        <div class="update-details-label">更新详情</div>
+                        <div id="update-details-content" class="update-details-content" data-state="loading">正在加载更新详情...</div>
+                    </div>
                 </div>
                 <button id="close-update-modal" class="modal-close-btn">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -157,6 +161,10 @@
             margin-bottom: 40px;
         }
 
+        #update-modal .modal-header > div {
+            width: min(100%, 720px);
+        }
+
         .modal-header h3 {
             font-size: 24px;
             font-weight: 700;
@@ -177,6 +185,52 @@
 
         #update-modal .version-info {
             font-size: 18px;
+        }
+
+        .update-details-block {
+            margin-top: 16px;
+            padding: 16px 18px;
+            border-radius: 20px;
+            border: 1px solid rgba(10, 89, 247, 0.12);
+            background: rgba(10, 89, 247, 0.06);
+            text-align: left;
+        }
+
+        #update-modal .update-details-block {
+            margin-top: 20px;
+            padding: 20px 22px;
+            border-radius: 24px;
+        }
+
+        .update-details-label {
+            margin-bottom: 10px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            color: #0a59f7;
+        }
+
+        .update-details-content {
+            margin: 0;
+            font-size: 14px;
+            line-height: 1.7;
+            color: #334155;
+            white-space: pre-wrap;
+            word-break: break-word;
+            max-height: 220px;
+            overflow: auto;
+        }
+
+        #update-modal .update-details-content {
+            font-size: 15px;
+            max-height: 260px;
+        }
+
+        .update-details-content[data-state="loading"],
+        .update-details-content[data-state="empty"],
+        .update-details-content[data-state="error"] {
+            color: #64748b;
         }
 
         .modal-close-btn {
@@ -279,6 +333,8 @@
             let pollingInterval = null;
             const INSTALL_LAUNCH_DELAY_MS = 2000;
             const INSTALL_LAUNCH_DELAY_TEXT = '2 秒';
+            const UPDATE_DETAILS_URL = 'https://fuckseats.577622.xyz/update.txt';
+            let updateDetailsRequestId = 0;
 
             // 全局更新信息，统一通过 window.updateInfo 读写
             window.updateInfo = null;
@@ -316,6 +372,53 @@
                 setInstallActionVisible(false);
             }
 
+            function renderUpdateDetails(text, state = 'loaded') {
+                const detailsEl = document.getElementById('update-details-content');
+                if (!detailsEl) return;
+                detailsEl.dataset.state = state;
+                detailsEl.textContent = text;
+            }
+
+            async function loadUpdateDetails() {
+                const requestId = ++updateDetailsRequestId;
+                const fallbackText = String((window.updateInfo && window.updateInfo.notes) || '').trim();
+
+                renderUpdateDetails('正在加载更新详情...', 'loading');
+
+                try {
+                    const detailUrl = `${UPDATE_DETAILS_URL}?t=${Date.now()}`;
+                    const response = await fetch(detailUrl, { cache: 'no-store' });
+                    if (!response.ok) {
+                        throw new Error(`HTTP ${response.status}`);
+                    }
+
+                    const remoteText = (await response.text()).trim();
+                    if (requestId !== updateDetailsRequestId) return;
+
+                    if (remoteText) {
+                        renderUpdateDetails(remoteText, 'loaded');
+                        return;
+                    }
+
+                    if (fallbackText) {
+                        renderUpdateDetails(fallbackText, 'loaded');
+                        return;
+                    }
+
+                    renderUpdateDetails('暂无更新详情。', 'empty');
+                } catch (error) {
+                    console.error('Update details fetch error:', error);
+                    if (requestId !== updateDetailsRequestId) return;
+
+                    if (fallbackText) {
+                        renderUpdateDetails(fallbackText, 'loaded');
+                        return;
+                    }
+
+                    renderUpdateDetails('暂时无法加载更新详情，请稍后重试。', 'error');
+                }
+            }
+
             function showUpdateModal() {
                 if (!window.updateInfo) return;
                 const modal = document.getElementById('update-modal');
@@ -335,6 +438,7 @@
                 resetUpdateProgressView();
 
                 modal.style.display = 'flex';
+                loadUpdateDetails();
             }
 
             function hideUpdateModal() {

@@ -34,7 +34,7 @@
 
 <section class="classrooms-grid animate-fade-in">
     {% for classroom in classrooms %}
-    <a href="{% url 'classroom_detail' classroom.pk %}" class="classroom-card-link">
+    <a href="{% url 'classroom_detail' classroom.pk %}" class="classroom-card-link" style="--card-index: {{ forloop.counter0 }}">
         <article class="card classroom-card">
             <header class="classroom-card-header">
                 <h3>{{ classroom.name }}</h3>

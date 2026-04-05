@@ -47,14 +47,21 @@
     <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="transform">
         <div class="ribbon-group">
             <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
-                <input type="number" id="shiftLayoutSteps" value="1" min="1" style="width: 54px; padding: 4px 8px; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 6px; font-size: 12px; outline: none;" title="移动列数">
+                <input type="number" id="shiftLayoutSteps" value="1" min="1" style="width: 54px; padding: 4px 8px; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 6px; font-size: 12px; outline: none;" title="移动步数">
                 <button type="button" class="btn btn-secondary" id="btn-shift-layout-left">左移</button>
                 <button type="button" class="btn btn-secondary" id="btn-shift-layout-right">右移</button>
             </div>
             <span class="ribbon-group-label">集体左右移动</span>
         </div>
         <div class="ribbon-group">
-            <a href="{% url 'shift_layout_options_page' classroom.pk %}" class="btn btn-secondary">移动选项</a>
+            <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
+                <button type="button" class="btn btn-secondary" id="btn-shift-layout-front">前移</button>
+                <button type="button" class="btn btn-secondary" id="btn-shift-layout-back">后移</button>
+            </div>
+            <span class="ribbon-group-label">集体前后移动</span>
+        </div>
+        <div class="ribbon-group">
+            <button type="button" class="btn btn-secondary" data-open-modal="shift-options-modal">移动选项</button>
             <span class="ribbon-group-label">详细操作</span>
         </div>
     </div>
@@ -218,10 +225,9 @@
             <span class="ribbon-group-label">班级信息</span>
         </div>
         <div class="ribbon-group ribbon-group-danger">
-            <form method="post" action="{% url 'delete_classroom' classroom.pk %}" class="danger-inline-form"
-                onsubmit="return confirm('确定要删除这个班级吗？');">
+            <form id="delete-classroom-form" method="post" action="{% url 'delete_classroom' classroom.pk %}" class="danger-inline-form">
                 {% csrf_token %}
-                <button type="submit" class="btn btn-danger">删除班级</button>
+                <button type="button" class="btn btn-danger" id="btn-delete-classroom">删除班级</button>
             </form>
             <span class="ribbon-group-label">危险操作</span>
         </div>
@@ -243,6 +249,7 @@
     data-rename-classroom-url="{% url 'rename_classroom' classroom.pk %}" data-classroom-name="{{ classroom.name }}"
     data-state-url="{% url 'classroom_state' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
     data-redo-url="{% url 'redo_action' classroom.pk %}" data-set-leader-url="{% url 'set_group_leader' classroom.pk %}"
+    data-command-url="{% url 'classroom_command' classroom.pk %}"
     data-csrf="{{ csrf_token }}">
 
     <div class="zoom-controls">
@@ -532,6 +539,56 @@
         </div>
     </div>
 
+    <!-- Generic Prompt / Confirm Modal -->
+    <div id="generic-dialog-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3 id="genericDialogTitle" style="margin: 0 0 12px; font-size: 16px; font-weight: 600;"></h3>
+            <p id="genericDialogMessage" style="margin: 0 0 16px; font-size: 14px; color: var(--text-secondary); line-height: 1.5;"></p>
+            <input type="text" id="genericDialogInput" style="display:none; width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-bottom:16px;">
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="genericDialogCancel">取消</button>
+                <button type="button" class="btn btn-primary" id="genericDialogOk">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="shift-options-modal" class="modal">
+        <div class="modal-content" style="max-width: 460px;">
+            <h3 style="margin: 0 0 20px; font-size: 17px; font-weight: 600;">高级布局轮换</h3>
+            <form id="shiftOptionsForm">
+                {% csrf_token %}
+                <div class="modal-block">
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">轮换方向</label>
+                    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; margin-top: 8px;">
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                            <input type="radio" name="shift_direction" value="left" checked> 左移
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                            <input type="radio" name="shift_direction" value="right"> 右移
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                            <input type="radio" name="shift_direction" value="front"> 前移
+                        </label>
+                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                            <input type="radio" name="shift_direction" value="back"> 后移
+                        </label>
+                    </div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">四个方向均为循环轮换，不会新增空位。前移时最后一排会绕到最前，左移时最左一列会绕到最右。</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">前移表示朝讲台方向轮换，后移表示远离讲台方向轮换。</div>
+                </div>
+                <div class="modal-divider"></div>
+                <div class="modal-block">
+                    <label for="shiftOptionsSteps" style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">移动步数</label>
+                    <input type="number" id="shiftOptionsSteps" name="shift_steps" min="1" value="1" style="margin-top: 4px; padding: 8px 12px; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; font-size: 14px; outline: none; width: 100%; box-sizing: border-box;">
+                </div>
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" data-close-modal="shift-options-modal">取消</button>
+                    <button type="submit" class="btn btn-primary" id="shiftOptionsSubmitBtn">执行轮换</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="plugin-hub-modal" class="modal">
         <div class="modal-content plugin-hub-modal-content">
             <div class="plugin-hub-header">
@@ -642,6 +699,30 @@
     <!-- Context Menu -->
     <div id="seat-context-menu" class="context-menu">
         <button type="button" class="menu-item" id="ctx-set-leader">任命为组长</button>
+    </div>
+</div>
+
+<!-- Spotlight Command Panel -->
+<div id="spotlight-overlay" class="spotlight-overlay">
+    <div class="spotlight-panel">
+        <div class="spotlight-input-row">
+            <svg class="spotlight-icon" width="20" height="20" viewBox="0 0 20 20" fill="none">
+                <circle cx="9" cy="9" r="6.5" stroke="currentColor" stroke-width="1.5"/>
+                <line x1="13.5" y1="13.5" x2="17" y2="17" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <input type="text" id="spotlightInput" placeholder="输入命令，如 /help、/overview、/students 张三" autocomplete="off" spellcheck="false">
+            <kbd class="spotlight-hint-key">Tab 补全</kbd>
+        </div>
+        <div id="spotlightSuggestions" class="spotlight-suggestions"></div>
+        <div id="spotlightResult" class="spotlight-result"></div>
+        <div class="spotlight-footer">
+            <span class="spotlight-footer-hint">
+                <kbd>Shift</kbd><kbd>Shift</kbd> 打开
+                <kbd>Tab</kbd> 补全
+                <kbd>Enter</kbd> 执行
+                <kbd>Esc</kbd> 关闭
+            </span>
+        </div>
     </div>
 </div>
 
@@ -768,13 +849,22 @@
                 }
             ],
             onDestroyStarted: () => {
-                if (!driver.hasNextStep() || confirm('确定要结束教程吗？')) {
+                if (!driver.hasNextStep()) {
                     driver.destroy();
                     localStorage.setItem('seat_app_tour_seen', 'true');
-                    // 教程结束后重置滚动位置
                     window.scrollTo(0, 0);
                     document.documentElement.scrollTop = 0;
                     document.body.scrollTop = 0;
+                } else {
+                    showConfirmModal('确定要结束教程吗？', { title: '结束教程' }).then(ok => {
+                        if (ok) {
+                            driver.destroy();
+                            localStorage.setItem('seat_app_tour_seen', 'true');
+                            window.scrollTo(0, 0);
+                            document.documentElement.scrollTop = 0;
+                            document.body.scrollTop = 0;
+                        }
+                    });
                 }
             },
         });

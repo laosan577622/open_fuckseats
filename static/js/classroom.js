@@ -56,6 +56,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const groupMergeFromSelect = document.getElementById('groupMergeFromSelect');
     const groupMergeToSelect = document.getElementById('groupMergeToSelect');
 
+    const shiftLayoutFrontBtn = document.getElementById('btn-shift-layout-front');
+    const shiftLayoutBackBtn = document.getElementById('btn-shift-layout-back');
     const shiftLayoutLeftBtn = document.getElementById('btn-shift-layout-left');
     const shiftLayoutRightBtn = document.getElementById('btn-shift-layout-right');
     const shiftLayoutSteps = document.getElementById('shiftLayoutSteps');
@@ -213,6 +215,69 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }, 2200);
     };
+
+    const dismissToast = (toast) => {
+        if (!toast) return;
+        toast.classList.add('toast-exit');
+        toast.addEventListener('animationend', () => {
+            if (toast.parentNode) toast.parentNode.removeChild(toast);
+        });
+    };
+
+    // Generic dialog helpers (replace native confirm/prompt)
+    const _dialogModal = document.getElementById('generic-dialog-modal');
+    const _dialogTitle = document.getElementById('genericDialogTitle');
+    const _dialogMessage = document.getElementById('genericDialogMessage');
+    const _dialogInput = document.getElementById('genericDialogInput');
+    const _dialogOk = document.getElementById('genericDialogOk');
+    const _dialogCancel = document.getElementById('genericDialogCancel');
+    let _dialogResolve = null;
+
+    const _cleanupDialog = () => {
+        _dialogOk.replaceWith(_dialogOk.cloneNode(true));
+        _dialogCancel.replaceWith(_dialogCancel.cloneNode(true));
+        // Re-grab after clone
+        const ok = document.getElementById('genericDialogOk');
+        const cancel = document.getElementById('genericDialogCancel');
+        return { ok, cancel };
+    };
+
+    const showConfirmModal = (message, { title = '确认操作', okText = '确定', cancelText = '取消' } = {}) => {
+        return new Promise((resolve) => {
+            _dialogTitle.textContent = title;
+            _dialogMessage.textContent = message;
+            _dialogInput.style.display = 'none';
+            const { ok, cancel } = _cleanupDialog();
+            ok.textContent = okText;
+            cancel.textContent = cancelText;
+            _dialogResolve = resolve;
+            ok.addEventListener('click', () => { closeModal('generic-dialog-modal'); resolve(true); });
+            cancel.addEventListener('click', () => { closeModal('generic-dialog-modal'); resolve(false); });
+            openModal('generic-dialog-modal');
+        });
+    };
+
+    const showPromptModal = (message, { title = '请输入', defaultValue = '', okText = '确定', cancelText = '取消' } = {}) => {
+        return new Promise((resolve) => {
+            _dialogTitle.textContent = title;
+            _dialogMessage.textContent = message;
+            _dialogInput.style.display = '';
+            _dialogInput.value = defaultValue;
+            const { ok, cancel } = _cleanupDialog();
+            ok.textContent = okText;
+            cancel.textContent = cancelText;
+            _dialogResolve = resolve;
+            const submit = () => { closeModal('generic-dialog-modal'); resolve(_dialogInput.value); };
+            ok.addEventListener('click', submit);
+            _dialogInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+            cancel.addEventListener('click', () => { closeModal('generic-dialog-modal'); resolve(null); });
+            openModal('generic-dialog-modal');
+            requestAnimationFrame(() => { _dialogInput.focus(); _dialogInput.select(); });
+        });
+    };
+    window.showConfirmModal = showConfirmModal;
+    window.showPromptModal = showPromptModal;
+
     const notify = (message) => {
         showInlineToast(message);
     };
@@ -388,7 +453,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!options.interactive) return false;
 
         const title = ext.name || ext.id;
-        const confirmed = window.confirm(`插件“${title}”请求修改当前工作页面，是否授权？`);
+        const confirmed = await showConfirmModal(`插件”${title}”请求修改当前工作页面，是否授权？`, { title: '插件授权' });
         if (!confirmed) return false;
         return setWorkspacePermission(extensionId, true, { silent: true });
     };
@@ -2089,7 +2154,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                     } else if (result.status === 'downloaded') {
                                         showInlineToast(`已开始下载：${result.filename}`);
                                     }
-                                    btn.closest('.toast-notification')?.remove();
+                                    dismissToast(btn.closest('.toast-notification'));
                                 }).catch((error) => {
                                     notify(error?.message || '导出失败');
                                 }).finally(() => {
@@ -2101,7 +2166,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
 
                             if (type === 'auto_fixed') {
-                                btn.closest('.toast-notification').remove();
+                                dismissToast(btn.closest('.toast-notification'));
                                 return;
                             }
 
@@ -2115,7 +2180,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             if (url && url !== '#') {
                                 handleResponse(postJson(url, {}));
                             }
-                            btn.closest('.toast-notification').remove();
+                            dismissToast(btn.closest('.toast-notification'));
                         });
                     });
 
@@ -2212,13 +2277,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (unseatedList) {
-        unseatedList.addEventListener('click', (e) => {
+        unseatedList.addEventListener('click', async (e) => {
             const deleteBtn = e.target.closest('.delete-student');
             if (deleteBtn) {
                 e.stopPropagation();
                 const url = deleteBtn.dataset.deleteUrl;
                 if (!url) return;
-                if (!confirm('确定要删除该学生吗？')) return;
+                const ok = await showConfirmModal('确定要删除该学生吗？', { title: '删除学生' });
+                if (!ok) return;
                 handleResponse(postJson(url, {}));
                 return;
             }
@@ -2396,7 +2462,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (groupMergeBtn) {
-        groupMergeBtn.addEventListener('click', () => {
+        groupMergeBtn.addEventListener('click', async () => {
             const sourceGroupId = groupMergeFromSelect ? groupMergeFromSelect.value : '';
             const targetGroupId = groupMergeToSelect ? groupMergeToSelect.value : '';
             if (!sourceGroupId || !targetGroupId) {
@@ -2413,9 +2479,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             const sourceName = groupMergeFromSelect?.selectedOptions?.[0]?.textContent?.trim() || '来源组';
             const targetName = groupMergeToSelect?.selectedOptions?.[0]?.textContent?.trim() || '目标组';
-            if (!confirm(`确定将【${sourceName}】并入【${targetName}】吗？来源组将被删除。`)) {
-                return;
-            }
+            const ok = await showConfirmModal(`确定将【${sourceName}】并入【${targetName}】吗？来源组将被删除。`, { title: '合并小组' });
+            if (!ok) return;
 
             const originalText = groupMergeBtn.textContent;
             groupMergeBtn.textContent = '合并中...';
@@ -2452,14 +2517,13 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (groupRotateBtn) {
-        groupRotateBtn.addEventListener('click', () => {
+        groupRotateBtn.addEventListener('click', async () => {
             if (!urls.groupRotate) {
                 notify('当前版本不支持小组轮换');
                 return;
             }
-            if (!confirm('确定执行小组平移轮换吗？将按当前小组顺序整体交换位置。')) {
-                return;
-            }
+            const ok = await showConfirmModal('确定执行小组平移轮换吗？将按当前小组顺序整体交换位置。', { title: '小组轮换' });
+            if (!ok) return;
             const originalText = groupRotateBtn.textContent;
             groupRotateBtn.textContent = '轮换中...';
             groupRotateBtn.disabled = true;
@@ -2483,9 +2547,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const handleShiftLayout = (direction) => {
         if (!urls.shiftLayout) return;
-        const steps = 1;
-
-        const btn = direction === 'left' ? shiftLayoutLeftBtn : shiftLayoutRightBtn;
+        const steps = Math.max(1, parseInt(shiftLayoutSteps?.value, 10) || 1);
+        const shiftButtonMap = {
+            left: shiftLayoutLeftBtn,
+            right: shiftLayoutRightBtn,
+            front: shiftLayoutFrontBtn,
+            back: shiftLayoutBackBtn,
+        };
+        const btn = shiftButtonMap[direction];
         if (!btn) return;
 
         const originalText = btn.textContent;
@@ -2519,14 +2588,22 @@ document.addEventListener('DOMContentLoaded', () => {
         shiftLayoutRightBtn.addEventListener('click', () => handleShiftLayout('right'));
     }
 
+    if (shiftLayoutFrontBtn) {
+        shiftLayoutFrontBtn.addEventListener('click', () => handleShiftLayout('front'));
+    }
+
+    if (shiftLayoutBackBtn) {
+        shiftLayoutBackBtn.addEventListener('click', () => handleShiftLayout('back'));
+    }
+
     if (renameClassroomBtn) {
-        renameClassroomBtn.addEventListener('click', () => {
+        renameClassroomBtn.addEventListener('click', async () => {
             if (!urls.renameClassroom) {
                 notify('当前版本不支持修改班级名称');
                 return;
             }
             const currentName = root.dataset.classroomName || '';
-            const newName = prompt('请输入新的班级名称：', currentName);
+            const newName = await showPromptModal('请输入新的班级名称：', { title: '重命名班级', defaultValue: currentName });
             if (newName === null) return;
             const trimmed = newName.trim();
             if (!trimmed) {
@@ -2553,6 +2630,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     renameClassroomBtn.textContent = originalText;
                     renameClassroomBtn.disabled = false;
                 });
+        });
+    }
+
+    const deleteClassroomBtn = document.getElementById('btn-delete-classroom');
+    const deleteClassroomForm = document.getElementById('delete-classroom-form');
+    if (deleteClassroomBtn && deleteClassroomForm) {
+        deleteClassroomBtn.addEventListener('click', async () => {
+            const ok = await showConfirmModal('确定要删除这个班级吗？此操作不可撤销。', { title: '删除班级' });
+            if (ok) deleteClassroomForm.submit();
         });
     }
 
@@ -2591,12 +2677,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (groupList) {
-        groupList.addEventListener('click', (e) => {
+        groupList.addEventListener('click', async (e) => {
             const renameBtn = e.target.closest('[data-action="rename-group"]');
             if (renameBtn) {
                 const item = renameBtn.closest('.group-item');
                 const currentName = item ? item.dataset.groupName : '';
-                const newName = prompt('请输入新的小组名称：', currentName || '');
+                const newName = await showPromptModal('请输入新的小组名称：', { title: '重命名小组', defaultValue: currentName || '' });
                 if (newName === null) return;
                 const trimmed = newName.trim();
                 if (!trimmed) {
@@ -2624,7 +2710,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const deleteBtn = e.target.closest('[data-action="delete-group"]');
             if (deleteBtn) {
-                if (!confirm('确定要删除这个小组吗？')) return;
+                const ok = await showConfirmModal('确定要删除这个小组吗？', { title: '删除小组' });
+                if (!ok) return;
                 postForm(deleteBtn.dataset.url)
                     .then((data) => {
                         const row = deleteBtn.closest('.group-item');
@@ -2684,7 +2771,8 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!modalId) return;
         const modal = document.getElementById(modalId);
         if (!modal) return;
-        modal.style.display = 'block';
+        modal.style.display = 'flex';
+        // Double rAF ensures display:flex is painted before transition starts
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 modal.classList.add('modal-visible');
@@ -2697,7 +2785,9 @@ document.addEventListener('DOMContentLoaded', () => {
         const modal = document.getElementById(modalId);
         if (!modal) return;
         modal.classList.remove('modal-visible');
-        const onEnd = () => {
+        const onEnd = (e) => {
+            // Only react to the modal-content transition, not child elements
+            if (e.target !== modal.querySelector('.modal-content')) return;
             modal.style.display = 'none';
             modal.removeEventListener('transitionend', onEnd);
         };
@@ -2728,6 +2818,42 @@ document.addEventListener('DOMContentLoaded', () => {
     initSeatsImport();
     bindSystemSaveLinks();
     initPluginHub();
+
+    // Shift options modal form
+    const shiftOptionsForm = document.getElementById('shiftOptionsForm');
+    if (shiftOptionsForm && urls.shiftLayout) {
+        shiftOptionsForm.addEventListener('submit', (e) => {
+            e.preventDefault();
+            const fd = new FormData(shiftOptionsForm);
+            const submitBtn = document.getElementById('shiftOptionsSubmitBtn');
+            const origText = submitBtn.textContent;
+            submitBtn.textContent = '执行中...';
+            submitBtn.disabled = true;
+            fetch(urls.shiftLayout, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': csrf },
+                body: JSON.stringify({
+                    direction: fd.get('shift_direction'),
+                    steps: parseInt(fd.get('shift_steps'), 10) || 1,
+                }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.status === 'success') {
+                    closeModal('shift-options-modal');
+                    refreshState();
+                    showToast(data.message || '轮换完成');
+                } else {
+                    showToast(data.message || '操作失败');
+                }
+            })
+            .catch(() => showToast('请求出错，请重试'))
+            .finally(() => {
+                submitBtn.textContent = origText;
+                submitBtn.disabled = false;
+            });
+        });
+    }
 
     if (seatStage) {
         seatStage.addEventListener('mousedown', (e) => {
@@ -3069,4 +3195,228 @@ document.addEventListener('DOMContentLoaded', () => {
             hideContextMenu();
         });
     }
+
+    // ===== Spotlight Command Panel =====
+    (function initSpotlight() {
+        const overlay = document.getElementById('spotlight-overlay');
+        const input = document.getElementById('spotlightInput');
+        const suggestionsEl = document.getElementById('spotlightSuggestions');
+        const resultEl = document.getElementById('spotlightResult');
+        if (!overlay || !input) return;
+
+        const commandUrl = root.dataset.commandUrl;
+        if (!commandUrl) return;
+
+        let manifest = [];
+        let activeIndex = -1;
+        let filteredCommands = [];
+        let isOpen = false;
+
+        // Fetch command manifest
+        fetch(commandUrl, { headers: { 'Accept': 'application/json' } })
+            .then(r => r.json())
+            .then(data => {
+                if (data.manifest && data.manifest.commands) manifest = data.manifest.commands;
+            })
+            .catch(() => {});
+
+        // Double-Shift detection
+        let lastShiftTime = 0;
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Shift' && !e.repeat) {
+                const now = Date.now();
+                if (now - lastShiftTime < 400) {
+                    e.preventDefault();
+                    toggleSpotlight();
+                    lastShiftTime = 0;
+                } else {
+                    lastShiftTime = now;
+                }
+            }
+            if (e.key === 'Escape' && isOpen) {
+                e.preventDefault();
+                closeSpotlight();
+            }
+        });
+
+        function toggleSpotlight() {
+            isOpen ? closeSpotlight() : openSpotlight();
+        }
+
+        function openSpotlight() {
+            isOpen = true;
+            overlay.style.display = 'flex';
+            requestAnimationFrame(() => {
+                requestAnimationFrame(() => {
+                    overlay.classList.add('active');
+                });
+            });
+            input.value = '';
+            resultEl.innerHTML = '';
+            activeIndex = -1;
+            updateSuggestions();
+            requestAnimationFrame(() => input.focus());
+        }
+
+        function closeSpotlight() {
+            isOpen = false;
+            overlay.classList.remove('active');
+            const onEnd = (e) => {
+                if (e.target !== overlay) return;
+                overlay.style.display = 'none';
+                overlay.removeEventListener('transitionend', onEnd);
+            };
+            overlay.addEventListener('transitionend', onEnd);
+            input.blur();
+        }
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) closeSpotlight();
+        });
+
+        // Input handling
+        input.addEventListener('input', () => {
+            resultEl.innerHTML = '';
+            updateSuggestions();
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                moveSelection(1);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                moveSelection(-1);
+            } else if (e.key === 'Tab') {
+                e.preventDefault();
+                tabComplete();
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                executeCommand();
+            }
+        });
+
+        function updateSuggestions() {
+            const raw = input.value.trim();
+            const query = raw.startsWith('/') ? raw.slice(1) : raw;
+            const lower = query.toLowerCase();
+
+            if (!query) {
+                filteredCommands = manifest.slice();
+            } else {
+                filteredCommands = manifest.filter(cmd => {
+                    if (cmd.name.includes(lower)) return true;
+                    if (cmd.summary && cmd.summary.includes(lower)) return true;
+                    if (cmd.aliases && cmd.aliases.some(a => a.includes(lower))) return true;
+                    return false;
+                });
+            }
+
+            activeIndex = filteredCommands.length > 0 ? 0 : -1;
+            renderSuggestions();
+        }
+
+        function renderSuggestions() {
+            if (filteredCommands.length === 0) {
+                suggestionsEl.innerHTML = '';
+                return;
+            }
+            suggestionsEl.innerHTML = filteredCommands.map((cmd, i) => {
+                const aliases = (cmd.aliases || []).filter(a => a !== cmd.name).join(', ');
+                return `<div class="spotlight-suggestion-item${i === activeIndex ? ' active' : ''}" data-index="${i}">
+                    <div>
+                        <div class="spotlight-suggestion-name">/${cmd.name}</div>
+                        <div class="spotlight-suggestion-summary">${cmd.summary || ''}</div>
+                    </div>
+                    ${aliases ? `<span class="spotlight-suggestion-aliases">${aliases}</span>` : ''}
+                </div>`;
+            }).join('');
+
+            suggestionsEl.querySelectorAll('.spotlight-suggestion-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const idx = parseInt(el.dataset.index);
+                    const cmd = filteredCommands[idx];
+                    if (cmd) {
+                        input.value = '/' + cmd.name + ' ';
+                        input.focus();
+                        updateSuggestions();
+                    }
+                });
+            });
+        }
+
+        function moveSelection(dir) {
+            if (filteredCommands.length === 0) return;
+            activeIndex = (activeIndex + dir + filteredCommands.length) % filteredCommands.length;
+            renderSuggestions();
+            const activeEl = suggestionsEl.querySelector('.spotlight-suggestion-item.active');
+            if (activeEl) activeEl.scrollIntoView({ block: 'nearest' });
+        }
+
+        function tabComplete() {
+            if (activeIndex >= 0 && activeIndex < filteredCommands.length) {
+                const cmd = filteredCommands[activeIndex];
+                input.value = '/' + cmd.name + ' ';
+                updateSuggestions();
+            }
+        }
+
+        function executeCommand() {
+            let text = input.value.trim();
+            if (!text) {
+                if (activeIndex >= 0 && filteredCommands[activeIndex]) {
+                    text = '/' + filteredCommands[activeIndex].name;
+                } else {
+                    return;
+                }
+            }
+            if (!text.startsWith('/')) text = '/' + text;
+
+            suggestionsEl.innerHTML = '';
+            resultEl.innerHTML = '<div class="spotlight-result-loading">执行中...</div>';
+
+            fetch(commandUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf,
+                },
+                body: JSON.stringify({ command: text }),
+            })
+            .then(r => r.json())
+            .then(data => {
+                const reply = (data.reply || '').trim();
+                const cr = data.command_result || {};
+                const needsRefresh = cr.needs_refresh;
+
+                if (data.status === 'error') {
+                    resultEl.innerHTML = `<div class="spotlight-result-content spotlight-result-error">${data.message || '命令执行失败'}</div>`;
+                } else if (reply) {
+                    resultEl.innerHTML = `<div class="spotlight-result-content">${escapeHtml(reply)}</div>`;
+                } else {
+                    resultEl.innerHTML = `<div class="spotlight-result-content">命令已执行</div>`;
+                }
+
+                if (needsRefresh) {
+                    setTimeout(() => {
+                        closeSpotlight();
+                        if (typeof refreshState === 'function') {
+                            refreshState();
+                        } else {
+                            location.reload();
+                        }
+                    }, 800);
+                }
+            })
+            .catch(() => {
+                resultEl.innerHTML = '<div class="spotlight-result-content spotlight-result-error">网络错误，请重试</div>';
+            });
+        }
+
+        function escapeHtml(str) {
+            const div = document.createElement('div');
+            div.textContent = str;
+            return div.innerHTML;
+        }
+    })();
 });

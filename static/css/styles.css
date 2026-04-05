@@ -494,8 +494,93 @@ input:focus {
     }
 }
 
+@keyframes slideInFromLeft {
+    from {
+        opacity: 0;
+        transform: translateX(-24px);
+        filter: blur(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+        filter: blur(0);
+    }
+}
+
+@keyframes slideInFromRight {
+    from {
+        opacity: 0;
+        transform: translateX(24px);
+        filter: blur(6px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+        filter: blur(0);
+    }
+}
+
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.96);
+        filter: blur(6px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+        filter: blur(0);
+    }
+}
+
+@keyframes cardStaggerIn {
+    from {
+        opacity: 0;
+        transform: translateY(16px) scale(0.97);
+        filter: blur(4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
 .animate-fade-in {
-    animation: fadeIn 0.4s ease-out forwards;
+    animation: fadeIn 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+}
+
+/* Classroom detail page staggered entrance */
+.classroom-layout.animate-fade-in {
+    animation: none;
+}
+
+.classroom-layout.animate-fade-in .seat-stage {
+    opacity: 0;
+    animation: slideInFromLeft 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.05s forwards;
+}
+
+.classroom-layout.animate-fade-in .side-panel {
+    opacity: 0;
+    animation: slideInFromRight 0.5s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.15s forwards;
+}
+
+.classroom-layout.animate-fade-in .zoom-controls {
+    opacity: 0;
+    animation: scaleIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.25s forwards;
+}
+
+/* Index page classroom card stagger */
+.classrooms-grid .classroom-card-link {
+    opacity: 0;
+    animation: cardStaggerIn 0.45s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
+    animation-delay: calc(var(--card-index, 0) * 0.06s + 0.1s);
+}
+
+/* Ribbon panels entrance */
+.ribbon-panels {
+    opacity: 0;
+    animation: fadeIn 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.08s forwards;
 }
 
 /* Classroom Layout */
@@ -1640,15 +1725,14 @@ input:focus {
     display: none;
     position: fixed;
     z-index: 5000;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
+    inset: 0;
     overflow: auto;
     background-color: rgba(0, 0, 0, 0);
     backdrop-filter: blur(0px);
     -webkit-backdrop-filter: blur(0px);
     transition: background-color 0.3s ease, backdrop-filter 0.3s ease, -webkit-backdrop-filter 0.3s ease;
+    justify-content: center;
+    align-items: center;
 }
 
 .modal.modal-visible {
@@ -1672,7 +1756,6 @@ input:focus {
 
 .modal-content {
     background-color: #ffffff;
-    margin: 10% auto;
     padding: 24px;
     border: 1px solid rgba(0, 0, 0, 0.1);
     width: 90%;
@@ -2276,4 +2359,182 @@ input:focus {
 
 .seat-layout-cell.type-empty {
     background: rgba(32, 201, 151, 0.12);
+}
+
+/* ===== Spotlight Command Panel ===== */
+.spotlight-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: none;
+    align-items: flex-start;
+    justify-content: center;
+    padding-top: 18vh;
+    background: rgba(0, 0, 0, 0.18);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    opacity: 0;
+    transition: opacity 0.22s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.spotlight-overlay.active {
+    opacity: 1;
+}
+
+.spotlight-panel {
+    width: min(620px, 90vw);
+    background: rgba(255, 255, 255, 0.82);
+    backdrop-filter: blur(40px) saturate(1.8);
+    -webkit-backdrop-filter: blur(40px) saturate(1.8);
+    border-radius: 16px;
+    box-shadow:
+        0 0 0 0.5px rgba(0, 0, 0, 0.08),
+        0 8px 40px rgba(0, 0, 0, 0.18),
+        0 2px 8px rgba(0, 0, 0, 0.06);
+    overflow: hidden;
+    transform: scale(0.96) translateY(-8px);
+    opacity: 0;
+    transition: transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+                opacity 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.spotlight-overlay.active .spotlight-panel {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+}
+
+.spotlight-input-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 14px 18px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.spotlight-icon {
+    flex-shrink: 0;
+    color: rgba(0, 0, 0, 0.35);
+}
+
+#spotlightInput {
+    flex: 1;
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 17px;
+    font-weight: 400;
+    color: #1d1d1f;
+    letter-spacing: -0.01em;
+}
+
+#spotlightInput::placeholder {
+    color: rgba(0, 0, 0, 0.3);
+}
+
+.spotlight-hint-key {
+    flex-shrink: 0;
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.3);
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 5px;
+    padding: 3px 7px;
+    font-family: inherit;
+}
+
+.spotlight-suggestions {
+    max-height: 280px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.spotlight-suggestions:empty {
+    display: none;
+}
+
+.spotlight-suggestion-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 18px;
+    cursor: pointer;
+    transition: background 0.12s;
+}
+
+.spotlight-suggestion-item:hover,
+.spotlight-suggestion-item.active {
+    background: rgba(10, 89, 247, 0.08);
+}
+
+.spotlight-suggestion-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #1d1d1f;
+}
+
+.spotlight-suggestion-summary {
+    font-size: 12px;
+    color: rgba(0, 0, 0, 0.45);
+    margin-top: 1px;
+}
+
+.spotlight-suggestion-aliases {
+    margin-left: auto;
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.25);
+    flex-shrink: 0;
+}
+
+.spotlight-result {
+    padding: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+.spotlight-result:empty {
+    display: none;
+}
+
+.spotlight-result-content {
+    padding: 14px 18px;
+    font-size: 13px;
+    line-height: 1.7;
+    color: #1d1d1f;
+    white-space: pre-wrap;
+    word-break: break-word;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.spotlight-result-error {
+    color: #ff3b30;
+}
+
+.spotlight-result-loading {
+    padding: 14px 18px;
+    font-size: 13px;
+    color: rgba(0, 0, 0, 0.35);
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.spotlight-footer {
+    padding: 8px 18px;
+    border-top: 1px solid rgba(0, 0, 0, 0.06);
+    display: flex;
+    align-items: center;
+}
+
+.spotlight-footer-hint {
+    font-size: 11px;
+    color: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.spotlight-footer-hint kbd {
+    background: rgba(0, 0, 0, 0.05);
+    border-radius: 4px;
+    padding: 2px 6px;
+    font-size: 10px;
+    font-family: inherit;
 }

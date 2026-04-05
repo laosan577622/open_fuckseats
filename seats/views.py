@@ -3949,46 +3949,126 @@ def _is_blank_layout_cell(cell):
     )
 
 
-def _shift_layout_constraints(constraints, delta, cols):
+def _normalize_shift_direction(direction):
+    normalized = str(direction or '').strip().lower()
+    aliases = {
+        'up': 'front',
+        'forward': 'front',
+        'down': 'back',
+        'backward': 'back',
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in {'left', 'right', 'front', 'back'}:
+        raise ValueError('移动方向不合法')
+    return normalized
+
+
+def _shift_direction_meta(direction):
+    normalized = _normalize_shift_direction(direction)
+    if normalized == 'left':
+        return {
+            'direction': normalized,
+            'axis_field': 'col',
+            'size_key': 'cols',
+            'unit': '列',
+            'action_label': '左移',
+            'leading_label': '最左侧',
+            'expand': False,
+        }
+    if normalized == 'right':
+        return {
+            'direction': normalized,
+            'axis_field': 'col',
+            'size_key': 'cols',
+            'unit': '列',
+            'action_label': '右移',
+            'leading_label': '最左侧',
+            'expand': True,
+        }
+    if normalized == 'front':
+        return {
+            'direction': normalized,
+            'axis_field': 'row',
+            'size_key': 'rows',
+            'unit': '行',
+            'action_label': '前移',
+            'leading_label': '最前方',
+            'expand': False,
+        }
+    return {
+        'direction': normalized,
+        'axis_field': 'row',
+        'size_key': 'rows',
+        'unit': '行',
+        'action_label': '后移',
+        'leading_label': '最前方',
+        'expand': True,
+    }
+
+
+def _shift_layout_constraints(constraints, axis_field, delta, axis_label, action_label):
+    size_map = {'row': 'rows', 'col': 'cols'}
+    size_key = size_map.get(axis_field)
+    if not size_key:
+        raise ValueError(f'{axis_label}约束处理失败')
     shifted = []
     for raw in constraints:
         item = dict(raw)
-        col = item.get('col')
-        if col in (None, ''):
+        axis_value = item.get(axis_field)
+        if axis_value in (None, ''):
             shifted.append(item)
             continue
-        next_col = (int(col) - 1 + int(delta)) % cols + 1
-        item['col'] = next_col
+        size = int(item.get('_classroom_size') or 0)
+        if size < 1:
+            raise ValueError(f'{axis_label}约束处理失败')
+        next_value = (int(axis_value) - 1 + int(delta)) % size + 1
+        item[axis_field] = next_value
+        item.pop('_classroom_size', None)
         shifted.append(item)
     return shifted
 
 
 def _build_shifted_layout_payload(classroom, direction, steps):
-    normalized_direction = str(direction or '').strip().lower()
-    if normalized_direction not in {'left', 'right'}:
-        raise ValueError('移动方向不合法')
+    meta = _shift_direction_meta(direction)
 
     normalized_steps = _safe_int(steps, 0)
     if normalized_steps < 1:
-        raise ValueError('移动列数必须大于 0')
+        raise ValueError(f'移动{meta["unit"]}数必须大于 0')
 
     payload = copy.deepcopy(
         _snapshot_payload(classroom, include_students=False, include_constraints=True)
     )
 
-    delta = normalized_steps if normalized_direction == 'right' else -normalized_steps
-    cols = classroom.cols
+    rows = int(payload.get('classroom', {}).get('rows') or classroom.rows)
+    cols = int(payload.get('classroom', {}).get('cols') or classroom.cols)
+    axis_field = meta['axis_field']
+    size = cols if meta['size_key'] == 'cols' else rows
+    normalized_steps = normalized_steps % size if size > 0 else normalized_steps
+    if normalized_steps == 0:
+        normalized_steps = size if size > 0 else normalized_steps
+
+    delta = normalized_steps if meta['expand'] else -normalized_steps
 
     shifted_seats = []
     for seat in payload.get('seats', []):
         item = dict(seat)
-        current_col = int(item.get('col') or 0)
-        if current_col > 0:
-            item['col'] = (current_col - 1 + delta) % cols + 1
+        current_axis_value = int(item.get(axis_field) or 0)
+        if current_axis_value > 0:
+            item[axis_field] = (current_axis_value - 1 + delta) % size + 1
         shifted_seats.append(item)
 
     payload['seats'] = _sort_layout_seats(shifted_seats)
-    payload['constraints'] = _shift_layout_constraints(payload.get('constraints', []), delta, cols)
+
+    payload['constraints'] = _shift_layout_constraints(
+        [
+            dict(item, _classroom_size=size)
+            for item in payload.get('constraints', [])
+        ],
+        axis_field,
+        delta,
+        meta['unit'],
+        meta['action_label'],
+    )
 
     return payload
 
@@ -5630,7 +5710,8 @@ def shift_layout(request, pk):
         else:
             payload = request.POST
 
-        direction = payload.get('direction')
+        direction = _normalize_shift_direction(payload.get('direction'))
+        direction_meta = _shift_direction_meta(direction)
         steps = payload.get('steps')
         before_data = _snapshot_payload(classroom, include_students=False, include_constraints=True)
         after_data = _build_shifted_layout_payload(classroom, direction, steps)
@@ -5647,7 +5728,7 @@ def shift_layout(request, pk):
             _push_action(request, pk, action)
         return JsonResponse({
             'status': 'success',
-            'message': f"已整体{'右移' if str(direction).lower() == 'right' else '左移'} {action['steps']} 列"
+            'message': f'已整体{direction_meta["action_label"]} {action["steps"]} {direction_meta["unit"]}'
         })
     except ValueError as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)

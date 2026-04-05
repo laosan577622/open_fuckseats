@@ -1223,7 +1223,7 @@ class GroupRotationTests(TestCase):
 
 
 class LayoutShiftTests(TestCase):
-    def test_shift_layout_right_expands_grid_and_preserves_layout_data(self):
+    def test_shift_layout_right_wraps_layout_and_preserves_layout_data(self):
         classroom = Classroom.objects.create(name="LS1", rows=2, cols=3)
         student = classroom.students.create(name="张三")
         group = SeatGroup.objects.create(classroom=classroom, name="第1组", order=1)
@@ -1255,22 +1255,19 @@ class LayoutShiftTests(TestCase):
         self.assertEqual(response.json().get("status"), "success")
 
         classroom.refresh_from_db()
-        self.assertEqual(classroom.cols, 5)
-        self.assertEqual(classroom.seats.get(row=1, col=1).cell_type, SeatCellType.EMPTY)
+        self.assertEqual(classroom.cols, 3)
 
         shifted = classroom.seats.get(row=1, col=3)
         self.assertEqual(shifted.student_id, student.pk)
         self.assertEqual(shifted.group_id, group.pk)
-        self.assertEqual(classroom.seats.get(row=1, col=4).cell_type, SeatCellType.AISLE)
+        self.assertEqual(classroom.seats.get(row=1, col=1).cell_type, SeatCellType.AISLE)
 
         constraint = classroom.constraints.get(student=student)
         self.assertEqual((constraint.row, constraint.col), (1, 3))
 
-    def test_shift_layout_left_supports_undo_and_redo(self):
+    def test_shift_layout_left_wraps_and_supports_undo_and_redo(self):
         classroom = Classroom.objects.create(name="LS2", rows=1, cols=4)
         student = classroom.students.create(name="李四")
-
-        classroom.seats.filter(row=1, col=1).update(cell_type=SeatCellType.EMPTY)
 
         seat = classroom.seats.get(row=1, col=2)
         seat.student = student
@@ -1287,7 +1284,7 @@ class LayoutShiftTests(TestCase):
         self.assertEqual(response.status_code, 200)
         classroom.refresh_from_db()
         student.refresh_from_db()
-        self.assertEqual(classroom.cols, 3)
+        self.assertEqual(classroom.cols, 4)
         self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
         self.assertEqual(classroom.seats.get(row=1, col=2).cell_type, SeatCellType.PODIUM)
 
@@ -1300,17 +1297,22 @@ class LayoutShiftTests(TestCase):
         student.refresh_from_db()
         self.assertEqual(classroom.cols, 4)
         self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 2))
-        self.assertEqual(classroom.seats.get(row=1, col=1).cell_type, SeatCellType.EMPTY)
+        self.assertEqual(classroom.seats.get(row=1, col=3).cell_type, SeatCellType.PODIUM)
 
         redo_response = self.client.post(redo_url)
         self.assertEqual(redo_response.status_code, 200)
         classroom.refresh_from_db()
         student.refresh_from_db()
-        self.assertEqual(classroom.cols, 3)
+        self.assertEqual(classroom.cols, 4)
         self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
 
-    def test_shift_layout_left_rejects_non_empty_leading_columns(self):
+    def test_shift_layout_left_wraps_non_empty_leading_columns(self):
         classroom = Classroom.objects.create(name="LS3", rows=1, cols=3)
+        student = classroom.students.create(name="王五")
+        seat = classroom.seats.get(row=1, col=1)
+        seat.student = student
+        seat.save(update_fields=["student"])
+
         url = reverse("shift_layout", args=[classroom.pk])
 
         response = self.client.post(
@@ -1318,14 +1320,14 @@ class LayoutShiftTests(TestCase):
             data=json.dumps({"direction": "left", "steps": 1}),
             content_type="application/json",
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json().get("status"), "error")
-        self.assertIn("仍有布局内容", response.json().get("message", ""))
+        self.assertEqual(response.status_code, 200)
+        classroom.refresh_from_db()
+        student.refresh_from_db()
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 3))
 
-    def test_shift_layout_left_rejects_out_of_range_column_constraints(self):
+    def test_shift_layout_left_wraps_column_constraints(self):
         classroom = Classroom.objects.create(name="LS4", rows=1, cols=3)
         student = classroom.students.create(name="王五")
-        classroom.seats.filter(row=1, col=1).update(cell_type=SeatCellType.EMPTY)
 
         SeatConstraint.objects.create(
             classroom=classroom,
@@ -1340,9 +1342,132 @@ class LayoutShiftTests(TestCase):
             data=json.dumps({"direction": "left", "steps": 1}),
             content_type="application/json",
         )
-        self.assertEqual(response.status_code, 400)
-        self.assertEqual(response.json().get("status"), "error")
-        self.assertIn("列约束越界", response.json().get("message", ""))
+        self.assertEqual(response.status_code, 200)
+        constraint = classroom.constraints.get(student=student)
+        self.assertEqual(constraint.col, 3)
+
+    def test_shift_layout_back_wraps_layout_and_preserves_layout_data(self):
+        classroom = Classroom.objects.create(name="LS5", rows=3, cols=2)
+        student = classroom.students.create(name="赵六")
+        group = SeatGroup.objects.create(classroom=classroom, name="第2组", order=2)
+
+        seat_a = classroom.seats.get(row=1, col=1)
+        seat_a.student = student
+        seat_a.group = group
+        seat_a.save(update_fields=["student", "group"])
+
+        seat_b = classroom.seats.get(row=2, col=1)
+        seat_b.cell_type = SeatCellType.AISLE
+        seat_b.save(update_fields=["cell_type"])
+
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+            student=student,
+            row=1,
+            col=1,
+        )
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "back", "steps": 2}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+
+        classroom.refresh_from_db()
+        self.assertEqual(classroom.rows, 3)
+
+        shifted = classroom.seats.get(row=3, col=1)
+        self.assertEqual(shifted.student_id, student.pk)
+        self.assertEqual(shifted.group_id, group.pk)
+        self.assertEqual(classroom.seats.get(row=1, col=1).cell_type, SeatCellType.AISLE)
+
+        constraint = classroom.constraints.get(student=student)
+        self.assertEqual((constraint.row, constraint.col), (3, 1))
+
+    def test_shift_layout_front_wraps_and_supports_undo_and_redo(self):
+        classroom = Classroom.objects.create(name="LS6", rows=4, cols=1)
+        student = classroom.students.create(name="孙七")
+
+        seat = classroom.seats.get(row=2, col=1)
+        seat.student = student
+        seat.save(update_fields=["student"])
+
+        classroom.seats.filter(row=3, col=1).update(cell_type=SeatCellType.PODIUM)
+
+        shift_url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            shift_url,
+            data=json.dumps({"direction": "front", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        classroom.refresh_from_db()
+        student.refresh_from_db()
+        self.assertEqual(classroom.rows, 4)
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
+        self.assertEqual(classroom.seats.get(row=2, col=1).cell_type, SeatCellType.PODIUM)
+
+        undo_url = reverse("undo_action", args=[classroom.pk])
+        redo_url = reverse("redo_action", args=[classroom.pk])
+
+        undo_response = self.client.post(undo_url)
+        self.assertEqual(undo_response.status_code, 200)
+        classroom.refresh_from_db()
+        student.refresh_from_db()
+        self.assertEqual(classroom.rows, 4)
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (2, 1))
+        self.assertEqual(classroom.seats.get(row=3, col=1).cell_type, SeatCellType.PODIUM)
+
+        redo_response = self.client.post(redo_url)
+        self.assertEqual(redo_response.status_code, 200)
+        classroom.refresh_from_db()
+        student.refresh_from_db()
+        self.assertEqual(classroom.rows, 4)
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
+
+    def test_shift_layout_front_wraps_non_empty_leading_rows(self):
+        classroom = Classroom.objects.create(name="LS7", rows=3, cols=1)
+        student = classroom.students.create(name="周八")
+        seat = classroom.seats.get(row=1, col=1)
+        seat.student = student
+        seat.save(update_fields=["student"])
+
+        url = reverse("shift_layout", args=[classroom.pk])
+
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "front", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        classroom.refresh_from_db()
+        student.refresh_from_db()
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (3, 1))
+
+    def test_shift_layout_front_wraps_row_constraints(self):
+        classroom = Classroom.objects.create(name="LS8", rows=3, cols=1)
+        student = classroom.students.create(name="周八")
+
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_ROW,
+            student=student,
+            row=1,
+        )
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "front", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        constraint = classroom.constraints.get(student=student)
+        self.assertEqual(constraint.row, 3)
 
 
 class StudentImportTests(TestCase):
@@ -2145,3 +2270,10 @@ class SettingsPageVersionTests(TestCase):
         response = self.client.get(reverse('settings'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '7.8.9')
+
+    @patch('seats.context_processors.desktop_runtime.get_current_version', return_value='7.8.9')
+    def test_settings_page_contains_update_details_entry(self, _mock_get_current_version):
+        response = self.client.get(reverse('settings'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, 'update-details-content')
+        self.assertContains(response, 'https://fuckseats.577622.xyz/update.txt')
