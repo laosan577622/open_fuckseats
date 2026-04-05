@@ -16,6 +16,7 @@ urlpatterns = [
     path('extensions/<str:plugin_id>/runtime/sendMessage/', views.extension_send_message, name='extension_send_message_compat'),
     path('create/', views.create_classroom, name='create_classroom'),
     path('classroom/<int:pk>/', views.classroom_detail, name='classroom_detail'),
+    path('classroom/<int:pk>/command/', views.classroom_command, name='classroom_command'),
     path('classroom/<int:pk>/ai/', views.ai_workspace, name='ai_workspace'),
     path('classroom/<int:pk>/ai/chat/', views.ai_chat, name='ai_chat'),
     path('classroom/<int:pk>/ai/chat/stream/', views.ai_chat_stream, name='ai_chat_stream'),

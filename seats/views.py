@@ -28,6 +28,7 @@ import json
 import random
 import os
 import re
+import shlex
 import uuid
 import time
 import html
@@ -350,6 +351,123 @@ AI_TOOL_LABELS = {
     'send_card_info': '发送卡片信息',
     'swap_students': '交换座位',
     'execute_classroom_action': '执行班级操作',
+}
+
+CLASSROOM_COMMAND_HELP_ORDER = [
+    'help',
+    'view',
+    'overview',
+    'students',
+    'seat',
+    'group',
+    'snapshot',
+    'arrange',
+    'undo',
+    'redo',
+]
+
+CLASSROOM_COMMAND_ALIASES = {
+    'help': {'help', 'bangzhu', 'bz'},
+    'view': {'view', 'shitu', 'goto'},
+    'overview': {'overview', 'gaikuang', 'stats', 'state'},
+    'students': {'student', 'students', 'xuesheng', 'xs'},
+    'seat': {'seat', 'zuowei', 'zw'},
+    'group': {'group', 'groups', 'xiaozu', 'xz'},
+    'snapshot': {'snapshot', 'kuaizhao', 'kz'},
+    'arrange': {'arrange', 'paizuo', 'pz'},
+    'undo': {'undo', 'chexiao', 'cx'},
+    'redo': {'redo', 'chongzuo', 'cz'},
+}
+
+CLASSROOM_VIEW_TARGET_ALIASES = {
+    'classroom': {'classroom', 'banji', 'home', 'zhuye'},
+    'layout': {'layout', 'buju'},
+    'ai': {'ai', 'wendao', 'zhineng'},
+}
+
+CLASSROOM_STUDENT_SUBCOMMAND_ALIASES = {
+    'info': {'info', 'xinxi', 'detail', 'xiangqing'},
+    'top': {'top', 'rank', 'paiming', 'chengji'},
+    'unseated': {'unseated', 'weiruzuo', 'weipai', 'noseat'},
+    'group': {'group', 'xiaozu'},
+    'seat': {'seat', 'zuowei'},
+    'search': {'search', 'sousuo', 'find'},
+}
+
+CLASSROOM_SEAT_SUBCOMMAND_ALIASES = {
+    'assign': {'assign', 'fenpei'},
+    'move': {'move', 'yidong'},
+    'clear': {'clear', 'qingkong'},
+    'swap': {'swap', 'jiaohuan', 'duidiao'},
+}
+
+CLASSROOM_GROUP_SUBCOMMAND_ALIASES = {
+    'score': {'score', 'defen', 'rank', 'paiming'},
+    'create': {'create', 'chuangjian'},
+    'rename': {'rename', 'gaiming', 'chongmingming'},
+    'delete': {'delete', 'remove', 'shanchu'},
+    'leader': {'leader', 'zuzhang'},
+}
+
+CLASSROOM_SNAPSHOT_SUBCOMMAND_ALIASES = {
+    'list': {'list', 'liebiao'},
+    'save': {'save', 'baocun'},
+    'load': {'load', 'jiazai'},
+    'delete': {'delete', 'remove', 'shanchu'},
+}
+
+CLASSROOM_ARRANGE_MODE_ALIASES = {
+    'random': {'random', 'suiji'},
+    'score_desc': {'scoredesc', 'chengji', 'gaofen'},
+    'score_asc': {'scoreasc', 'difen'},
+    'good_front': {'goodfront', 'qianpai'},
+    'good_back': {'goodback', 'houpai'},
+    'score_spread': {'scorespread', 'junheng'},
+    'group_balanced': {'groupbalanced', 'xiaozujunheng'},
+    'group_mentor': {'groupmentor', 'xiaozuzhidao'},
+}
+
+CLASSROOM_COMMAND_HELP = {
+    'help': {
+        'summary': '查看全部命令或某个命令的详细用法。',
+        'examples': ['/help', '/bangzhu zuowei'],
+    },
+    'view': {
+        'summary': '切换到指定页面视图，适合命令面板做页面跳转。',
+        'examples': ['/view layout', '/shitu buju', '/view classroom'],
+    },
+    'overview': {
+        'summary': '读取当前班级概览，包括人数、入座情况、小组和建议。',
+        'examples': ['/overview', '/gaikuang'],
+    },
+    'students': {
+        'summary': '查询学生详情、排行榜、未入座名单、按组或座位筛选。',
+        'examples': ['/students 张三', '/xuesheng top 10', '/xuesheng unseated'],
+    },
+    'seat': {
+        'summary': '执行座位相关操作，例如分配、移动、清空、交换。',
+        'examples': ['/seat assign 张三 2 3', '/zuowei move 张三 1 1', '/zuowei swap 张三 李四'],
+    },
+    'group': {
+        'summary': '查看小组排行或维护小组信息。',
+        'examples': ['/group score', '/xiaozu create 第一组', '/xiaozu leader 张三'],
+    },
+    'snapshot': {
+        'summary': '列出、保存、加载、删除布局快照。',
+        'examples': ['/snapshot list', '/kuaizhao save 期中布局', '/kuaizhao load 期中布局'],
+    },
+    'arrange': {
+        'summary': '执行自动排座，支持随机、成绩、均衡等模式。',
+        'examples': ['/arrange random', '/paizuo suiji', '/paizuo junheng'],
+    },
+    'undo': {
+        'summary': '撤销最近一次操作。',
+        'examples': ['/undo', '/chexiao'],
+    },
+    'redo': {
+        'summary': '重做最近一次撤销。',
+        'examples': ['/redo', '/chongzuo'],
+    },
 }
 
 
@@ -2161,6 +2279,960 @@ def _build_ai_tool_error_result(tool_name, exc):
     }
 
 
+def _command_alias_candidates(value):
+    text = str(value or '').strip().lower().lstrip('/').strip()
+    if not text:
+        return set()
+    candidates = {text, re.sub(r'[\s_-]+', '', text)}
+    for item in list(candidates):
+        if item and re.search(r'[\u4e00-\u9fff]', item):
+            candidates.add(''.join(lazy_pinyin(item)).lower())
+    return {item for item in candidates if item}
+
+
+def _resolve_command_alias(token, alias_map):
+    token_candidates = _command_alias_candidates(token)
+    if not token_candidates:
+        return None
+    for canonical, aliases in alias_map.items():
+        alias_candidates = _command_alias_candidates(canonical)
+        for alias in aliases or set():
+            alias_candidates.update(_command_alias_candidates(alias))
+        if token_candidates & alias_candidates:
+            return canonical
+    return None
+
+
+def _list_command_aliases(canonical, alias_map):
+    aliases = [canonical]
+    for alias in sorted(alias_map.get(canonical, set())):
+        if alias not in aliases:
+            aliases.append(alias)
+    return aliases
+
+
+def _tokenize_classroom_command(command_text):
+    raw = str(command_text or '').strip()
+    if raw.startswith('／'):
+        raw = '/' + raw[1:]
+    if not raw.startswith('/'):
+        return [], '命令必须以 / 开头，例如 /help'
+    body = raw[1:].strip()
+    if not body:
+        return [], '请输入命令，例如 /help'
+    try:
+        return shlex.split(body), ''
+    except ValueError:
+        return [], '命令格式错误，请检查引号是否成对出现'
+
+
+def _build_classroom_command_manifest(classroom):
+    commands = []
+    for name in CLASSROOM_COMMAND_HELP_ORDER:
+        doc = CLASSROOM_COMMAND_HELP.get(name, {})
+        commands.append({
+            'name': name,
+            'aliases': _list_command_aliases(name, CLASSROOM_COMMAND_ALIASES),
+            'summary': doc.get('summary') or '',
+            'examples': doc.get('examples') or [],
+        })
+    return {
+        'prefix': '/',
+        'endpoint': reverse('classroom_command', args=[classroom.pk]),
+        'placeholder': '输入 /help 查看命令',
+        'commands': commands,
+    }
+
+
+def _format_command_seat_label(seat):
+    if not isinstance(seat, dict) or seat.get('row') in (None, '') or seat.get('col') in (None, ''):
+        return '未入座'
+    return f"{seat.get('row')}-{seat.get('col')}"
+
+
+def _format_classroom_overview_command_reply(data):
+    classroom_info = data.get('classroom') if isinstance(data, dict) else {}
+    metrics = data.get('metrics') if isinstance(data, dict) else {}
+    suggestions = data.get('suggestions') if isinstance(data, dict) else []
+    lines = [
+        f"班级：{classroom_info.get('name') or '未命名班级'}",
+        (
+            f"1. 学生 {metrics.get('student_count', 0)} 人，"
+            f"已入座 {metrics.get('seated_count', 0)} 人，"
+            f"未入座 {metrics.get('unseated_count', 0)} 人。"
+        ),
+        (
+            f"2. 小组 {metrics.get('group_count', 0)} 个，"
+            f"约束 {metrics.get('constraint_count', 0)} 条。"
+        ),
+    ]
+    if suggestions:
+        first_suggestion = suggestions[0]
+        message = str((first_suggestion or {}).get('message') or '').strip()
+        if message:
+            lines.append(f'3. 当前建议：{message}')
+    return '\n'.join(lines)
+
+
+def _format_student_profile_command_reply(data):
+    seat_label = _format_command_seat_label(data.get('seat'))
+    group = data.get('group') if isinstance(data, dict) else None
+    group_name = (group or {}).get('name') or '未分组'
+    if group and group.get('is_leader'):
+        group_name += '（组长）'
+    lines = [
+        f"学生：{data.get('name') or '未知'}",
+        f"1. 学号：{data.get('student_id') or '未填写'}",
+        f"2. 成绩：{data.get('score_display') if data.get('score_display') not in (None, '') else data.get('score', 0)}",
+        f"3. 座位：{seat_label}",
+        f"4. 小组：{group_name}",
+    ]
+    if data.get('gender'):
+        lines.insert(2, f"2. 性别：{data.get('gender')}")
+        lines[3] = f"3. 成绩：{data.get('score_display') if data.get('score_display') not in (None, '') else data.get('score', 0)}"
+        lines[4] = f"4. 座位：{seat_label}"
+        lines[5] = f"5. 小组：{group_name}"
+    return '\n'.join(lines)
+
+
+def _format_student_list_item(item):
+    name = str(item.get('name') or '未知')
+    student_id = str(item.get('student_id') or '').strip()
+    score = item.get('score_display')
+    seat_label = _format_command_seat_label(item.get('seat'))
+    group = item.get('group')
+    group_name = group.get('name') if isinstance(group, dict) else ''
+    parts = [name]
+    if student_id:
+        parts.append(f'学号 {student_id}')
+    if score not in (None, ''):
+        parts.append(f'成绩 {score}')
+    parts.append(f'座位 {seat_label}')
+    if group_name:
+        parts.append(f'小组 {group_name}')
+    return '，'.join(parts)
+
+
+def _format_student_list_command_reply(data, title):
+    items = data.get('items') if isinstance(data, dict) else []
+    total = int(data.get('total') or 0) if isinstance(data, dict) else 0
+    if not items:
+        return f'{title}\n当前没有匹配结果。'
+    lines = [f'{title}（共 {total} 条，本次返回 {len(items)} 条）']
+    for index, item in enumerate(items[:8], start=1):
+        lines.append(f'{index}. {_format_student_list_item(item)}')
+    if len(items) > 8:
+        lines.append(f'共返回 {len(items)} 条，已省略后续内容。')
+    return '\n'.join(lines)
+
+
+def _format_group_scores_command_reply(data):
+    items = data.get('items') if isinstance(data, dict) else []
+    if not items:
+        return '当前还没有可统计的小组成绩。'
+    lines = [f'小组排行（共 {len(items)} 组）']
+    for index, item in enumerate(items[:6], start=1):
+        lines.append(
+            f"{index}. {item.get('group_name') or '未命名小组'}，"
+            f"均分 {item.get('average_score', 0)}，"
+            f"总分 {item.get('total_score', 0)}，"
+            f"人数 {item.get('member_count', 0)}"
+        )
+    return '\n'.join(lines)
+
+
+def _format_snapshot_list_command_reply(items):
+    if not items:
+        return '当前还没有布局快照。'
+    lines = [f'布局快照（共 {len(items)} 个）']
+    for index, item in enumerate(items[:10], start=1):
+        lines.append(f"{index}. {item.get('name') or '未命名快照'}")
+    return '\n'.join(lines)
+
+
+def _build_classroom_command_result(
+    classroom,
+    command_text,
+    command,
+    *,
+    subcommand='',
+    kind='query',
+    reply='',
+    ok=True,
+    data=None,
+    tool_name='',
+    tool_arguments=None,
+    navigation=None,
+    needs_refresh=False,
+    extra=None,
+):
+    result = {
+        'ok': bool(ok),
+        'raw': str(command_text or ''),
+        'command': str(command or ''),
+        'subcommand': str(subcommand or ''),
+        'kind': str(kind or 'query'),
+        'reply': str(reply or '').strip(),
+        'classroom': {
+            'id': classroom.pk,
+            'name': classroom.name,
+        },
+        'tool_name': str(tool_name or ''),
+        'tool_arguments': tool_arguments if isinstance(tool_arguments, dict) else {},
+        'needs_refresh': bool(needs_refresh),
+        'state_url': reverse('classroom_state', args=[classroom.pk]),
+        'data': data if data is not None else {},
+    }
+    if isinstance(navigation, dict) and navigation:
+        result['navigation'] = navigation
+    if isinstance(extra, dict) and extra:
+        result.update(extra)
+    return result
+
+
+def _build_classroom_command_error(classroom, command_text, reply, *, command='', subcommand='', suggestions=None):
+    extra = {}
+    if suggestions:
+        extra['suggestions'] = list(suggestions)
+    return _build_classroom_command_result(
+        classroom,
+        command_text,
+        command,
+        subcommand=subcommand,
+        kind='error',
+        reply=reply,
+        ok=False,
+        needs_refresh=False,
+        extra=extra,
+    )
+
+
+def _run_classroom_command_tool(
+    classroom,
+    command_text,
+    command,
+    *,
+    subcommand='',
+    tool_name,
+    arguments=None,
+    request=None,
+    kind='query',
+    needs_refresh=False,
+    reply_formatter=None,
+):
+    normalized_arguments = arguments if isinstance(arguments, dict) else {}
+    try:
+        tool_result = _execute_ai_tool(classroom, tool_name, normalized_arguments, request=request)
+    except Exception as exc:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            str(exc),
+            command=command,
+            subcommand=subcommand,
+        )
+    data = tool_result.get('data') if isinstance(tool_result, dict) else {}
+    reply = reply_formatter(data) if callable(reply_formatter) else str((data or {}).get('message') or '命令已执行。')
+    return _build_classroom_command_result(
+        classroom,
+        command_text,
+        command,
+        subcommand=subcommand,
+        kind=kind,
+        reply=reply,
+        ok=True,
+        data=data,
+        tool_name=tool_name,
+        tool_arguments=normalized_arguments,
+        needs_refresh=needs_refresh,
+    )
+
+
+def _handle_classroom_help_command(classroom, command_text, args):
+    manifest = _build_classroom_command_manifest(classroom)
+    target_name = _resolve_command_alias(args[0], CLASSROOM_COMMAND_ALIASES) if args else None
+    command_detail = None
+    reply_prefix = ''
+    if args and not target_name:
+        reply_prefix = f"未找到命令 “{args[0]}”，下面是全部可用命令。\n"
+    if target_name:
+        command_detail = next((item for item in manifest['commands'] if item['name'] == target_name), None)
+    if command_detail:
+        reply_lines = [
+            f"{command_detail['name']}：{command_detail.get('summary') or ''}",
+            '可用写法：' + '、'.join(f"/{item}" for item in command_detail.get('aliases') or []),
+            '示例：',
+        ]
+        for index, example in enumerate(command_detail.get('examples') or [], start=1):
+            reply_lines.append(f'{index}. {example}')
+        reply = '\n'.join(reply_lines)
+    else:
+        reply_lines = ['可用命令：']
+        for index, item in enumerate(manifest['commands'], start=1):
+            reply_lines.append(f"{index}. /{item['name']}：{item.get('summary') or ''}")
+        reply_lines.append('输入 /help 命令名 可以查看某个命令的详细示例。')
+        reply = reply_prefix + '\n'.join(reply_lines)
+    return _build_classroom_command_result(
+        classroom,
+        command_text,
+        'help',
+        kind='help',
+        reply=reply,
+        data={
+            'manifest': manifest,
+            'command': command_detail or {},
+        },
+    )
+
+
+def _handle_classroom_view_command(classroom, command_text, args):
+    if not args:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            '请指定目标视图，例如 /view layout 或 /shitu buju',
+            command='view',
+        )
+    target = _resolve_command_alias(args[0], CLASSROOM_VIEW_TARGET_ALIASES)
+    if not target:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            f'不支持的视图：{args[0]}',
+            command='view',
+            suggestions=['/view classroom', '/view layout', '/view ai'],
+        )
+    view_targets = {
+        'classroom': {
+            'target': 'classroom',
+            'label': '班级主页',
+            'url': reverse('classroom_detail', args=[classroom.pk]),
+        },
+        'layout': {
+            'target': 'layout',
+            'label': '布局视图',
+            'url': reverse('layout_editor', args=[classroom.pk]),
+        },
+        'ai': {
+            'target': 'ai',
+            'label': '闻道智能',
+            'url': reverse('ai_workspace', args=[classroom.pk]),
+        },
+    }
+    navigation = view_targets[target]
+    return _build_classroom_command_result(
+        classroom,
+        command_text,
+        'view',
+        subcommand=target,
+        kind='navigate',
+        reply=f"已解析到 {navigation['label']}，前端可跳转到 {navigation['url']}",
+        navigation=navigation,
+        data=navigation,
+    )
+
+
+def _handle_classroom_overview_command(classroom, command_text, request=None):
+    return _run_classroom_command_tool(
+        classroom,
+        command_text,
+        'overview',
+        tool_name='get_classroom_overview',
+        arguments={},
+        request=request,
+        kind='query',
+        reply_formatter=_format_classroom_overview_command_reply,
+    )
+
+
+def _handle_classroom_students_command(classroom, command_text, args, request=None):
+    if not args:
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'students',
+            tool_name='get_student_list',
+            arguments={
+                'sort_by': 'name',
+                'sort_order': 'asc',
+                'limit': 20,
+                'fields': ['id', 'name', 'student_id', 'score_display', 'seat', 'group', 'is_seated'],
+            },
+            request=request,
+            kind='query',
+            reply_formatter=lambda data: _format_student_list_command_reply(data, '学生列表'),
+        )
+
+    subcommand = _resolve_command_alias(args[0], CLASSROOM_STUDENT_SUBCOMMAND_ALIASES)
+    if subcommand is None:
+        student_query = ' '.join(args).strip()
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'students',
+            subcommand='info',
+            tool_name='get_student_info',
+            arguments={'student_query': student_query},
+            request=request,
+            kind='query',
+            reply_formatter=_format_student_profile_command_reply,
+        )
+
+    if subcommand == 'info':
+        student_query = ' '.join(args[1:]).strip()
+        if not student_query:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '请提供学生姓名、学号或系统 ID，例如 /students 张三',
+                command='students',
+                subcommand='info',
+            )
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'students',
+            subcommand='info',
+            tool_name='get_student_info',
+            arguments={'student_query': student_query},
+            request=request,
+            kind='query',
+            reply_formatter=_format_student_profile_command_reply,
+        )
+
+    if subcommand == 'top':
+        limit = max(1, min(50, _safe_int(args[1], 10))) if len(args) > 1 else 10
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'students',
+            subcommand='top',
+            tool_name='get_student_list',
+            arguments={
+                'sort_by': 'score',
+                'sort_order': 'desc',
+                'limit': limit,
+                'fields': ['id', 'name', 'student_id', 'score_display', 'seat', 'group', 'is_seated'],
+            },
+            request=request,
+            kind='query',
+            reply_formatter=lambda data: _format_student_list_command_reply(data, f'成绩 Top {limit}'),
+        )
+
+    if subcommand == 'unseated':
+        limit = max(1, min(100, _safe_int(args[1], 50))) if len(args) > 1 else 50
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'students',
+            subcommand='unseated',
+            tool_name='get_student_list',
+            arguments={
+                'limit': limit,
+                'fields': ['id', 'name', 'student_id', 'score_display', 'seat', 'is_seated'],
+                'filters': {'seated': False},
+            },
+            request=request,
+            kind='query',
+            reply_formatter=lambda data: _format_student_list_command_reply(data, '未入座学生'),
+        )
+
+    if subcommand == 'group':
+        group_query = ' '.join(args[1:]).strip()
+        if not group_query:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '请提供小组名称，例如 /students group 第一组',
+                command='students',
+                subcommand='group',
+            )
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'students',
+            subcommand='group',
+            tool_name='get_student_list',
+            arguments={
+                'limit': 100,
+                'fields': ['id', 'name', 'student_id', 'score_display', 'seat', 'group', 'is_seated'],
+                'filters': {'group_query': group_query},
+            },
+            request=request,
+            kind='query',
+            reply_formatter=lambda data: _format_student_list_command_reply(data, f'小组 {group_query} 的学生'),
+        )
+
+    if subcommand == 'seat':
+        if len(args) < 3:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '请提供座位行列，例如 /students seat 2 3',
+                command='students',
+                subcommand='seat',
+            )
+        row = _safe_int(args[1], 0)
+        col = _safe_int(args[2], 0)
+        if row <= 0 or col <= 0:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '座位行列必须是正整数，例如 /students seat 2 3',
+                command='students',
+                subcommand='seat',
+            )
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'students',
+            subcommand='seat',
+            tool_name='get_student_list',
+            arguments={
+                'limit': 10,
+                'fields': ['id', 'name', 'student_id', 'score_display', 'seat', 'group', 'is_seated'],
+                'filters': {'row': row, 'col': col},
+            },
+            request=request,
+            kind='query',
+            reply_formatter=lambda data: _format_student_list_command_reply(data, f'座位 {row}-{col} 的学生'),
+        )
+
+    keyword = ' '.join(args[1:]).strip()
+    if not keyword:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            '请提供搜索关键词，例如 /students search 张',
+            command='students',
+            subcommand='search',
+        )
+    return _run_classroom_command_tool(
+        classroom,
+        command_text,
+        'students',
+        subcommand='search',
+        tool_name='get_student_list',
+        arguments={
+            'limit': 20,
+            'fields': ['id', 'name', 'student_id', 'score_display', 'seat', 'group', 'is_seated'],
+            'filters': {'keyword': keyword},
+        },
+        request=request,
+        kind='query',
+        reply_formatter=lambda data: _format_student_list_command_reply(data, f'搜索 “{keyword}” 的结果'),
+    )
+
+
+def _handle_classroom_seat_command(classroom, command_text, args, request=None):
+    if not args:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            '请提供座位命令，例如 /seat assign 张三 2 3',
+            command='seat',
+        )
+
+    subcommand = _resolve_command_alias(args[0], CLASSROOM_SEAT_SUBCOMMAND_ALIASES)
+    if subcommand is None:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            f'不支持的座位命令：{args[0]}',
+            command='seat',
+            suggestions=['/seat assign 张三 2 3', '/seat move 张三 1 1', '/seat clear 2 3', '/seat swap 张三 李四'],
+        )
+
+    if subcommand in {'assign', 'move'}:
+        if len(args) < 4:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '请提供学生和目标座位，例如 /seat move 张三 2 3',
+                command='seat',
+                subcommand=subcommand,
+            )
+        student_query = ' '.join(args[1:-2]).strip()
+        row = _safe_int(args[-2], 0)
+        col = _safe_int(args[-1], 0)
+        if not student_query or row <= 0 or col <= 0:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '命令格式错误，例如 /seat assign 张三 2 3',
+                command='seat',
+                subcommand=subcommand,
+            )
+        action = 'assign_student' if subcommand == 'assign' else 'move_student'
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'seat',
+            subcommand=subcommand,
+            tool_name='execute_classroom_action',
+            arguments={
+                'action': action,
+                'student_query': student_query,
+                'row': row,
+                'col': col,
+            },
+            request=request,
+            kind='mutation',
+            needs_refresh=True,
+        )
+
+    if subcommand == 'clear':
+        if len(args) < 3:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '请提供要清空的座位，例如 /seat clear 2 3',
+                command='seat',
+                subcommand='clear',
+            )
+        row = _safe_int(args[1], 0)
+        col = _safe_int(args[2], 0)
+        if row <= 0 or col <= 0:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '座位行列必须是正整数，例如 /seat clear 2 3',
+                command='seat',
+                subcommand='clear',
+            )
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'seat',
+            subcommand='clear',
+            tool_name='execute_classroom_action',
+            arguments={'action': 'clear_seat', 'row': row, 'col': col},
+            request=request,
+            kind='mutation',
+            needs_refresh=True,
+        )
+
+    if len(args) < 3:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            '请提供两名学生，例如 /seat swap 张三 李四',
+            command='seat',
+            subcommand='swap',
+        )
+    student_a = str(args[1] or '').strip()
+    student_b = ' '.join(args[2:]).strip()
+    if not student_a or not student_b:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            '请提供两名学生，例如 /seat swap 张三 李四',
+            command='seat',
+            subcommand='swap',
+        )
+    return _run_classroom_command_tool(
+        classroom,
+        command_text,
+        'seat',
+        subcommand='swap',
+        tool_name='swap_students',
+        arguments={'student_a': student_a, 'student_b': student_b},
+        request=request,
+        kind='mutation',
+        needs_refresh=True,
+    )
+
+
+def _handle_classroom_group_command(classroom, command_text, args, request=None):
+    if not args:
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'group',
+            subcommand='score',
+            tool_name='get_group_scores',
+            arguments={},
+            request=request,
+            kind='query',
+            reply_formatter=_format_group_scores_command_reply,
+        )
+
+    subcommand = _resolve_command_alias(args[0], CLASSROOM_GROUP_SUBCOMMAND_ALIASES)
+    if subcommand is None:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            f'不支持的小组命令：{args[0]}',
+            command='group',
+            suggestions=['/group score', '/group create 第一组', '/group rename 第一组 第二组', '/group leader 张三'],
+        )
+
+    if subcommand == 'score':
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'group',
+            subcommand='score',
+            tool_name='get_group_scores',
+            arguments={},
+            request=request,
+            kind='query',
+            reply_formatter=_format_group_scores_command_reply,
+        )
+
+    if subcommand == 'create':
+        name = ' '.join(args[1:]).strip()
+        if not name:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '请提供小组名，例如 /group create 第一组',
+                command='group',
+                subcommand='create',
+            )
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'group',
+            subcommand='create',
+            tool_name='execute_classroom_action',
+            arguments={'action': 'create_group', 'name': name},
+            request=request,
+            kind='mutation',
+            needs_refresh=True,
+        )
+
+    if subcommand == 'rename':
+        if len(args) < 3:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '请提供原组名和新组名，例如 /group rename 第一组 第二组',
+                command='group',
+                subcommand='rename',
+            )
+        group_query = str(args[1] or '').strip()
+        new_name = ' '.join(args[2:]).strip()
+        if not group_query or not new_name:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '请提供原组名和新组名，例如 /group rename 第一组 第二组',
+                command='group',
+                subcommand='rename',
+            )
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'group',
+            subcommand='rename',
+            tool_name='execute_classroom_action',
+            arguments={'action': 'rename_group', 'group_query': group_query, 'new_name': new_name},
+            request=request,
+            kind='mutation',
+            needs_refresh=True,
+        )
+
+    if subcommand == 'delete':
+        group_query = ' '.join(args[1:]).strip()
+        if not group_query:
+            return _build_classroom_command_error(
+                classroom,
+                command_text,
+                '请提供要删除的小组名，例如 /group delete 第一组',
+                command='group',
+                subcommand='delete',
+            )
+        return _run_classroom_command_tool(
+            classroom,
+            command_text,
+            'group',
+            subcommand='delete',
+            tool_name='execute_classroom_action',
+            arguments={'action': 'delete_group', 'group_query': group_query},
+            request=request,
+            kind='mutation',
+            needs_refresh=True,
+        )
+
+    student_query = ' '.join(args[1:]).strip()
+    if not student_query:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            '请提供学生姓名，例如 /group leader 张三',
+            command='group',
+            subcommand='leader',
+        )
+    return _run_classroom_command_tool(
+        classroom,
+        command_text,
+        'group',
+        subcommand='leader',
+        tool_name='execute_classroom_action',
+        arguments={'action': 'set_group_leader', 'student_query': student_query},
+        request=request,
+        kind='mutation',
+        needs_refresh=True,
+    )
+
+
+def _handle_classroom_snapshot_command(classroom, command_text, args, request=None):
+    subcommand = _resolve_command_alias(args[0], CLASSROOM_SNAPSHOT_SUBCOMMAND_ALIASES) if args else 'list'
+    if subcommand is None:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            f'不支持的快照命令：{args[0]}',
+            command='snapshot',
+            suggestions=['/snapshot list', '/snapshot save 期中布局', '/snapshot load 期中布局', '/snapshot delete 期中布局'],
+        )
+
+    if subcommand == 'list':
+        items = [
+            {
+                'id': snapshot.pk,
+                'name': snapshot.name,
+                'created_at': snapshot.created_at.isoformat() if snapshot.created_at else '',
+            }
+            for snapshot in classroom.layout_snapshots.all().order_by('-created_at', '-pk')[:20]
+        ]
+        return _build_classroom_command_result(
+            classroom,
+            command_text,
+            'snapshot',
+            subcommand='list',
+            kind='query',
+            reply=_format_snapshot_list_command_reply(items),
+            data={'items': items},
+        )
+
+    snapshot_query = ' '.join(args[1:]).strip()
+    if not snapshot_query:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            '请提供快照名称，例如 /snapshot save 期中布局',
+            command='snapshot',
+            subcommand=subcommand,
+        )
+
+    action_map = {
+        'save': 'save_layout_snapshot',
+        'load': 'load_layout_snapshot',
+        'delete': 'delete_layout_snapshot',
+    }
+    argument_key = 'name' if subcommand == 'save' else 'snapshot_query'
+    return _run_classroom_command_tool(
+        classroom,
+        command_text,
+        'snapshot',
+        subcommand=subcommand,
+        tool_name='execute_classroom_action',
+        arguments={'action': action_map[subcommand], argument_key: snapshot_query},
+        request=request,
+        kind='mutation',
+        needs_refresh=True,
+    )
+
+
+def _handle_classroom_arrange_command(classroom, command_text, args, request=None):
+    mode = 'random'
+    if args:
+        mode = _resolve_command_alias(args[0], CLASSROOM_ARRANGE_MODE_ALIASES) or str(args[0] or '').strip()
+    if mode not in CLASSROOM_ARRANGE_MODE_ALIASES:
+        mode = _resolve_command_alias(mode, CLASSROOM_ARRANGE_MODE_ALIASES) or mode
+    if mode not in CLASSROOM_ARRANGE_MODE_ALIASES:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            f'不支持的排座模式：{args[0]}',
+            command='arrange',
+            suggestions=['/arrange random', '/arrange score_desc', '/arrange score_spread', '/paizuo suiji'],
+        )
+    return _run_classroom_command_tool(
+        classroom,
+        command_text,
+        'arrange',
+        subcommand=mode,
+        tool_name='execute_classroom_action',
+        arguments={'action': 'auto_arrange', 'mode': mode},
+        request=request,
+        kind='mutation',
+        needs_refresh=True,
+    )
+
+
+def _handle_classroom_undo_redo_command(classroom, command_text, command, request=None):
+    action = 'undo' if command == 'undo' else 'redo'
+    return _run_classroom_command_tool(
+        classroom,
+        command_text,
+        command,
+        tool_name='execute_classroom_action',
+        arguments={'action': action},
+        request=request,
+        kind='mutation',
+        needs_refresh=True,
+    )
+
+
+def _execute_classroom_command(classroom, command_text, request=None):
+    tokens, error_message = _tokenize_classroom_command(command_text)
+    if error_message:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            error_message,
+            suggestions=['/help', '/view layout', '/students 张三'],
+        )
+
+    command = _resolve_command_alias(tokens[0], CLASSROOM_COMMAND_ALIASES)
+    if command is None:
+        return _build_classroom_command_error(
+            classroom,
+            command_text,
+            f'未知命令：{tokens[0]}。输入 /help 查看全部命令。',
+            suggestions=['/help', '/view layout', '/overview', '/students 张三'],
+        )
+
+    args = tokens[1:]
+    if command == 'help':
+        return _handle_classroom_help_command(classroom, command_text, args)
+    if command == 'view':
+        return _handle_classroom_view_command(classroom, command_text, args)
+    if command == 'overview':
+        return _handle_classroom_overview_command(classroom, command_text, request=request)
+    if command == 'students':
+        return _handle_classroom_students_command(classroom, command_text, args, request=request)
+    if command == 'seat':
+        return _handle_classroom_seat_command(classroom, command_text, args, request=request)
+    if command == 'group':
+        return _handle_classroom_group_command(classroom, command_text, args, request=request)
+    if command == 'snapshot':
+        return _handle_classroom_snapshot_command(classroom, command_text, args, request=request)
+    if command == 'arrange':
+        return _handle_classroom_arrange_command(classroom, command_text, args, request=request)
+    if command in {'undo', 'redo'}:
+        return _handle_classroom_undo_redo_command(classroom, command_text, command, request=request)
+    return _build_classroom_command_error(
+        classroom,
+        command_text,
+        f'命令 {command} 暂未实现。',
+        command=command,
+    )
+
+
+def _build_classroom_command_response_payload(classroom, command_result):
+    return {
+        'status': 'success',
+        'reply': str((command_result or {}).get('reply') or '').strip(),
+        'command_result': command_result if isinstance(command_result, dict) else {},
+        'cards': [],
+        'overview': _get_classroom_overview_payload(classroom),
+    }
+
+
 def _extract_direct_swap_call(classroom, message):
     text = str(message or '').strip()
     if not text:
@@ -3768,6 +4840,31 @@ def classroom_detail(request, pk):
     })
 
 
+@require_http_methods(['GET', 'POST'])
+def classroom_command(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    if request.method == 'GET':
+        return JsonResponse({
+            'status': 'success',
+            'manifest': _build_classroom_command_manifest(classroom),
+        })
+
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            payload = json.loads(request.body or '{}')
+        else:
+            payload = request.POST
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': '请求数据格式错误'}, status=400)
+
+    command_text = str(payload.get('command') or payload.get('message') or '').strip()
+    if not command_text:
+        return JsonResponse({'status': 'error', 'message': '请输入命令内容'}, status=400)
+
+    command_result = _execute_classroom_command(classroom, command_text, request=request)
+    return JsonResponse(_build_classroom_command_response_payload(classroom, command_result))
+
+
 def ai_workspace(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     return render(request, 'seats/ai_workspace.html', {
@@ -4062,6 +5159,28 @@ def ai_chat(request, pk):
             conversation.updated_at = timezone.now()
             conversation.save(update_fields=['title', 'updated_at'])
 
+    if str(message).strip().startswith(('/', '／')):
+        command_result = _execute_classroom_command(classroom, message, request=request)
+        _append_ai_conversation_message(
+            conversation,
+            AIConversationMessage.MessageRole.ASSISTANT,
+            command_result.get('reply') or '命令已处理。',
+            payload={
+                'command': {
+                    'name': command_result.get('command') or '',
+                    'subcommand': command_result.get('subcommand') or '',
+                    'kind': command_result.get('kind') or '',
+                    'ok': bool(command_result.get('ok')),
+                }
+            },
+        )
+        response_payload = _build_classroom_command_response_payload(classroom, command_result)
+        response_payload.update({
+            'conversation_id': conversation.pk,
+            'conversations': _list_ai_conversations(classroom, request),
+        })
+        return JsonResponse(response_payload)
+
     direct_swap_call = _extract_direct_swap_call(classroom, message)
     if direct_swap_call:
         token = _store_future_mode_pending(
@@ -4184,6 +5303,35 @@ def ai_chat_stream(request, pk):
             conversation.title = _build_conversation_title_from_message(message)
             conversation.updated_at = timezone.now()
             conversation.save(update_fields=['title', 'updated_at'])
+
+    if str(message).strip().startswith(('/', '／')):
+        command_result = _execute_classroom_command(classroom, message, request=request)
+        _append_ai_conversation_message(
+            conversation,
+            AIConversationMessage.MessageRole.ASSISTANT,
+            command_result.get('reply') or '命令已处理。',
+            payload={
+                'command': {
+                    'name': command_result.get('command') or '',
+                    'subcommand': command_result.get('subcommand') or '',
+                    'kind': command_result.get('kind') or '',
+                    'ok': bool(command_result.get('ok')),
+                }
+            },
+        )
+
+        def command_stream():
+            payload_data = _build_classroom_command_response_payload(classroom, command_result)
+            payload_data.update({
+                'conversation_id': conversation.pk,
+                'conversations': _list_ai_conversations(classroom, request),
+            })
+            yield _sse_event('done', payload_data)
+
+        response = StreamingHttpResponse(command_stream(), content_type='text/event-stream; charset=utf-8')
+        response['Cache-Control'] = 'no-cache'
+        response['X-Accel-Buffering'] = 'no'
+        return response
 
     direct_swap_call = _extract_direct_swap_call(classroom, message)
     if direct_swap_call:

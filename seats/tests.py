@@ -23,7 +23,17 @@ from desktop_shell import (
     parse_content_disposition_filename,
     resolve_local_export_url,
 )
-from .models import Classroom, FrontendKVStore, SeatConstraint, SeatCellType, SeatGroup, FutureModeConfig, Seat
+from .models import (
+    Classroom,
+    FrontendKVStore,
+    SeatConstraint,
+    SeatCellType,
+    SeatGroup,
+    FutureModeConfig,
+    Seat,
+    Student,
+    LayoutSnapshot,
+)
 from .plugin_system import plugin_registry
 from .views import (
     _arrange_standard,
@@ -1953,6 +1963,129 @@ def register(registry):
             workspace_html = workspace_resp.content.decode('utf-8')
             self.assertIn('id="btn-open-plugin-hub"', workspace_html)
             self.assertIn('data-extensions-list-url="/extensions/"', workspace_html)
+
+
+class ClassroomCommandApiTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name='命令测试班', rows=3, cols=3)
+        self.command_url = reverse('classroom_command', args=[self.classroom.pk])
+        self.ai_chat_url = reverse('ai_chat', args=[self.classroom.pk])
+        self.ai_chat_stream_url = reverse('ai_chat_stream', args=[self.classroom.pk])
+
+        self.student_a = Student.objects.create(classroom=self.classroom, name='张三', student_id='001', score=98)
+        self.student_b = Student.objects.create(classroom=self.classroom, name='李四', student_id='002', score=93)
+        self.student_c = Student.objects.create(classroom=self.classroom, name='王五', student_id='003', score=88)
+
+        self.seat_a = self.classroom.seats.get(row=1, col=1)
+        self.seat_b = self.classroom.seats.get(row=1, col=2)
+        self.seat_a.student = self.student_a
+        self.seat_a.save(update_fields=['student'])
+        self.seat_b.student = self.student_b
+        self.seat_b.save(update_fields=['student'])
+
+    def _post_command(self, command_text):
+        return self.client.post(
+            self.command_url,
+            data=json.dumps({'command': command_text}),
+            content_type='application/json',
+        )
+
+    def test_classroom_command_manifest_can_be_fetched(self):
+        response = self.client.get(self.command_url)
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get('status'), 'success')
+        manifest = payload.get('manifest') or {}
+        self.assertEqual(manifest.get('prefix'), '/')
+        self.assertEqual(manifest.get('endpoint'), self.command_url)
+        self.assertTrue(any(item.get('name') == 'view' for item in manifest.get('commands') or []))
+
+    def test_classroom_command_supports_view_alias_navigation(self):
+        response = self._post_command('/shitu buju')
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        command_result = payload.get('command_result') or {}
+        self.assertTrue(command_result.get('ok'))
+        self.assertEqual(command_result.get('command'), 'view')
+        self.assertEqual(command_result.get('subcommand'), 'layout')
+        self.assertEqual((command_result.get('navigation') or {}).get('url'), reverse('layout_editor', args=[self.classroom.pk]))
+
+    def test_classroom_command_can_swap_students(self):
+        response = self._post_command('/zuowei jiaohuan 张三 李四')
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        command_result = payload.get('command_result') or {}
+        self.assertTrue(command_result.get('ok'))
+        self.assertEqual(command_result.get('kind'), 'mutation')
+        self.assertTrue(command_result.get('needs_refresh'))
+
+        self.student_a.refresh_from_db()
+        self.student_b.refresh_from_db()
+        self.assertEqual(self.student_a.assigned_seat.row, 1)
+        self.assertEqual(self.student_a.assigned_seat.col, 2)
+        self.assertEqual(self.student_b.assigned_seat.row, 1)
+        self.assertEqual(self.student_b.assigned_seat.col, 1)
+
+    def test_classroom_command_returns_student_info_with_default_query(self):
+        response = self._post_command('/xuesheng 张三')
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        command_result = payload.get('command_result') or {}
+        self.assertTrue(command_result.get('ok'))
+        self.assertEqual(command_result.get('command'), 'students')
+        self.assertEqual(command_result.get('subcommand'), 'info')
+        self.assertEqual((command_result.get('data') or {}).get('name'), '张三')
+        self.assertIn('学生：张三', payload.get('reply') or '')
+
+    def test_classroom_command_lists_snapshots(self):
+        LayoutSnapshot.objects.create(classroom=self.classroom, name='期中布局', data={'rows': 3, 'cols': 3})
+        response = self._post_command('/kuaizhao liebiao')
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        command_result = payload.get('command_result') or {}
+        self.assertTrue(command_result.get('ok'))
+        items = (command_result.get('data') or {}).get('items') or []
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].get('name'), '期中布局')
+
+    def test_ai_chat_uses_command_backend_for_slash_commands(self):
+        with patch('seats.views._run_future_mode') as mock_run_future_mode:
+            response = self.client.post(
+                self.ai_chat_url,
+                data=json.dumps({'action': 'message', 'message': '/view layout'}),
+                content_type='application/json',
+            )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get('status'), 'success')
+        self.assertEqual((payload.get('command_result') or {}).get('command'), 'view')
+        mock_run_future_mode.assert_not_called()
+
+        conversation = self.classroom.ai_conversations.first()
+        self.assertIsNotNone(conversation)
+        messages = list(conversation.messages.order_by('created_at', 'pk'))
+        self.assertEqual(len(messages), 2)
+        self.assertEqual(messages[0].role, 'user')
+        self.assertEqual(messages[0].content, '/view layout')
+        self.assertEqual(messages[1].role, 'assistant')
+        self.assertIn('布局视图', messages[1].content)
+
+    def test_ai_chat_stream_returns_done_event_for_command(self):
+        response = self.client.post(
+            self.ai_chat_stream_url,
+            data=json.dumps({'action': 'message', 'message': '/overview'}),
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, 200)
+        streamed = ''.join(
+            chunk if isinstance(chunk, str) else chunk.decode('utf-8')
+            for chunk in response.streaming_content
+        )
+        self.assertIn('event: done', streamed)
+        payload = json.loads(streamed.split('data: ', 1)[1].strip())
+        self.assertEqual(payload.get('status'), 'success')
+        self.assertEqual((payload.get('command_result') or {}).get('command'), 'overview')
 
 
 class RuntimeReleaseManifestTests(unittest.TestCase):
