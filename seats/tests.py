@@ -2277,3 +2277,10 @@ class SettingsPageVersionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'update-details-content')
         self.assertContains(response, 'https://fuckseats.577622.xyz/update.txt')
+
+    @patch('seats.context_processors.desktop_runtime.get_current_version', return_value='7.8.9')
+    def test_settings_page_contains_liquid_glass_toggle(self, _mock_get_current_version):
+        response = self.client.get(reverse('settings'))
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, '灵动液态效果（液态玻璃）')
+        self.assertContains(response, 'id="liquid-glass-toggle"', html=False)
