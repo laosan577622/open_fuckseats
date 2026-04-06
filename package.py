@@ -50,23 +50,19 @@ def _remove_embedded_databases(dist_root):
 def main():
     _ensure_utf8_stdio()
 
-    # 获取当前脚本所在目录
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
     
-    # 确保在虚拟环境中运行
     if not sys.prefix or sys.prefix == sys.base_prefix:
         print("警告: 似乎未在虚拟环境中运行。建议在虚拟环境中使用此脚本。", flush=True)
     
-    # 定义输出目录
     DIST_DIR = os.path.join(BASE_DIR, 'dist')
     BUILD_DIR = os.path.join(BASE_DIR, 'build')
     SPEC_FILE = os.path.join(BASE_DIR, 'FuckSeats.spec')
     STAGE_DIR = os.path.join(BASE_DIR, '_data_stage')
-    # 桌面端不依赖宣传站资源，只带运行时版本文件与 Django 所需目录。
+    # 仅打包桌面运行所需目录
     DATA_DIRS = ['templates', 'static', 'seats', 'runtime', 'config']
     DB_EXCLUDE_PATTERNS = ['*.sqlite3', '*.sqlite', '*.db']
     
-    # 清理旧的构建文件
     print("正在清理旧构建文件...", flush=True)
     if os.path.exists(DIST_DIR):
         try:
@@ -88,9 +84,7 @@ def main():
 
     print("开始打包程序...", flush=True)
     
-    # 构建 PyInstaller 命令
-    # 使用 sys.executable 确保使用当前环境的 Python 解释器和库
-    # Stage data directories to exclude database files from packaging
+    # 先暂存数据目录，排除数据库文件
     print("Preparing data files (excluding database files)...", flush=True)
     if os.path.exists(STAGE_DIR):
         try:
@@ -125,7 +119,6 @@ def main():
         '--clean',
         '--name', 'FuckSeats',
 
-        # Data files (staged; database files excluded)
         *data_args,
 
         '--hidden-import', 'waitress',
@@ -170,18 +163,11 @@ def main():
         '--copy-metadata', 'python-dateutil',
         '--copy-metadata', 'tzdata',
         
-        # 如果 run_app.py 里排除了这些模块，则需要在这里排除，或者让 pyinstaller 自动分析
-        # 用户之前的指令排除了它们，可能是因为包含在 add-data 中了。
-        # 如果 add-data 同时包含了源码，通常排除模块分析可以减小体积或避免冲突，但要小心。
-        # 这里为了稳妥，我们遵循之前的排除逻辑，但确保 hidden-import 处理了依赖。
-        # 不过，如果 run_app 导入了它们，排除可能会导致问题。
-        # 鉴于 add-data 已经把文件夹拷过去了，我们可以排除模块分析，让 python 运行时直接从文件系统（_internal）加载。
-        # 这种方式类似“源代码分发”。
+        # 这些目录已通过 add-data 带入
         '--exclude-module', 'seats',
         '--exclude-module', 'website',
         '--exclude-module', 'config',
-        
-        # 主入口
+
         'run_app.py'
     ]
     

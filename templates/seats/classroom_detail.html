@@ -252,65 +252,7 @@
     data-command-url="{% url 'classroom_command' classroom.pk %}"
     data-csrf="{{ csrf_token }}">
 
-    <svg class="zoom-refraction-defs" aria-hidden="true" focusable="false">
-        <defs>
-            <!-- 主折射滤镜：多层噪声 + 柔和位移 -->
-            <filter id="zoom-glass-refraction" x="-20%" y="-20%" width="140%" height="140%"
-                color-interpolation-filters="sRGB">
-                <feTurbulence id="zoom-refraction-noise" type="fractalNoise" baseFrequency="0.018 0.024"
-                    numOctaves="3" seed="7" stitchTiles="stitch" result="noiseA" />
-                <feTurbulence type="fractalNoise" baseFrequency="0.045 0.015" numOctaves="2" seed="31"
-                    stitchTiles="stitch" result="noiseB" />
-                <feMerge result="mergedNoise">
-                    <feMergeNode in="noiseA" />
-                    <feMergeNode in="noiseB" />
-                </feMerge>
-                <feGaussianBlur in="mergedNoise" stdDeviation="1.2" result="softNoise" />
-                <feDisplacementMap id="zoom-refraction-displacement" in="SourceGraphic" in2="softNoise" scale="8"
-                    xChannelSelector="R" yChannelSelector="G" result="displaced" />
-                <feGaussianBlur in="displaced" stdDeviation="0.3" result="smoothed" />
-                <feMerge>
-                    <feMergeNode in="smoothed" />
-                </feMerge>
-            </filter>
-            <!-- 色差分离滤镜：红/蓝通道微偏移模拟色散 -->
-            <filter id="zoom-glass-chromatic" x="-10%" y="-10%" width="120%" height="120%"
-                color-interpolation-filters="sRGB">
-                <feOffset id="zoom-chromatic-r" in="SourceGraphic" dx="0.6" dy="0.3" result="redShift" />
-                <feOffset in="SourceGraphic" dx="0" dy="0" result="greenBase" />
-                <feOffset id="zoom-chromatic-b" in="SourceGraphic" dx="-0.6" dy="-0.3" result="blueShift" />
-                <feColorMatrix in="redShift" type="matrix"
-                    values="1 0 0 0 0  0 0 0 0 0  0 0 0 0 0  0 0 0 0.34 0" result="redOnly" />
-                <feColorMatrix in="greenBase" type="matrix"
-                    values="0 0 0 0 0  0 1 0 0 0  0 0 0 0 0  0 0 0 0.40 0" result="greenOnly" />
-                <feColorMatrix in="blueShift" type="matrix"
-                    values="0 0 0 0 0  0 0 0 0 0  0 0 1 0 0  0 0 0 0.34 0" result="blueOnly" />
-                <feBlend in="redOnly" in2="greenOnly" mode="screen" result="rg" />
-                <feBlend in="rg" in2="blueOnly" mode="screen" result="chromatic" />
-                <feBlend in="SourceGraphic" in2="chromatic" mode="normal" />
-            </filter>
-            <!-- 焦散高光滤镜 -->
-            <filter id="zoom-glass-caustic" x="-5%" y="-5%" width="110%" height="110%"
-                color-interpolation-filters="sRGB">
-                <feTurbulence id="zoom-caustic-noise" type="fractalNoise" baseFrequency="0.06 0.04"
-                    numOctaves="2" seed="42" stitchTiles="stitch" result="causticNoise" />
-                <feColorMatrix in="causticNoise" type="luminanceToAlpha" result="causticAlpha" />
-                <feComponentTransfer in="causticAlpha" result="causticMask">
-                    <feFuncA type="gamma" amplitude="1" exponent="3.5" offset="-0.15" />
-                </feComponentTransfer>
-                <feFlood flood-color="white" flood-opacity="0.12" result="causticLight" />
-                <feComposite in="causticLight" in2="causticMask" operator="in" result="causticPattern" />
-                <feMerge>
-                    <feMergeNode in="SourceGraphic" />
-                    <feMergeNode in="causticPattern" />
-                </feMerge>
-            </filter>
-        </defs>
-    </svg>
-
-    <div class="zoom-controls zoom-controls--plain" id="zoom-controls">
-        <span class="zoom-controls-prism" aria-hidden="true"></span>
-        <span class="zoom-controls-core" aria-hidden="true"></span>
+    <div class="zoom-controls">
         <button type="button" class="zoom-btn" onclick="zoomOut()" title="缩小">-</button>
         <span id="zoom-level">100%</span>
         <button type="button" class="zoom-btn" onclick="zoomIn()" title="放大">+</button>
@@ -950,23 +892,6 @@
     let currentScale = 1.0;
     const gridContainer = document.getElementById('seat-grid-container');
     const zoomLevelDisplay = document.getElementById('zoom-level');
-    const zoomControls = document.getElementById('zoom-controls');
-    const ZOOM_LIQUID_GLASS_STORAGE_KEY = 'seats_zoom_liquid_glass_enabled';
-
-    function isZoomLiquidGlassEnabled() {
-        return localStorage.getItem(ZOOM_LIQUID_GLASS_STORAGE_KEY) === '1';
-    }
-
-    function applyZoomGlassMode() {
-        const enabled = isZoomLiquidGlassEnabled();
-        if (zoomControls) {
-            zoomControls.classList.toggle('zoom-controls--plain', !enabled);
-            zoomControls.classList.toggle('zoom-controls--liquid', enabled);
-        }
-        return enabled;
-    }
-
-    const zoomLiquidGlassEnabled = applyZoomGlassMode();
 
     function updateZoom() {
         if (!gridContainer) return;
@@ -976,10 +901,6 @@
 
         if (zoomLevelDisplay) {
             zoomLevelDisplay.textContent = `${Math.round(currentScale * 100)}%`;
-        }
-
-        if (typeof window.requestZoomRefractionPulse === 'function') {
-            window.requestZoomRefractionPulse(0.18);
         }
     }
 
@@ -1004,168 +925,6 @@
             }
         });
     }
-
-    function initZoomRefraction() {
-        const turbulence = document.getElementById('zoom-refraction-noise');
-        const displacement = document.getElementById('zoom-refraction-displacement');
-        const chromaticR = document.getElementById('zoom-chromatic-r');
-        const chromaticB = document.getElementById('zoom-chromatic-b');
-        const causticNoise = document.getElementById('zoom-caustic-noise');
-
-        if (!zoomControls || !zoomLiquidGlassEnabled || !turbulence || !displacement || typeof requestAnimationFrame !== 'function') {
-            return;
-        }
-
-        const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
-        const lerp = (a, b, t) => a + (b - a) * t;
-
-        let pointerX = 0.28;
-        let pointerY = 0.18;
-        let targetPointerX = pointerX;
-        let targetPointerY = pointerY;
-        let lastPointerX = pointerX;
-        let lastPointerY = pointerY;
-        let motionEnergy = 0.08;
-        let targetMotionEnergy = 0.08;
-        let frameId = null;
-        let disposed = false;
-        let lastMoveAt = performance.now();
-
-        const syncSheen = () => {
-            const sheenX = (18 + pointerX * 66).toFixed(2);
-            const sheenY = (12 + pointerY * 70).toFixed(2);
-            const edgeOp = (0.65 + motionEnergy * 0.30).toFixed(3);
-            const shiftX = ((pointerX - 0.5) * 5.0).toFixed(2);
-            const shiftY = ((pointerY - 0.5) * 3.5).toFixed(2);
-
-            zoomControls.style.setProperty('--zoom-refract-sheen-x', `${sheenX}%`);
-            zoomControls.style.setProperty('--zoom-refract-sheen-y', `${sheenY}%`);
-            zoomControls.style.setProperty('--zoom-refract-edge-opacity', edgeOp);
-            zoomControls.style.setProperty('--zoom-refract-shift-x', `${shiftX}px`);
-            zoomControls.style.setProperty('--zoom-refract-shift-y', `${shiftY}px`);
-        };
-
-        const handlePointerMove = (event) => {
-            const rect = zoomControls.getBoundingClientRect();
-            if (!rect.width || !rect.height) return;
-
-            const nextX = clamp((event.clientX - rect.left) / rect.width, 0, 1);
-            const nextY = clamp((event.clientY - rect.top) / rect.height, 0, 1);
-            const now = performance.now();
-            const delta = Math.hypot(nextX - lastPointerX, nextY - lastPointerY);
-            const elapsed = Math.max(16, now - lastMoveAt);
-            const velocity = delta / (elapsed / 1000);
-
-            targetMotionEnergy = clamp(velocity * 0.008, 0.06, 1.0);
-            targetPointerX = nextX;
-            targetPointerY = nextY;
-            lastPointerX = nextX;
-            lastPointerY = nextY;
-            lastMoveAt = now;
-        };
-
-        const handlePointerLeave = () => {
-            targetPointerX = 0.28;
-            targetPointerY = 0.18;
-            targetMotionEnergy = 0.04;
-        };
-
-        const pulse = (amount = 0.12) => {
-            targetMotionEnergy = clamp(targetMotionEnergy + amount, 0.06, 1.0);
-        };
-
-        window.requestZoomRefractionPulse = pulse;
-
-        const render = (now) => {
-            if (disposed) return;
-
-            // 平滑插值指针位置和运动能量
-            pointerX = lerp(pointerX, targetPointerX, 0.08);
-            pointerY = lerp(pointerY, targetPointerY, 0.08);
-            motionEnergy = lerp(motionEnergy, targetMotionEnergy, 0.05);
-
-            // 运动能量自然衰减
-            targetMotionEnergy *= 0.985;
-            if (targetMotionEnergy < 0.04) targetMotionEnergy = 0.04;
-
-            const time = now * 0.0004;
-
-            // 主折射噪声 — 频率随运动能量微调
-            const freqX = 0.016 + Math.sin(time * 1.3 + pointerX * Math.PI) * 0.003 + motionEnergy * 0.004;
-            const freqY = 0.022 + Math.cos(time * 0.9 + pointerY * Math.PI * 1.5) * 0.004 + motionEnergy * 0.005;
-            turbulence.setAttribute('baseFrequency', `${freqX.toFixed(4)} ${freqY.toFixed(4)}`);
-
-            // 位移强度 — 基础值低，运动时增强，更自然
-            const dispScale = 4 + motionEnergy * 18 + Math.sin(time * 1.8) * 1.2;
-            displacement.setAttribute('scale', dispScale.toFixed(2));
-
-            // 色差分离 — 随指针偏移和运动能量变化
-            if (chromaticR && chromaticB) {
-                const chrAngle = Math.atan2(pointerY - 0.5, pointerX - 0.5);
-                const chrStrength = 0.3 + motionEnergy * 1.8;
-                const crDx = Math.cos(chrAngle) * chrStrength;
-                const crDy = Math.sin(chrAngle) * chrStrength;
-                chromaticR.setAttribute('dx', crDx.toFixed(3));
-                chromaticR.setAttribute('dy', crDy.toFixed(3));
-                chromaticB.setAttribute('dx', (-crDx).toFixed(3));
-                chromaticB.setAttribute('dy', (-crDy).toFixed(3));
-            }
-
-            // 焦散噪声动画
-            if (causticNoise) {
-                const cFreqX = 0.055 + Math.sin(time * 0.7) * 0.012;
-                const cFreqY = 0.038 + Math.cos(time * 0.5) * 0.010;
-                causticNoise.setAttribute('baseFrequency', `${cFreqX.toFixed(4)} ${cFreqY.toFixed(4)}`);
-            }
-
-            syncSheen();
-            frameId = requestAnimationFrame(render);
-        };
-
-        const handleVisibilityChange = () => {
-            if (document.hidden) {
-                if (frameId) {
-                    cancelAnimationFrame(frameId);
-                    frameId = null;
-                }
-                return;
-            }
-
-            if (!frameId) {
-                frameId = requestAnimationFrame(render);
-            }
-        };
-
-        zoomControls.addEventListener('pointerenter', handlePointerMove);
-        zoomControls.addEventListener('pointermove', handlePointerMove);
-        zoomControls.addEventListener('pointerleave', handlePointerLeave);
-
-        if (stage) {
-            stage.addEventListener('scroll', () => pulse(0.06), { passive: true });
-        }
-
-        window.addEventListener('resize', () => pulse(0.08), { passive: true });
-        document.addEventListener('visibilitychange', handleVisibilityChange);
-
-        syncSheen();
-        frameId = requestAnimationFrame(render);
-
-        window.addEventListener('pagehide', () => {
-            disposed = true;
-            if (frameId) {
-                cancelAnimationFrame(frameId);
-            }
-            document.removeEventListener('visibilitychange', handleVisibilityChange);
-            zoomControls.removeEventListener('pointerenter', handlePointerMove);
-            zoomControls.removeEventListener('pointermove', handlePointerMove);
-            zoomControls.removeEventListener('pointerleave', handlePointerLeave);
-            if (window.requestZoomRefractionPulse === pulse) {
-                delete window.requestZoomRefractionPulse;
-            }
-        }, { once: true });
-    }
-
-    initZoomRefraction();
 
     document.addEventListener('DOMContentLoaded', function () {
         const hasSeenTour = localStorage.getItem('seat_app_tour_seen');

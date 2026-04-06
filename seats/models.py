@@ -19,12 +19,12 @@ class Classroom(models.Model):
     def save(self, *args, **kwargs):
         is_new = self.pk is None
         super().save(*args, **kwargs)
-        # Automatically create seats if new
+        # 新建后补齐座位
         if is_new:
             self.generate_seats()
 
     def generate_seats(self):
-        # Create seats for the grid
+        # 按网格补齐座位
         current_seats = self.seats.all()
         existing_coords = set((s.row, s.col) for s in current_seats)
         

@@ -378,12 +378,6 @@ main {
     max-width: 100%;
     padding: 0;
     /* Remove padding to let layout control it */
-    animation: mainFadeIn 0.35s ease both;
-}
-
-@keyframes mainFadeIn {
-    from { opacity: 0; filter: blur(6px); }
-    to   { opacity: 1; filter: blur(0); }
 }
 
 .form-page {
@@ -618,15 +612,6 @@ input:focus {
 }
 
 .zoom-controls {
-    --zoom-refract-sheen-x: 28%;
-    --zoom-refract-sheen-y: 18%;
-    --zoom-refract-edge-opacity: 0.76;
-    --zoom-refract-shift-x: 0px;
-    --zoom-refract-shift-y: 0px;
-    --zoom-refract-chromatic-dx: 0.6;
-    --zoom-refract-chromatic-dy: 0.3;
-    --zoom-refract-caustic-freq: 0.06;
-    --zoom-prism-thickness: 8px;
     position: fixed;
     bottom: 24px;
     left: 24px;
@@ -634,120 +619,13 @@ input:focus {
     display: flex;
     align-items: center;
     gap: 8px;
-    isolation: isolate;
-    overflow: hidden;
-    background: rgba(255, 255, 255, 0.22);
-    backdrop-filter: saturate(185%) blur(1px) brightness(1.06);
-    -webkit-backdrop-filter: saturate(185%) blur(1px) brightness(1.06);
-    backdrop-filter: url("#zoom-glass-refraction") saturate(185%) blur(0.6px) brightness(1.06);
-    -webkit-backdrop-filter: url("#zoom-glass-refraction") saturate(185%) blur(0.6px) brightness(1.06);
+    background: rgba(255, 255, 255, 0.65);
+    backdrop-filter: saturate(180%) blur(20px);
+    -webkit-backdrop-filter: saturate(180%) blur(20px);
     padding: 6px 12px;
     border-radius: 999px;
-    box-shadow:
-        0 18px 40px rgba(15, 23, 42, 0.10),
-        inset 0 1px 0 rgba(255, 255, 255, 0.5),
-        inset 0 -1px 0 rgba(0, 0, 0, 0.04);
-    border: 1px solid rgba(255, 255, 255, 0.38);
-    transform: translateZ(0);
-}
-
-.zoom-refraction-defs {
-    position: absolute;
-    width: 0;
-    height: 0;
-    pointer-events: none;
-}
-
-.zoom-controls::before,
-.zoom-controls::after {
-    display: none;
-}
-
-.zoom-controls-prism {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    border-radius: inherit;
-    pointer-events: none;
-    filter: url("#zoom-glass-caustic");
-}
-
-.zoom-controls-prism::before,
-.zoom-controls-prism::after {
-    content: "";
-    position: absolute;
-    border-radius: inherit;
-    pointer-events: none;
-}
-
-.zoom-controls-prism::before {
-    inset: -1px;
-    padding: var(--zoom-prism-thickness);
-    transform: translate(var(--zoom-refract-shift-x), var(--zoom-refract-shift-y));
-    background: linear-gradient(
-        135deg,
-        rgba(255, 255, 255, 0.35) 0%,
-        rgba(255, 255, 255, 0.08) 40%,
-        rgba(255, 255, 255, 0.20) 60%,
-        rgba(255, 255, 255, 0.05) 100%
-    );
-    opacity: 1;
-    backdrop-filter: url("#zoom-glass-refraction") url("#zoom-glass-chromatic") saturate(220%) blur(0.3px) brightness(1.10) contrast(1.06);
-    -webkit-backdrop-filter: url("#zoom-glass-refraction") url("#zoom-glass-chromatic") saturate(220%) blur(0.3px) brightness(1.10) contrast(1.06);
-    -webkit-mask:
-        linear-gradient(#fff 0 0) content-box,
-        linear-gradient(#fff 0 0);
-    -webkit-mask-composite: xor;
-    mask-composite: exclude;
-}
-
-.zoom-controls-prism::after {
-    inset: 0;
-    background: radial-gradient(
-        ellipse at var(--zoom-refract-sheen-x) var(--zoom-refract-sheen-y),
-        rgba(255, 255, 255, 0.45) 0%,
-        rgba(255, 255, 255, 0.12) 30%,
-        transparent 65%
-    );
-    opacity: var(--zoom-refract-edge-opacity);
-    mix-blend-mode: overlay;
-    transition: opacity 0.3s ease;
-}
-
-.zoom-controls-core {
-    position: absolute;
-    inset: 6px;
-    z-index: 1;
-    border-radius: inherit;
-    background: linear-gradient(
-        160deg,
-        rgba(255, 255, 255, 0.25) 0%,
-        rgba(255, 255, 255, 0.06) 50%,
-        rgba(255, 255, 255, 0.15) 100%
-    );
-    backdrop-filter: saturate(140%) blur(0.8px) brightness(1.02);
-    -webkit-backdrop-filter: saturate(140%) blur(0.8px) brightness(1.02);
-    box-shadow: inset 0 0.5px 0 rgba(255, 255, 255, 0.4);
-}
-
-.zoom-controls--liquid .zoom-controls-core {
-    display: none;
-}
-
-.zoom-controls--plain {
-    background: rgba(255, 255, 255, 0.3);
-    backdrop-filter: saturate(180%) blur(5px) brightness(1.04);
-    -webkit-backdrop-filter: saturate(180%) blur(5px) brightness(1.04);
-    border: 1px solid rgba(255, 255, 255, 0.56);
-    box-shadow: 0 16px 32px rgba(15, 23, 42, 0.1);
-}
-
-.zoom-controls--plain .zoom-controls-prism {
-    display: none;
-}
-
-.zoom-controls--plain .zoom-controls-core {
-    display: none;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .zoom-btn {
@@ -762,8 +640,6 @@ input:focus {
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative;
-    z-index: 4;
     transition: background 0.2s;
 }
 
@@ -777,8 +653,6 @@ input:focus {
     width: 40px;
     text-align: center;
     user-select: none;
-    position: relative;
-    z-index: 4;
 }
 
 .seat-grid {
