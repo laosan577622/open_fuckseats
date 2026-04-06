@@ -378,6 +378,12 @@ main {
     max-width: 100%;
     padding: 0;
     /* Remove padding to let layout control it */
+    animation: mainFadeIn 0.35s ease both;
+}
+
+@keyframes mainFadeIn {
+    from { opacity: 0; filter: blur(6px); }
+    to   { opacity: 1; filter: blur(0); }
 }
 
 .form-page {

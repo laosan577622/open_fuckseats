@@ -4,12 +4,18 @@
 {% block title %}{{ plugin_name }} · {{ ui_name }}{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/plugin_ui.css' %}?v=1.0">
+<link rel="stylesheet" href="{% static 'css/plugin_ui.css' %}?v=2.0">
 {% endblock %}
 
 {% block actions %}
 <div class="header-action-row office-ribbon-row">
     <div class="ribbon-group">
+        <button type="button" class="btn btn-secondary" id="plugin-ui-back-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: -2px; margin-right: 2px;">
+                <path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+            返回
+        </button>
         <button type="button" class="btn btn-primary" id="plugin-ui-refresh-btn">刷新界面</button>
         <a class="btn btn-secondary" href="{% url 'plugin_ui_dispatch' plugin_id ui_name %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" target="_blank" rel="noopener noreferrer">查看原始 JSON</a>
         <span class="ribbon-group-label">插件 UI</span>
@@ -40,5 +46,20 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/plugin_ui_renderer.js' %}?v=1.0"></script>
+<script src="{% static 'js/plugin_ui_renderer.js' %}?v=2.0"></script>
+<script>
+(function() {
+    var backBtn = document.getElementById('plugin-ui-back-btn');
+    if (!backBtn) return;
+    var fallbackUrl = '{% url "extensions_overview" %}{% if request.GET.classroom_id %}?classroom_id={{ request.GET.classroom_id }}{% endif %}';
+    backBtn.addEventListener('click', function() {
+        var page = document.querySelector('.plugin-ui-page');
+        if (page) page.classList.add('leaving');
+        setTimeout(function() {
+            if (history.length > 1) { history.back(); }
+            else { location.href = fallbackUrl; }
+        }, 220);
+    });
+})();
+</script>
 {% endblock %}

@@ -96,13 +96,24 @@ def register(registry):
 
 常用 API：
 - `components.page(title=..., subtitle=..., blocks=[...], theme={...})`
-- `components.metric(label, value, hint='')`
-- `components.text(title, text)`
-- `components.list(title, items, empty_text='暂无数据')`
-- `components.actions(title, items)`
-- `components.table(title, columns, rows)`
+- `components.metric(label, value, hint='', span=None)`
+- `components.text(title, text, span=None)`
+- `components.list(title, items, empty_text='暂无数据', span=None)`
+- `components.actions(title, items, span=None)`
+- `components.table(title, columns, rows, span=None)`
+- `components.progress(title, value, label='', hint='', span=None)`
+- `components.divider()`
+- `components.section(title, subtitle='')`
+- `components.badge(text, variant='primary', span=None)`
 - `components.call('metric', label='xx', value=1)`
 - `components.names()` / `components.exists(name)`
+
+`span` 参数说明：
+- 渲染器使用 12 列 grid 布局，`span` 控制组件占据的列数（1~12）。
+- 不传 `span` 时，各组件有默认值：`metric=3`、`text=6`、`list=6`、`progress=6`、`table=12`、`actions=12`、`badge=3`。
+- `divider` 和 `section` 始终占满整行。
+
+`badge` 的 `variant` 可选值：`primary`、`success`、`warning`、`danger`、`neutral`。
 
 示例：
 ```python
@@ -110,7 +121,12 @@ count = classroom.students.count() if classroom else 0
 ui = components.page(
     title='统计看板',
     blocks=[
+        components.badge('运行中', 'success'),
         components.metric('学生人数', count),
+        components.metric('小组数', 5, span=3),
+        components.progress('导入进度', 75, label='正在处理', hint='75%'),
+        components.divider(),
+        components.section('详细信息', '以下为扩展数据'),
         components.text('提示', '这个页面由组件库生成'),
     ],
 )
@@ -164,11 +180,20 @@ def register(registry):
 就能看到自动渲染后的页面。
 
 当前渲染器支持的 block：
-- `metric`：指标卡（`label/value/hint`）
-- `text`：文字卡片（`title/text`）
-- `list`：列表卡片（`title/items`）
-- `actions`：动作按钮组（`items`，可触发插件 action）
+- `metric`：指标卡（`label/value/hint`，默认 span 3）
+- `text`：文字卡片（`title/text`，默认 span 6）
+- `list`：列表卡片（`title/items`，默认 span 6）
+- `actions`：动作按钮组（`items`，可触发插件 action，默认 span 12）
+- `table`：数据表格（`title/columns/rows`，默认 span 12）
+- `progress`：进度条（`title/value/label/hint`，默认 span 6）
+- `divider`：分割线（始终全宽）
+- `section`：段落标题（`title/subtitle`，始终全宽）
+- `badge`：标签徽章（`text/variant`，默认 span 3，variant 可选 primary/success/warning/danger/neutral）
 - 其他类型会自动按 JSON 卡片展示
+
+所有 block 均支持 `span` 字段（1~12），用于自定义在 12 列 grid 中占据的列数。
+渲染器会根据 block 类型自动分配默认 span，也可由脚本显式覆盖。
+卡片出现时带有模糊渐入动效，交错入场。
 
 `actions.items` 常用字段：
 - `label`：按钮文本

@@ -3,7 +3,7 @@ from django.db.models import Q
 PLUGIN_META = {
     'id': 'student_search_plugin',
     'name': '学生搜索插件',
-    'version': '1.0.0',
+    'version': '2.0.0',
     'description': '在工作界面快速搜索学生，并定位座位。',
     'author': '老三',
     'website': 'www.577622.xyz',
@@ -80,6 +80,7 @@ if limit > 50:
     limit = 50
 
 students_qs = classroom.students.select_related('assigned_seat__group').all() if classroom else []
+total_count = classroom.students.count() if classroom else 0
 if classroom and query:
     students_qs = students_qs.filter(name__icontains=query) | students_qs.filter(student_id__icontains=query)
 
@@ -96,22 +97,41 @@ if classroom:
         })
 
 list_rows = [f"{item['name']}（{item['student_id']}） · 座位 {item['seat']}" for item in rows]
+hit_rate = round(len(rows) / total_count * 100, 1) if total_count > 0 else 0
+
+status_variant = 'success' if classroom else 'danger'
+status_text = '已连接班级' if classroom else '未连接班级'
 
 ui = components.page(
-    title='学生搜索插件',
-    subtitle='支持按姓名或学号搜索',
+    title='学生搜索',
+    subtitle='支持按姓名或学号搜索，实时定位座位',
     theme={'primary': '#0a59f7', 'style': 'apple-like'},
     blocks=[
+        components.badge(status_text, status_variant),
+        components.badge(f"共 {total_count} 人", 'neutral'),
+        components.badge(f"v2.0.0", 'primary'),
+        components.badge('实时搜索', 'neutral'),
+
+        components.divider(),
+
+        components.section('搜索结果', f"关键词：{query or '（空）'}"),
+
         components.metric('命中人数', len(rows), hint=f"关键词：{query or '（空）'}"),
-        components.text('说明', '工作页可授权注入搜索面板，支持无感快捷搜索与定位。'),
-        components.actions('常用调用', items=[
-            {
-                'label': '搜索全部（前20）',
-                'action': 'search_students',
-                'method': 'POST',
-                'payload': {'query': '', 'limit': 20},
-            },
-        ]),
+        components.metric('学生总数', total_count, hint='当前班级'),
+        components.metric('命中率', f"{hit_rate}%", hint='命中/总数'),
+        components.metric('搜索上限', limit, hint='单次最多返回'),
+
+        components.progress('命中率', hit_rate, label='搜索覆盖', hint=f"{len(rows)}/{total_count}"),
+
+        components.text('使用说明',
+            '工作页可授权注入搜索面板，支持无感快捷搜索与定位。'
+            '快捷键 Ctrl+Shift+F 聚焦搜索框，Esc 清空高亮。'
+            '点击搜索结果可自动滚动到对应座位并高亮显示。'),
+
+        components.divider(),
+
+        components.section('数据详情'),
+
         components.table(
             '搜索结果表格',
             columns=[
@@ -122,7 +142,28 @@ ui = components.page(
             ],
             rows=rows,
         ),
-        components.list('搜索结果', list_rows, empty_text='暂无结果'),
+
+        components.list('搜索结果列表', list_rows, empty_text='暂无结果'),
+
+        components.divider(),
+
+        components.section('快捷操作'),
+
+        components.actions('常用调用', items=[
+            {
+                'label': '搜索全部（前20）',
+                'action': 'search_students',
+                'method': 'POST',
+                'payload': {'query': '', 'limit': 20},
+            },
+            {
+                'label': '搜索前5名',
+                'action': 'search_students',
+                'method': 'POST',
+                'payload': {'query': '', 'limit': 5},
+                'variant': 'secondary',
+            },
+        ]),
     ],
 )
 """.strip()

@@ -19,6 +19,10 @@ class PluginComponentLibrary:
         self.register('list', self._build_list)
         self.register('actions', self._build_actions)
         self.register('table', self._build_table)
+        self.register('progress', self._build_progress)
+        self.register('divider', self._build_divider)
+        self.register('section', self._build_section)
+        self.register('badge', self._build_badge)
 
     def register(self, name: str, factory: ComponentFactory):
         key = str(name or '').strip()
@@ -55,43 +59,89 @@ class PluginComponentLibrary:
             payload['theme'] = deepcopy(theme)
         return payload
 
-    def metric(self, label: str, value: Any, hint: str = ''):
-        props = {
-            'label': label,
-            'value': value,
-        }
+    def metric(self, label: str, value: Any, hint: str = '', span: int | None = None):
+        props: dict[str, Any] = {'label': label, 'value': value}
         if hint:
             props['hint'] = hint
+        if span is not None:
+            props['span'] = span
         return self.call('metric', **props)
 
-    def text(self, title: str, text: str):
-        return self.call('text', title=title, text=text)
+    def text(self, title: str, text: str, span: int | None = None):
+        props: dict[str, Any] = {'title': title, 'text': text}
+        if span is not None:
+            props['span'] = span
+        return self.call('text', **props)
 
-    def list(self, title: str, items: list[Any] | None = None, empty_text: str = '暂无数据'):
-        return self.call('list', title=title, items=items or [], empty_text=empty_text)
+    def list(self, title: str, items: list[Any] | None = None, empty_text: str = '暂无数据', span: int | None = None):
+        props: dict[str, Any] = {'title': title, 'items': items or [], 'empty_text': empty_text}
+        if span is not None:
+            props['span'] = span
+        return self.call('list', **props)
 
-    def actions(self, title: str, items: list[dict[str, Any]] | None = None):
-        return self.call('actions', title=title, items=items or [])
+    def actions(self, title: str, items: list[dict[str, Any]] | None = None, span: int | None = None):
+        props: dict[str, Any] = {'title': title, 'items': items or []}
+        if span is not None:
+            props['span'] = span
+        return self.call('actions', **props)
 
-    def table(self, title: str, columns: list[dict[str, Any]] | None = None, rows: list[dict[str, Any]] | None = None):
-        return self.call('table', title=title, columns=columns or [], rows=rows or [])
+    def table(self, title: str, columns: list[dict[str, Any]] | None = None, rows: list[dict[str, Any]] | None = None, span: int | None = None):
+        props: dict[str, Any] = {'title': title, 'columns': columns or [], 'rows': rows or []}
+        if span is not None:
+            props['span'] = span
+        return self.call('table', **props)
+
+    def progress(self, title: str, value: float, label: str = '', hint: str = '', span: int | None = None):
+        props: dict[str, Any] = {'title': title, 'value': value}
+        if label:
+            props['label'] = label
+        if hint:
+            props['hint'] = hint
+        if span is not None:
+            props['span'] = span
+        return self.call('progress', **props)
+
+    def divider(self):
+        return self.call('divider')
+
+    def section(self, title: str, subtitle: str = ''):
+        props: dict[str, Any] = {'title': title}
+        if subtitle:
+            props['subtitle'] = subtitle
+        return self.call('section', **props)
+
+    def badge(self, text: str, variant: str = 'primary', span: int | None = None):
+        props: dict[str, Any] = {'text': text, 'variant': variant}
+        if span is not None:
+            props['span'] = span
+        return self.call('badge', **props)
+
+    @staticmethod
+    def _apply_span(result: dict[str, Any], props: dict[str, Any]) -> dict[str, Any]:
+        span = props.get('span')
+        if span is not None:
+            result['span'] = max(1, min(12, int(span)))
+        return result
 
     @staticmethod
     def _build_metric(props: dict[str, Any]):
-        return {
+        result = {
             'type': 'metric',
             'label': str(props.get('label') or '指标'),
             'value': props.get('value'),
-            **({'hint': str(props.get('hint'))} if props.get('hint') not in (None, '') else {}),
         }
+        if props.get('hint') not in (None, ''):
+            result['hint'] = str(props.get('hint'))
+        return PluginComponentLibrary._apply_span(result, props)
 
     @staticmethod
     def _build_text(props: dict[str, Any]):
-        return {
+        result = {
             'type': 'text',
             'title': str(props.get('title') or '说明'),
             'text': str(props.get('text') or ''),
         }
+        return PluginComponentLibrary._apply_span(result, props)
 
     @staticmethod
     def _build_list(props: dict[str, Any]):
@@ -101,11 +151,12 @@ class PluginComponentLibrary:
         if not items:
             empty_text = str(props.get('empty_text') or '暂无数据')
             items = [empty_text]
-        return {
+        result = {
             'type': 'list',
             'title': str(props.get('title') or '列表'),
             'items': items,
         }
+        return PluginComponentLibrary._apply_span(result, props)
 
     @staticmethod
     def _build_actions(props: dict[str, Any]):
@@ -129,11 +180,12 @@ class PluginComponentLibrary:
                 row['refresh_ui'] = False
             normalized.append(row)
 
-        return {
+        result = {
             'type': 'actions',
             'title': str(props.get('title') or '动作'),
             'items': normalized,
         }
+        return PluginComponentLibrary._apply_span(result, props)
 
     @staticmethod
     def _build_table(props: dict[str, Any]):
@@ -143,12 +195,54 @@ class PluginComponentLibrary:
             columns = []
         if not isinstance(rows, list):
             rows = []
-        return {
+        result = {
             'type': 'table',
             'title': str(props.get('title') or '表格'),
             'columns': columns,
             'rows': rows,
         }
+        return PluginComponentLibrary._apply_span(result, props)
+
+    @staticmethod
+    def _build_progress(props: dict[str, Any]):
+        value = props.get('value', 0)
+        try:
+            value = max(0, min(100, float(value)))
+        except (TypeError, ValueError):
+            value = 0
+        result = {
+            'type': 'progress',
+            'title': str(props.get('title') or '进度'),
+            'value': value,
+        }
+        if props.get('label') not in (None, ''):
+            result['label'] = str(props.get('label'))
+        if props.get('hint') not in (None, ''):
+            result['hint'] = str(props.get('hint'))
+        return PluginComponentLibrary._apply_span(result, props)
+
+    @staticmethod
+    def _build_divider(props: dict[str, Any]):
+        return {'type': 'divider'}
+
+    @staticmethod
+    def _build_section(props: dict[str, Any]):
+        result = {
+            'type': 'section',
+            'title': str(props.get('title') or ''),
+        }
+        if props.get('subtitle') not in (None, ''):
+            result['subtitle'] = str(props.get('subtitle'))
+        return result
+
+    @staticmethod
+    def _build_badge(props: dict[str, Any]):
+        result = {
+            'type': 'badge',
+            'text': str(props.get('text') or ''),
+            'variant': str(props.get('variant') or 'primary'),
+        }
+        return PluginComponentLibrary._apply_span(result, props)
 
 
 @dataclass
@@ -168,20 +262,32 @@ class PluginComponentScope:
     def page(self, **kwargs):
         return self.library.page(**kwargs)
 
-    def metric(self, label, value, hint=''):
-        return self.library.metric(label, value, hint)
+    def metric(self, label, value, hint='', span=None):
+        return self.library.metric(label, value, hint, span)
 
-    def text(self, title, text):
-        return self.library.text(title, text)
+    def text(self, title, text, span=None):
+        return self.library.text(title, text, span)
 
-    def list(self, title, items=None, empty_text='暂无数据'):
-        return self.library.list(title, items or [], empty_text)
+    def list(self, title, items=None, empty_text='暂无数据', span=None):
+        return self.library.list(title, items or [], empty_text, span)
 
-    def actions(self, title, items=None):
-        return self.library.actions(title, items or [])
+    def actions(self, title, items=None, span=None):
+        return self.library.actions(title, items or [], span)
 
-    def table(self, title, columns=None, rows=None):
-        return self.library.table(title, columns or [], rows or [])
+    def table(self, title, columns=None, rows=None, span=None):
+        return self.library.table(title, columns or [], rows or [], span)
+
+    def progress(self, title, value, label='', hint='', span=None):
+        return self.library.progress(title, value, label, hint, span)
+
+    def divider(self):
+        return self.library.divider()
+
+    def section(self, title, subtitle=''):
+        return self.library.section(title, subtitle)
+
+    def badge(self, text, variant='primary', span=None):
+        return self.library.badge(text, variant, span)
 
 
 plugin_component_library = PluginComponentLibrary()

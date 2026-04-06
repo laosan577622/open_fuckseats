@@ -896,8 +896,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!cmd) return;
 
         if (cmd.kind === 'uiOpen') {
-            window.open(buildUiPageUrl(cmd.extensionId, cmd.uiName), '_blank', 'noopener,noreferrer');
-            if (!options.silent) showInlineToast(`已打开 ${cmd.extensionId}.${cmd.uiName}`);
+            window.location.href = buildUiPageUrl(cmd.extensionId, cmd.uiName);
             return;
         }
 
@@ -1160,7 +1159,7 @@ document.addEventListener('DOMContentLoaded', () => {
             openUI(uiName, extensionId = '') {
                 const targetId = String(extensionId || '').trim() || getDefaultExtensionId();
                 if (!targetId) return false;
-                window.open(buildUiPageUrl(targetId, uiName), '_blank', 'noopener,noreferrer');
+                window.location.href = buildUiPageUrl(targetId, uiName);
                 return true;
             },
             async runWorkspace(scriptName, extensionId = '', options = {}) {
