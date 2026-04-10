@@ -3,11 +3,13 @@ from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from django.db import transaction, models, IntegrityError, OperationalError, ProgrammingError
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 from django.urls import reverse
 from django.utils.encoding import escape_uri_path
 from django.conf import settings
 from django.test import RequestFactory
 from pypinyin import lazy_pinyin
+import base64
 import desktop_runtime
 import copy
 from .models import (
@@ -22,6 +24,7 @@ from .models import (
     AIConversation,
     AIConversationMessage,
     FrontendKVStore,
+    ClassroomHistoryEntry,
 )
 from io import BytesIO
 import json
@@ -34,6 +37,7 @@ import time
 import html
 import openpyxl
 import math
+import zlib
 from collections import defaultdict
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -85,6 +89,7 @@ AI_CONTEXT_MESSAGE_LIMIT = 12
 FUTURE_MODE_PENDING_TTL_SECONDS = 1800
 FUTURE_MODE_PENDING_CACHE = {}
 MAX_LAYOUT_GRID_SIZE = 30
+CLASSROOM_HISTORY_LIMIT = 1000
 
 AI_TOOL_DEFINITIONS = [
     {
@@ -3344,13 +3349,20 @@ def _execute_ai_tool(classroom, tool_name, arguments, request=None):
         if not seat_a or not seat_b:
             raise ValueError('两名学生都需要先入座，才能交换座位')
 
+        before_state = _capture_history_state(classroom)
         with transaction.atomic():
             _swap_seats(seat_a, seat_b)
             violations = _stabilize_layout_with_rules(classroom, request)
             if violations:
                 raise ValueError(f'交换失败：{_format_issues_preview(violations)}')
         if request is not None:
-            _push_action(request, classroom.pk, _build_swap_action(student_a, student_b))
+            _push_snapshot_action(
+                request,
+                classroom,
+                before_state,
+                'swap',
+                extra=_build_swap_action(student_a, student_b),
+            )
         student_a = classroom.students.get(pk=student_a.pk)
         student_b = classroom.students.get(pk=student_b.pk)
         return {
@@ -4028,6 +4040,267 @@ def _shift_layout_constraints(constraints, axis_field, delta, axis_label, action
     return shifted
 
 
+def _build_layout_column_payload(payload):
+    column_map = defaultdict(list)
+    for seat in payload.get('seats', []):
+        try:
+            col = int(seat.get('col') or 0)
+        except Exception:
+            continue
+        if col < 1:
+            continue
+        column_map[col].append(dict(seat))
+    for cells in column_map.values():
+        cells.sort(key=lambda item: int(item.get('row') or 0))
+    return column_map
+
+
+def _classify_horizontal_layout_column(cells, row_count):
+    seat_cells = 0
+    aisle_cells = 0
+    occupied_cells = 0
+
+    for cell in cells:
+        cell_type = str(cell.get('cell_type') or SeatCellType.SEAT)
+        if cell_type == SeatCellType.SEAT:
+            seat_cells += 1
+        elif cell_type == SeatCellType.AISLE:
+            aisle_cells += 1
+        if cell.get('student_pk') or cell.get('student_id') or cell.get('student_name') or cell.get('group_name'):
+            occupied_cells += 1
+
+    aisle_threshold = max(1, math.ceil(max(row_count, 1) * 0.5))
+    seat_threshold = max(1, math.ceil(max(row_count, 1) * 0.4))
+
+    if occupied_cells == 0 and aisle_cells >= aisle_threshold and aisle_cells > seat_cells:
+        return 'aisle'
+    if occupied_cells > 0 or seat_cells >= seat_threshold:
+        return 'seat'
+    return 'other'
+
+
+def _build_horizontal_template_blocks(payload):
+    classroom_data = payload.get('classroom', {})
+    cols = int(classroom_data.get('cols') or 0)
+    rows = int(classroom_data.get('rows') or 0)
+    column_payload = _build_layout_column_payload(payload)
+
+    blocks = []
+    current_type = None
+    current_cols = []
+
+    for col in range(1, cols + 1):
+        cells = column_payload.get(col, [])
+        column_type = _classify_horizontal_layout_column(cells, rows)
+        if current_type != column_type:
+            if current_cols:
+                start_col = current_cols[0]
+                end_col = current_cols[-1]
+                content_cells = []
+                for source_col in current_cols:
+                    for cell in column_payload.get(source_col, []):
+                        item = dict(cell)
+                        item['col_offset'] = source_col - start_col
+                        content_cells.append(item)
+                blocks.append({
+                    'block_type': current_type,
+                    'start_col': start_col,
+                    'end_col': end_col,
+                    'width': len(current_cols),
+                    'columns': list(current_cols),
+                    'content_cells': content_cells,
+                    'is_structural': current_type == 'aisle',
+                })
+            current_type = column_type
+            current_cols = [col]
+        else:
+            current_cols.append(col)
+
+    if current_cols:
+        start_col = current_cols[0]
+        end_col = current_cols[-1]
+        content_cells = []
+        for source_col in current_cols:
+            for cell in column_payload.get(source_col, []):
+                item = dict(cell)
+                item['col_offset'] = source_col - start_col
+                content_cells.append(item)
+        blocks.append({
+            'block_type': current_type,
+            'start_col': start_col,
+            'end_col': end_col,
+            'width': len(current_cols),
+            'columns': list(current_cols),
+            'content_cells': content_cells,
+            'is_structural': current_type == 'aisle',
+        })
+
+    return blocks
+
+
+def _format_horizontal_template_signature(blocks):
+    return '+'.join(str(int(block.get('width') or 0)) for block in blocks if int(block.get('width') or 0) > 0)
+
+
+def _analyze_horizontal_layout_template(payload):
+    blocks = _build_horizontal_template_blocks(payload)
+    if not blocks:
+        return {
+            'supported': False,
+            'reason': '当前布局为空，无法识别横向模板',
+            'blocks': [],
+            'template_signature': '',
+            'seat_block_count': 0,
+            'aisle_block_count': 0,
+        }
+
+    other_blocks = [block for block in blocks if block.get('block_type') == 'other']
+    if other_blocks:
+        return {
+            'supported': False,
+            'reason': '存在无法稳定判定的结构列，请先整理走廊列',
+            'blocks': blocks,
+            'template_signature': _format_horizontal_template_signature(blocks),
+            'seat_block_count': len([block for block in blocks if block.get('block_type') == 'seat']),
+            'aisle_block_count': len([block for block in blocks if block.get('block_type') == 'aisle']),
+        }
+
+    seat_blocks = [block for block in blocks if block.get('block_type') == 'seat']
+    aisle_blocks = [block for block in blocks if block.get('block_type') == 'aisle']
+    if len(seat_blocks) < 2:
+        return {
+            'supported': False,
+            'reason': '未识别到至少两个稳定的座位块',
+            'blocks': blocks,
+            'template_signature': _format_horizontal_template_signature(blocks),
+            'seat_block_count': len(seat_blocks),
+            'aisle_block_count': len(aisle_blocks),
+        }
+    if not aisle_blocks:
+        return {
+            'supported': False,
+            'reason': '未识别到结构走廊列，已无法安全执行块级轮换',
+            'blocks': blocks,
+            'template_signature': _format_horizontal_template_signature(blocks),
+            'seat_block_count': len(seat_blocks),
+            'aisle_block_count': 0,
+        }
+
+    if blocks[0].get('block_type') != 'seat' or blocks[-1].get('block_type') != 'seat':
+        return {
+            'supported': False,
+            'reason': '横向模板必须以座位块开始并以座位块结束',
+            'blocks': blocks,
+            'template_signature': _format_horizontal_template_signature(blocks),
+            'seat_block_count': len(seat_blocks),
+            'aisle_block_count': len(aisle_blocks),
+        }
+
+    for index, block in enumerate(blocks):
+        expected_type = 'seat' if index % 2 == 0 else 'aisle'
+        if block.get('block_type') != expected_type:
+            return {
+                'supported': False,
+                'reason': '当前横向结构不是稳定的座位块与走廊块交替模板',
+                'blocks': blocks,
+                'template_signature': _format_horizontal_template_signature(blocks),
+                'seat_block_count': len(seat_blocks),
+                'aisle_block_count': len(aisle_blocks),
+            }
+
+    if len(aisle_blocks) != len(seat_blocks) - 1:
+        return {
+            'supported': False,
+            'reason': '结构走廊数量与座位块边界不匹配',
+            'blocks': blocks,
+            'template_signature': _format_horizontal_template_signature(blocks),
+            'seat_block_count': len(seat_blocks),
+            'aisle_block_count': len(aisle_blocks),
+        }
+
+    return {
+        'supported': True,
+        'reason': '',
+        'blocks': blocks,
+        'template_signature': _format_horizontal_template_signature(blocks),
+        'seat_block_count': len(seat_blocks),
+        'aisle_block_count': len(aisle_blocks),
+    }
+
+
+def _rotate_template_seat_blocks(seat_blocks, direction, steps):
+    if not seat_blocks:
+        return []
+    shift = int(steps or 0) % len(seat_blocks)
+    if shift == 0:
+        return list(seat_blocks)
+    if direction == 'left':
+        return list(seat_blocks[shift:]) + list(seat_blocks[:shift])
+    return list(seat_blocks[-shift:]) + list(seat_blocks[:-shift])
+
+
+def _rebuild_template_blocks_for_shift(blocks, direction, steps):
+    seat_blocks = [block for block in blocks if block.get('block_type') == 'seat']
+    aisle_blocks = [block for block in blocks if block.get('block_type') == 'aisle']
+    rotated_seat_blocks = _rotate_template_seat_blocks(seat_blocks, direction, steps)
+    rebuilt = []
+    for index, seat_block in enumerate(rotated_seat_blocks):
+        rebuilt.append(seat_block)
+        if index < len(aisle_blocks):
+            rebuilt.append(aisle_blocks[index])
+    return rebuilt
+
+
+def _build_intelligent_horizontal_shift_payload(classroom, direction, steps):
+    normalized_steps = _safe_int(steps, 0)
+    if normalized_steps < 1:
+        raise ValueError('移动模板单位数必须大于 0')
+
+    payload = copy.deepcopy(
+        _snapshot_payload(classroom, include_students=False, include_constraints=True)
+    )
+    analysis = _analyze_horizontal_layout_template(payload)
+    if not analysis.get('supported'):
+        return None, analysis
+
+    rebuilt_blocks = _rebuild_template_blocks_for_shift(analysis.get('blocks', []), direction, normalized_steps)
+    rebuilt_seats = []
+    column_map = {}
+    next_col = 1
+
+    for block in rebuilt_blocks:
+        source_start = int(block.get('start_col') or next_col)
+        width = int(block.get('width') or 0)
+        for offset in range(width):
+            column_map[source_start + offset] = next_col + offset
+        for cell in block.get('content_cells', []):
+            item = dict(cell)
+            item['col'] = next_col + int(cell.get('col_offset') or 0)
+            item.pop('col_offset', None)
+            rebuilt_seats.append(item)
+        next_col += width
+
+    payload['seats'] = _sort_layout_seats(rebuilt_seats)
+
+    remapped_constraints = []
+    for raw in payload.get('constraints', []):
+        item = dict(raw)
+        current_col = item.get('col')
+        if current_col not in (None, ''):
+            try:
+                mapped_col = column_map.get(int(current_col))
+            except Exception:
+                mapped_col = None
+            if mapped_col is not None:
+                item['col'] = mapped_col
+        remapped_constraints.append(item)
+    payload['constraints'] = remapped_constraints
+
+    analysis['column_map'] = column_map
+    analysis['shift_units'] = normalized_steps
+    return payload, analysis
+
+
 def _build_shifted_layout_payload(classroom, direction, steps):
     meta = _shift_direction_meta(direction)
 
@@ -4263,27 +4536,271 @@ def _apply_layout_data(classroom, data, replace_students=False):
                 )
 
 
+def _serialize_history_datetime(value):
+    if not value:
+        return ''
+    return value.isoformat()
+
+
+def _restore_history_datetime(model_cls, pk, value):
+    dt = parse_datetime(str(value or '').strip()) if value else None
+    if not dt:
+        return
+    if timezone.is_naive(dt):
+        dt = timezone.make_aware(dt, timezone.get_current_timezone())
+    model_cls.objects.filter(pk=pk).update(created_at=dt)
+
+
+def _capture_history_state(classroom):
+    seats = list(classroom.seats.select_related('student', 'group').all())
+    students = list(classroom.students.all().order_by('pk'))
+    groups = list(classroom.groups.all().order_by('pk'))
+    constraints = list(classroom.constraints.all().order_by('pk'))
+    layout_snapshots = list(classroom.layout_snapshots.all().order_by('pk'))
+    return {
+        'classroom': {
+            'pk': classroom.pk,
+            'name': classroom.name,
+            'rows': classroom.rows,
+            'cols': classroom.cols,
+        },
+        'students': [
+            {
+                'pk': student.pk,
+                'name': student.name,
+                'student_id': student.student_id,
+                'gender': student.gender,
+                'score': student.score,
+            }
+            for student in students
+        ],
+        'groups': [
+            {
+                'pk': group.pk,
+                'name': group.name,
+                'order': group.order,
+                'leader_student_pk': group.leader_id,
+                'created_at': _serialize_history_datetime(group.created_at),
+            }
+            for group in groups
+        ],
+        'seats': [
+            {
+                'row': seat.row,
+                'col': seat.col,
+                'cell_type': seat.cell_type,
+                'student_pk': seat.student_id,
+                'group_pk': seat.group_id,
+            }
+            for seat in seats
+        ],
+        'constraints': [
+            {
+                'pk': constraint.pk,
+                'constraint_type': constraint.constraint_type,
+                'student_pk': constraint.student_id,
+                'target_student_pk': constraint.target_student_id,
+                'row': constraint.row,
+                'col': constraint.col,
+                'distance': constraint.distance,
+                'enabled': constraint.enabled,
+                'note': constraint.note,
+                'created_at': _serialize_history_datetime(constraint.created_at),
+            }
+            for constraint in constraints
+        ],
+        'layout_snapshots': [
+            {
+                'pk': snapshot.pk,
+                'name': snapshot.name,
+                'data': copy.deepcopy(snapshot.data),
+                'created_at': _serialize_history_datetime(snapshot.created_at),
+            }
+            for snapshot in layout_snapshots
+        ],
+    }
+
+
+def _encode_history_blob(data):
+    raw = json.dumps(data, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
+    return base64.b64encode(zlib.compress(raw, level=6)).decode('ascii')
+
+
+def _decode_history_blob(blob):
+    if not blob:
+        return {}
+    raw = zlib.decompress(base64.b64decode(str(blob).encode('ascii')))
+    return json.loads(raw.decode('utf-8'))
+
+
+def _build_history_snapshot_action(before_state, after_state, action_type, extra=None):
+    payload = {
+        'before_state': _encode_history_blob(before_state),
+        'after_state': _encode_history_blob(after_state),
+    }
+    if extra:
+        payload.update(copy.deepcopy(extra))
+    payload['type'] = str(action_type or 'history_snapshot')
+    payload['history_mode'] = 'snapshot'
+    return payload
+
+
+def _push_snapshot_action(request, classroom, before_state, action_type, extra=None):
+    after_state = _capture_history_state(classroom)
+    if before_state == after_state:
+        return None
+    action = _build_history_snapshot_action(before_state, after_state, action_type, extra=extra)
+    _push_action(request, classroom.pk, action)
+    return action
+
+
+def _restore_history_state(classroom, state):
+    state = state or {}
+    classroom_data = state.get('classroom') or {}
+    target_name = str(classroom_data.get('name') or classroom.name)
+    target_rows = int(classroom_data.get('rows') or classroom.rows)
+    target_cols = int(classroom_data.get('cols') or classroom.cols)
+
+    with transaction.atomic():
+        if classroom.name != target_name:
+            classroom.name = target_name
+            classroom.save(update_fields=['name'])
+
+        _sync_seats(classroom, target_rows, target_cols)
+
+        classroom.seats.update(student=None, group=None, cell_type=SeatCellType.SEAT)
+        classroom.constraints.all().delete()
+        classroom.layout_snapshots.all().delete()
+        classroom.groups.update(leader=None)
+        classroom.groups.all().delete()
+        classroom.students.all().delete()
+
+        student_map = {}
+        for item in state.get('students', []):
+            pk = int(item.get('pk'))
+            student = Student(
+                pk=pk,
+                classroom=classroom,
+                name=str(item.get('name') or '').strip(),
+                student_id=str(item.get('student_id') or '').strip() or None,
+                gender=item.get('gender') or None,
+                score=float(item.get('score') or 0),
+            )
+            student.save(force_insert=True)
+            student_map[pk] = student
+
+        group_map = {}
+        for item in state.get('groups', []):
+            pk = int(item.get('pk'))
+            group = SeatGroup(
+                pk=pk,
+                classroom=classroom,
+                name=str(item.get('name') or '').strip(),
+                order=int(item.get('order') or 0),
+            )
+            group.save(force_insert=True)
+            _restore_history_datetime(SeatGroup, pk, item.get('created_at'))
+            group_map[pk] = group
+
+        seat_map = _build_seat_map(classroom.seats.all())
+        for item in state.get('seats', []):
+            row = int(item.get('row') or 0)
+            col = int(item.get('col') or 0)
+            seat = seat_map.get((row, col))
+            if not seat:
+                continue
+            cell_type = item.get('cell_type') or SeatCellType.SEAT
+            seat.cell_type = cell_type
+            if cell_type == SeatCellType.SEAT:
+                seat.student = student_map.get(item.get('student_pk'))
+                seat.group = group_map.get(item.get('group_pk'))
+            else:
+                seat.student = None
+                seat.group = None
+            seat.save(update_fields=['cell_type', 'student', 'group'])
+
+        for item in state.get('groups', []):
+            group = group_map.get(item.get('pk'))
+            leader = student_map.get(item.get('leader_student_pk'))
+            if not group or not leader:
+                continue
+            in_group = classroom.seats.filter(
+                row__gte=1,
+                cell_type=SeatCellType.SEAT,
+                group_id=group.pk,
+                student_id=leader.pk,
+            ).exists()
+            group.leader = leader if in_group else None
+            group.save(update_fields=['leader'])
+
+        for item in state.get('constraints', []):
+            pk = int(item.get('pk'))
+            constraint = SeatConstraint(
+                pk=pk,
+                classroom=classroom,
+                constraint_type=item.get('constraint_type'),
+                student=student_map.get(item.get('student_pk')),
+                target_student=student_map.get(item.get('target_student_pk')),
+                row=item.get('row') or None,
+                col=item.get('col') or None,
+                distance=int(item.get('distance') or 1),
+                enabled=bool(item.get('enabled', True)),
+                note=str(item.get('note') or ''),
+            )
+            if not constraint.student_id:
+                continue
+            constraint.save(force_insert=True)
+            _restore_history_datetime(SeatConstraint, pk, item.get('created_at'))
+
+        for item in state.get('layout_snapshots', []):
+            pk = int(item.get('pk'))
+            snapshot = LayoutSnapshot(
+                pk=pk,
+                classroom=classroom,
+                name=str(item.get('name') or '').strip(),
+                data=copy.deepcopy(item.get('data') or {}),
+            )
+            snapshot.save(force_insert=True)
+            _restore_history_datetime(LayoutSnapshot, pk, item.get('created_at'))
+
+        _normalize_group_leaders(classroom)
+
+
+def _get_history_queryset(classroom_id):
+    return ClassroomHistoryEntry.objects.filter(classroom_id=classroom_id).order_by('pk')
+
+
 def _get_history(request, classroom_id):
-    history = request.session.get('history', {})
-    key = str(classroom_id)
-    if key not in history:
-        history[key] = {'undo': [], 'redo': []}
-    request.session['history'] = history
-    return history[key]
+    undo = []
+    redo = []
+    for payload, is_applied in _get_history_queryset(classroom_id).values_list('payload', 'is_applied'):
+        if is_applied:
+            undo.append(payload or {})
+        else:
+            redo.append(payload or {})
+    return {'undo': undo, 'redo': redo}
 
 
 def _push_action(request, classroom_id, action):
-    history = _get_history(request, classroom_id)
-    history['undo'].append(action)
-    history['redo'] = []
-    request.session.modified = True
+    if not action:
+        return
+    _get_history_queryset(classroom_id).filter(is_applied=False).delete()
+    ClassroomHistoryEntry.objects.create(
+        classroom_id=classroom_id,
+        action_type=str(action.get('type') or '')[:40],
+        payload=copy.deepcopy(action),
+        is_applied=True,
+    )
+    total = _get_history_queryset(classroom_id).count()
+    overflow = total - CLASSROOM_HISTORY_LIMIT
+    if overflow > 0:
+        stale_ids = list(_get_history_queryset(classroom_id).values_list('pk', flat=True)[:overflow])
+        if stale_ids:
+            ClassroomHistoryEntry.objects.filter(pk__in=stale_ids).delete()
 
 
 def _reset_history(request, classroom_id):
-    history = _get_history(request, classroom_id)
-    history['undo'] = []
-    history['redo'] = []
-    request.session.modified = True
+    _get_history_queryset(classroom_id).delete()
 
 
 def _is_ajax_request(request):
@@ -4536,6 +5053,34 @@ def _apply_layout_snapshot_action(classroom, action, forward=True):
     _apply_layout_data(classroom, data, replace_students=False)
     _normalize_group_leaders(classroom)
     return True
+
+
+def _apply_recorded_history_action(classroom, action, forward=True):
+    if not isinstance(action, dict):
+        return False
+    if action.get('history_mode') == 'snapshot':
+        blob = action.get('after_state') if forward else action.get('before_state')
+        state = _decode_history_blob(blob)
+        _restore_history_state(classroom, state)
+        return True
+    if action.get('type') == 'move':
+        inverse = _invert_move_action(action)
+        return _apply_move_action(classroom, action if forward else inverse)
+    if action.get('type') == 'move_batch':
+        return _apply_move_batch_action(classroom, action, forward=forward)
+    if action.get('type') == 'swap':
+        return _apply_swap_action(classroom, action)
+    if action.get('type') == 'cell_type':
+        return _apply_cell_type_action(classroom, action, forward=forward)
+    if action.get('type') == 'group':
+        return _apply_group_action(classroom, action, forward=forward)
+    if action.get('type') == 'group_batch':
+        return _apply_group_batch_action(classroom, action, forward=forward)
+    if action.get('type') == 'seat_layout_batch':
+        return _apply_seat_layout_action(classroom, action, forward=forward)
+    if action.get('type') == 'layout_snapshot':
+        return _apply_layout_snapshot_action(classroom, action, forward=forward)
+    return False
 
 
 def _constraint_issues(classroom):
@@ -5697,7 +6242,15 @@ def update_layout_grid(request, pk):
     cols = int(request.POST.get('cols', classroom.cols))
     rows = max(1, min(rows, MAX_LAYOUT_GRID_SIZE))
     cols = max(1, min(cols, MAX_LAYOUT_GRID_SIZE))
+    before_state = _capture_history_state(classroom)
     _sync_seats(classroom, rows, cols)
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'update_layout_grid',
+        extra={'rows': rows, 'cols': cols},
+    )
     return redirect('layout_editor', pk=pk)
 
 
@@ -5714,21 +6267,55 @@ def shift_layout(request, pk):
         direction_meta = _shift_direction_meta(direction)
         steps = payload.get('steps')
         before_data = _snapshot_payload(classroom, include_students=False, include_constraints=True)
-        after_data = _build_shifted_layout_payload(classroom, direction, steps)
+        before_state = _capture_history_state(classroom)
+        shift_mode = 'normal'
+        fallback_reason = ''
+        template_signature = ''
+        template_meta = {}
+        if direction in {'left', 'right'}:
+            intelligent_payload, template_meta = _build_intelligent_horizontal_shift_payload(classroom, direction, steps)
+            if intelligent_payload is not None:
+                after_data = intelligent_payload
+                shift_mode = 'template'
+                template_signature = str(template_meta.get('template_signature') or '')
+            else:
+                after_data = _build_shifted_layout_payload(classroom, direction, steps)
+                fallback_reason = str(template_meta.get('reason') or '当前布局结构不明确')
+        else:
+            after_data = _build_shifted_layout_payload(classroom, direction, steps)
         action = {
             'type': 'layout_snapshot',
             'before_data': before_data,
             'after_data': after_data,
             'direction': direction,
             'steps': _safe_int(steps, 0),
+            'shift_mode': shift_mode,
+            'template_signature': template_signature,
         }
         with transaction.atomic():
             if not _apply_layout_snapshot_action(classroom, action, forward=True):
                 raise ValueError('整体平移失败')
-            _push_action(request, pk, action)
+            _push_snapshot_action(request, classroom, before_state, 'shift_layout', extra=action)
+        if shift_mode == 'template':
+            seat_block_count = int(template_meta.get('seat_block_count') or 0)
+            aisle_block_count = int(template_meta.get('aisle_block_count') or 0)
+            message = (
+                f'已按 {template_signature} 布局模板完成{direction_meta["action_label"]}'
+                f'，识别到 {seat_block_count} 个座位块和 {aisle_block_count} 条结构走廊'
+            )
+        elif direction in {'left', 'right'} and fallback_reason:
+            message = (
+                f'当前布局结构不明确，已回退为普通{direction_meta["action_label"]} '
+                f'{action["steps"]} {direction_meta["unit"]}'
+            )
+        else:
+            message = f'已整体{direction_meta["action_label"]} {action["steps"]} {direction_meta["unit"]}'
         return JsonResponse({
             'status': 'success',
-            'message': f'已整体{direction_meta["action_label"]} {action["steps"]} {direction_meta["unit"]}'
+            'message': message,
+            'shift_mode': shift_mode,
+            'template_signature': template_signature,
+            'fallback_reason': fallback_reason,
         })
     except ValueError as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -5750,6 +6337,7 @@ def insert_delete_row_col(request, pk):
             raise ValueError('索引必须大于 0')
 
         before_data = _snapshot_payload(classroom, include_students=True, include_constraints=True)
+        before_state = _capture_history_state(classroom)
 
         with transaction.atomic():
             if action_type == 'insert_row':
@@ -5806,7 +6394,13 @@ def insert_delete_row_col(request, pk):
                 'before_data': before_data,
                 'after_data': after_data,
             }
-            _push_action(request, pk, undo_action)
+            _push_snapshot_action(
+                request,
+                classroom,
+                before_state,
+                action_type,
+                extra={'action': action_type, 'index': index, **undo_action},
+            )
 
         labels = {
             'insert_row': f'已在第 {index} 行上方插入新行',
@@ -6285,6 +6879,7 @@ def import_layout_excel(request, pk):
     if action == 'confirm':
         options['replace_students'] = _parse_bool(request.POST.get('replace_students'))
         try:
+            before_state = _capture_history_state(classroom)
             imported_cells, created_students = _apply_layout_excel_import(
                 classroom,
                 temp_path,
@@ -6292,7 +6887,17 @@ def import_layout_excel(request, pk):
                 end_row,
                 options
             )
-            _reset_history(request, pk)
+            _push_snapshot_action(
+                request,
+                classroom,
+                before_state,
+                'import_layout_excel',
+                extra={
+                    'replace_students': options.get('replace_students'),
+                    'imported_cells': imported_cells,
+                    'created_students': created_students,
+                },
+            )
             if os.path.exists(temp_path):
                 os.remove(temp_path)
             return JsonResponse({
@@ -6357,6 +6962,7 @@ def import_students(request, pk):
                 if name_col and score_col:
                     student_id_col = find_column(['学号', '学生号', '编号', 'ID'])
                     gender_col = find_column(['性别', '男女性别'])
+                    before_state = _capture_history_state(classroom)
 
                     result = _process_import(
                         classroom,
@@ -6372,6 +6978,13 @@ def import_students(request, pk):
                         request=request,
                         classroom=classroom,
                         payload={'import_mode': import_mode, 'result': result},
+                    )
+                    _push_snapshot_action(
+                        request,
+                        classroom,
+                        before_state,
+                        'import_students',
+                        extra={'import_mode': import_mode, 'result': result},
                     )
                     return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
                 
@@ -6421,6 +7034,7 @@ def import_students(request, pk):
                 return JsonResponse({'status': 'error', 'message': '临时文件已过期，请重新上传'}, status=400)
                 
             try:
+                before_state = _capture_history_state(classroom)
                 # 读取原始文件
                 df = pd_module.read_excel(temp_path, header=None)
                 
@@ -6451,6 +7065,13 @@ def import_students(request, pk):
                     request=request,
                     classroom=classroom,
                     payload={'import_mode': import_mode, 'result': result},
+                )
+                _push_snapshot_action(
+                    request,
+                    classroom,
+                    before_state,
+                    'import_students',
+                    extra={'import_mode': import_mode, 'result': result},
                 )
                 return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
             except Exception as e:
@@ -7051,6 +7672,7 @@ def auto_arrange_seats(request, pk):
             message = f'可用座位不足(座位:{seat_cells_count} < 学生:{students_count})，无法保证100%入座，请在布局编辑中增加座位。'
             return _arrange_error(message, status=400)
 
+        before_state = _capture_history_state(classroom)
         try:
             with transaction.atomic():
                 if not _run_arrangement(classroom, method):
@@ -7063,7 +7685,13 @@ def auto_arrange_seats(request, pk):
         except ValueError as e:
             # 自动修复，不直接失败
             if _attempt_auto_constraint_fix(classroom, preferred_method=method):
-                _reset_history(request, pk)
+                _push_snapshot_action(
+                    request,
+                    classroom,
+                    before_state,
+                    'auto_arrange',
+                    extra={'method': method, 'auto_fixed': True},
+                )
                 _emit_plugin_hook(
                     'seats_arranged',
                     request=request,
@@ -7075,7 +7703,13 @@ def auto_arrange_seats(request, pk):
                 return redirect('classroom_detail', pk=pk)
             return _arrange_error(str(e), status=400)
 
-        _reset_history(request, pk)
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'auto_arrange',
+            extra={'method': method, 'auto_fixed': False},
+        )
         _emit_plugin_hook(
             'seats_arranged',
             request=request,
@@ -7160,12 +7794,13 @@ def move_student(request, pk):
             if target_seat.cell_type != SeatCellType.SEAT:
                 return JsonResponse({'status': 'error', 'message': '目标位置不可入座'}, status=400)
 
+            before_state = _capture_history_state(classroom)
             with transaction.atomic():
                 action = _perform_move(classroom, student, target_seat)
                 violations = _stabilize_layout_with_rules(classroom, request, trigger_student_id=student.pk)
                 if violations:
                     raise ValueError(f'移动失败：{_format_issues_preview(violations)}')
-            _push_action(request, pk, action)
+            _push_snapshot_action(request, classroom, before_state, 'move', extra=action)
             _emit_plugin_hook(
                 'student_moved',
                 request=request,
@@ -7248,6 +7883,7 @@ def move_students_batch(request, pk):
 
         actions = []
         trigger_student_id = None
+        before_state = _capture_history_state(classroom)
         with transaction.atomic():
             for item in parsed_moves:
                 sid = item.get('student_id')
@@ -7292,7 +7928,13 @@ def move_students_batch(request, pk):
             if violations:
                 raise ValueError(f'批量移动失败：{_format_issues_preview(violations)}')
 
-        _push_action(request, pk, {'type': 'move_batch', 'items': actions})
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'move_batch',
+            extra={'type': 'move_batch', 'items': actions},
+        )
         _emit_plugin_hook(
             'students_moved_batch',
             request=request,
@@ -7354,6 +7996,7 @@ def clear_seat(request, pk):
             'to_col': None,
             'target_student_id': None
         }
+        before_state = _capture_history_state(classroom)
         with transaction.atomic():
             if seat.student:
                 student = seat.student
@@ -7368,7 +8011,7 @@ def clear_seat(request, pk):
             violations = _stabilize_layout_with_rules(classroom, request)
             if violations:
                 raise ValueError(f'清空失败：{_format_issues_preview(violations)}')
-        _push_action(request, pk, action)
+        _push_snapshot_action(request, classroom, before_state, 'clear_seat', extra=action)
         return JsonResponse({'status': 'success'})
     except ValueError as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -7388,12 +8031,13 @@ def assign_student(request, pk):
         target_seat = get_object_or_404(Seat, classroom=classroom, row=row, col=col)
         if target_seat.cell_type != SeatCellType.SEAT:
             return JsonResponse({'status': 'error', 'message': '目标位置不可入座'}, status=400)
+        before_state = _capture_history_state(classroom)
         with transaction.atomic():
             action = _perform_move(classroom, student, target_seat)
             violations = _stabilize_layout_with_rules(classroom, request, trigger_student_id=student.pk)
             if violations:
                 raise ValueError(f'指派失败：{_format_issues_preview(violations)}')
-        _push_action(request, pk, action)
+        _push_snapshot_action(request, classroom, before_state, 'assign_student', extra=action)
         _emit_plugin_hook(
             'student_assigned',
             request=request,
@@ -7410,7 +8054,10 @@ def assign_student(request, pk):
 def delete_student(request, pk, student_id):
     classroom = get_object_or_404(Classroom, pk=pk)
     student = get_object_or_404(Student, pk=student_id, classroom=classroom)
+    before_state = _capture_history_state(classroom)
+    deleted_student = {'student_id': student.pk, 'student_name': student.name}
     student.delete()
+    _push_snapshot_action(request, classroom, before_state, 'delete_student', extra=deleted_student)
     is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.headers.get('sec-fetch-mode') == 'cors'
     if is_ajax:
         return JsonResponse({'status': 'success'})
@@ -7437,12 +8084,13 @@ def update_cell_type(request, pk):
             'prev_student_id': seat.student.pk if seat.student else None,
             'prev_group_id': seat.group.pk if seat.group else None
         }
+        before_state = _capture_history_state(classroom)
         seat.cell_type = cell_type
         if cell_type != SeatCellType.SEAT:
             seat.student = None
             seat.group = None
         seat.save(update_fields=['cell_type', 'student', 'group'])
-        _push_action(request, pk, action)
+        _push_snapshot_action(request, classroom, before_state, 'cell_type', extra=action)
         return JsonResponse({'status': 'success'})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -7456,11 +8104,20 @@ def create_group(request, pk):
         if _is_ajax_request(request):
             return JsonResponse({'status': 'error', 'message': '小组名称不能为空'}, status=400)
         return redirect('classroom_detail', pk=pk)
+    before_state = _capture_history_state(classroom)
     group, created = SeatGroup.objects.get_or_create(classroom=classroom, name=name)
     if not created:
         if _is_ajax_request(request):
             return JsonResponse({'status': 'error', 'message': '小组名称已存在'}, status=400)
         return redirect('classroom_detail', pk=pk)
+
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'create_group',
+        extra={'group_id': group.pk, 'group_name': group.name},
+    )
 
     _emit_plugin_hook(
         'group_created',
@@ -7881,6 +8538,7 @@ def auto_group_from_reference(request, pk):
     target_groups = list(selected_reusable_groups)
     action_items = []
     affected_group_ids = set()
+    before_state = _capture_history_state(classroom)
 
     with transaction.atomic():
         current_max_order = classroom.groups.aggregate(m=models.Max('order')).get('m') or 0
@@ -7928,7 +8586,20 @@ def auto_group_from_reference(request, pk):
         if affected_group_ids:
             _normalize_group_leaders(classroom, affected_group_ids)
         if action_items:
-            _push_action(request, pk, {'type': 'group_batch', 'items': action_items})
+            _push_snapshot_action(
+                request,
+                classroom,
+                before_state,
+                'auto_group_from_reference',
+                extra={
+                    'type': 'group_batch',
+                    'items': action_items,
+                    'reference_group_id': ref_group.pk,
+                    'remainder_strategy': remainder_strategy,
+                    'group_style': detected_group_style,
+                    'linear_grouping': linear_grouping,
+                },
+            )
 
     unassigned_count = total_target_count - len(assign_target_seats)
     strategy_label = {
@@ -7987,6 +8658,7 @@ def merge_groups(request, pk):
 
     source_ids = [g.pk for g in source_groups]
     source_names = [g.name for g in source_groups]
+    before_state = _capture_history_state(classroom)
 
     with transaction.atomic():
         affected_rows = list(
@@ -8010,24 +8682,36 @@ def merge_groups(request, pk):
                     student_id=g.leader_id
                 ).exists()
                 if in_target:
+                    SeatGroup.objects.filter(pk__in=source_ids, leader_id=g.leader_id).update(leader=None)
                     target_group.leader_id = g.leader_id
                     target_group.save(update_fields=['leader'])
                     break
 
-        if affected_rows:
-            action_items = [
-                {
-                    'row': item['row'],
-                    'col': item['col'],
-                    'before_group_id': item['group_id'],
-                    'after_group_id': target_group.pk
-                }
-                for item in affected_rows
-            ]
-            _push_action(request, pk, {'type': 'group_batch', 'items': action_items})
+        action_items = [
+            {
+                'row': item['row'],
+                'col': item['col'],
+                'before_group_id': item['group_id'],
+                'after_group_id': target_group.pk
+            }
+            for item in affected_rows
+        ]
 
         SeatGroup.objects.filter(classroom=classroom, pk__in=source_ids).delete()
         _normalize_group_leaders(classroom, [target_group.pk])
+
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'merge_groups',
+        extra={
+            'type': 'group_batch',
+            'items': action_items,
+            'target_group_id': target_group.pk,
+            'source_group_ids': source_ids,
+        },
+    )
 
     return JsonResponse({
         'status': 'success',
@@ -8102,6 +8786,7 @@ def rotate_groups(request, pk):
 
     action = {'type': 'seat_layout_batch', 'items': action_items}
 
+    before_state = _capture_history_state(classroom)
     try:
         with transaction.atomic():
             if not _apply_seat_layout_action(classroom, action, forward=True):
@@ -8109,7 +8794,7 @@ def rotate_groups(request, pk):
             violations = _stabilize_layout_with_rules(classroom, request)
             if violations:
                 raise ValueError(f'轮换失败：{_format_issues_preview(violations)}')
-            _push_action(request, pk, action)
+            _push_snapshot_action(request, classroom, before_state, 'rotate_groups', extra=action)
     except ValueError as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
     except Exception as e:
@@ -8139,6 +8824,7 @@ def rename_group(request, pk, group_id):
         if _is_ajax_request(request):
             return JsonResponse({'status': 'error', 'message': '小组名称已存在'}, status=400)
         return redirect('classroom_detail', pk=pk)
+    before_state = _capture_history_state(classroom)
     try:
         group.name = new_name
         group.save(update_fields=['name'])
@@ -8146,6 +8832,13 @@ def rename_group(request, pk, group_id):
         if _is_ajax_request(request):
             return JsonResponse({'status': 'error', 'message': '小组名称已存在'}, status=400)
         return redirect('classroom_detail', pk=pk)
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'rename_group',
+        extra={'group_id': group.pk, 'group_name': group.name},
+    )
     if _is_ajax_request(request):
         return JsonResponse({'status': 'success', 'group': {'id': group.pk, 'name': group.name}})
     return redirect('classroom_detail', pk=pk)
@@ -8155,8 +8848,17 @@ def rename_group(request, pk, group_id):
 def delete_group(request, pk, group_id):
     classroom = get_object_or_404(Classroom, pk=pk)
     group = get_object_or_404(SeatGroup, pk=group_id, classroom=classroom)
+    before_state = _capture_history_state(classroom)
     deleted_group_id = group.pk
+    deleted_group_name = group.name
     group.delete()
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'delete_group',
+        extra={'group_id': deleted_group_id, 'group_name': deleted_group_name},
+    )
     if _is_ajax_request(request):
         return JsonResponse({'status': 'success', 'deleted_group_id': deleted_group_id})
     return redirect('classroom_detail', pk=pk)
@@ -8183,6 +8885,7 @@ def assign_group(request, pk):
             affected_group_ids.add(group.pk)
         else:
             seat.group = None
+        before_state = _capture_history_state(classroom)
         seat.save(update_fields=['group'])
         _normalize_group_leaders(classroom, affected_group_ids)
         action = {
@@ -8192,7 +8895,7 @@ def assign_group(request, pk):
             'before_group_id': before_group_id,
             'after_group_id': seat.group.pk if seat.group else None
         }
-        _push_action(request, pk, action)
+        _push_snapshot_action(request, classroom, before_state, 'assign_group', extra=action)
         return JsonResponse({'status': 'success'})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -8214,6 +8917,7 @@ def assign_group_batch(request, pk):
         affected_group_ids = set()
         if group:
             affected_group_ids.add(group.pk)
+        before_state = _capture_history_state(classroom)
         for seat_data in seats_payload:
             row = int(seat_data.get('row'))
             col = int(seat_data.get('col'))
@@ -8235,7 +8939,7 @@ def assign_group_batch(request, pk):
         if items:
             _normalize_group_leaders(classroom, affected_group_ids)
             action = {'type': 'group_batch', 'items': items}
-            _push_action(request, pk, action)
+            _push_snapshot_action(request, classroom, before_state, 'assign_group_batch', extra=action)
         return JsonResponse({'status': 'success'})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -8267,7 +8971,8 @@ def create_constraint(request, pk):
         if target_student_id:
             target_student = get_object_or_404(Student, pk=target_student_id, classroom=classroom)
 
-        SeatConstraint.objects.create(
+        before_state = _capture_history_state(classroom)
+        constraint = SeatConstraint.objects.create(
             classroom=classroom,
             constraint_type=constraint_type,
             student=student,
@@ -8276,6 +8981,13 @@ def create_constraint(request, pk):
             col=int(col) if col else None,
             distance=distance,
             note=note
+        )
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'create_constraint',
+            extra={'constraint_id': constraint.pk, 'constraint_type': constraint_type},
         )
     except Exception as e:
         if request.headers.get('x-requested-with') == 'XMLHttpRequest':
@@ -8288,7 +9000,16 @@ def create_constraint(request, pk):
 def delete_constraint(request, pk, constraint_id):
     classroom = get_object_or_404(Classroom, pk=pk)
     constraint = get_object_or_404(SeatConstraint, pk=constraint_id, classroom=classroom)
+    before_state = _capture_history_state(classroom)
+    constraint_type = constraint.constraint_type
     constraint.delete()
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'delete_constraint',
+        extra={'constraint_id': constraint_id, 'constraint_type': constraint_type},
+    )
     return redirect('classroom_detail', pk=pk)
 
 
@@ -9236,11 +9957,19 @@ def save_layout_snapshot(request, pk):
         name = str(request.POST.get('snapshot_name', '')).strip()
         if not name:
             return redirect('classroom_detail', pk=pk)
+        before_state = _capture_history_state(classroom)
         data = _snapshot_payload(classroom, include_students=False)
-        LayoutSnapshot.objects.update_or_create(
+        snapshot, _ = LayoutSnapshot.objects.update_or_create(
             classroom=classroom,
             name=name,
             defaults={'data': data}
+        )
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'save_layout_snapshot',
+            extra={'snapshot_id': snapshot.pk, 'snapshot_name': snapshot.name},
         )
     return redirect('classroom_detail', pk=pk)
 
@@ -9248,14 +9977,31 @@ def save_layout_snapshot(request, pk):
 def load_layout_snapshot(request, pk, snapshot_id):
     classroom = get_object_or_404(Classroom, pk=pk)
     snapshot = get_object_or_404(LayoutSnapshot, pk=snapshot_id, classroom=classroom)
+    before_state = _capture_history_state(classroom)
     _apply_layout_data(classroom, snapshot.data, replace_students=False)
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'load_layout_snapshot',
+        extra={'snapshot_id': snapshot.pk, 'snapshot_name': snapshot.name},
+    )
     return redirect('classroom_detail', pk=pk)
 
 
 def delete_layout_snapshot(request, pk, snapshot_id):
     classroom = get_object_or_404(Classroom, pk=pk)
     snapshot = get_object_or_404(LayoutSnapshot, pk=snapshot_id, classroom=classroom)
+    before_state = _capture_history_state(classroom)
+    snapshot_name = snapshot.name
     snapshot.delete()
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'delete_layout_snapshot',
+        extra={'snapshot_id': snapshot_id, 'snapshot_name': snapshot_name},
+    )
     return redirect('classroom_detail', pk=pk)
 
 
@@ -9274,10 +10020,11 @@ def import_seats_file(request, pk):
     if request.method == 'POST' and request.FILES.get('seats_file'):
         seats_file = request.FILES['seats_file']
         try:
+            before_state = _capture_history_state(classroom)
             raw = seats_file.read().decode('utf-8')
             data = json.loads(raw)
             _apply_layout_data(classroom, data, replace_students=True)
-            _reset_history(request, pk)
+            _push_snapshot_action(request, classroom, before_state, 'import_seats_file')
         except Exception:
             pass
     return redirect('classroom_detail', pk=pk)
@@ -9285,56 +10032,29 @@ def import_seats_file(request, pk):
 
 def undo_action(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
-    history = _get_history(request, pk)
-    if not history['undo']:
+    entry = _get_history_queryset(pk).filter(is_applied=True).order_by('-pk').first()
+    if not entry:
         return JsonResponse({'status': 'error', 'message': '没有可撤销操作'}, status=400)
-    action = history['undo'].pop()
-    if action['type'] == 'move':
-        inverse = _invert_move_action(action)
-        _apply_move_action(classroom, inverse)
-    elif action['type'] == 'move_batch':
-        _apply_move_batch_action(classroom, action, forward=False)
-    elif action['type'] == 'swap':
-        _apply_swap_action(classroom, action)
-    elif action['type'] == 'cell_type':
-        _apply_cell_type_action(classroom, action, forward=False)
-    elif action['type'] == 'group':
-        _apply_group_action(classroom, action, forward=False)
-    elif action['type'] == 'group_batch':
-        _apply_group_batch_action(classroom, action, forward=False)
-    elif action['type'] == 'seat_layout_batch':
-        _apply_seat_layout_action(classroom, action, forward=False)
-    elif action['type'] == 'layout_snapshot':
-        _apply_layout_snapshot_action(classroom, action, forward=False)
-    history['redo'].append(action)
-    request.session.modified = True
+    action = entry.payload or {}
+    with transaction.atomic():
+        if not _apply_recorded_history_action(classroom, action, forward=False):
+            return JsonResponse({'status': 'error', 'message': '撤销失败：历史记录不可用'}, status=400)
+        entry.is_applied = False
+        entry.save(update_fields=['is_applied'])
     return JsonResponse({'status': 'success'})
 
 
 def redo_action(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
-    history = _get_history(request, pk)
-    if not history['redo']:
+    entry = _get_history_queryset(pk).filter(is_applied=False).order_by('pk').first()
+    if not entry:
         return JsonResponse({'status': 'error', 'message': '没有可重做操作'}, status=400)
-    action = history['redo'].pop()
-    if action['type'] == 'move':
-        _apply_move_action(classroom, action)
-    elif action['type'] == 'move_batch':
-        _apply_move_batch_action(classroom, action, forward=True)
-    elif action['type'] == 'swap':
-        _apply_swap_action(classroom, action)
-    elif action['type'] == 'cell_type':
-        _apply_cell_type_action(classroom, action, forward=True)
-    elif action['type'] == 'group':
-        _apply_group_action(classroom, action, forward=True)
-    elif action['type'] == 'group_batch':
-        _apply_group_batch_action(classroom, action, forward=True)
-    elif action['type'] == 'seat_layout_batch':
-        _apply_seat_layout_action(classroom, action, forward=True)
-    elif action['type'] == 'layout_snapshot':
-        _apply_layout_snapshot_action(classroom, action, forward=True)
-    history['undo'].append(action)
-    request.session.modified = True
+    action = entry.payload or {}
+    with transaction.atomic():
+        if not _apply_recorded_history_action(classroom, action, forward=True):
+            return JsonResponse({'status': 'error', 'message': '重做失败：历史记录不可用'}, status=400)
+        entry.is_applied = True
+        entry.save(update_fields=['is_applied'])
     return JsonResponse({'status': 'success'})
 
 
@@ -9362,8 +10082,16 @@ def rename_classroom(request, pk):
     if len(new_name) > 100:
         return JsonResponse({'status': 'error', 'message': '班级名称不能超过 100 个字符'}, status=400)
 
+    before_state = _capture_history_state(classroom)
     classroom.name = new_name
     classroom.save(update_fields=['name'])
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'rename_classroom',
+        extra={'name': classroom.name},
+    )
 
     if is_json or _is_ajax_request(request):
         return JsonResponse({'status': 'success', 'name': classroom.name})
@@ -9398,12 +10126,19 @@ def apply_suggestion(request, pk):
                 return JsonResponse({'status': 'error', 'message': '座位不属于当前班级'}, status=400)
             
             # 交换座位，违规则回滚
+            before_state = _capture_history_state(classroom)
             with transaction.atomic():
                 _swap_seats(seat1, seat2)
                 violations = _stabilize_layout_with_rules(classroom, request)
                 if violations:
                     raise ValueError(f'交换失败：{_format_issues_preview(violations)}')
-            _push_action(request, pk, _build_swap_action(s1, s2))
+            _push_snapshot_action(
+                request,
+                classroom,
+                before_state,
+                'swap',
+                extra=_build_swap_action(s1, s2),
+            )
             return JsonResponse({'status': 'success', 'message': f'已执行交换并自动校正约束：{s1.name} / {s2.name}'})
         except ValueError as e:
             return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
@@ -9437,6 +10172,7 @@ def set_group_leader(request, pk):
             return JsonResponse({'status': 'error', 'message': '该学生未分配或未在小组中'}, status=400)
             
         group = seat.group
+        before_state = _capture_history_state(classroom)
         
         # 已是组长则取消
         if group.leader == student:
@@ -9445,6 +10181,13 @@ def set_group_leader(request, pk):
             group.leader = student
             
         group.save()
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'set_group_leader',
+            extra={'group_id': group.pk, 'student_id': student.pk},
+        )
         
         return JsonResponse({'status': 'success'})
     except Exception as e:

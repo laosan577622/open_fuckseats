@@ -619,9 +619,9 @@ input:focus {
     display: flex;
     align-items: center;
     gap: 8px;
-    background: rgba(255, 255, 255, 0.65);
-    backdrop-filter: saturate(180%) blur(20px);
-    -webkit-backdrop-filter: saturate(180%) blur(20px);
+    background: rgba(255, 255, 255, 0.2);
+    backdrop-filter: saturate(180%) blur(5px);
+    -webkit-backdrop-filter: saturate(180%) blur(5px);
     padding: 6px 12px;
     border-radius: 999px;
     box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08);
@@ -1724,7 +1724,7 @@ input:focus {
 .modal {
     display: none;
     position: fixed;
-    z-index: 5000;
+    z-index: 20000;
     inset: 0;
     overflow: auto;
     background-color: rgba(0, 0, 0, 0);

@@ -1,4 +1,4 @@
-from django.test import TestCase, override_settings
+from django.test import TestCase, override_settings, Client
 from django.urls import reverse
 import json
 import importlib.util
@@ -33,6 +33,7 @@ from .models import (
     Seat,
     Student,
     LayoutSnapshot,
+    ClassroomHistoryEntry,
 )
 from .plugin_system import plugin_registry
 from .views import (
@@ -1159,6 +1160,139 @@ class GroupInteractionTests(TestCase):
         self.assertEqual(set(group_cols.values()), {1, 2})
 
 
+class ClassroomHistoryTests(TestCase):
+    def test_history_is_persisted_in_database_across_clients(self):
+        classroom = Classroom.objects.create(name="历史持久化班", rows=1, cols=2)
+        student = classroom.students.create(name="张三")
+        seat1 = classroom.seats.get(row=1, col=1)
+        seat1.student = student
+        seat1.save(update_fields=["student"])
+
+        move_url = reverse("move_student", args=[classroom.pk])
+        response = self.client.post(
+            move_url,
+            data=json.dumps({"student_id": student.pk, "row": 1, "col": 2}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(ClassroomHistoryEntry.objects.filter(classroom=classroom).count(), 1)
+
+        another_client = Client()
+        undo_response = another_client.post(reverse("undo_action", args=[classroom.pk]))
+        self.assertEqual(undo_response.status_code, 200)
+        student.refresh_from_db()
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
+
+        redo_response = another_client.post(reverse("redo_action", args=[classroom.pk]))
+        self.assertEqual(redo_response.status_code, 200)
+        student.refresh_from_db()
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 2))
+
+    def test_merge_groups_supports_undo_and_redo(self):
+        classroom = Classroom.objects.create(name="合组回滚班", rows=1, cols=2)
+        g1 = SeatGroup.objects.create(classroom=classroom, name="A组", order=1)
+        g2 = SeatGroup.objects.create(classroom=classroom, name="B组", order=2)
+        s1 = classroom.students.create(name="甲")
+        s2 = classroom.students.create(name="乙")
+
+        seat1 = classroom.seats.get(row=1, col=1)
+        seat2 = classroom.seats.get(row=1, col=2)
+        seat1.student = s1
+        seat1.group = g1
+        seat1.save(update_fields=["student", "group"])
+        seat2.student = s2
+        seat2.group = g2
+        seat2.save(update_fields=["student", "group"])
+        g2.leader = s2
+        g2.save(update_fields=["leader"])
+
+        merge_url = reverse("merge_groups", args=[classroom.pk])
+        response = self.client.post(
+            merge_url,
+            data=json.dumps({"target_group_id": g1.pk, "source_group_ids": [g2.pk]}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(SeatGroup.objects.filter(pk=g2.pk).exists())
+
+        undo_response = self.client.post(reverse("undo_action", args=[classroom.pk]))
+        self.assertEqual(undo_response.status_code, 200)
+        g2.refresh_from_db()
+        seat2.refresh_from_db()
+        self.assertEqual(seat2.group_id, g2.pk)
+        self.assertEqual(g2.leader_id, s2.pk)
+
+        redo_response = self.client.post(reverse("redo_action", args=[classroom.pk]))
+        self.assertEqual(redo_response.status_code, 200)
+        self.assertFalse(SeatGroup.objects.filter(pk=g2.pk).exists())
+        seat2.refresh_from_db()
+        self.assertEqual(seat2.group_id, g1.pk)
+
+    def test_save_layout_snapshot_supports_undo_and_redo(self):
+        classroom = Classroom.objects.create(name="快照回滚班", rows=1, cols=1)
+
+        save_url = reverse("save_layout_snapshot", args=[classroom.pk])
+        response = self.client.post(save_url, {"snapshot_name": "期中布局"})
+        self.assertEqual(response.status_code, 302)
+        snapshot = LayoutSnapshot.objects.get(classroom=classroom, name="期中布局")
+
+        undo_response = self.client.post(reverse("undo_action", args=[classroom.pk]))
+        self.assertEqual(undo_response.status_code, 200)
+        self.assertFalse(LayoutSnapshot.objects.filter(pk=snapshot.pk).exists())
+
+        redo_response = self.client.post(reverse("redo_action", args=[classroom.pk]))
+        self.assertEqual(redo_response.status_code, 200)
+        self.assertTrue(LayoutSnapshot.objects.filter(pk=snapshot.pk, name="期中布局").exists())
+
+    def test_set_group_leader_supports_undo_and_redo(self):
+        classroom = Classroom.objects.create(name="组长回滚班", rows=1, cols=1)
+        group = SeatGroup.objects.create(classroom=classroom, name="第一组", order=1)
+        student = classroom.students.create(name="班长")
+        seat = classroom.seats.get(row=1, col=1)
+        seat.student = student
+        seat.group = group
+        seat.save(update_fields=["student", "group"])
+
+        url = reverse("set_group_leader", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"student_id": student.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        group.refresh_from_db()
+        self.assertEqual(group.leader_id, student.pk)
+
+        undo_response = self.client.post(reverse("undo_action", args=[classroom.pk]))
+        self.assertEqual(undo_response.status_code, 200)
+        group.refresh_from_db()
+        self.assertIsNone(group.leader_id)
+
+        redo_response = self.client.post(reverse("redo_action", args=[classroom.pk]))
+        self.assertEqual(redo_response.status_code, 200)
+        group.refresh_from_db()
+        self.assertEqual(group.leader_id, student.pk)
+
+    def test_history_only_keeps_latest_thousand_entries(self):
+        classroom = Classroom.objects.create(name="历史上限班", rows=1, cols=1)
+        url = reverse("rename_classroom", args=[classroom.pk])
+
+        for index in range(1005):
+            response = self.client.post(
+                url,
+                data=json.dumps({"name": f"历史班{index}"}),
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+            self.assertEqual(response.status_code, 200)
+
+        entries = list(ClassroomHistoryEntry.objects.filter(classroom=classroom).order_by("pk"))
+        self.assertEqual(len(entries), 1000)
+        self.assertEqual(entries[0].payload.get("type"), "rename_classroom")
+        self.assertEqual(entries[0].payload.get("name"), "历史班5")
+        self.assertTrue(all(entry.is_applied for entry in entries))
+
+
 class GroupRotationTests(TestCase):
     def test_rotate_groups_swaps_group_positions_with_students(self):
         classroom = Classroom.objects.create(name="R1", rows=1, cols=4)
@@ -1468,6 +1602,138 @@ class LayoutShiftTests(TestCase):
         self.assertEqual(response.status_code, 200)
         constraint = classroom.constraints.get(student=student)
         self.assertEqual(constraint.row, 3)
+
+    def test_shift_layout_left_uses_template_blocks_for_2_1_2(self):
+        classroom = Classroom.objects.create(name="LS9", rows=2, cols=5)
+        left_student = classroom.students.create(name="左组学生")
+        right_student = classroom.students.create(name="右组学生")
+        left_group = SeatGroup.objects.create(classroom=classroom, name="左组", order=1)
+        right_group = SeatGroup.objects.create(classroom=classroom, name="右组", order=2)
+
+        left_seat = classroom.seats.get(row=1, col=1)
+        left_seat.student = left_student
+        left_seat.group = left_group
+        left_seat.save(update_fields=["student", "group"])
+
+        right_seat = classroom.seats.get(row=1, col=4)
+        right_seat.student = right_student
+        right_seat.group = right_group
+        right_seat.save(update_fields=["student", "group"])
+
+        classroom.seats.filter(col=3).update(cell_type=SeatCellType.AISLE, student=None, group=None)
+        classroom.seats.filter(row=2, col=2).update(cell_type=SeatCellType.AISLE, student=None, group=None)
+
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+            student=left_student,
+            row=1,
+            col=1,
+        )
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "left", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("shift_mode"), "template")
+        self.assertEqual(payload.get("template_signature"), "2+1+2")
+        self.assertIn("布局模板", payload.get("message", ""))
+
+        left_student.refresh_from_db()
+        right_student.refresh_from_db()
+
+        self.assertEqual(left_student.assigned_seat.col, 4)
+        self.assertEqual(right_student.assigned_seat.col, 1)
+        self.assertEqual(classroom.seats.get(row=1, col=3).cell_type, SeatCellType.AISLE)
+        self.assertEqual(classroom.seats.get(row=2, col=2).cell_type, SeatCellType.SEAT)
+        self.assertEqual(classroom.seats.get(row=2, col=5).cell_type, SeatCellType.AISLE)
+
+        constraint = classroom.constraints.get(student=left_student)
+        self.assertEqual((constraint.row, constraint.col), (1, 4))
+
+    def test_shift_layout_right_uses_template_blocks_for_2_1_2_1_2(self):
+        classroom = Classroom.objects.create(name="LS10", rows=1, cols=8)
+        student_a = classroom.students.create(name="A")
+        student_b = classroom.students.create(name="B")
+        student_c = classroom.students.create(name="C")
+
+        classroom.seats.filter(row=1, col=1).update(student=student_a)
+        classroom.seats.filter(row=1, col=4).update(student=student_b)
+        classroom.seats.filter(row=1, col=7).update(student=student_c)
+        classroom.seats.filter(col__in=[3, 6]).update(cell_type=SeatCellType.AISLE, student=None, group=None)
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "right", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("shift_mode"), "template")
+        self.assertEqual(payload.get("template_signature"), "2+1+2+1+2")
+
+        student_a.refresh_from_db()
+        student_b.refresh_from_db()
+        student_c.refresh_from_db()
+
+        self.assertEqual(student_c.assigned_seat.col, 1)
+        self.assertEqual(student_a.assigned_seat.col, 4)
+        self.assertEqual(student_b.assigned_seat.col, 7)
+        self.assertEqual(classroom.seats.get(row=1, col=3).cell_type, SeatCellType.AISLE)
+        self.assertEqual(classroom.seats.get(row=1, col=6).cell_type, SeatCellType.AISLE)
+
+    def test_shift_layout_right_supports_different_seat_block_widths(self):
+        classroom = Classroom.objects.create(name="LS11", rows=1, cols=8)
+        left_student = classroom.students.create(name="左侧")
+        right_student = classroom.students.create(name="右侧")
+
+        classroom.seats.filter(row=1, col=3).update(student=left_student)
+        classroom.seats.filter(row=1, col=5).update(student=right_student)
+        classroom.seats.filter(col=4).update(cell_type=SeatCellType.AISLE, student=None, group=None)
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "right", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("shift_mode"), "template")
+        self.assertEqual(payload.get("template_signature"), "3+1+4")
+
+        left_student.refresh_from_db()
+        right_student.refresh_from_db()
+
+        self.assertEqual(right_student.assigned_seat.col, 1)
+        self.assertEqual(left_student.assigned_seat.col, 8)
+        self.assertEqual(classroom.seats.get(row=1, col=5).cell_type, SeatCellType.AISLE)
+        self.assertEqual(classroom.seats.get(row=1, col=4).cell_type, SeatCellType.SEAT)
+
+    def test_shift_layout_left_falls_back_when_template_is_not_recognized(self):
+        classroom = Classroom.objects.create(name="LS12", rows=1, cols=3)
+        student = classroom.students.create(name="普通移动")
+        classroom.seats.filter(row=1, col=1).update(student=student)
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "left", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("shift_mode"), "normal")
+        self.assertIn("回退为普通左移", payload.get("message", ""))
+        self.assertTrue(payload.get("fallback_reason"))
+
+        student.refresh_from_db()
+        self.assertEqual(student.assigned_seat.col, 3)
 
 
 class StudentImportTests(TestCase):

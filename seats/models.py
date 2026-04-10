@@ -218,3 +218,22 @@ class FrontendKVStore(models.Model):
 
     def __str__(self):
         return self.key
+
+
+class ClassroomHistoryEntry(models.Model):
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='history_entries')
+    action_type = models.CharField(max_length=40, blank=True, default='', verbose_name="动作类型")
+    payload = models.JSONField(blank=True, default=dict, verbose_name="动作载荷")
+    is_applied = models.BooleanField(default=True, verbose_name="已应用")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "班级历史记录"
+        verbose_name_plural = verbose_name
+        ordering = ['pk']
+        indexes = [
+            models.Index(fields=['classroom', 'is_applied', 'id'], name='class_history_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.classroom_id}-{self.action_type or 'action'}-{self.pk}"

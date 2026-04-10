@@ -1549,6 +1549,16 @@ document.addEventListener('DOMContentLoaded', () => {
         }).catch((err) => notify(err?.message || '操作失败'));
     };
 
+    const handleHistoryResponse = (promise) => {
+        promise.then(data => {
+            if (data && data.status && data.status !== 'success') {
+                notify(data.message || '操作失败');
+                return;
+            }
+            window.location.reload();
+        }).catch((err) => notify(err?.message || '操作失败'));
+    };
+
     const applyUnseatedFilter = () => {
         if (!unseatedList || !unseatedSearch) return;
         const keyword = unseatedSearch.value.trim().toLowerCase();
@@ -2544,6 +2554,40 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const showShiftResultToast = (data) => {
+        const container = createToastContainer();
+        const toast = document.createElement('div');
+        toast.className = 'toast-notification';
+        const isTemplate = data.shift_mode === 'template';
+        const isFallback = data.shift_mode === 'normal' && data.fallback_reason;
+        let badge = '';
+        if (isTemplate) {
+            badge = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;background:#e8f5e9;color:#2e7d32;margin-left:6px;">智能模板</span>`;
+        } else if (isFallback) {
+            badge = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;background:#fff3e0;color:#e65100;margin-left:6px;">普通模式</span>`;
+        }
+        let extra = '';
+        if (isTemplate && data.template_signature) {
+            extra = `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">模板结构: ${data.template_signature}</div>`;
+        } else if (isFallback && data.fallback_reason) {
+            extra = `<div style="margin-top:4px;font-size:11px;color:#e65100;">${data.fallback_reason}</div>`;
+        }
+        toast.innerHTML = `
+            <div class="toast-header">
+                <span>布局移动${badge}</span>
+                <span style="color:var(--text-secondary); font-weight:400; font-size:11px;">刚刚</span>
+            </div>
+            <div class="toast-body">${data.message || '布局轮换成功'}${extra}</div>
+        `;
+        container.appendChild(toast);
+        setTimeout(() => {
+            toast.classList.add('toast-exit');
+            toast.addEventListener('animationend', () => {
+                if (toast.parentNode) toast.parentNode.removeChild(toast);
+            });
+        }, 3000);
+    };
+
     const handleShiftLayout = (direction) => {
         if (!urls.shiftLayout) return;
         const steps = Math.max(1, parseInt(shiftLayoutSteps?.value, 10) || 1);
@@ -2563,7 +2607,7 @@ document.addEventListener('DOMContentLoaded', () => {
         postJson(urls.shiftLayout, { direction, steps })
             .then(data => {
                 if (data && data.status === 'success') {
-                    showInlineToast(data.message || '布局轮换成功');
+                    showShiftResultToast(data);
                     refreshState();
                 } else {
                     throw new Error(data?.message || '布局轮换失败');
@@ -2727,11 +2771,11 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (undoBtn) {
-        undoBtn.addEventListener('click', () => handleResponse(postJson(urls.undo, {})));
+        undoBtn.addEventListener('click', () => handleHistoryResponse(postJson(urls.undo, {})));
     }
 
     if (redoBtn) {
-        redoBtn.addEventListener('click', () => handleResponse(postJson(urls.redo, {})));
+        redoBtn.addEventListener('click', () => handleHistoryResponse(postJson(urls.redo, {})));
     }
 
     const openSideTab = (tab) => {
@@ -2841,12 +2885,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.status === 'success') {
                     closeModal('shift-options-modal');
                     refreshState();
-                    showToast(data.message || '轮换完成');
+                    showShiftResultToast(data);
                 } else {
-                    showToast(data.message || '操作失败');
+                    showInlineToast(data.message || '操作失败');
                 }
             })
-            .catch(() => showToast('请求出错，请重试'))
+            .catch(() => showInlineToast('请求出错，请重试'))
             .finally(() => {
                 submitBtn.textContent = origText;
                 submitBtn.disabled = false;
@@ -2912,12 +2956,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         if (e.ctrlKey && key === 'z') {
             e.preventDefault();
-            handleResponse(postJson(urls.undo, {}));
+            handleHistoryResponse(postJson(urls.undo, {}));
             return;
         }
         if (e.ctrlKey && key === 'y') {
             e.preventDefault();
-            handleResponse(postJson(urls.redo, {}));
+            handleHistoryResponse(postJson(urls.redo, {}));
             return;
         }
         if (e.ctrlKey && key === 'c') {

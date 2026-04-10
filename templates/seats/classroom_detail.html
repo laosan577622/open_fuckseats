@@ -573,7 +573,7 @@
                             <input type="radio" name="shift_direction" value="back"> 后移
                         </label>
                     </div>
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">四个方向均为循环轮换，不会新增空位。前移时最后一排会绕到最前，左移时最左一列会绕到最右。</div>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">左右移动时，系统会自动识别布局模板（如 2+1+2），按座位块整体轮换并重建走廊位置。若无法识别模板则回退为普通按列移动。前后移动为循环轮换。</div>
                     <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">前移表示朝讲台方向轮换，后移表示远离讲台方向轮换。</div>
                 </div>
                 <div class="modal-divider"></div>
@@ -728,11 +728,20 @@
 
 <script src="{% static 'js/classroom.js' %}?v={{ request.session.session_key|default:'dev' }}"></script>
 <script>
-    function startTour() {
+    function startTour(startIndex = 0) {
         const switchRibbon = (tabKey) => {
             const tab = document.querySelector(`.ribbon-tab[data-ribbon-tab="${tabKey}"]`);
             if (tab) tab.click();
         };
+
+        const finishTour = () => {
+            localStorage.setItem('seat_app_tour_seen', 'true');
+            window.scrollTo(0, 0);
+            document.documentElement.scrollTop = 0;
+            document.body.scrollTop = 0;
+        };
+
+        let exitByCloseButton = false;
 
         const driver = window.driver.js.driver({
             showProgress: true,
@@ -848,28 +857,36 @@
                     }
                 }
             ],
-            onDestroyStarted: () => {
-                if (!driver.hasNextStep()) {
-                    driver.destroy();
-                    localStorage.setItem('seat_app_tour_seen', 'true');
-                    window.scrollTo(0, 0);
-                    document.documentElement.scrollTop = 0;
-                    document.body.scrollTop = 0;
-                } else {
-                    showConfirmModal('确定要结束教程吗？', { title: '结束教程' }).then(ok => {
+            onCloseClick: () => {
+                const activeIndex = typeof driver.getActiveIndex === 'function' ? driver.getActiveIndex() : 0;
+                exitByCloseButton = true;
+                driver.destroy();
+                window.setTimeout(() => {
+                    showConfirmModal('确定要结束教程吗？', {
+                        title: '结束教程',
+                        okText: '结束教程',
+                        cancelText: '继续观看'
+                    }).then(ok => {
                         if (ok) {
-                            driver.destroy();
-                            localStorage.setItem('seat_app_tour_seen', 'true');
-                            window.scrollTo(0, 0);
-                            document.documentElement.scrollTop = 0;
-                            document.body.scrollTop = 0;
+                            finishTour();
+                            return;
                         }
+                        startTour(activeIndex);
                     });
+                }, 0);
+            },
+            onDestroyStarted: () => {
+                if (exitByCloseButton) {
+                    exitByCloseButton = false;
+                    driver.destroy();
+                    return;
                 }
+                driver.destroy();
+                finishTour();
             },
         });
 
-        driver.drive();
+        driver.drive(startIndex);
     }
 
     function toggleFullScreen() {
