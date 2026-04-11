@@ -1,5 +1,6 @@
 from django.test import TestCase, override_settings, Client
 from django.urls import reverse
+from django.core.files.uploadedfile import SimpleUploadedFile
 import json
 import importlib.util
 import unittest
@@ -30,6 +31,8 @@ from .models import (
     SeatCellType,
     SeatGroup,
     FutureModeConfig,
+    AIConversation,
+    AIConversationMessage,
     Seat,
     Student,
     LayoutSnapshot,
@@ -1291,6 +1294,169 @@ class ClassroomHistoryTests(TestCase):
         self.assertEqual(entries[0].payload.get("type"), "rename_classroom")
         self.assertEqual(entries[0].payload.get("name"), "历史班5")
         self.assertTrue(all(entry.is_applied for entry in entries))
+
+    def test_exported_seats_file_restores_full_bundle_and_undo_history(self):
+        source = Classroom.objects.create(name="完整导出班", rows=1, cols=2)
+        student = source.students.create(name="张三", student_id="001", gender="M", score=88)
+        group = SeatGroup.objects.create(classroom=source, name="第一组", order=1)
+
+        source_seat = source.seats.get(row=1, col=1)
+        source_seat.student = student
+        source_seat.group = group
+        source_seat.save(update_fields=["student", "group"])
+        target_seat = source.seats.get(row=1, col=2)
+        target_seat.group = group
+        target_seat.save(update_fields=["group"])
+        group.leader = student
+        group.save(update_fields=["leader"])
+
+        SeatConstraint.objects.create(
+            classroom=source,
+            constraint_type=SeatConstraint.ConstraintType.MUST_ROW,
+            student=student,
+            row=1,
+            note="原位",
+        )
+        FutureModeConfig.objects.create(
+            classroom=source,
+            api_key="sk-test",
+            base_url="https://example.com/v1",
+            model="gpt-test",
+            thinking_mode="enabled",
+        )
+        conversation = AIConversation.objects.create(
+            classroom=source,
+            session_key="source-session",
+            title="排座记录",
+            last_mode="chat",
+            last_response_id="resp_1",
+        )
+        AIConversationMessage.objects.create(
+            conversation=conversation,
+            role=AIConversationMessage.MessageRole.USER,
+            content="你好",
+            payload={"cards": [{"type": "student_detail", "title": "测试卡片"}]},
+        )
+        AIConversationMessage.objects.create(
+            conversation=conversation,
+            role=AIConversationMessage.MessageRole.ASSISTANT,
+            content="好的",
+            payload={},
+        )
+
+        save_response = self.client.post(
+            reverse("save_layout_snapshot", args=[source.pk]),
+            {"snapshot_name": "开局"},
+        )
+        self.assertEqual(save_response.status_code, 302)
+
+        move_response = self.client.post(
+            reverse("move_student", args=[source.pk]),
+            data=json.dumps({"student_id": student.pk, "row": 1, "col": 2}),
+            content_type="application/json",
+        )
+        self.assertEqual(move_response.status_code, 200)
+
+        export_response = self.client.get(reverse("export_seats_file", args=[source.pk]))
+        self.assertEqual(export_response.status_code, 200)
+        export_payload = json.loads(export_response.content.decode("utf-8"))
+        self.assertEqual(export_payload.get("meta", {}).get("schema"), "full")
+        self.assertIn("current_state", export_payload)
+        self.assertIn("history", export_payload)
+        self.assertIn("future_mode_config", export_payload)
+        self.assertIn("ai_conversations", export_payload)
+
+        target = Classroom.objects.create(name="导入目标班", rows=1, cols=1)
+        upload = SimpleUploadedFile(
+            "demo.seats",
+            json.dumps(export_payload, ensure_ascii=False).encode("utf-8"),
+            content_type="application/octet-stream",
+        )
+        import_response = self.client.post(
+            reverse("import_seats_file", args=[target.pk]),
+            {"seats_file": upload},
+        )
+        self.assertEqual(import_response.status_code, 302)
+
+        target.refresh_from_db()
+        self.assertEqual(target.name, "完整导出班")
+
+        imported_student = Student.objects.get(classroom=target, student_id="001")
+        self.assertEqual((imported_student.assigned_seat.row, imported_student.assigned_seat.col), (1, 2))
+
+        imported_group = SeatGroup.objects.get(classroom=target, name="第一组")
+        self.assertEqual(imported_group.leader_id, imported_student.pk)
+
+        imported_snapshot = LayoutSnapshot.objects.get(classroom=target, name="开局")
+        imported_config = FutureModeConfig.objects.get(classroom=target)
+        self.assertEqual(imported_config.model, "gpt-test")
+        self.assertEqual(imported_config.base_url, "https://example.com/v1")
+
+        imported_conversation = AIConversation.objects.get(classroom=target)
+        self.assertEqual(imported_conversation.title, "排座记录")
+        self.assertEqual(imported_conversation.messages.count(), 2)
+
+        self.assertEqual(
+            ClassroomHistoryEntry.objects.filter(classroom=target).count(),
+            ClassroomHistoryEntry.objects.filter(classroom=source).count(),
+        )
+
+        undo_response = self.client.post(reverse("undo_action", args=[target.pk]))
+        self.assertEqual(undo_response.status_code, 200)
+        imported_student.refresh_from_db()
+        self.assertEqual((imported_student.assigned_seat.row, imported_student.assigned_seat.col), (1, 1))
+
+        redo_response = self.client.post(reverse("redo_action", args=[target.pk]))
+        self.assertEqual(redo_response.status_code, 200)
+        imported_student.refresh_from_db()
+        self.assertEqual((imported_student.assigned_seat.row, imported_student.assigned_seat.col), (1, 2))
+
+        load_response = self.client.get(reverse("load_layout_snapshot", args=[target.pk, imported_snapshot.pk]))
+        self.assertEqual(load_response.status_code, 302)
+        imported_student.refresh_from_db()
+        self.assertEqual((imported_student.assigned_seat.row, imported_student.assigned_seat.col), (1, 1))
+
+    def test_legacy_seats_file_import_keeps_old_behavior(self):
+        classroom = Classroom.objects.create(name="旧版导入班", rows=1, cols=1)
+        legacy_payload = {
+            "meta": {"app": "不想排座位", "version": "1.0"},
+            "classroom": {"name": "旧版导入班", "rows": 1, "cols": 1},
+            "students": [
+                {"name": "李四", "student_id": "1001", "gender": "M", "score": 90}
+            ],
+            "groups": [],
+            "seats": [
+                {
+                    "row": 1,
+                    "col": 1,
+                    "cell_type": SeatCellType.SEAT,
+                    "student_pk": None,
+                    "student_id": "1001",
+                    "student_name": "李四",
+                    "group_name": None,
+                }
+            ],
+            "constraints": [],
+        }
+
+        upload = SimpleUploadedFile(
+            "legacy.seats",
+            json.dumps(legacy_payload, ensure_ascii=False).encode("utf-8"),
+            content_type="application/octet-stream",
+        )
+        response = self.client.post(
+            reverse("import_seats_file", args=[classroom.pk]),
+            {"seats_file": upload},
+        )
+        self.assertEqual(response.status_code, 302)
+
+        student = Student.objects.get(classroom=classroom, student_id="1001")
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
+        self.assertEqual(ClassroomHistoryEntry.objects.filter(classroom=classroom).count(), 1)
+
+        undo_response = self.client.post(reverse("undo_action", args=[classroom.pk]))
+        self.assertEqual(undo_response.status_code, 200)
+        self.assertFalse(Student.objects.filter(classroom=classroom, student_id="1001").exists())
 
 
 class GroupRotationTests(TestCase):

@@ -90,6 +90,29 @@ FUTURE_MODE_PENDING_TTL_SECONDS = 1800
 FUTURE_MODE_PENDING_CACHE = {}
 MAX_LAYOUT_GRID_SIZE = 30
 CLASSROOM_HISTORY_LIMIT = 1000
+HISTORY_STUDENT_ID_KEYS = {
+    'student_pk',
+    'target_student_pk',
+    'leader_student_pk',
+    'student_id',
+    'target_student_id',
+    'student_a_id',
+    'student_b_id',
+    'prev_student_id',
+    'before_student_id',
+    'after_student_id',
+}
+HISTORY_GROUP_ID_KEYS = {
+    'group_pk',
+    'group_id',
+    'prev_group_id',
+    'before_group_id',
+    'after_group_id',
+    'target_group_id',
+}
+HISTORY_GROUP_ID_LIST_KEYS = {'source_group_ids'}
+HISTORY_SNAPSHOT_ID_KEYS = {'snapshot_id'}
+HISTORY_CONSTRAINT_ID_KEYS = {'constraint_id'}
 
 AI_TOOL_DEFINITIONS = [
     {
@@ -4542,13 +4565,13 @@ def _serialize_history_datetime(value):
     return value.isoformat()
 
 
-def _restore_history_datetime(model_cls, pk, value):
+def _restore_history_datetime(model_cls, pk, value, field_name='created_at'):
     dt = parse_datetime(str(value or '').strip()) if value else None
     if not dt:
         return
     if timezone.is_naive(dt):
         dt = timezone.make_aware(dt, timezone.get_current_timezone())
-    model_cls.objects.filter(pk=pk).update(created_at=dt)
+    model_cls.objects.filter(pk=pk).update(**{field_name: dt})
 
 
 def _capture_history_state(classroom):
@@ -4563,6 +4586,7 @@ def _capture_history_state(classroom):
             'name': classroom.name,
             'rows': classroom.rows,
             'cols': classroom.cols,
+            'created_at': _serialize_history_datetime(classroom.created_at),
         },
         'students': [
             {
@@ -4621,6 +4645,77 @@ def _capture_history_state(classroom):
     }
 
 
+def _serialize_future_mode_config(classroom):
+    config = FutureModeConfig.objects.filter(classroom=classroom).first()
+    if not config:
+        return None
+    return {
+        'api_key': str(config.api_key or ''),
+        'base_url': str(config.base_url or ''),
+        'model': str(config.model or ''),
+        'thinking_mode': str(config.thinking_mode or ''),
+        'created_at': _serialize_history_datetime(config.created_at),
+        'updated_at': _serialize_history_datetime(config.updated_at),
+    }
+
+
+def _serialize_ai_conversations_for_export(classroom):
+    conversations = list(
+        classroom.ai_conversations
+        .all()
+        .prefetch_related('messages')
+        .order_by('created_at', 'pk')
+    )
+    data = []
+    for conversation in conversations:
+        data.append({
+            'session_key': str(conversation.session_key or ''),
+            'title': str(conversation.title or ''),
+            'last_mode': str(conversation.last_mode or ''),
+            'last_response_id': str(conversation.last_response_id or ''),
+            'created_at': _serialize_history_datetime(conversation.created_at),
+            'updated_at': _serialize_history_datetime(conversation.updated_at),
+            'messages': [
+                {
+                    'role': str(message.role or ''),
+                    'content': str(message.content or ''),
+                    'payload': copy.deepcopy(message.payload if isinstance(message.payload, dict) else {}),
+                    'created_at': _serialize_history_datetime(message.created_at),
+                }
+                for message in conversation.messages.all()
+            ],
+        })
+    return data
+
+
+def _serialize_classroom_history_for_export(classroom):
+    return [
+        {
+            'action_type': str(entry.action_type or ''),
+            'payload': copy.deepcopy(entry.payload if isinstance(entry.payload, dict) else {}),
+            'is_applied': bool(entry.is_applied),
+            'created_at': _serialize_history_datetime(entry.created_at),
+        }
+        for entry in _get_history_queryset(classroom.pk)
+    ]
+
+
+def _serialize_seats_file_bundle(classroom):
+    data = _snapshot_payload(classroom, include_students=True, include_constraints=True)
+    data['meta'] = {
+        **copy.deepcopy(data.get('meta') or {}),
+        'version': '2.0',
+        'schema': 'full',
+    }
+    data['current_state'] = _capture_history_state(classroom)
+    data['history'] = {
+        'entries': _serialize_classroom_history_for_export(classroom),
+    }
+    data['future_mode_config'] = _serialize_future_mode_config(classroom)
+    data['ai_conversations'] = _serialize_ai_conversations_for_export(classroom)
+    return data
+
+
 def _encode_history_blob(data):
     raw = json.dumps(data, ensure_ascii=False, separators=(',', ':')).encode('utf-8')
     return base64.b64encode(zlib.compress(raw, level=6)).decode('ascii')
@@ -4631,6 +4726,239 @@ def _decode_history_blob(blob):
         return {}
     raw = zlib.decompress(base64.b64decode(str(blob).encode('ascii')))
     return json.loads(raw.decode('utf-8'))
+
+
+def _collect_state_reference_pks(state, collector=None):
+    collector = collector or {
+        'student': set(),
+        'group': set(),
+        'constraint': set(),
+        'snapshot': set(),
+    }
+    if not isinstance(state, dict):
+        return collector
+
+    for item in state.get('students', []):
+        try:
+            collector['student'].add(int(item.get('pk')))
+        except (TypeError, ValueError):
+            continue
+
+    for item in state.get('groups', []):
+        try:
+            collector['group'].add(int(item.get('pk')))
+        except (TypeError, ValueError):
+            pass
+        try:
+            collector['student'].add(int(item.get('leader_student_pk')))
+        except (TypeError, ValueError):
+            pass
+
+    for item in state.get('constraints', []):
+        try:
+            collector['constraint'].add(int(item.get('pk')))
+        except (TypeError, ValueError):
+            pass
+        try:
+            collector['student'].add(int(item.get('student_pk')))
+        except (TypeError, ValueError):
+            pass
+        try:
+            collector['student'].add(int(item.get('target_student_pk')))
+        except (TypeError, ValueError):
+            pass
+
+    for item in state.get('layout_snapshots', []):
+        try:
+            collector['snapshot'].add(int(item.get('pk')))
+        except (TypeError, ValueError):
+            continue
+
+    return collector
+
+
+def _extract_export_history_entries(data):
+    history = data.get('history')
+    if isinstance(history, dict):
+        entries = history.get('entries')
+        if isinstance(entries, list):
+            return entries
+    if isinstance(history, list):
+        return history
+    return []
+
+
+def _collect_bundle_reference_pks(data):
+    collector = _collect_state_reference_pks(data.get('current_state'))
+    for entry in _extract_export_history_entries(data):
+        if not isinstance(entry, dict):
+            continue
+        payload = entry.get('payload')
+        if not isinstance(payload, dict):
+            continue
+        for key in ('before_state', 'after_state'):
+            blob = payload.get(key)
+            if not blob:
+                continue
+            try:
+                state = _decode_history_blob(blob)
+            except Exception:
+                continue
+            _collect_state_reference_pks(state, collector)
+    return collector
+
+
+def _build_entity_pk_mapping(model_cls, source_pks, classroom=None):
+    source_pks = {int(pk) for pk in source_pks if pk not in (None, '')}
+    if not source_pks:
+        return {}
+
+    queryset = model_cls.objects.all()
+    if classroom is not None and any(field.name == 'classroom' for field in model_cls._meta.fields):
+        queryset = queryset.exclude(classroom=classroom)
+
+    occupied = set(queryset.filter(pk__in=list(source_pks)).values_list('pk', flat=True))
+    current_max = queryset.order_by('-pk').values_list('pk', flat=True).first() or 0
+    next_pk = max(current_max, max(source_pks)) + 1
+    reserved = set(occupied)
+    mapping = {}
+
+    for source_pk in sorted(source_pks):
+        if source_pk not in reserved:
+            mapping[source_pk] = source_pk
+            reserved.add(source_pk)
+            continue
+        while next_pk in reserved:
+            next_pk += 1
+        mapping[source_pk] = next_pk
+        reserved.add(next_pk)
+        next_pk += 1
+
+    return mapping
+
+
+def _build_seats_file_pk_mappings(classroom, data):
+    collector = _collect_bundle_reference_pks(data)
+    return {
+        'student': _build_entity_pk_mapping(Student, collector['student'], classroom=classroom),
+        'group': _build_entity_pk_mapping(SeatGroup, collector['group'], classroom=classroom),
+        'constraint': _build_entity_pk_mapping(SeatConstraint, collector['constraint'], classroom=classroom),
+        'snapshot': _build_entity_pk_mapping(LayoutSnapshot, collector['snapshot'], classroom=classroom),
+    }
+
+
+def _remap_scalar_pk(value, mapping):
+    if value in (None, ''):
+        return value
+    try:
+        source_pk = int(value)
+    except (TypeError, ValueError):
+        return value
+    return mapping.get(source_pk, source_pk)
+
+
+def _remap_snapshot_payload_data(data, mappings):
+    if not isinstance(data, dict):
+        return {}
+    payload = copy.deepcopy(data)
+    for item in payload.get('seats', []):
+        if not isinstance(item, dict):
+            continue
+        item['student_pk'] = _remap_scalar_pk(item.get('student_pk'), mappings['student'])
+    for item in payload.get('constraints', []):
+        if not isinstance(item, dict):
+            continue
+        item['student_pk'] = _remap_scalar_pk(item.get('student_pk'), mappings['student'])
+        item['target_student_pk'] = _remap_scalar_pk(item.get('target_student_pk'), mappings['student'])
+    return payload
+
+
+def _remap_history_state(state, mappings, classroom_pk):
+    if not isinstance(state, dict):
+        return {}
+    payload = copy.deepcopy(state)
+    classroom_data = payload.get('classroom') or {}
+    classroom_data['pk'] = classroom_pk
+    payload['classroom'] = classroom_data
+
+    for item in payload.get('students', []):
+        if not isinstance(item, dict):
+            continue
+        item['pk'] = _remap_scalar_pk(item.get('pk'), mappings['student'])
+
+    for item in payload.get('groups', []):
+        if not isinstance(item, dict):
+            continue
+        item['pk'] = _remap_scalar_pk(item.get('pk'), mappings['group'])
+        item['leader_student_pk'] = _remap_scalar_pk(item.get('leader_student_pk'), mappings['student'])
+
+    for item in payload.get('seats', []):
+        if not isinstance(item, dict):
+            continue
+        item['student_pk'] = _remap_scalar_pk(item.get('student_pk'), mappings['student'])
+        item['group_pk'] = _remap_scalar_pk(item.get('group_pk'), mappings['group'])
+
+    for item in payload.get('constraints', []):
+        if not isinstance(item, dict):
+            continue
+        item['pk'] = _remap_scalar_pk(item.get('pk'), mappings['constraint'])
+        item['student_pk'] = _remap_scalar_pk(item.get('student_pk'), mappings['student'])
+        item['target_student_pk'] = _remap_scalar_pk(item.get('target_student_pk'), mappings['student'])
+
+    for item in payload.get('layout_snapshots', []):
+        if not isinstance(item, dict):
+            continue
+        item['pk'] = _remap_scalar_pk(item.get('pk'), mappings['snapshot'])
+        item['data'] = _remap_snapshot_payload_data(item.get('data'), mappings)
+
+    return payload
+
+
+def _remap_history_payload(payload, mappings, classroom_pk):
+    def _walk(value, current_key=''):
+        if isinstance(value, dict):
+            remapped = {}
+            for key, item in value.items():
+                if key in {'before_state', 'after_state'} and item:
+                    try:
+                        state = _decode_history_blob(item)
+                    except Exception:
+                        remapped[key] = item
+                    else:
+                        remapped[key] = _encode_history_blob(_remap_history_state(state, mappings, classroom_pk))
+                    continue
+                if key in {'before_data', 'after_data'} and isinstance(item, dict):
+                    remapped[key] = _remap_snapshot_payload_data(item, mappings)
+                    continue
+                if key == 'classroom_id':
+                    remapped[key] = classroom_pk
+                    continue
+                if key in HISTORY_STUDENT_ID_KEYS:
+                    remapped[key] = _remap_scalar_pk(item, mappings['student'])
+                    continue
+                if key in HISTORY_GROUP_ID_KEYS:
+                    remapped[key] = _remap_scalar_pk(item, mappings['group'])
+                    continue
+                if key in HISTORY_SNAPSHOT_ID_KEYS:
+                    remapped[key] = _remap_scalar_pk(item, mappings['snapshot'])
+                    continue
+                if key in HISTORY_CONSTRAINT_ID_KEYS:
+                    remapped[key] = _remap_scalar_pk(item, mappings['constraint'])
+                    continue
+                if key in HISTORY_GROUP_ID_LIST_KEYS and isinstance(item, list):
+                    remapped[key] = [_remap_scalar_pk(entry, mappings['group']) for entry in item]
+                    continue
+                remapped[key] = _walk(item, key)
+            return remapped
+        if isinstance(value, list):
+            if current_key in HISTORY_GROUP_ID_LIST_KEYS:
+                return [_remap_scalar_pk(item, mappings['group']) for item in value]
+            return [_walk(item) for item in value]
+        return value
+
+    if not isinstance(payload, dict):
+        return {}
+    return _walk(copy.deepcopy(payload))
 
 
 def _build_history_snapshot_action(before_state, after_state, action_type, extra=None):
@@ -4667,6 +4995,7 @@ def _restore_history_state(classroom, state):
             classroom.save(update_fields=['name'])
 
         _sync_seats(classroom, target_rows, target_cols)
+        _restore_history_datetime(Classroom, classroom.pk, classroom_data.get('created_at'))
 
         classroom.seats.update(student=None, group=None, cell_type=SeatCellType.SEAT)
         classroom.constraints.all().delete()
@@ -4801,6 +5130,83 @@ def _push_action(request, classroom_id, action):
 
 def _reset_history(request, classroom_id):
     _get_history_queryset(classroom_id).delete()
+
+
+def _restore_exported_history(classroom, data, mappings):
+    _get_history_queryset(classroom.pk).delete()
+    for item in _extract_export_history_entries(data):
+        if not isinstance(item, dict):
+            continue
+        payload = _remap_history_payload(item.get('payload'), mappings, classroom.pk)
+        entry = ClassroomHistoryEntry.objects.create(
+            classroom=classroom,
+            action_type=str(item.get('action_type') or payload.get('type') or '')[:40],
+            payload=payload,
+            is_applied=bool(item.get('is_applied', True)),
+        )
+        _restore_history_datetime(ClassroomHistoryEntry, entry.pk, item.get('created_at'))
+
+
+def _restore_future_mode_config(classroom, data):
+    FutureModeConfig.objects.filter(classroom=classroom).delete()
+    if not isinstance(data, dict):
+        return
+    payload = {
+        'api_key': str(data.get('api_key') or '').strip(),
+        'base_url': str(data.get('base_url') or '').strip(),
+        'model': str(data.get('model') or '').strip(),
+        'thinking_mode': str(data.get('thinking_mode') or '').strip(),
+    }
+    if not any(payload.values()):
+        return
+    config = FutureModeConfig.objects.create(classroom=classroom, **payload)
+    _restore_history_datetime(FutureModeConfig, config.pk, data.get('created_at'))
+    _restore_history_datetime(FutureModeConfig, config.pk, data.get('updated_at'), field_name='updated_at')
+
+
+def _restore_ai_conversations(classroom, data, request=None):
+    classroom.ai_conversations.all().delete()
+    if not isinstance(data, list):
+        return
+    owner_key = _ensure_session_key(request) if request else ''
+    for item in data:
+        if not isinstance(item, dict):
+            continue
+        conversation = AIConversation.objects.create(
+            classroom=classroom,
+            session_key=owner_key or str(item.get('session_key') or ''),
+            title=str(item.get('title') or DEFAULT_AI_CONVERSATION_TITLE)[:120],
+            last_mode=str(item.get('last_mode') or '')[:16],
+            last_response_id=str(item.get('last_response_id') or '')[:120],
+        )
+        _restore_history_datetime(AIConversation, conversation.pk, item.get('created_at'))
+        _restore_history_datetime(AIConversation, conversation.pk, item.get('updated_at'), field_name='updated_at')
+
+        for message_data in item.get('messages', []):
+            if not isinstance(message_data, dict):
+                continue
+            message = AIConversationMessage.objects.create(
+                conversation=conversation,
+                role=str(message_data.get('role') or AIConversationMessage.MessageRole.USER),
+                content=str(message_data.get('content') or '')[:4000],
+                payload=copy.deepcopy(message_data.get('payload') if isinstance(message_data.get('payload'), dict) else {}),
+            )
+            _restore_history_datetime(AIConversationMessage, message.pk, message_data.get('created_at'))
+
+
+def _import_seats_file_payload(classroom, data, request=None):
+    if isinstance(data.get('current_state'), dict):
+        with transaction.atomic():
+            mappings = _build_seats_file_pk_mappings(classroom, data)
+            state = _remap_history_state(data.get('current_state'), mappings, classroom.pk)
+            _restore_history_state(classroom, state)
+            _restore_exported_history(classroom, data, mappings)
+            _restore_future_mode_config(classroom, data.get('future_mode_config'))
+            _restore_ai_conversations(classroom, data.get('ai_conversations'), request=request)
+        return 'full'
+
+    _apply_layout_data(classroom, data, replace_students=True)
+    return 'legacy'
 
 
 def _is_ajax_request(request):
@@ -10007,7 +10413,7 @@ def delete_layout_snapshot(request, pk, snapshot_id):
 
 def export_seats_file(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
-    data = _snapshot_payload(classroom, include_students=True)
+    data = _serialize_seats_file_bundle(classroom)
     payload = json.dumps(data, ensure_ascii=False, indent=2)
     response = HttpResponse(payload, content_type='application/octet-stream')
     filename = escape_uri_path(f'{classroom.name}.seats')
@@ -10020,11 +10426,16 @@ def import_seats_file(request, pk):
     if request.method == 'POST' and request.FILES.get('seats_file'):
         seats_file = request.FILES['seats_file']
         try:
-            before_state = _capture_history_state(classroom)
             raw = seats_file.read().decode('utf-8')
             data = json.loads(raw)
-            _apply_layout_data(classroom, data, replace_students=True)
-            _push_snapshot_action(request, classroom, before_state, 'import_seats_file')
+            import_mode = 'full'
+            before_state = None
+            if not isinstance(data.get('current_state'), dict):
+                before_state = _capture_history_state(classroom)
+                import_mode = 'legacy'
+            resolved_mode = _import_seats_file_payload(classroom, data, request=request)
+            if import_mode == 'legacy' and resolved_mode == 'legacy' and before_state is not None:
+                _push_snapshot_action(request, classroom, before_state, 'import_seats_file')
         except Exception:
             pass
     return redirect('classroom_detail', pk=pk)
