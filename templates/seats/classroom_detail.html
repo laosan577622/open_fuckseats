@@ -61,6 +61,12 @@
             <span class="ribbon-group-label">集体前后移动</span>
         </div>
         <div class="ribbon-group">
+            <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
+                <button type="button" class="btn btn-secondary" id="btn-mirror-layout-lr">左右镜像</button>
+            </div>
+            <span class="ribbon-group-label">布局镜像</span>
+        </div>
+        <div class="ribbon-group">
             <button type="button" class="btn btn-secondary" data-open-modal="shift-options-modal">移动选项</button>
             <span class="ribbon-group-label">详细操作</span>
         </div>
@@ -246,6 +252,7 @@
     data-group-merge-url="{% url 'merge_groups' classroom.pk %}"
     data-group-rotate-url="{% url 'rotate_groups' classroom.pk %}"
     data-shift-layout-url="{% url 'shift_layout' classroom.pk %}"
+    data-mirror-layout-url="{% url 'mirror_layout' classroom.pk %}"
     data-rename-classroom-url="{% url 'rename_classroom' classroom.pk %}" data-classroom-name="{{ classroom.name }}"
     data-state-url="{% url 'classroom_state' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
     data-redo-url="{% url 'redo_action' classroom.pk %}" data-set-leader-url="{% url 'set_group_leader' classroom.pk %}"

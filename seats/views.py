@@ -4063,6 +4063,50 @@ def _shift_layout_constraints(constraints, axis_field, delta, axis_label, action
     return shifted
 
 
+def _normalize_mirror_axis(axis):
+    normalized = str(axis or '').strip().lower()
+    aliases = {
+        'left_right': 'lr',
+        'horizontal': 'lr',
+        'flip_lr': 'lr',
+        'mirror_lr': 'lr',
+    }
+    normalized = aliases.get(normalized, normalized)
+    if normalized not in {'lr'}:
+        raise ValueError('镜像方向不合法')
+    return normalized
+
+
+def _build_mirrored_layout_payload(classroom, axis='lr'):
+    normalized_axis = _normalize_mirror_axis(axis)
+    payload = copy.deepcopy(
+        _snapshot_payload(classroom, include_students=False, include_constraints=True)
+    )
+
+    cols = int(payload.get('classroom', {}).get('cols') or classroom.cols)
+
+    mirrored_seats = []
+    for seat in payload.get('seats', []):
+        item = dict(seat)
+        if normalized_axis == 'lr':
+            item['col'] = cols - int(item.get('col') or 0) + 1
+        mirrored_seats.append(item)
+
+    payload['seats'] = _sort_layout_seats(mirrored_seats)
+
+    mirrored_constraints = []
+    for raw in payload.get('constraints', []):
+        item = dict(raw)
+        if normalized_axis == 'lr':
+            current_col = item.get('col')
+            if current_col not in (None, ''):
+                item['col'] = cols - int(current_col) + 1
+        mirrored_constraints.append(item)
+    payload['constraints'] = mirrored_constraints
+
+    return payload
+
+
 def _build_layout_column_payload(payload):
     column_map = defaultdict(list)
     for seat in payload.get('seats', []):
@@ -6727,6 +6771,40 @@ def shift_layout(request, pk):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': f'整体平移失败：{e}'}, status=400)
+
+
+@require_POST
+def mirror_layout(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            payload = json.loads(request.body or '{}')
+        else:
+            payload = request.POST
+
+        axis = _normalize_mirror_axis(payload.get('axis') or payload.get('direction') or 'lr')
+        before_data = _snapshot_payload(classroom, include_students=False, include_constraints=True)
+        before_state = _capture_history_state(classroom)
+        after_data = _build_mirrored_layout_payload(classroom, axis=axis)
+        action = {
+            'type': 'layout_snapshot',
+            'before_data': before_data,
+            'after_data': after_data,
+            'mirror_axis': axis,
+        }
+        with transaction.atomic():
+            if not _apply_layout_snapshot_action(classroom, action, forward=True):
+                raise ValueError('左右镜像失败')
+            _push_snapshot_action(request, classroom, before_state, 'mirror_layout', extra=action)
+        return JsonResponse({
+            'status': 'success',
+            'message': '已完成左右镜像',
+            'mirror_axis': axis,
+        })
+    except ValueError as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': f'左右镜像失败：{e}'}, status=400)
 
 
 @require_POST

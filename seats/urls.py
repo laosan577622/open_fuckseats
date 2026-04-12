@@ -23,6 +23,7 @@ urlpatterns = [
     path('classroom/<int:pk>/layout/', views.layout_editor, name='layout_editor'),
     path('classroom/<int:pk>/layout/grid/', views.update_layout_grid, name='update_layout_grid'),
     path('classroom/<int:pk>/layout/shift/', views.shift_layout, name='shift_layout'),
+    path('classroom/<int:pk>/layout/mirror/', views.mirror_layout, name='mirror_layout'),
     path('classroom/<int:pk>/layout/shift/options/', views.shift_layout_options_page, name='shift_layout_options_page'),
     path('classroom/<int:pk>/layout/row-col-op/', views.insert_delete_row_col, name='insert_delete_row_col'),
     path('classroom/<int:pk>/state/', views.classroom_state, name='classroom_state'),

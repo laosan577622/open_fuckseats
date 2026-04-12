@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
         groupMerge: root.dataset.groupMergeUrl,
         groupRotate: root.dataset.groupRotateUrl,
         shiftLayout: root.dataset.shiftLayoutUrl,
+        mirrorLayout: root.dataset.mirrorLayoutUrl,
         renameClassroom: root.dataset.renameClassroomUrl,
         state: root.dataset.stateUrl,
         undo: root.dataset.undoUrl,
@@ -60,6 +61,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const shiftLayoutBackBtn = document.getElementById('btn-shift-layout-back');
     const shiftLayoutLeftBtn = document.getElementById('btn-shift-layout-left');
     const shiftLayoutRightBtn = document.getElementById('btn-shift-layout-right');
+    const mirrorLayoutLeftRightBtn = document.getElementById('btn-mirror-layout-lr');
     const shiftLayoutSteps = document.getElementById('shiftLayoutSteps');
     const createGroupForm = document.getElementById('createGroupForm');
     const groupList = document.getElementById('groupList');
@@ -2109,7 +2111,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (data.suggestions) {
                     const toastContainer = document.getElementById('toast-container') || createToastContainer();
-                    toastContainer.innerHTML = ''; // 清空容器（简单同步逻辑，可优化）
+                    // 只移除 suggestion 类型的 toast，保留其他通知（如布局变换提示）
+                    toastContainer.querySelectorAll('.toast-suggestion').forEach(el => el.remove());
 
                     const listItems = [];
                     data.suggestions.forEach(item => {
@@ -2123,7 +2126,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             // 渲染为弹窗
                             const toast = document.createElement('div');
-                            toast.className = 'toast-notification';
+                            toast.className = 'toast-notification toast-suggestion';
                             toast.innerHTML = `
                                 <div class="toast-header">
                                     <span>优化建议</span>
@@ -2554,7 +2557,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    const showShiftResultToast = (data) => {
+    const showLayoutTransformToast = (title, data) => {
         const container = createToastContainer();
         const toast = document.createElement('div');
         toast.className = 'toast-notification';
@@ -2574,7 +2577,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         toast.innerHTML = `
             <div class="toast-header">
-                <span>布局移动${badge}</span>
+                <span>${title || '布局操作'}${badge}</span>
                 <span style="color:var(--text-secondary); font-weight:400; font-size:11px;">刚刚</span>
             </div>
             <div class="toast-body">${data.message || '布局轮换成功'}${extra}</div>
@@ -2607,7 +2610,7 @@ document.addEventListener('DOMContentLoaded', () => {
         postJson(urls.shiftLayout, { direction, steps })
             .then(data => {
                 if (data && data.status === 'success') {
-                    showShiftResultToast(data);
+                    showLayoutTransformToast('布局移动', data);
                     refreshState();
                 } else {
                     throw new Error(data?.message || '布局轮换失败');
@@ -2620,6 +2623,32 @@ document.addEventListener('DOMContentLoaded', () => {
             .finally(() => {
                 btn.textContent = originalText;
                 btn.disabled = false;
+            });
+    };
+
+    const handleMirrorLayout = () => {
+        if (!urls.mirrorLayout || !mirrorLayoutLeftRightBtn) return;
+
+        const originalText = mirrorLayoutLeftRightBtn.textContent;
+        mirrorLayoutLeftRightBtn.textContent = '执行中...';
+        mirrorLayoutLeftRightBtn.disabled = true;
+
+        postJson(urls.mirrorLayout, { axis: 'lr' })
+            .then((data) => {
+                if (data && data.status === 'success') {
+                    showLayoutTransformToast('布局镜像', data);
+                    refreshState();
+                } else {
+                    throw new Error(data?.message || '左右镜像失败');
+                }
+            })
+            .catch((err) => {
+                console.error('Mirror layout error:', err);
+                notify(err.message || '请求出错，请重试');
+            })
+            .finally(() => {
+                mirrorLayoutLeftRightBtn.textContent = originalText;
+                mirrorLayoutLeftRightBtn.disabled = false;
             });
     };
 
@@ -2637,6 +2666,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (shiftLayoutBackBtn) {
         shiftLayoutBackBtn.addEventListener('click', () => handleShiftLayout('back'));
+    }
+
+    if (mirrorLayoutLeftRightBtn) {
+        mirrorLayoutLeftRightBtn.addEventListener('click', handleMirrorLayout);
     }
 
     if (renameClassroomBtn) {
@@ -2885,7 +2918,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.status === 'success') {
                     closeModal('shift-options-modal');
                     refreshState();
-                    showShiftResultToast(data);
+                    showLayoutTransformToast('布局移动', data);
                 } else {
                     showInlineToast(data.message || '操作失败');
                 }

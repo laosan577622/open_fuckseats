@@ -51,6 +51,68 @@ from .views import (
 )
 
 
+class LayoutMirrorTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="镜像测试班", rows=2, cols=4)
+        self.group = SeatGroup.objects.create(classroom=self.classroom, name="第一组", order=1)
+        self.student_left = Student.objects.create(classroom=self.classroom, name="左侧学生", student_id="S001", score=88)
+        self.student_right = Student.objects.create(classroom=self.classroom, name="右侧学生", student_id="S002", score=92)
+
+        self.seat_11 = Seat.objects.get(classroom=self.classroom, row=1, col=1)
+        self.seat_12 = Seat.objects.get(classroom=self.classroom, row=1, col=2)
+        self.seat_13 = Seat.objects.get(classroom=self.classroom, row=1, col=3)
+        self.seat_14 = Seat.objects.get(classroom=self.classroom, row=1, col=4)
+        self.seat_11.student = self.student_left
+        self.seat_11.group = self.group
+        self.seat_11.cell_type = SeatCellType.SEAT
+        self.seat_11.save()
+        self.seat_12.cell_type = SeatCellType.AISLE
+        self.seat_12.save(update_fields=["cell_type"])
+        self.seat_13.student = self.student_right
+        self.seat_13.group = self.group
+        self.seat_13.cell_type = SeatCellType.SEAT
+        self.seat_13.save()
+        self.seat_14.cell_type = SeatCellType.PODIUM
+        self.seat_14.save(update_fields=["cell_type"])
+
+        SeatConstraint.objects.create(
+            classroom=self.classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+            student=self.student_left,
+            row=1,
+            col=1,
+            distance=1,
+            enabled=True,
+        )
+
+    def test_mirror_layout_flips_students_cells_and_constraints(self):
+        url = reverse("mirror_layout", args=[self.classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"axis": "lr"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("status"), "success")
+        self.assertEqual(payload.get("mirror_axis"), "lr")
+
+        seat_map = {
+            (seat.row, seat.col): seat
+            for seat in Seat.objects.filter(classroom=self.classroom).select_related("student", "group")
+        }
+        self.assertEqual(seat_map[(1, 4)].student_id, self.student_left.pk)
+        self.assertEqual(seat_map[(1, 4)].group_id, self.group.pk)
+        self.assertEqual(seat_map[(1, 3)].cell_type, SeatCellType.AISLE)
+        self.assertEqual(seat_map[(1, 2)].student_id, self.student_right.pk)
+        self.assertEqual(seat_map[(1, 1)].cell_type, SeatCellType.PODIUM)
+
+        constraint = SeatConstraint.objects.get(classroom=self.classroom, student=self.student_left)
+        self.assertEqual(constraint.row, 1)
+        self.assertEqual(constraint.col, 4)
+
+
 class FutureModeErrorHandlingTests(TestCase):
     def setUp(self):
         self.classroom = Classroom.objects.create(name="AI测试班", rows=2, cols=2)
