@@ -585,6 +585,15 @@
                 </div>
                 <div class="modal-divider"></div>
                 <div class="modal-block">
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">左右移动分组</label>
+                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--text-primary); margin-top: 8px;">
+                        <input type="checkbox" id="shiftOptionsUseLargeGroups" name="use_large_groups" checked>
+                        按大组移动
+                    </label>
+                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">勾选后沿用原有的大组模板轮换；取消勾选后，会把每个座位纵列当作独立单组轮换，走廊列保持不动。</div>
+                </div>
+                <div class="modal-divider"></div>
+                <div class="modal-block">
                     <label for="shiftOptionsSteps" style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">移动步数</label>
                     <input type="number" id="shiftOptionsSteps" name="shift_steps" min="1" value="1" style="margin-top: 4px; padding: 8px 12px; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; font-size: 14px; outline: none; width: 100%; box-sizing: border-box;">
                 </div>

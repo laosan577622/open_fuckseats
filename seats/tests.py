@@ -1943,6 +1943,138 @@ class LayoutShiftTests(TestCase):
         self.assertEqual(classroom.seats.get(row=1, col=5).cell_type, SeatCellType.AISLE)
         self.assertEqual(classroom.seats.get(row=1, col=4).cell_type, SeatCellType.SEAT)
 
+    def test_shift_layout_left_rotates_single_columns_when_large_groups_disabled(self):
+        classroom = Classroom.objects.create(name="LS11-C1", rows=1, cols=7)
+        student_a1 = classroom.students.create(name="a1")
+        student_a2 = classroom.students.create(name="a2")
+        student_a3 = classroom.students.create(name="a3")
+        student_a4 = classroom.students.create(name="a4")
+
+        classroom.seats.filter(row=1, col=2).update(student=student_a1)
+        classroom.seats.filter(row=1, col=4).update(student=student_a2)
+        classroom.seats.filter(row=1, col=5).update(student=student_a3)
+        classroom.seats.filter(row=1, col=7).update(student=student_a4)
+        classroom.seats.filter(col__in=[1, 3, 6]).update(cell_type=SeatCellType.AISLE, student=None, group=None)
+
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+            student=student_a2,
+            row=1,
+            col=4,
+        )
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "left", "steps": 1, "use_large_groups": False}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("shift_mode"), "column")
+        self.assertEqual(payload.get("seat_column_count"), 4)
+
+        student_a1.refresh_from_db()
+        student_a2.refresh_from_db()
+        student_a3.refresh_from_db()
+        student_a4.refresh_from_db()
+
+        self.assertEqual(student_a4.assigned_seat.col, 2)
+        self.assertEqual(student_a1.assigned_seat.col, 4)
+        self.assertEqual(student_a2.assigned_seat.col, 5)
+        self.assertEqual(student_a3.assigned_seat.col, 7)
+        self.assertEqual(classroom.seats.get(row=1, col=1).cell_type, SeatCellType.AISLE)
+        self.assertEqual(classroom.seats.get(row=1, col=3).cell_type, SeatCellType.AISLE)
+        self.assertEqual(classroom.seats.get(row=1, col=6).cell_type, SeatCellType.AISLE)
+
+        constraint = classroom.constraints.get(student=student_a2)
+        self.assertEqual((constraint.row, constraint.col), (1, 5))
+
+    def test_shift_layout_right_rotates_single_columns_when_large_groups_disabled(self):
+        classroom = Classroom.objects.create(name="LS11-C2", rows=1, cols=7)
+        student_a1 = classroom.students.create(name="a1")
+        student_a2 = classroom.students.create(name="a2")
+        student_a3 = classroom.students.create(name="a3")
+        student_a4 = classroom.students.create(name="a4")
+
+        classroom.seats.filter(row=1, col=2).update(student=student_a1)
+        classroom.seats.filter(row=1, col=4).update(student=student_a2)
+        classroom.seats.filter(row=1, col=5).update(student=student_a3)
+        classroom.seats.filter(row=1, col=7).update(student=student_a4)
+        classroom.seats.filter(col__in=[1, 3, 6]).update(cell_type=SeatCellType.AISLE, student=None, group=None)
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "right", "steps": 1, "use_large_groups": False}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("shift_mode"), "column")
+        self.assertEqual(payload.get("seat_column_count"), 4)
+
+        student_a1.refresh_from_db()
+        student_a2.refresh_from_db()
+        student_a3.refresh_from_db()
+        student_a4.refresh_from_db()
+
+        self.assertEqual(student_a2.assigned_seat.col, 2)
+        self.assertEqual(student_a3.assigned_seat.col, 4)
+        self.assertEqual(student_a4.assigned_seat.col, 5)
+        self.assertEqual(student_a1.assigned_seat.col, 7)
+
+    def test_shift_layout_left_preserves_symmetric_structure_for_1_1_3_1_3_1_1(self):
+        classroom = Classroom.objects.create(name="LS11-S", rows=1, cols=11)
+        left_edge_student = classroom.students.create(name="左侧单列")
+        left_middle_student = classroom.students.create(name="左侧三列")
+        right_middle_student = classroom.students.create(name="右侧三列")
+        right_edge_student = classroom.students.create(name="右侧单列")
+
+        classroom.seats.filter(row=1, col=1).update(student=left_edge_student)
+        classroom.seats.filter(row=1, col=3).update(student=left_middle_student)
+        classroom.seats.filter(row=1, col=7).update(student=right_middle_student)
+        classroom.seats.filter(row=1, col=11).update(student=right_edge_student)
+        classroom.seats.filter(col__in=[2, 6, 10]).update(cell_type=SeatCellType.AISLE, student=None, group=None)
+
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+            student=left_middle_student,
+            row=1,
+            col=3,
+        )
+
+        url = reverse("shift_layout", args=[classroom.pk])
+        response = self.client.post(
+            url,
+            data=json.dumps({"direction": "left", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload.get("shift_mode"), "template")
+        self.assertEqual(payload.get("template_signature"), "1+1+3+1+3+1+1")
+
+        left_edge_student.refresh_from_db()
+        left_middle_student.refresh_from_db()
+        right_middle_student.refresh_from_db()
+        right_edge_student.refresh_from_db()
+
+        self.assertEqual(right_edge_student.assigned_seat.col, 1)
+        self.assertEqual(right_middle_student.assigned_seat.col, 3)
+        self.assertEqual(left_middle_student.assigned_seat.col, 7)
+        self.assertEqual(left_edge_student.assigned_seat.col, 11)
+        self.assertEqual(classroom.seats.get(row=1, col=2).cell_type, SeatCellType.AISLE)
+        self.assertEqual(classroom.seats.get(row=1, col=6).cell_type, SeatCellType.AISLE)
+        self.assertEqual(classroom.seats.get(row=1, col=10).cell_type, SeatCellType.AISLE)
+        self.assertEqual(classroom.seats.get(row=1, col=1).cell_type, SeatCellType.SEAT)
+        self.assertEqual(classroom.seats.get(row=1, col=11).cell_type, SeatCellType.SEAT)
+
+        constraint = classroom.constraints.get(student=left_middle_student)
+        self.assertEqual((constraint.row, constraint.col), (1, 7))
+
     def test_shift_layout_left_falls_back_when_template_is_not_recognized(self):
         classroom = Classroom.objects.create(name="LS12", rows=1, cols=3)
         student = classroom.students.create(name="普通移动")

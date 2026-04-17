@@ -4306,6 +4306,148 @@ def _rotate_template_seat_blocks(seat_blocks, direction, steps):
     return list(seat_blocks[-shift:]) + list(seat_blocks[:-shift])
 
 
+def _should_preserve_horizontal_template_structure(blocks):
+    if not blocks:
+        return False
+    widths = [int(block.get('width') or 0) for block in blocks]
+    return widths == list(reversed(widths))
+
+
+def _build_structure_preserved_template_shift(payload, blocks, direction, steps):
+    seat_blocks = [block for block in blocks if block.get('block_type') == 'seat']
+    if not seat_blocks:
+        return None
+
+    seat_blocks_by_width = defaultdict(list)
+    for block in seat_blocks:
+        seat_blocks_by_width[int(block.get('width') or 0)].append(block)
+
+    rotated_by_width = {}
+    for width, width_blocks in seat_blocks_by_width.items():
+        rotated_by_width[width] = _rotate_template_seat_blocks(width_blocks, direction, steps)
+
+    width_offsets = defaultdict(int)
+    rebuilt_seats = []
+    column_map = {}
+
+    for block in blocks:
+        width = int(block.get('width') or 0)
+        target_start = int(block.get('start_col') or 0)
+        if width < 1 or target_start < 1:
+            continue
+
+        if block.get('block_type') == 'seat':
+            width_key = int(block.get('width') or 0)
+            width_index = width_offsets[width_key]
+            source_block = rotated_by_width[width_key][width_index]
+            width_offsets[width_key] += 1
+        else:
+            source_block = block
+
+        source_start = int(source_block.get('start_col') or target_start)
+        for offset in range(width):
+            column_map[source_start + offset] = target_start + offset
+
+        for cell in source_block.get('content_cells', []):
+            item = dict(cell)
+            item['col'] = target_start + int(cell.get('col_offset') or 0)
+            item.pop('col_offset', None)
+            rebuilt_seats.append(item)
+
+    rebuilt_payload = copy.deepcopy(payload)
+    rebuilt_payload['seats'] = _sort_layout_seats(rebuilt_seats)
+
+    remapped_constraints = []
+    for raw in rebuilt_payload.get('constraints', []):
+        item = dict(raw)
+        current_col = item.get('col')
+        if current_col not in (None, ''):
+            try:
+                mapped_col = column_map.get(int(current_col))
+            except Exception:
+                mapped_col = None
+            if mapped_col is not None:
+                item['col'] = mapped_col
+        remapped_constraints.append(item)
+    rebuilt_payload['constraints'] = remapped_constraints
+
+    return rebuilt_payload, column_map
+
+
+def _rotate_single_column_units(seat_columns, direction, steps):
+    if not seat_columns:
+        return []
+    shift = int(steps or 0) % len(seat_columns)
+    if shift == 0:
+        return list(seat_columns)
+    if direction == 'left':
+        return list(seat_columns[-shift:]) + list(seat_columns[:-shift])
+    return list(seat_columns[shift:]) + list(seat_columns[:shift])
+
+
+def _build_single_column_horizontal_shift_payload(classroom, direction, steps):
+    normalized_steps = _safe_int(steps, 0)
+    if normalized_steps < 1:
+        raise ValueError('移动模板单位数必须大于 0')
+
+    payload = copy.deepcopy(
+        _snapshot_payload(classroom, include_students=False, include_constraints=True)
+    )
+    classroom_data = payload.get('classroom', {})
+    cols = int(classroom_data.get('cols') or classroom.cols)
+    rows = int(classroom_data.get('rows') or classroom.rows)
+    column_payload = _build_layout_column_payload(payload)
+    blocks = _build_horizontal_template_blocks(payload)
+
+    seat_columns = []
+    structural_columns = []
+    column_map = {}
+    for col in range(1, cols + 1):
+        column_type = _classify_horizontal_layout_column(column_payload.get(col, []), rows)
+        column_map[col] = col
+        if column_type == 'seat':
+            seat_columns.append(col)
+        else:
+            structural_columns.append(col)
+
+    rotated_columns = _rotate_single_column_units(seat_columns, direction, normalized_steps)
+    for target_col, source_col in zip(seat_columns, rotated_columns):
+        column_map[source_col] = target_col
+
+    rebuilt_seats = []
+    for source_col in range(1, cols + 1):
+        target_col = int(column_map.get(source_col) or source_col)
+        for cell in column_payload.get(source_col, []):
+            item = dict(cell)
+            item['col'] = target_col
+            rebuilt_seats.append(item)
+
+    payload['seats'] = _sort_layout_seats(rebuilt_seats)
+
+    remapped_constraints = []
+    for raw in payload.get('constraints', []):
+        item = dict(raw)
+        current_col = item.get('col')
+        if current_col not in (None, ''):
+            try:
+                item['col'] = int(column_map.get(int(current_col), int(current_col)))
+            except Exception:
+                pass
+        remapped_constraints.append(item)
+    payload['constraints'] = remapped_constraints
+
+    return payload, {
+        'supported': True,
+        'reason': '',
+        'column_map': column_map,
+        'shift_units': normalized_steps,
+        'seat_column_count': len(seat_columns),
+        'structural_column_count': len(structural_columns),
+        'template_signature': _format_horizontal_template_signature(blocks),
+        'template_strategy': 'single_column',
+    }
+
+
 def _rebuild_template_blocks_for_shift(blocks, direction, steps):
     seat_blocks = [block for block in blocks if block.get('block_type') == 'seat']
     aisle_blocks = [block for block in blocks if block.get('block_type') == 'aisle']
@@ -4330,38 +4472,50 @@ def _build_intelligent_horizontal_shift_payload(classroom, direction, steps):
     if not analysis.get('supported'):
         return None, analysis
 
-    rebuilt_blocks = _rebuild_template_blocks_for_shift(analysis.get('blocks', []), direction, normalized_steps)
-    rebuilt_seats = []
     column_map = {}
-    next_col = 1
+    if _should_preserve_horizontal_template_structure(analysis.get('blocks', [])):
+        rebuilt = _build_structure_preserved_template_shift(
+            payload,
+            analysis.get('blocks', []),
+            direction,
+            normalized_steps,
+        )
+        if rebuilt is not None:
+            payload, column_map = rebuilt
+            analysis['template_strategy'] = 'preserve_structure'
+    if not column_map:
+        rebuilt_blocks = _rebuild_template_blocks_for_shift(analysis.get('blocks', []), direction, normalized_steps)
+        rebuilt_seats = []
+        next_col = 1
 
-    for block in rebuilt_blocks:
-        source_start = int(block.get('start_col') or next_col)
-        width = int(block.get('width') or 0)
-        for offset in range(width):
-            column_map[source_start + offset] = next_col + offset
-        for cell in block.get('content_cells', []):
-            item = dict(cell)
-            item['col'] = next_col + int(cell.get('col_offset') or 0)
-            item.pop('col_offset', None)
-            rebuilt_seats.append(item)
-        next_col += width
+        for block in rebuilt_blocks:
+            source_start = int(block.get('start_col') or next_col)
+            width = int(block.get('width') or 0)
+            for offset in range(width):
+                column_map[source_start + offset] = next_col + offset
+            for cell in block.get('content_cells', []):
+                item = dict(cell)
+                item['col'] = next_col + int(cell.get('col_offset') or 0)
+                item.pop('col_offset', None)
+                rebuilt_seats.append(item)
+            next_col += width
 
-    payload['seats'] = _sort_layout_seats(rebuilt_seats)
+        payload['seats'] = _sort_layout_seats(rebuilt_seats)
 
-    remapped_constraints = []
-    for raw in payload.get('constraints', []):
-        item = dict(raw)
-        current_col = item.get('col')
-        if current_col not in (None, ''):
-            try:
-                mapped_col = column_map.get(int(current_col))
-            except Exception:
-                mapped_col = None
-            if mapped_col is not None:
-                item['col'] = mapped_col
-        remapped_constraints.append(item)
-    payload['constraints'] = remapped_constraints
+        remapped_constraints = []
+        for raw in payload.get('constraints', []):
+            item = dict(raw)
+            current_col = item.get('col')
+            if current_col not in (None, ''):
+                try:
+                    mapped_col = column_map.get(int(current_col))
+                except Exception:
+                    mapped_col = None
+                if mapped_col is not None:
+                    item['col'] = mapped_col
+            remapped_constraints.append(item)
+        payload['constraints'] = remapped_constraints
+        analysis['template_strategy'] = 'rotate_blocks'
 
     analysis['column_map'] = column_map
     analysis['shift_units'] = normalized_steps
@@ -6716,21 +6870,31 @@ def shift_layout(request, pk):
         direction = _normalize_shift_direction(payload.get('direction'))
         direction_meta = _shift_direction_meta(direction)
         steps = payload.get('steps')
+        use_large_groups_raw = payload.get('use_large_groups') if hasattr(payload, 'get') else None
+        use_large_groups = True if use_large_groups_raw in (None, '') else _parse_bool(use_large_groups_raw)
         before_data = _snapshot_payload(classroom, include_students=False, include_constraints=True)
         before_state = _capture_history_state(classroom)
         shift_mode = 'normal'
+        shift_strategy = 'normal'
         fallback_reason = ''
         template_signature = ''
         template_meta = {}
         if direction in {'left', 'right'}:
-            intelligent_payload, template_meta = _build_intelligent_horizontal_shift_payload(classroom, direction, steps)
-            if intelligent_payload is not None:
-                after_data = intelligent_payload
-                shift_mode = 'template'
-                template_signature = str(template_meta.get('template_signature') or '')
+            if use_large_groups:
+                intelligent_payload, template_meta = _build_intelligent_horizontal_shift_payload(classroom, direction, steps)
+                if intelligent_payload is not None:
+                    after_data = intelligent_payload
+                    shift_mode = 'template'
+                    shift_strategy = str(template_meta.get('template_strategy') or 'large_group')
+                    template_signature = str(template_meta.get('template_signature') or '')
+                else:
+                    after_data = _build_shifted_layout_payload(classroom, direction, steps)
+                    fallback_reason = str(template_meta.get('reason') or '当前布局结构不明确')
             else:
-                after_data = _build_shifted_layout_payload(classroom, direction, steps)
-                fallback_reason = str(template_meta.get('reason') or '当前布局结构不明确')
+                after_data, template_meta = _build_single_column_horizontal_shift_payload(classroom, direction, steps)
+                shift_mode = 'column'
+                shift_strategy = str(template_meta.get('template_strategy') or 'single_column')
+                template_signature = str(template_meta.get('template_signature') or '')
         else:
             after_data = _build_shifted_layout_payload(classroom, direction, steps)
         action = {
@@ -6740,7 +6904,9 @@ def shift_layout(request, pk):
             'direction': direction,
             'steps': _safe_int(steps, 0),
             'shift_mode': shift_mode,
+            'shift_strategy': shift_strategy,
             'template_signature': template_signature,
+            'use_large_groups': use_large_groups,
         }
         with transaction.atomic():
             if not _apply_layout_snapshot_action(classroom, action, forward=True):
@@ -6753,6 +6919,13 @@ def shift_layout(request, pk):
                 f'已按 {template_signature} 布局模板完成{direction_meta["action_label"]}'
                 f'，识别到 {seat_block_count} 个座位块和 {aisle_block_count} 条结构走廊'
             )
+        elif shift_mode == 'column':
+            seat_column_count = int(template_meta.get('seat_column_count') or 0)
+            structural_column_count = int(template_meta.get('structural_column_count') or 0)
+            message = (
+                f'已按座位纵列轮换完成{direction_meta["action_label"]}'
+                f'，识别到 {seat_column_count} 个座位纵列和 {structural_column_count} 列固定结构'
+            )
         elif direction in {'left', 'right'} and fallback_reason:
             message = (
                 f'当前布局结构不明确，已回退为普通{direction_meta["action_label"]} '
@@ -6764,8 +6937,11 @@ def shift_layout(request, pk):
             'status': 'success',
             'message': message,
             'shift_mode': shift_mode,
+            'shift_strategy': shift_strategy,
             'template_signature': template_signature,
             'fallback_reason': fallback_reason,
+            'use_large_groups': use_large_groups,
+            'seat_column_count': int(template_meta.get('seat_column_count') or 0),
         })
     except ValueError as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)

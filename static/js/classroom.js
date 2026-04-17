@@ -63,6 +63,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const shiftLayoutRightBtn = document.getElementById('btn-shift-layout-right');
     const mirrorLayoutLeftRightBtn = document.getElementById('btn-mirror-layout-lr');
     const shiftLayoutSteps = document.getElementById('shiftLayoutSteps');
+    const shiftUseLargeGroupsToggle = document.getElementById('shiftUseLargeGroups');
+    const shiftOptionsUseLargeGroupsToggle = document.getElementById('shiftOptionsUseLargeGroups');
     const createGroupForm = document.getElementById('createGroupForm');
     const groupList = document.getElementById('groupList');
     const unseatedSearch = document.getElementById('unseatedSearch');
@@ -80,6 +82,58 @@ document.addEventListener('DOMContentLoaded', () => {
     const seatsImportInput = document.getElementById('seats-import-input');
     const seatsImportTriggers = Array.from(document.querySelectorAll('[data-seats-import-trigger="1"]'));
     const fileMenuRoots = Array.from(document.querySelectorAll('.menu-dropdown[data-menu-root]'));
+    const SHIFT_USE_LARGE_GROUPS_KEY = 'seats_shift_use_large_groups';
+
+    const setShiftUseLargeGroups = (checked) => {
+        const normalized = !!checked;
+        if (shiftUseLargeGroupsToggle) {
+            shiftUseLargeGroupsToggle.checked = normalized;
+        }
+        if (shiftOptionsUseLargeGroupsToggle) {
+            shiftOptionsUseLargeGroupsToggle.checked = normalized;
+        }
+    };
+
+    const getShiftUseLargeGroups = () => {
+        if (shiftUseLargeGroupsToggle) {
+            return !!shiftUseLargeGroupsToggle.checked;
+        }
+        if (shiftOptionsUseLargeGroupsToggle) {
+            return !!shiftOptionsUseLargeGroupsToggle.checked;
+        }
+        return true;
+    };
+
+    const persistShiftUseLargeGroups = (checked) => {
+        try {
+            localStorage.setItem(SHIFT_USE_LARGE_GROUPS_KEY, checked ? '1' : '0');
+        } catch (error) {
+            console.warn('Unable to persist shift group mode:', error);
+        }
+    };
+
+    const initShiftUseLargeGroupsPreference = () => {
+        let initialChecked = true;
+        try {
+            const saved = localStorage.getItem(SHIFT_USE_LARGE_GROUPS_KEY);
+            if (saved === '0' || saved === '1') {
+                initialChecked = saved === '1';
+            }
+        } catch (error) {
+            console.warn('Unable to read shift group mode:', error);
+        }
+
+        setShiftUseLargeGroups(initialChecked);
+
+        [shiftUseLargeGroupsToggle, shiftOptionsUseLargeGroupsToggle].forEach((toggle) => {
+            if (!toggle) return;
+            toggle.addEventListener('change', () => {
+                const checked = !!toggle.checked;
+                setShiftUseLargeGroups(checked);
+                persistShiftUseLargeGroups(checked);
+            });
+        });
+    };
 
     const closeAllFileMenus = () => {
         fileMenuRoots.forEach((rootEl) => {
@@ -2562,16 +2616,23 @@ document.addEventListener('DOMContentLoaded', () => {
         const toast = document.createElement('div');
         toast.className = 'toast-notification';
         const isTemplate = data.shift_mode === 'template';
+        const isColumn = data.shift_mode === 'column';
         const isFallback = data.shift_mode === 'normal' && data.fallback_reason;
         let badge = '';
         if (isTemplate) {
             badge = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;background:#e8f5e9;color:#2e7d32;margin-left:6px;">智能模板</span>`;
+        } else if (isColumn) {
+            badge = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;background:#e3f2fd;color:#0a59f7;margin-left:6px;">纵列轮换</span>`;
         } else if (isFallback) {
             badge = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;background:#fff3e0;color:#e65100;margin-left:6px;">普通模式</span>`;
         }
         let extra = '';
         if (isTemplate && data.template_signature) {
             extra = `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">模板结构: ${data.template_signature}</div>`;
+        } else if (isColumn) {
+            const columnCount = parseInt(data.seat_column_count, 10) || 0;
+            const signature = data.template_signature ? ` · 结构 ${data.template_signature}` : '';
+            extra = `<div style="margin-top:4px;font-size:11px;color:var(--text-secondary);">座位纵列: ${columnCount}${signature}</div>`;
         } else if (isFallback && data.fallback_reason) {
             extra = `<div style="margin-top:4px;font-size:11px;color:#e65100;">${data.fallback_reason}</div>`;
         }
@@ -2594,6 +2655,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const handleShiftLayout = (direction) => {
         if (!urls.shiftLayout) return;
         const steps = Math.max(1, parseInt(shiftLayoutSteps?.value, 10) || 1);
+        const useLargeGroups = getShiftUseLargeGroups();
         const shiftButtonMap = {
             left: shiftLayoutLeftBtn,
             right: shiftLayoutRightBtn,
@@ -2607,7 +2669,7 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.textContent = '执行中...';
         btn.disabled = true;
 
-        postJson(urls.shiftLayout, { direction, steps })
+        postJson(urls.shiftLayout, { direction, steps, use_large_groups: useLargeGroups })
             .then(data => {
                 if (data && data.status === 'success') {
                     showLayoutTransformToast('布局移动', data);
@@ -2894,6 +2956,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initSeatsImport();
     bindSystemSaveLinks();
     initPluginHub();
+    initShiftUseLargeGroupsPreference();
 
     // Shift options modal form
     const shiftOptionsForm = document.getElementById('shiftOptionsForm');
@@ -2911,6 +2974,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 body: JSON.stringify({
                     direction: fd.get('shift_direction'),
                     steps: parseInt(fd.get('shift_steps'), 10) || 1,
+                    use_large_groups: fd.has('use_large_groups'),
                 }),
             })
             .then(r => r.json())

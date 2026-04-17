@@ -37,6 +37,15 @@
                 <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">四个方向均为循环轮换，不会新增空位。前移时最后一排会绕到最前，左移时最左一列会绕到最右。</div>
                 <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">前移表示朝讲台方向轮换，后移表示远离讲台方向轮换。</div>
             </div>
+
+            <div class="form-group">
+                <label>左右移动分组</label>
+                <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text-primary); margin-top: 8px;">
+                    <input type="checkbox" id="shiftFormUseLargeGroups" name="use_large_groups" checked>
+                    按大组移动
+                </label>
+                <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">勾选后按原有大组模板轮换；取消勾选后，按每个座位纵列单独轮换，走廊列保持不动。</div>
+            </div>
             
             <div class="form-group">
                 <label for="steps">移动步数</label>
@@ -48,6 +57,26 @@
     </div>
 </main>
 <script>
+const SHIFT_USE_LARGE_GROUPS_KEY = 'seats_shift_use_large_groups';
+const shiftFormUseLargeGroups = document.getElementById('shiftFormUseLargeGroups');
+if (shiftFormUseLargeGroups) {
+    try {
+        const saved = localStorage.getItem(SHIFT_USE_LARGE_GROUPS_KEY);
+        if (saved === '0' || saved === '1') {
+            shiftFormUseLargeGroups.checked = saved === '1';
+        }
+    } catch (err) {
+        console.warn(err);
+    }
+    shiftFormUseLargeGroups.addEventListener('change', () => {
+        try {
+            localStorage.setItem(SHIFT_USE_LARGE_GROUPS_KEY, shiftFormUseLargeGroups.checked ? '1' : '0');
+        } catch (err) {
+            console.warn(err);
+        }
+    });
+}
+
 document.getElementById('shiftForm').addEventListener('submit', function(e) {
     e.preventDefault();
     const notify = (message) => {
@@ -66,7 +95,8 @@ document.getElementById('shiftForm').addEventListener('submit', function(e) {
     const fd = new FormData(this);
     const payload = {
         direction: fd.get('direction'),
-        steps: parseInt(fd.get('steps'), 10)
+        steps: parseInt(fd.get('steps'), 10),
+        use_large_groups: fd.has('use_large_groups')
     };
     
     fetch(this.action, {
