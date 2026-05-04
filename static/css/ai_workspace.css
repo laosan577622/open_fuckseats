@@ -5,10 +5,10 @@
     --glass-bg: rgba(255, 255, 255, 0.7);
     --glass-border: rgba(255, 255, 255, 0.3);
     --user-bubble: #eff6ff;
-    --theme-color: #0a59f7;
-    --theme-color-strong: #0044cc;
+    --theme-color: var(--primary-color, #0a59f7);
+    --theme-color-strong: color-mix(in srgb, var(--primary-color, #0a59f7), #000 20%);
     --theme-on-color: #ffffff;
-    --theme-glow: rgba(10, 89, 247, 0.55);
+    --theme-glow: rgba(var(--primary-color-rgb, 10, 89, 247), 0.55);
     /* 打字律动变量，由 JS 实时控制 */
     --pulse-scale: 1;
     --pulse-brightness: 1;
@@ -93,8 +93,8 @@ body {
     position: absolute;
     inset: 0;
     background: conic-gradient(from 0deg at 50% 50%,
-            #0a59f7 0%, #3b82f6 25%, #60a5fa 55%,
-            #8b5cf6 80%, #0a59f7 100%);
+            var(--primary-color, #0a59f7) 0%, color-mix(in srgb, var(--primary-color, #0a59f7), #93c5fd 50%) 25%, color-mix(in srgb, var(--primary-color, #0a59f7), #93c5fd 70%) 55%,
+            #8b5cf6 80%, var(--primary-color, #0a59f7) 100%);
     filter: url(#fluid-noise) blur(35px);
     animation: rotate-fluid 8s linear infinite;
     /* 默认暂停，不跑马灯 */
@@ -105,7 +105,7 @@ body {
     content: '';
     position: absolute;
     inset: 0;
-    background: radial-gradient(circle at 50% 50%, transparent 30%, #3b82f6 70%, #0a59f7 100%);
+    background: radial-gradient(circle at 50% 50%, transparent 30%, color-mix(in srgb, var(--primary-color, #0a59f7), #93c5fd 50%) 70%, var(--primary-color, #0a59f7) 100%);
     mix-blend-mode: overlay;
     animation: rotate-fluid-reverse 12s linear infinite;
     /* 默认暂停，不跑马灯 */
@@ -183,7 +183,7 @@ body {
 .topbar .header-title {
     font-size: 16px;
     font-weight: 700;
-    background: linear-gradient(90deg, #0a59f7 0%, #3b82f6 48%, #60a5fa 100%);
+    background: linear-gradient(90deg, var(--primary-color, #0a59f7) 0%, color-mix(in srgb, var(--primary-color, #0a59f7), #93c5fd 50%) 48%, color-mix(in srgb, var(--primary-color, #0a59f7), #93c5fd 70%) 100%);
     -webkit-background-clip: text;
     background-clip: text;
     -webkit-text-fill-color: transparent;
@@ -191,12 +191,12 @@ body {
 
 .topbar .back-btn {
     background: rgba(239, 246, 255, 0.9);
-    color: #0a59f7;
+    color: var(--primary-color, #0a59f7);
 }
 
 .topbar .config-btn {
     background: rgba(239, 246, 255, 0.9);
-    color: #0a59f7;
+    color: var(--primary-color, #0a59f7);
 }
 
 /* 新增：主布局 */
@@ -594,7 +594,7 @@ body {
     border-radius: 20px;
     padding: 16px;
     border: 1px solid rgba(255, 255, 255, 0.5);
-    box-shadow: 0 6px 24px rgba(10, 89, 247, 0.08);
+    box-shadow: 0 6px 24px rgba(var(--primary-color-rgb, 10, 89, 247), 0.08);
     width: 100%;
 }
 
@@ -764,8 +764,8 @@ body {
     bottom: -100vh;
     height: 150vh;
     background: conic-gradient(from 0deg at 50% 50%,
-            #0a59f7 0%, #3b82f6 25%, #60a5fa 55%,
-            #8b5cf6 80%, #0a59f7 100%);
+            var(--primary-color, #0a59f7) 0%, color-mix(in srgb, var(--primary-color, #0a59f7), #93c5fd 50%) 25%, color-mix(in srgb, var(--primary-color, #0a59f7), #93c5fd 70%) 55%,
+            #8b5cf6 80%, var(--primary-color, #0a59f7) 100%);
     filter: url(#fluid-noise) blur(30px);
     opacity: 0.8;
     z-index: 9999;

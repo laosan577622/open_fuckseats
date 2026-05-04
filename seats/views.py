@@ -25,6 +25,7 @@ from .models import (
     AIConversationMessage,
     FrontendKVStore,
     ClassroomHistoryEntry,
+    SyncMeta,
 )
 from io import BytesIO
 import json
@@ -32,15 +33,29 @@ import random
 import os
 import re
 import shlex
+import secrets
 import uuid
 import time
 import html
 import openpyxl
+import ssl
+import urllib.error
+import urllib.parse
+import urllib.request
 import math
 import zlib
 from collections import defaultdict
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from .constraints import (
+    ConstraintServiceError,
+    compile_constraint_maps,
+    constraint_issue_messages,
+    get_constraint_type_definitions,
+    normalize_constraint_payload,
+    serialize_constraints,
+    validate_constraint_candidate,
+)
 from .plugin_components import plugin_component_library
 from .plugin_system import (
     plugin_registry,
@@ -51,6 +66,21 @@ from .plugin_system import (
     PluginUIScriptNotFoundError,
     PluginWorkspaceScriptMethodNotAllowedError,
     PluginWorkspaceScriptNotFoundError,
+)
+from .cloud import (
+    apply_cloud_subscription_payload,
+    CloudAPIError,
+    build_cloud_login_url,
+    clear_cloud_session,
+    cloud_api_request,
+    cloud_exchange_session_code,
+    cloud_public_request,
+    get_active_cloud_session,
+    get_cloud_server_url,
+    refresh_cloud_subscription,
+    save_cloud_session_from_payload,
+    set_cloud_server_url,
+    suspend_sync_version_bump,
 )
 
 try:
@@ -90,6 +120,8 @@ FUTURE_MODE_PENDING_TTL_SECONDS = 1800
 FUTURE_MODE_PENDING_CACHE = {}
 MAX_LAYOUT_GRID_SIZE = 30
 CLASSROOM_HISTORY_LIMIT = 1000
+GROUP_MOVE_MODE_FIXED = 'fixed'
+GROUP_MOVE_MODE_FOLLOW = 'follow'
 HISTORY_STUDENT_ID_KEYS = {
     'student_pk',
     'target_student_pk',
@@ -98,6 +130,8 @@ HISTORY_STUDENT_ID_KEYS = {
     'target_student_id',
     'student_a_id',
     'student_b_id',
+    'left_guardian_student_id',
+    'right_guardian_student_id',
     'prev_student_id',
     'before_student_id',
     'after_student_id',
@@ -311,6 +345,8 @@ AI_TOOL_DEFINITIONS = [
                         'set_group_leader',
                         'auto_arrange',
                         'create_constraint',
+                        'update_constraint',
+                        'toggle_constraint',
                         'delete_constraint',
                         'save_layout_snapshot',
                         'load_layout_snapshot',
@@ -337,6 +373,7 @@ AI_TOOL_DEFINITIONS = [
                     'type': 'string',
                     'enum': ['must_seat', 'forbid_seat', 'must_row', 'forbid_row', 'must_col', 'forbid_col', 'must_together', 'forbid_together'],
                 },
+                'enabled': {'type': 'boolean'},
                 'distance': {'type': 'integer'},
                 'note': {'type': 'string'},
                 'moves': {
@@ -520,7 +557,15 @@ def create_classroom(request):
             classroom=classroom,
             payload={'name': name, 'rows': rows, 'cols': cols},
         )
-        return redirect('index')
+        mode = request.POST.get('mode', 'blank')
+        if mode == 'excel_students':
+            return redirect('import_students_options_page', pk=classroom.pk)
+        if mode == 'excel_layout':
+            return redirect('import_layout_excel_options_page', pk=classroom.pk)
+        if mode == 'bsce':
+            from django.urls import reverse
+            return redirect(reverse('classroom_detail', kwargs={'pk': classroom.pk}) + '?open=bsce-import')
+        return redirect('classroom_detail', pk=classroom.pk)
     return render(request, 'seats/create_classroom.html')
 
 
@@ -1106,9 +1151,175 @@ def _coerce_score_value(score):
     return value
 
 
-def _serialize_student_profile(student):
+def _legacy_podium_guardian_ids(classroom):
+    if not classroom:
+        return {'left': None, 'right': None}
+    return {
+        'left': int(classroom.left_guardian_id) if classroom.left_guardian_id else None,
+        'right': int(classroom.right_guardian_id) if classroom.right_guardian_id else None,
+    }
+
+
+def _resolve_auto_podium_guardian_ids_from_seats(classroom, seats):
+    if not classroom or not seats:
+        return {'left': None, 'right': None}
+
+    seat_map = {}
+    podium_rows = defaultdict(list)
+    max_col = max(int(getattr(classroom, 'cols', 0) or 0), 0)
+
+    for seat in seats:
+        row = _safe_int(getattr(seat, 'row', 0), 0)
+        col = _safe_int(getattr(seat, 'col', 0), 0)
+        if row < 1 or col < 1:
+            continue
+        seat_map[(row, col)] = seat
+        max_col = max(max_col, col)
+        if getattr(seat, 'cell_type', None) == SeatCellType.PODIUM:
+            podium_rows[row].append(col)
+
+    for row in sorted(podium_rows.keys()):
+        podium_cols = sorted(set(podium_rows[row]))
+        if not podium_cols:
+            continue
+
+        left_student_id = None
+        for col in range(podium_cols[0] - 1, 0, -1):
+            seat = seat_map.get((row, col))
+            if seat and getattr(seat, 'cell_type', None) == SeatCellType.SEAT:
+                left_student_id = int(seat.student_id) if getattr(seat, 'student_id', None) else None
+                break
+
+        right_student_id = None
+        for col in range(podium_cols[-1] + 1, max_col + 1):
+            seat = seat_map.get((row, col))
+            if seat and getattr(seat, 'cell_type', None) == SeatCellType.SEAT:
+                right_student_id = int(seat.student_id) if getattr(seat, 'student_id', None) else None
+                break
+
+        if left_student_id or right_student_id:
+            return {
+                'left': left_student_id,
+                'right': right_student_id,
+            }
+
+    return {'left': None, 'right': None}
+
+
+def _get_podium_guardian_ids(classroom, seats=None):
+    if not classroom:
+        return {'left': None, 'right': None}
+
+    resolved_seats = seats
+    if resolved_seats is None:
+        resolved_seats = list(classroom.seats.select_related('student').all())
+
+    auto_guardian_ids = _resolve_auto_podium_guardian_ids_from_seats(classroom, resolved_seats)
+    if auto_guardian_ids.get('left') or auto_guardian_ids.get('right'):
+        return auto_guardian_ids
+    return _legacy_podium_guardian_ids(classroom)
+
+
+def _get_fixed_seat_student_ids(classroom, constraints=None):
+    if not classroom:
+        return set()
+    fixed_seats, *_ = compile_constraint_maps(classroom, constraints=constraints)
+    return set(int(student_id) for student_id in fixed_seats.keys())
+
+
+def _get_podium_guardian_side(classroom, student, *, seats=None, guardian_student_ids=None):
+    if not classroom or not student:
+        return ''
+    resolved_guardian_ids = guardian_student_ids or _get_podium_guardian_ids(classroom, seats=seats)
+    if resolved_guardian_ids.get('left') == student.pk:
+        return 'left'
+    if resolved_guardian_ids.get('right') == student.pk:
+        return 'right'
+    return ''
+
+
+def _serialize_podium_guardian_student(classroom, student, side, *, guardian_student_ids=None):
+    if not student or student.classroom_id != classroom.pk:
+        return None
+    if guardian_student_ids and guardian_student_ids.get(side) != student.pk:
+        return None
+    seat = getattr(student, 'assigned_seat', None)
+    return {
+        'id': student.pk,
+        'name': student.name,
+        'student_id': student.student_id or '',
+        'score_display': student.display_score if student.score is not None else '',
+        'side': side,
+        'seat': {
+            'row': seat.row,
+            'col': seat.col,
+        } if seat else None,
+    }
+
+
+def _serialize_podium_guards(classroom, *, seats=None, guardian_student_ids=None):
+    resolved_guardian_ids = guardian_student_ids or _get_podium_guardian_ids(classroom, seats=seats)
+    student_map = {}
+    if seats is not None:
+        for seat in seats:
+            student = getattr(seat, 'student', None)
+            if student:
+                student_map[student.pk] = student
+
+    required_ids = [student_id for student_id in resolved_guardian_ids.values() if student_id]
+    missing_ids = [student_id for student_id in required_ids if student_id not in student_map]
+    if missing_ids:
+        for student in classroom.students.filter(pk__in=missing_ids):
+            student_map[student.pk] = student
+
+    left_student = student_map.get(resolved_guardian_ids.get('left'))
+    right_student = student_map.get(resolved_guardian_ids.get('right'))
+    return {
+        'left': _serialize_podium_guardian_student(
+            classroom,
+            left_student,
+            'left',
+            guardian_student_ids=resolved_guardian_ids,
+        ),
+        'right': _serialize_podium_guardian_student(
+            classroom,
+            right_student,
+            'right',
+            guardian_student_ids=resolved_guardian_ids,
+        ),
+    }
+
+
+def _apply_podium_guards(classroom, left_student=None, right_student=None):
+    if left_student and left_student.classroom_id != classroom.pk:
+        raise ValueError('左护法学生不属于当前班级')
+    if right_student and right_student.classroom_id != classroom.pk:
+        raise ValueError('右护法学生不属于当前班级')
+    if left_student and right_student and left_student.pk == right_student.pk:
+        raise ValueError('左右护法不能设置为同一名学生')
+    classroom.left_guardian = left_student
+    classroom.right_guardian = right_student
+    classroom.save(update_fields=['left_guardian', 'right_guardian'])
+
+
+def _serialize_student_profile(
+    student,
+    classroom=None,
+    *,
+    seats=None,
+    constraints=None,
+    guardian_student_ids=None,
+    fixed_student_ids=None,
+):
     seat = getattr(student, 'assigned_seat', None)
     group = seat.group if seat else None
+    resolved_classroom = classroom or getattr(student, 'classroom', None)
+    resolved_guardian_ids = guardian_student_ids or _get_podium_guardian_ids(resolved_classroom, seats=seats)
+    resolved_fixed_student_ids = (
+        fixed_student_ids
+        if fixed_student_ids is not None
+        else _get_fixed_seat_student_ids(resolved_classroom, constraints=constraints)
+    )
     return {
         'id': student.pk,
         'name': student.name,
@@ -1125,6 +1336,13 @@ def _serialize_student_profile(student):
             'name': group.name,
             'is_leader': bool(group and group.leader_id == student.pk),
         } if group else None,
+        'podium_guardian_side': _get_podium_guardian_side(
+            resolved_classroom,
+            student,
+            seats=seats,
+            guardian_student_ids=resolved_guardian_ids,
+        ),
+        'is_fixed_seat': student.pk in resolved_fixed_student_ids,
     }
 
 
@@ -1393,7 +1611,7 @@ def _build_student_detail_card(classroom, arguments):
     return {
         'type': 'student_detail',
         'title': str(arguments.get('title') or f'{student.name} 详情'),
-        'student': _serialize_student_profile(student),
+        'student': _serialize_student_profile(student, classroom=classroom),
     }
 
 
@@ -1869,6 +2087,51 @@ def _execute_classroom_action_tool(classroom, arguments, request=None):
         )
         return {'message': '已创建约束', 'payload': payload}
 
+    if action == 'update_constraint':
+        constraint_id = int(arguments.get('constraint_id'))
+        constraint = classroom.constraints.filter(pk=constraint_id).first()
+        if not constraint:
+            raise ValueError(f'未找到约束：{constraint_id}')
+        student = _resolve_student_query(classroom, arguments.get('student_query')) if arguments.get('student_query') else constraint.student
+        target_student_query = arguments.get('target_student_query')
+        target_student = (
+            _resolve_student_query(classroom, target_student_query)
+            if target_student_query
+            else constraint.target_student
+        )
+        form_payload = {
+            'constraint_type': str(arguments.get('constraint_type') or constraint.constraint_type).strip(),
+            'student_id': student.pk,
+            'target_student_id': target_student.pk if target_student else '',
+            'row': arguments.get('row') if arguments.get('row') is not None else (constraint.row if constraint.row is not None else ''),
+            'col': arguments.get('col') if arguments.get('col') is not None else (constraint.col if constraint.col is not None else ''),
+            'distance': int(arguments.get('distance') or constraint.distance or 1),
+            'note': str(arguments.get('note') or constraint.note or ''),
+            'enabled': arguments.get('enabled') if arguments.get('enabled') is not None else ('1' if constraint.enabled else '0'),
+        }
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            update_constraint,
+            form_payload=form_payload,
+            extra_args=[constraint_id],
+        )
+        return {'message': f'已更新约束 #{constraint_id}', 'payload': payload}
+
+    if action == 'toggle_constraint':
+        constraint_id = int(arguments.get('constraint_id'))
+        form_payload = {}
+        if arguments.get('enabled') is not None:
+            form_payload['enabled'] = '1' if bool(arguments.get('enabled')) else '0'
+        payload = _invoke_classroom_action_view(
+            classroom,
+            request,
+            toggle_constraint,
+            form_payload=form_payload,
+            extra_args=[constraint_id],
+        )
+        return {'message': f'已切换约束 #{constraint_id}', 'payload': payload}
+
     if action == 'delete_constraint':
         constraint_id = int(arguments.get('constraint_id'))
         payload = _invoke_classroom_action_view(
@@ -1951,7 +2214,11 @@ def _get_classroom_overview_payload(classroom):
             return None
         return {'title': '', 'message': message}
 
-    students = list(classroom.students.all())
+    students = list(classroom.students.select_related('assigned_seat').all())
+    seats = list(classroom.seats.select_related('student').all())
+    constraints = list(classroom.constraints.select_related('student', 'target_student').all())
+    guardian_student_ids = _get_podium_guardian_ids(classroom, seats=seats)
+    fixed_student_ids = _get_fixed_seat_student_ids(classroom, constraints=constraints)
     seated_count = sum(1 for student in students if getattr(student, 'assigned_seat', None))
     suggestions = _evaluate_layout(classroom, None)
     normalized_suggestions = []
@@ -1961,9 +2228,24 @@ def _get_classroom_overview_payload(classroom):
             normalized_suggestions.append(normalized)
     group_rows = _get_group_score_rows(classroom)
     top_students = sorted(
-        (_serialize_student_profile(student) for student in students),
+        (
+            _serialize_student_profile(
+                student,
+                classroom=classroom,
+                seats=seats,
+                constraints=constraints,
+                guardian_student_ids=guardian_student_ids,
+                fixed_student_ids=fixed_student_ids,
+            )
+            for student in students
+        ),
         key=lambda item: (-item['score'], item['name'])
     )[:5]
+    podium_guards = _serialize_podium_guards(
+        classroom,
+        seats=seats,
+        guardian_student_ids=guardian_student_ids,
+    )
     return {
         'classroom': {
             'id': classroom.pk,
@@ -1977,9 +2259,11 @@ def _get_classroom_overview_payload(classroom):
             'unseated_count': max(0, len(students) - seated_count),
             'group_count': classroom.groups.count(),
             'constraint_count': classroom.constraints.count(),
+            'podium_guardian_count': int(bool(guardian_student_ids.get('left'))) + int(bool(guardian_student_ids.get('right'))),
         },
         'group_ranking': group_rows[:6],
         'top_students': top_students,
+        'podium_guards': podium_guards,
         'suggestions': normalized_suggestions,
     }
 
@@ -3326,7 +3610,7 @@ def _execute_ai_tool(classroom, tool_name, arguments, request=None):
             'tool': tool_name,
             'data': {
                 'message': f'已读取学生信息：{student.name}',
-                **_serialize_student_profile(student),
+                **_serialize_student_profile(student, classroom=classroom),
             },
         }
 
@@ -3393,8 +3677,8 @@ def _execute_ai_tool(classroom, tool_name, arguments, request=None):
             'tool': tool_name,
             'data': {
                 'message': f'已交换 {student_a.name} 和 {student_b.name} 的座位',
-                'student_a': _serialize_student_profile(student_a),
-                'student_b': _serialize_student_profile(student_b),
+                'student_a': _serialize_student_profile(student_a, classroom=classroom),
+                'student_b': _serialize_student_profile(student_b, classroom=classroom),
             },
         }
 
@@ -4063,6 +4347,49 @@ def _shift_layout_constraints(constraints, axis_field, delta, axis_label, action
     return shifted
 
 
+def _build_shift_axis_map(size, excluded_values, expand, steps):
+    if size < 1:
+        return {}
+
+    excluded = {
+        _safe_int(value, 0)
+        for value in (excluded_values or set())
+    }
+    eligible_values = [
+        value
+        for value in range(1, size + 1)
+        if value not in excluded
+    ]
+    if not eligible_values:
+        return {value: value for value in range(1, size + 1)}
+
+    normalized_steps = int(steps or 0) % len(eligible_values)
+    if normalized_steps == 0:
+        normalized_steps = len(eligible_values)
+
+    delta = normalized_steps if expand else -normalized_steps
+    axis_map = {value: value for value in range(1, size + 1)}
+    for index, value in enumerate(eligible_values):
+        axis_map[value] = eligible_values[(index + delta) % len(eligible_values)]
+    return axis_map
+
+
+def _shift_layout_constraints_by_axis_map(constraints, axis_field, axis_map):
+    shifted = []
+    for raw in constraints:
+        item = dict(raw)
+        axis_value = item.get(axis_field)
+        if axis_value not in (None, ''):
+            try:
+                normalized_axis_value = int(axis_value)
+                item[axis_field] = int(axis_map.get(normalized_axis_value, normalized_axis_value))
+            except (TypeError, ValueError):
+                pass
+        item.pop('_classroom_size', None)
+        shifted.append(item)
+    return shifted
+
+
 def _normalize_mirror_axis(axis):
     normalized = str(axis or '').strip().lower()
     aliases = {
@@ -4525,8 +4852,8 @@ def _build_intelligent_horizontal_shift_payload(classroom, direction, steps):
 def _build_shifted_layout_payload(classroom, direction, steps):
     meta = _shift_direction_meta(direction)
 
-    normalized_steps = _safe_int(steps, 0)
-    if normalized_steps < 1:
+    requested_steps = _safe_int(steps, 0)
+    if requested_steps < 1:
         raise ValueError(f'移动{meta["unit"]}数必须大于 0')
 
     payload = copy.deepcopy(
@@ -4537,9 +4864,22 @@ def _build_shifted_layout_payload(classroom, direction, steps):
     cols = int(payload.get('classroom', {}).get('cols') or classroom.cols)
     axis_field = meta['axis_field']
     size = cols if meta['size_key'] == 'cols' else rows
-    normalized_steps = normalized_steps % size if size > 0 else normalized_steps
+    normalized_steps = requested_steps % size if size > 0 else requested_steps
     if normalized_steps == 0:
         normalized_steps = size if size > 0 else normalized_steps
+
+    excluded_axis_values = set()
+    if axis_field == 'row':
+        for seat in payload.get('seats', []):
+            if seat.get('cell_type') != SeatCellType.PODIUM:
+                continue
+            podium_row = _safe_int(seat.get('row'), 0)
+            if podium_row > 0:
+                excluded_axis_values.add(podium_row)
+
+    axis_map = None
+    if excluded_axis_values:
+        axis_map = _build_shift_axis_map(size, excluded_axis_values, meta['expand'], requested_steps)
 
     delta = normalized_steps if meta['expand'] else -normalized_steps
 
@@ -4548,23 +4888,231 @@ def _build_shifted_layout_payload(classroom, direction, steps):
         item = dict(seat)
         current_axis_value = int(item.get(axis_field) or 0)
         if current_axis_value > 0:
-            item[axis_field] = (current_axis_value - 1 + delta) % size + 1
+            if axis_map is not None:
+                item[axis_field] = int(axis_map.get(current_axis_value, current_axis_value))
+            else:
+                item[axis_field] = (current_axis_value - 1 + delta) % size + 1
         shifted_seats.append(item)
 
     payload['seats'] = _sort_layout_seats(shifted_seats)
 
-    payload['constraints'] = _shift_layout_constraints(
-        [
-            dict(item, _classroom_size=size)
-            for item in payload.get('constraints', [])
-        ],
-        axis_field,
-        delta,
-        meta['unit'],
-        meta['action_label'],
-    )
+    constraint_items = [
+        dict(item, _classroom_size=size)
+        for item in payload.get('constraints', [])
+    ]
+    if axis_map is not None:
+        payload['constraints'] = _shift_layout_constraints_by_axis_map(
+            constraint_items,
+            axis_field,
+            axis_map,
+        )
+    else:
+        payload['constraints'] = _shift_layout_constraints(
+            constraint_items,
+            axis_field,
+            delta,
+            meta['unit'],
+            meta['action_label'],
+        )
 
     return payload
+
+
+def _build_snapshot_seat_coord_map(payload):
+    seat_map = {}
+    for seat in payload.get('seats', []):
+        try:
+            row = int(seat.get('row') or 0)
+            col = int(seat.get('col') or 0)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if row < 1 or col < 1:
+            continue
+        seat_map[(row, col)] = seat
+    return seat_map
+
+
+def _find_snapshot_student_coord(payload, student_pk):
+    if student_pk in (None, ''):
+        return None
+    try:
+        target_student_pk = int(student_pk)
+    except (TypeError, ValueError):
+        return None
+
+    for seat in payload.get('seats', []):
+        try:
+            current_student_pk = int(seat.get('student_pk'))
+            row = int(seat.get('row') or 0)
+            col = int(seat.get('col') or 0)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if current_student_pk == target_student_pk and row > 0 and col > 0:
+            return (row, col)
+    return None
+
+
+def _swap_snapshot_seat_payload(source_seat, target_seat):
+    coord_keys = {'row', 'col'}
+    source_payload = {key: value for key, value in source_seat.items() if key not in coord_keys}
+    target_payload = {key: value for key, value in target_seat.items() if key not in coord_keys}
+
+    for key in list(source_seat.keys()):
+        if key not in coord_keys:
+            source_seat.pop(key, None)
+    for key in list(target_seat.keys()):
+        if key not in coord_keys:
+            target_seat.pop(key, None)
+
+    source_seat.update(target_payload)
+    target_seat.update(source_payload)
+
+
+def _restore_snapshot_constraints_for_students(before_data, after_data, student_ids):
+    if not student_ids:
+        return
+    before_constraints = before_data.get('constraints') or []
+    after_constraints = after_data.get('constraints') or []
+    for index, before_item in enumerate(before_constraints):
+        if index >= len(after_constraints):
+            break
+        if before_item.get('student_pk') in student_ids:
+            after_constraints[index] = dict(before_item)
+
+
+def _pin_snapshot_cell_type_positions(before_data, after_data, cell_type):
+    before_seat_map = _build_snapshot_seat_coord_map(before_data)
+    after_seat_map = _build_snapshot_seat_coord_map(after_data)
+
+    before_coords = {
+        coord for coord, item in before_seat_map.items()
+        if item.get('cell_type') == cell_type
+    }
+    after_coords = {
+        coord for coord, item in after_seat_map.items()
+        if item.get('cell_type') == cell_type
+    }
+
+    missing_coords = sorted(before_coords - after_coords)
+    extra_coords = sorted(after_coords - before_coords)
+    for original_coord, current_coord in zip(missing_coords, extra_coords):
+        source_seat = after_seat_map.get(original_coord)
+        target_seat = after_seat_map.get(current_coord)
+        if not source_seat or not target_seat:
+            continue
+        _swap_snapshot_seat_payload(source_seat, target_seat)
+
+
+def _resolve_auto_podium_guardian_ids_from_snapshot(payload):
+    if not isinstance(payload, dict):
+        return {'left': None, 'right': None}
+
+    classroom_data = payload.get('classroom') or {}
+    seat_map = _build_snapshot_seat_coord_map(payload)
+    podium_rows = defaultdict(list)
+    max_col = _safe_int(classroom_data.get('cols'), 0)
+
+    for seat in payload.get('seats', []):
+        try:
+            row = int(seat.get('row') or 0)
+            col = int(seat.get('col') or 0)
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if row < 1 or col < 1:
+            continue
+        max_col = max(max_col, col)
+        if seat.get('cell_type') == SeatCellType.PODIUM:
+            podium_rows[row].append(col)
+
+    for row in sorted(podium_rows.keys()):
+        podium_cols = sorted(set(podium_rows[row]))
+        if not podium_cols:
+            continue
+
+        left_student_id = None
+        for col in range(podium_cols[0] - 1, 0, -1):
+            seat = seat_map.get((row, col))
+            if seat and seat.get('cell_type') == SeatCellType.SEAT:
+                left_student_id = _safe_int(seat.get('student_pk'), 0) or None
+                break
+
+        right_student_id = None
+        for col in range(podium_cols[-1] + 1, max_col + 1):
+            seat = seat_map.get((row, col))
+            if seat and seat.get('cell_type') == SeatCellType.SEAT:
+                right_student_id = _safe_int(seat.get('student_pk'), 0) or None
+                break
+
+        if left_student_id or right_student_id:
+            return {
+                'left': left_student_id,
+                'right': right_student_id,
+            }
+
+    return {'left': None, 'right': None}
+
+
+def _get_snapshot_podium_guardian_ids(payload):
+    auto_guardian_ids = _resolve_auto_podium_guardian_ids_from_snapshot(payload)
+    if auto_guardian_ids.get('left') or auto_guardian_ids.get('right'):
+        return auto_guardian_ids
+
+    classroom_data = payload.get('classroom') or {}
+    return {
+        'left': _safe_int(classroom_data.get('left_guardian_student_pk'), 0) or None,
+        'right': _safe_int(classroom_data.get('right_guardian_student_pk'), 0) or None,
+    }
+
+
+def _get_fixed_student_ids_from_snapshot(payload):
+    fixed_student_ids = set()
+    for item in payload.get('constraints') or []:
+        if str(item.get('constraint_type') or '') != SeatConstraint.ConstraintType.MUST_SEAT:
+            continue
+        if not _parse_bool(item.get('enabled') if isinstance(item, dict) else True):
+            continue
+        student_pk = _safe_int(item.get('student_pk'), 0) if isinstance(item, dict) else 0
+        if student_pk > 0:
+            fixed_student_ids.add(student_pk)
+    return fixed_student_ids
+
+
+def _pin_podium_guardians_in_shift_payload(before_data, after_data):
+    if not isinstance(before_data, dict) or not isinstance(after_data, dict):
+        return after_data
+
+    _pin_snapshot_cell_type_positions(before_data, after_data, SeatCellType.PODIUM)
+
+    pinned_candidates = []
+    guardian_ids = _get_snapshot_podium_guardian_ids(before_data)
+    for student_pk in guardian_ids.values():
+        normalized_pk = _safe_int(student_pk, 0)
+        if normalized_pk > 0 and normalized_pk not in pinned_candidates:
+            pinned_candidates.append(normalized_pk)
+
+    for student_pk in sorted(_get_fixed_student_ids_from_snapshot(before_data)):
+        if student_pk not in pinned_candidates:
+            pinned_candidates.append(student_pk)
+
+    if not pinned_candidates:
+        return after_data
+
+    pinned_student_ids = set()
+    after_seat_map = _build_snapshot_seat_coord_map(after_data)
+    for student_pk in pinned_candidates:
+        original_coord = _find_snapshot_student_coord(before_data, student_pk)
+        current_coord = _find_snapshot_student_coord(after_data, student_pk)
+        if not original_coord or not current_coord or original_coord == current_coord:
+            continue
+        source_seat = after_seat_map.get(original_coord)
+        target_seat = after_seat_map.get(current_coord)
+        if not source_seat or not target_seat:
+            continue
+        _swap_snapshot_seat_payload(source_seat, target_seat)
+        pinned_student_ids.add(student_pk)
+
+    _restore_snapshot_constraints_for_students(before_data, after_data, pinned_student_ids)
+    return after_data
 
 
 def _snapshot_payload(classroom, include_students=True, include_constraints=True):
@@ -4582,7 +5130,13 @@ def _snapshot_payload(classroom, include_students=True, include_constraints=True
         'classroom': {
             'name': classroom.name,
             'rows': classroom.rows,
-            'cols': classroom.cols
+            'cols': classroom.cols,
+            'left_guardian_student_pk': classroom.left_guardian_id,
+            'left_guardian_student_id': classroom.left_guardian.student_id if classroom.left_guardian_id and classroom.left_guardian else None,
+            'left_guardian_student_name': classroom.left_guardian.name if classroom.left_guardian_id and classroom.left_guardian else None,
+            'right_guardian_student_pk': classroom.right_guardian_id,
+            'right_guardian_student_id': classroom.right_guardian.student_id if classroom.right_guardian_id and classroom.right_guardian else None,
+            'right_guardian_student_name': classroom.right_guardian.name if classroom.right_guardian_id and classroom.right_guardian else None,
         },
         'seats': [
             {
@@ -4700,6 +5254,18 @@ def _apply_layout_data(classroom, data, replace_students=False):
                 student.score = float(student_data.get('score') or 0)
                 student.save()
 
+        left_guardian = _find_student(classroom, {
+            'student_pk': classroom_data.get('left_guardian_student_pk'),
+            'student_id': classroom_data.get('left_guardian_student_id'),
+            'student_name': classroom_data.get('left_guardian_student_name'),
+        })
+        right_guardian = _find_student(classroom, {
+            'student_pk': classroom_data.get('right_guardian_student_pk'),
+            'student_id': classroom_data.get('right_guardian_student_id'),
+            'student_name': classroom_data.get('right_guardian_student_name'),
+        })
+        _apply_podium_guards(classroom, left_guardian, right_guardian)
+
         seats = list(classroom.seats.select_related('student', 'group'))
         seat_map = _build_seat_map(seats)
         for seat in seats:
@@ -4784,6 +5350,8 @@ def _capture_history_state(classroom):
             'name': classroom.name,
             'rows': classroom.rows,
             'cols': classroom.cols,
+            'left_guardian_student_pk': classroom.left_guardian_id,
+            'right_guardian_student_pk': classroom.right_guardian_id,
             'created_at': _serialize_history_datetime(classroom.created_at),
         },
         'students': [
@@ -4936,6 +5504,13 @@ def _collect_state_reference_pks(state, collector=None):
     if not isinstance(state, dict):
         return collector
 
+    classroom_data = state.get('classroom') or {}
+    for key in ('left_guardian_student_pk', 'right_guardian_student_pk'):
+        try:
+            collector['student'].add(int(classroom_data.get(key)))
+        except (TypeError, ValueError):
+            pass
+
     for item in state.get('students', []):
         try:
             collector['student'].add(int(item.get('pk')))
@@ -5059,6 +5634,10 @@ def _remap_snapshot_payload_data(data, mappings):
     if not isinstance(data, dict):
         return {}
     payload = copy.deepcopy(data)
+    classroom_data = payload.get('classroom') or {}
+    classroom_data['left_guardian_student_pk'] = _remap_scalar_pk(classroom_data.get('left_guardian_student_pk'), mappings['student'])
+    classroom_data['right_guardian_student_pk'] = _remap_scalar_pk(classroom_data.get('right_guardian_student_pk'), mappings['student'])
+    payload['classroom'] = classroom_data
     for item in payload.get('seats', []):
         if not isinstance(item, dict):
             continue
@@ -5077,6 +5656,8 @@ def _remap_history_state(state, mappings, classroom_pk):
     payload = copy.deepcopy(state)
     classroom_data = payload.get('classroom') or {}
     classroom_data['pk'] = classroom_pk
+    classroom_data['left_guardian_student_pk'] = _remap_scalar_pk(classroom_data.get('left_guardian_student_pk'), mappings['student'])
+    classroom_data['right_guardian_student_pk'] = _remap_scalar_pk(classroom_data.get('right_guardian_student_pk'), mappings['student'])
     payload['classroom'] = classroom_data
 
     for item in payload.get('students', []):
@@ -5228,6 +5809,12 @@ def _restore_history_state(classroom, state):
             group.save(force_insert=True)
             _restore_history_datetime(SeatGroup, pk, item.get('created_at'))
             group_map[pk] = group
+
+        _apply_podium_guards(
+            classroom,
+            student_map.get(classroom_data.get('left_guardian_student_pk')),
+            student_map.get(classroom_data.get('right_guardian_student_pk')),
+        )
 
         seat_map = _build_seat_map(classroom.seats.all())
         for item in state.get('seats', []):
@@ -5409,6 +5996,13 @@ def _import_seats_file_payload(classroom, data, request=None):
 
 def _is_ajax_request(request):
     return request.headers.get('x-requested-with') == 'XMLHttpRequest'
+
+
+def _normalize_group_move_mode(value, default=GROUP_MOVE_MODE_FIXED):
+    normalized = str(value or '').strip().lower()
+    if normalized in {GROUP_MOVE_MODE_FIXED, GROUP_MOVE_MODE_FOLLOW}:
+        return normalized
+    return default
 
 
 def _normalize_group_leaders(classroom, group_ids=None):
@@ -5688,48 +6282,8 @@ def _apply_recorded_history_action(classroom, action, forward=True):
 
 
 def _constraint_issues(classroom):
-    issues = []
-    seats = list(classroom.seats.select_related('student'))
-    student_seat = {seat.student_id: seat for seat in seats if seat.student_id}
-
-    for constraint in classroom.constraints.filter(enabled=True):
-        student = constraint.student
-        seat = student_seat.get(student.pk)
-        ctype = constraint.constraint_type
-        if ctype == SeatConstraint.ConstraintType.MUST_SEAT:
-            if not seat or seat.row != constraint.row or seat.col != constraint.col:
-                issues.append(f"{student.name} 未坐在指定座位")
-        elif ctype == SeatConstraint.ConstraintType.FORBID_SEAT:
-            if seat and seat.row == constraint.row and seat.col == constraint.col:
-                issues.append(f"{student.name} 坐到了禁用座位")
-        elif ctype == SeatConstraint.ConstraintType.MUST_ROW:
-            if not seat or seat.row != constraint.row:
-                issues.append(f"{student.name} 未坐在指定行")
-        elif ctype == SeatConstraint.ConstraintType.FORBID_ROW:
-            if seat and seat.row == constraint.row:
-                issues.append(f"{student.name} 坐到了禁用行")
-        elif ctype == SeatConstraint.ConstraintType.MUST_COL:
-            if not seat or seat.col != constraint.col:
-                issues.append(f"{student.name} 未坐在指定列")
-        elif ctype == SeatConstraint.ConstraintType.FORBID_COL:
-            if seat and seat.col == constraint.col:
-                issues.append(f"{student.name} 坐到了禁用列")
-        elif ctype in [SeatConstraint.ConstraintType.MUST_TOGETHER, SeatConstraint.ConstraintType.FORBID_TOGETHER]:
-            target = constraint.target_student
-            if not target:
-                continue
-            seat_a = student_seat.get(student.pk)
-            seat_b = student_seat.get(target.pk)
-            if not seat_a or not seat_b:
-                issues.append(f"{student.name} 与 {target.name} 未同时入座")
-                continue
-            distance = abs(seat_a.row - seat_b.row) + abs(seat_a.col - seat_b.col)
-            if ctype == SeatConstraint.ConstraintType.MUST_TOGETHER and distance > constraint.distance:
-                issues.append(f"{student.name} 与 {target.name} 未满足相邻要求")
-            if ctype == SeatConstraint.ConstraintType.FORBID_TOGETHER and distance <= constraint.distance:
-                issues.append(f"{student.name} 与 {target.name} 距离过近")
-
-    return issues
+    constraints = classroom.constraints.select_related('student', 'target_student').all()
+    return constraint_issue_messages(classroom, constraints=constraints)
 
 
 def _format_issues_preview(issues, limit=3):
@@ -6039,11 +6593,39 @@ def _evaluate_layout(classroom, request=None):
     return _filter_internal_issues(issues)
 
 
+def _serialize_classroom_sync_meta(classroom, meta=None):
+    meta = meta or SyncMeta.objects.get_or_create(classroom=classroom)[0]
+    local_version = int(meta.local_version or 0)
+    cloud_version = int(meta.cloud_version or 0)
+    backed_up = bool(meta.last_sync_at and cloud_version > 0)
+    has_local_changes = bool(backed_up and local_version > cloud_version)
+    if not backed_up:
+        state = 'not_backed_up'
+    elif has_local_changes:
+        state = 'dirty'
+    else:
+        state = 'synced'
+    return {
+        'uuid': str(meta.uuid),
+        'local_version': local_version,
+        'cloud_version': cloud_version,
+        'last_sync_at': meta.last_sync_at.isoformat() if meta.last_sync_at else None,
+        'last_error': meta.last_error,
+        'backed_up': backed_up,
+        'has_local_changes': has_local_changes,
+        'state': state,
+    }
+
+
 def classroom_detail(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
+    sync_meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
     suggestions = _evaluate_layout(classroom, request)
     seats = list(classroom.seats.select_related('student', 'group').all())
     seat_map = _build_seat_map(seats)
+    constraints = list(classroom.constraints.select_related('student', 'target_student').all())
+    guardian_student_ids = _get_podium_guardian_ids(classroom, seats=seats)
+    fixed_student_ids = _get_fixed_seat_student_ids(classroom, constraints=constraints)
 
     seat_grid = []
     for r in range(1, classroom.rows + 1):
@@ -6052,20 +6634,45 @@ def classroom_detail(request, pk):
             row_seats.append(seat_map.get((r, c)))
         seat_grid.append(row_seats)
 
-    unseated_students = classroom.students.filter(assigned_seat__isnull=True).order_by('name')
+    students = list(classroom.students.all().order_by('name'))
+    for student in students:
+        student.podium_guardian_side = _get_podium_guardian_side(
+            classroom,
+            student,
+            seats=seats,
+            guardian_student_ids=guardian_student_ids,
+        )
+        student.is_fixed_seat = student.pk in fixed_student_ids
+
+    for seat in seats:
+        if seat.student_id and seat.student:
+            seat.student.podium_guardian_side = _get_podium_guardian_side(
+                classroom,
+                seat.student,
+                seats=seats,
+                guardian_student_ids=guardian_student_ids,
+            )
+            seat.student.is_fixed_seat = seat.student.pk in fixed_student_ids
+
+    seated_student_ids = {seat.student_id for seat in seats if seat.student_id}
+    unseated_students = [student for student in students if student.pk not in seated_student_ids]
     groups = classroom.groups.all()
     snapshots = classroom.layout_snapshots.all()
-    constraints = classroom.constraints.select_related('student', 'target_student').all()
+    constraint_items, constraint_metrics = serialize_constraints(classroom, constraints=constraints)
     
     return render(request, 'seats/classroom_detail.html', {
         'classroom': classroom,
         'seat_grid': seat_grid,
-        'students': classroom.students.all().order_by('name'),
+        'students': students,
         'unseated_students': unseated_students,
         'groups': groups,
         'snapshots': snapshots,
-        'constraints': constraints,
-        'suggestions': suggestions
+        'constraint_items': constraint_items,
+        'constraint_metrics': constraint_metrics,
+        'constraint_types': get_constraint_type_definitions(),
+        'suggestions': suggestions,
+        'sync_meta': sync_meta,
+        'sync_meta_payload': _serialize_classroom_sync_meta(classroom, sync_meta),
     })
 
 
@@ -6781,13 +7388,23 @@ def classroom_state(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     suggestions = _evaluate_layout(classroom, request)
     seats = list(classroom.seats.select_related('student', 'group').all())
-    unseated_students = classroom.students.filter(assigned_seat__isnull=True).order_by('name')
+    unseated_students = list(classroom.students.filter(assigned_seat__isnull=True).order_by('name'))
+    constraints = list(classroom.constraints.select_related('student', 'target_student').all())
+    guardian_student_ids = _get_podium_guardian_ids(classroom, seats=seats)
+    fixed_student_ids = _get_fixed_seat_student_ids(classroom, constraints=constraints)
+    constraint_items, constraint_metrics = serialize_constraints(classroom, constraints=constraints)
 
     seat_payload = []
     for seat in seats:
         student = seat.student
         group = seat.group
         score_value = student.display_score if student and (student.score or 0) > 0 else None
+        guardian_side = _get_podium_guardian_side(
+            classroom,
+            student,
+            seats=seats,
+            guardian_student_ids=guardian_student_ids,
+        ) if student else ''
         seat_payload.append({
             'row': seat.row,
             'col': seat.col,
@@ -6797,7 +7414,9 @@ def classroom_state(request, pk):
                 'id': student.pk,
                 'name': student.name,
                 'score_display': score_value,
-                'is_leader': (group and getattr(group, 'leader_id', None) == student.pk)
+                'is_leader': (group and getattr(group, 'leader_id', None) == student.pk),
+                'podium_guardian_side': guardian_side,
+                'is_fixed_seat': student.pk in fixed_student_ids,
             } if student else None,
             'group': {
                 'id': group.pk,
@@ -6811,21 +7430,40 @@ def classroom_state(request, pk):
         unseated_payload.append({
             'id': student.pk,
             'name': student.name,
+            'student_id': student.student_id or '',
+            'gender': student.gender or '',
+            'score': student.score or 0,
             'score_display': score_value,
-            'delete_url': reverse('delete_student', args=[classroom.pk, student.pk])
+            'podium_guardian_side': _get_podium_guardian_side(
+                classroom,
+                student,
+                seats=seats,
+                guardian_student_ids=guardian_student_ids,
+            ),
+            'is_fixed_seat': student.pk in fixed_student_ids,
+            'delete_url': reverse('delete_student', args=[classroom.pk, student.pk]),
+            'update_url': reverse('update_student', args=[classroom.pk, student.pk]),
         })
 
     return JsonResponse({
         'seats': seat_payload,
         'unseated': unseated_payload,
+        'podium_guards': _serialize_podium_guards(
+            classroom,
+            seats=seats,
+            guardian_student_ids=guardian_student_ids,
+        ),
+        'constraints': constraint_items,
+        'constraint_metrics': constraint_metrics,
         'suggestions': suggestions,
-        'unseated_count': len(unseated_payload)
+        'unseated_count': len(unseated_payload),
+        'sync_meta': _serialize_classroom_sync_meta(classroom),
     })
 
 
 def layout_editor(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
-    seats = list(classroom.seats.all())
+    seats = list(classroom.seats.select_related('student').all())
     seat_map = _build_seat_map(seats)
     seat_grid = []
     for r in range(1, classroom.rows + 1):
@@ -6897,6 +7535,7 @@ def shift_layout(request, pk):
                 template_signature = str(template_meta.get('template_signature') or '')
         else:
             after_data = _build_shifted_layout_payload(classroom, direction, steps)
+        after_data = _pin_podium_guardians_in_shift_payload(before_data, after_data)
         action = {
             'type': 'layout_snapshot',
             'before_data': before_data,
@@ -7916,38 +8555,7 @@ def _process_import(classroom, df, name_col, student_id_col, gender_col, score_c
 
 
 def _build_constraint_maps(classroom, students):
-    must_rows = {}
-    must_cols = {}
-    forbid_rows = {}
-    forbid_cols = {}
-    forbid_seats = {}
-    must_pairs = {}
-    forbid_pairs = {}
-    fixed_seats = {}
-
-    constraints = list(classroom.constraints.filter(enabled=True))
-    for c in constraints:
-        sid = c.student_id
-        if c.constraint_type == SeatConstraint.ConstraintType.MUST_SEAT and c.row and c.col:
-            fixed_seats[sid] = (c.row, c.col)
-        elif c.constraint_type == SeatConstraint.ConstraintType.FORBID_SEAT and c.row and c.col:
-            forbid_seats.setdefault(sid, set()).add((c.row, c.col))
-        elif c.constraint_type == SeatConstraint.ConstraintType.MUST_ROW and c.row:
-            must_rows.setdefault(sid, set()).add(c.row)
-        elif c.constraint_type == SeatConstraint.ConstraintType.FORBID_ROW and c.row:
-            forbid_rows.setdefault(sid, set()).add(c.row)
-        elif c.constraint_type == SeatConstraint.ConstraintType.MUST_COL and c.col:
-            must_cols.setdefault(sid, set()).add(c.col)
-        elif c.constraint_type == SeatConstraint.ConstraintType.FORBID_COL and c.col:
-            forbid_cols.setdefault(sid, set()).add(c.col)
-        elif c.constraint_type == SeatConstraint.ConstraintType.MUST_TOGETHER and c.target_student_id:
-            must_pairs.setdefault(sid, []).append((c.target_student_id, c.distance))
-        elif c.constraint_type == SeatConstraint.ConstraintType.FORBID_TOGETHER and c.target_student_id:
-            forbid_pairs.setdefault(sid, []).append((c.target_student_id, c.distance))
-
-
-
-    return fixed_seats, must_rows, must_cols, forbid_rows, forbid_cols, forbid_seats, must_pairs, forbid_pairs
+    return compile_constraint_maps(classroom)
 
 
 def _swap_seats(seat_a, seat_b):
@@ -8384,7 +8992,7 @@ def auto_arrange_seats(request, pk):
     return redirect('classroom_detail', pk=pk)
 
 
-def _perform_move(classroom, student, target_seat):
+def _perform_move_fixed_group(classroom, student, target_seat):
     with transaction.atomic():
         current_seat = getattr(student, 'assigned_seat', None)
         target_student = target_seat.student
@@ -8434,9 +9042,67 @@ def _perform_move(classroom, student, target_seat):
         'from_col': current_seat.col if current_seat else None,
         'to_row': target_seat.row,
         'to_col': target_seat.col,
-        'target_student_id': target_student.pk if target_student else None
+        'target_student_id': target_student.pk if target_student else None,
+        'group_move_mode': GROUP_MOVE_MODE_FIXED,
     }
     return action
+
+
+def _perform_move_follow_group(classroom, student, target_seat):
+    current_seat = getattr(student, 'assigned_seat', None)
+    target_student = target_seat.student
+    source_group = current_seat.group if current_seat else None
+    target_group = target_seat.group
+    affected_group_ids = {
+        group_id
+        for group_id in [
+            source_group.pk if source_group else None,
+            target_group.pk if target_group else None,
+        ]
+        if group_id
+    }
+
+    with transaction.atomic():
+        if current_seat:
+            current_seat.student = None
+            current_seat.group = None
+            current_seat.save(update_fields=['student', 'group'])
+
+        target_seat.student = None
+        target_seat.group = None
+        target_seat.save(update_fields=['student', 'group'])
+
+        if current_seat and target_student:
+            current_seat.student = target_student
+            current_seat.group = target_group
+            current_seat.save(update_fields=['student', 'group'])
+
+        target_seat.student = student
+        target_seat.group = source_group if current_seat else target_group
+        target_seat.save(update_fields=['student', 'group'])
+
+    if affected_group_ids:
+        _normalize_group_leaders(classroom, affected_group_ids)
+
+    action = {
+        'type': 'move',
+        'student_id': student.pk,
+        'from_row': current_seat.row if current_seat else None,
+        'from_col': current_seat.col if current_seat else None,
+        'to_row': target_seat.row,
+        'to_col': target_seat.col,
+        'target_student_id': target_student.pk if target_student else None,
+        'group_move_mode': GROUP_MOVE_MODE_FOLLOW,
+    }
+    return action
+
+
+def _perform_move(classroom, student, target_seat, *, group_move_mode=GROUP_MOVE_MODE_FIXED):
+    normalized_group_mode = _normalize_group_move_mode(group_move_mode)
+    current_seat = getattr(student, 'assigned_seat', None)
+    if normalized_group_mode == GROUP_MOVE_MODE_FOLLOW and current_seat:
+        return _perform_move_follow_group(classroom, student, target_seat)
+    return _perform_move_fixed_group(classroom, student, target_seat)
 
 
 def move_student(request, pk):
@@ -8447,6 +9113,7 @@ def move_student(request, pk):
             student_id = data.get('student_id')
             target_row = int(data.get('row'))
             target_col = int(data.get('col'))
+            group_move_mode = _normalize_group_move_mode(data.get('group_move_mode'))
 
             student = get_object_or_404(Student, pk=student_id, classroom=classroom)
             target_seat = get_object_or_404(Seat, classroom=classroom, row=target_row, col=target_col)
@@ -8456,7 +9123,7 @@ def move_student(request, pk):
 
             before_state = _capture_history_state(classroom)
             with transaction.atomic():
-                action = _perform_move(classroom, student, target_seat)
+                action = _perform_move(classroom, student, target_seat, group_move_mode=group_move_mode)
                 violations = _stabilize_layout_with_rules(classroom, request, trigger_student_id=student.pk)
                 if violations:
                     raise ValueError(f'移动失败：{_format_issues_preview(violations)}')
@@ -8481,6 +9148,7 @@ def move_students_batch(request, pk):
     try:
         data = json.loads(request.body or '{}')
         moves = data.get('moves') or []
+        group_move_mode = _normalize_group_move_mode(data.get('group_move_mode'))
         if not isinstance(moves, list) or not moves:
             return JsonResponse({'status': 'error', 'message': '缺少批量移动数据'}, status=400)
 
@@ -8525,6 +9193,11 @@ def move_students_batch(request, pk):
         students_map = classroom.students.in_bulk(student_ids)
         if len(students_map) != len(student_ids):
             raise ValueError('存在不属于当前班级的学生')
+        use_follow_group_mode = (
+            group_move_mode == GROUP_MOVE_MODE_FOLLOW
+            and all(not item['is_clear_move'] for item in parsed_moves)
+            and all(getattr(student, 'assigned_seat', None) for student in students_map.values())
+        )
 
         seat_q = models.Q()
         for row, col in target_coords:
@@ -8579,7 +9252,12 @@ def move_students_batch(request, pk):
                     }
                 else:
                     target_seat = seat_map.get((row, col))
-                    action = _perform_move(classroom, student, target_seat)
+                    action = _perform_move(
+                        classroom,
+                        student,
+                        target_seat,
+                        group_move_mode=GROUP_MOVE_MODE_FOLLOW if use_follow_group_mode else GROUP_MOVE_MODE_FIXED,
+                    )
                 actions.append(action)
                 if trigger_student_id is None:
                     trigger_student_id = sid
@@ -8687,13 +9365,14 @@ def assign_student(request, pk):
         student_id = data.get('student_id')
         row = int(data.get('row'))
         col = int(data.get('col'))
+        group_move_mode = _normalize_group_move_mode(data.get('group_move_mode'))
         student = get_object_or_404(Student, pk=student_id, classroom=classroom)
         target_seat = get_object_or_404(Seat, classroom=classroom, row=row, col=col)
         if target_seat.cell_type != SeatCellType.SEAT:
             return JsonResponse({'status': 'error', 'message': '目标位置不可入座'}, status=400)
         before_state = _capture_history_state(classroom)
         with transaction.atomic():
-            action = _perform_move(classroom, student, target_seat)
+            action = _perform_move(classroom, student, target_seat, group_move_mode=group_move_mode)
             violations = _stabilize_layout_with_rules(classroom, request, trigger_student_id=student.pk)
             if violations:
                 raise ValueError(f'指派失败：{_format_issues_preview(violations)}')
@@ -8714,14 +9393,75 @@ def assign_student(request, pk):
 def delete_student(request, pk, student_id):
     classroom = get_object_or_404(Classroom, pk=pk)
     student = get_object_or_404(Student, pk=student_id, classroom=classroom)
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.headers.get('sec-fetch-mode') == 'cors'
+    if classroom.seats.filter(student_id=student.pk).exists():
+        if is_ajax:
+            return JsonResponse({'status': 'error', 'message': '该学生已入座，请先清空座位后再删除'}, status=400)
+        return redirect('classroom_detail', pk=pk)
     before_state = _capture_history_state(classroom)
     deleted_student = {'student_id': student.pk, 'student_name': student.name}
     student.delete()
     _push_snapshot_action(request, classroom, before_state, 'delete_student', extra=deleted_student)
-    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest' or request.headers.get('sec-fetch-mode') == 'cors'
     if is_ajax:
         return JsonResponse({'status': 'success'})
     return redirect('classroom_detail', pk=pk)
+
+
+@require_POST
+def add_student(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'status': 'error', 'message': '无效的请求数据'}, status=400)
+    name = (data.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'status': 'error', 'message': '姓名不能为空'}, status=400)
+    student_id_val = (data.get('student_id') or '').strip() or None
+    gender = data.get('gender') or None
+    if gender not in ('M', 'F'):
+        gender = None
+    try:
+        score = float(data.get('score', 0) or 0)
+    except (ValueError, TypeError):
+        score = 0
+    before_state = _capture_history_state(classroom)
+    student = Student.objects.create(
+        classroom=classroom,
+        name=name,
+        student_id=student_id_val,
+        gender=gender,
+        score=score,
+    )
+    _push_snapshot_action(request, classroom, before_state, 'add_student',
+                          extra={'student_id': student.pk, 'student_name': student.name})
+    return JsonResponse({'status': 'success', 'student_pk': student.pk})
+
+
+@require_POST
+def update_student(request, pk, student_id):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    student = get_object_or_404(Student, pk=student_id, classroom=classroom)
+    try:
+        data = json.loads(request.body)
+    except (json.JSONDecodeError, ValueError):
+        return JsonResponse({'status': 'error', 'message': '无效的请求数据'}, status=400)
+    name = (data.get('name') or '').strip()
+    if not name:
+        return JsonResponse({'status': 'error', 'message': '姓名不能为空'}, status=400)
+    before_state = _capture_history_state(classroom)
+    student.name = name
+    student.student_id = (data.get('student_id') or '').strip() or None
+    gender = data.get('gender') or None
+    student.gender = gender if gender in ('M', 'F') else None
+    try:
+        student.score = float(data.get('score', 0) or 0)
+    except (ValueError, TypeError):
+        student.score = 0
+    student.save()
+    _push_snapshot_action(request, classroom, before_state, 'update_student',
+                          extra={'student_id': student.pk, 'student_name': student.name})
+    return JsonResponse({'status': 'success'})
 
 
 @require_POST
@@ -9605,55 +10345,145 @@ def assign_group_batch(request, pk):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
 
+def _constraint_error_response(request, action_label, error_message, *, status=400):
+    if _is_ajax_request(request):
+        return JsonResponse({'status': 'error', 'message': error_message}, status=status)
+    return HttpResponse(f'{action_label}失败: {error_message}', status=status)
+
+
+def _constraint_success_response(request, constraint, *, metrics_message='操作成功'):
+    if _is_ajax_request(request):
+        return JsonResponse({
+            'status': 'success',
+            'constraint_id': constraint.pk,
+            'enabled': constraint.enabled,
+            'message': metrics_message,
+        })
+    return redirect('classroom_detail', pk=constraint.classroom_id)
+
+
+def _constraint_form_payload(request):
+    return {
+        'constraint_type': request.POST.get('constraint_type'),
+        'student_id': request.POST.get('student_id'),
+        'target_student_id': request.POST.get('target_student_id'),
+        'row': request.POST.get('row'),
+        'col': request.POST.get('col'),
+        'distance': request.POST.get('distance'),
+        'note': request.POST.get('note'),
+        'enabled': request.POST.get('enabled'),
+    }
+
+
 @require_POST
 def create_constraint(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     try:
-        constraint_type = request.POST.get('constraint_type')
-        student_id = request.POST.get('student_id')
-        target_student_id = request.POST.get('target_student_id') or None
-        row = request.POST.get('row') or None
-        col = request.POST.get('col') or None
-        distance = int(request.POST.get('distance') or 1)
-        note = request.POST.get('note', '')
-
-        if constraint_type in ['must_seat', 'forbid_seat'] and (not row or not col):
-            return redirect('classroom_detail', pk=pk)
-        if constraint_type in ['must_row', 'forbid_row'] and not row:
-            return redirect('classroom_detail', pk=pk)
-        if constraint_type in ['must_col', 'forbid_col'] and not col:
-            return redirect('classroom_detail', pk=pk)
-        if constraint_type in ['must_together', 'forbid_together'] and not target_student_id:
-            return redirect('classroom_detail', pk=pk)
-
-        student = get_object_or_404(Student, pk=student_id, classroom=classroom)
-        target_student = None
-        if target_student_id:
-            target_student = get_object_or_404(Student, pk=target_student_id, classroom=classroom)
+        cleaned = normalize_constraint_payload(classroom, _constraint_form_payload(request))
+        validate_constraint_candidate(classroom, cleaned)
 
         before_state = _capture_history_state(classroom)
         constraint = SeatConstraint.objects.create(
             classroom=classroom,
-            constraint_type=constraint_type,
-            student=student,
-            target_student=target_student,
-            row=int(row) if row else None,
-            col=int(col) if col else None,
-            distance=distance,
-            note=note
+            constraint_type=cleaned['constraint_type'],
+            student=cleaned['student'],
+            target_student=cleaned['target_student'],
+            row=cleaned['row'],
+            col=cleaned['col'],
+            distance=cleaned['distance'],
+            enabled=cleaned['enabled'],
+            note=cleaned['note'],
         )
         _push_snapshot_action(
             request,
             classroom,
             before_state,
             'create_constraint',
-            extra={'constraint_id': constraint.pk, 'constraint_type': constraint_type},
+            extra={'constraint_id': constraint.pk, 'constraint_type': cleaned['constraint_type']},
         )
-    except Exception as e:
-        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
-            return JsonResponse({'status': 'error', 'message': f'创建约束失败: {e}'}, status=400)
-        return HttpResponse(f'创建约束失败: {e}', status=400)
-    return redirect('classroom_detail', pk=pk)
+    except ConstraintServiceError as exc:
+        return _constraint_error_response(request, '创建约束', str(exc))
+    except Exception as exc:
+        return _constraint_error_response(request, '创建约束', str(exc))
+    return _constraint_success_response(request, constraint, metrics_message='约束已创建')
+
+
+@require_POST
+def update_constraint(request, pk, constraint_id):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    constraint = get_object_or_404(SeatConstraint, pk=constraint_id, classroom=classroom)
+    try:
+        cleaned = normalize_constraint_payload(classroom, _constraint_form_payload(request), instance=constraint)
+        validate_constraint_candidate(classroom, cleaned, instance=constraint)
+
+        before_state = _capture_history_state(classroom)
+        constraint.constraint_type = cleaned['constraint_type']
+        constraint.student = cleaned['student']
+        constraint.target_student = cleaned['target_student']
+        constraint.row = cleaned['row']
+        constraint.col = cleaned['col']
+        constraint.distance = cleaned['distance']
+        constraint.enabled = cleaned['enabled']
+        constraint.note = cleaned['note']
+        constraint.save()
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'update_constraint',
+            extra={'constraint_id': constraint.pk, 'constraint_type': cleaned['constraint_type']},
+        )
+    except ConstraintServiceError as exc:
+        return _constraint_error_response(request, '更新约束', str(exc))
+    except Exception as exc:
+        return _constraint_error_response(request, '更新约束', str(exc))
+    return _constraint_success_response(request, constraint, metrics_message='约束已更新')
+
+
+@require_POST
+def toggle_constraint(request, pk, constraint_id):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    constraint = get_object_or_404(SeatConstraint, pk=constraint_id, classroom=classroom)
+    try:
+        desired_enabled = request.POST.get('enabled')
+        next_enabled = (not constraint.enabled) if desired_enabled in (None, '') else str(desired_enabled).strip().lower() in {'1', 'true', 'yes', 'on'}
+
+        if next_enabled:
+            cleaned = normalize_constraint_payload(
+                classroom,
+                {
+                    'constraint_type': constraint.constraint_type,
+                    'student': constraint.student,
+                    'target_student': constraint.target_student,
+                    'row': constraint.row,
+                    'col': constraint.col,
+                    'distance': constraint.distance,
+                    'note': constraint.note,
+                    'enabled': True,
+                },
+                instance=constraint,
+            )
+            validate_constraint_candidate(classroom, cleaned, instance=constraint)
+
+        before_state = _capture_history_state(classroom)
+        constraint.enabled = next_enabled
+        constraint.save(update_fields=['enabled'])
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'toggle_constraint',
+            extra={'constraint_id': constraint.pk, 'constraint_type': constraint.constraint_type, 'enabled': constraint.enabled},
+        )
+    except ConstraintServiceError as exc:
+        return _constraint_error_response(request, '切换约束状态', str(exc))
+    except Exception as exc:
+        return _constraint_error_response(request, '切换约束状态', str(exc))
+    return _constraint_success_response(
+        request,
+        constraint,
+        metrics_message='约束已启用' if constraint.enabled else '约束已停用',
+    )
 
 
 @require_POST
@@ -9670,6 +10500,8 @@ def delete_constraint(request, pk, constraint_id):
         'delete_constraint',
         extra={'constraint_id': constraint_id, 'constraint_type': constraint_type},
     )
+    if _is_ajax_request(request):
+        return JsonResponse({'status': 'success'})
     return redirect('classroom_detail', pk=pk)
 
 
@@ -10631,6 +11463,8 @@ def save_layout_snapshot(request, pk):
             'save_layout_snapshot',
             extra={'snapshot_id': snapshot.pk, 'snapshot_name': snapshot.name},
         )
+        if _is_ajax_request(request):
+            return JsonResponse({'status': 'success', 'snapshot': {'id': snapshot.pk, 'name': snapshot.name}})
     return redirect('classroom_detail', pk=pk)
 
 
@@ -10662,6 +11496,8 @@ def delete_layout_snapshot(request, pk, snapshot_id):
         'delete_layout_snapshot',
         extra={'snapshot_id': snapshot_id, 'snapshot_name': snapshot_name},
     )
+    if _is_ajax_request(request):
+        return JsonResponse({'status': 'success'})
     return redirect('classroom_detail', pk=pk)
 
 
@@ -10695,6 +11531,503 @@ def import_seats_file(request, pk):
     return redirect('classroom_detail', pk=pk)
 
 
+BSCE_CLOUD_AUTH_URL = 'https://sce.jbyc.cc/api/auth.php'
+BSCE_CLOUD_WORKSPACE_URL = 'https://sce.jbyc.cc/api/workspace.php'
+BSCE_CLOUD_TIMEOUT = 15
+BSCE_CLOUD_HEADERS = {
+    'Accept': 'application/json, text/plain, */*',
+    'Content-Type': 'application/json',
+    'Origin': 'https://sce.jbyc.cc',
+    'Priority': 'u=1, i',
+    'Referer': 'https://sce.jbyc.cc/',
+    'Sec-Fetch-Dest': 'empty',
+    'Sec-Fetch-Mode': 'cors',
+    'Sec-Fetch-Site': 'same-origin',
+}
+BSCE_CLOUD_BROWSER_PROFILES = [
+    {
+        'User-Agent': (
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/147.0.0.0 Safari/537.36 Edg/147.0.0.0'
+        ),
+        'Sec-CH-UA': '"Microsoft Edge";v="147", "Not.A/Brand";v="8", "Chromium";v="147"',
+        'Sec-CH-UA-Mobile': '?0',
+        'Sec-CH-UA-Platform': '"macOS"',
+    },
+    {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/147.0.0.0 Safari/537.36 Edg/147.0.0.0'
+        ),
+        'Sec-CH-UA': '"Microsoft Edge";v="147", "Not.A/Brand";v="8", "Chromium";v="147"',
+        'Sec-CH-UA-Mobile': '?0',
+        'Sec-CH-UA-Platform': '"Windows"',
+    },
+    {
+        'User-Agent': (
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/147.0.0.0 Safari/537.36'
+        ),
+        'Sec-CH-UA': '"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"',
+        'Sec-CH-UA-Mobile': '?0',
+        'Sec-CH-UA-Platform': '"macOS"',
+    },
+    {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) '
+            'AppleWebKit/537.36 (KHTML, like Gecko) '
+            'Chrome/147.0.0.0 Safari/537.36'
+        ),
+        'Sec-CH-UA': '"Google Chrome";v="147", "Not.A/Brand";v="8", "Chromium";v="147"',
+        'Sec-CH-UA-Mobile': '?0',
+        'Sec-CH-UA-Platform': '"Windows"',
+    },
+]
+BSCE_CLOUD_ACCEPT_LANGUAGES = [
+    'zh-CN,zh;q=0.9,en;q=0.8',
+    'zh-CN,zh;q=0.9',
+    'zh-CN,zh-Hans;q=0.9,en-US;q=0.8,en;q=0.7',
+]
+
+
+def _bsce_cloud_cookie_header(csrf_token):
+    cookies = [
+        f'rth-uid={uuid.uuid4()}',
+        f'sce_csrf={csrf_token}',
+    ]
+    last_workspace = str(
+        getattr(settings, 'BSCE_CLOUD_LAST_WORKSPACE_COOKIE', os.environ.get('BSCE_CLOUD_LAST_WORKSPACE_COOKIE', '')) or ''
+    ).strip()
+    clearance = str(
+        getattr(settings, 'BSCE_CLOUD_CLEARANCE', os.environ.get('BSCE_CLOUD_CLEARANCE', '')) or ''
+    ).strip()
+    if last_workspace:
+        cookies.append(f'sce_last_workspace={last_workspace}')
+    if clearance:
+        cookies.append(f'rth-clearance={clearance}')
+    return '; '.join(cookies)
+
+
+def _bsce_cloud_browser_session():
+    csrf_token = secrets.token_hex(20)
+    headers = {
+        **BSCE_CLOUD_HEADERS,
+        **secrets.choice(BSCE_CLOUD_BROWSER_PROFILES),
+        'Accept-Language': secrets.choice(BSCE_CLOUD_ACCEPT_LANGUAGES),
+        'Cookie': _bsce_cloud_cookie_header(csrf_token),
+        'X-CSRF-Token': csrf_token,
+    }
+    return {
+        'csrf': csrf_token,
+        'headers': headers,
+    }
+
+
+def _extract_json_or_form_payload(request):
+    content_type = str(request.content_type or '').split(';', 1)[0].strip().lower()
+    if content_type == 'application/json':
+        try:
+            payload = json.loads(request.body or b'{}')
+        except json.JSONDecodeError as exc:
+            raise ValueError('JSON 请求体格式错误') from exc
+        if not isinstance(payload, dict):
+            raise ValueError('JSON 请求体必须是对象')
+        return payload
+    return dict(request.POST.items())
+
+
+def _bsce_cloud_request_payload(action, username, password=None, token=None, file_id=None):
+    payload = {
+        'action': action,
+        'username': username,
+    }
+    if action == 'login':
+        payload['password'] = password or ''
+    if token:
+        payload['token'] = token
+    if file_id:
+        payload['fileId'] = file_id
+    return payload
+
+
+def _bsce_json_post(url, payload, timeout=BSCE_CLOUD_TIMEOUT, browser_session=None):
+    browser_session = browser_session or _bsce_cloud_browser_session()
+    request_payload = dict(payload)
+    request_payload['_csrf'] = browser_session['csrf']
+
+    def execute(context):
+        body = json.dumps(request_payload, ensure_ascii=False).encode('utf-8')
+        req = urllib.request.Request(
+            url,
+            data=body,
+            headers=browser_session['headers'],
+            method='POST',
+        )
+        with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
+            raw = response.read().decode('utf-8', errors='replace')
+        try:
+            return json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise ValueError('云端返回的数据不是有效 JSON') from exc
+
+    contexts = [ssl.create_default_context()]
+    used_cert_fallback = False
+    while contexts:
+        context = contexts.pop(0)
+        try:
+            return execute(context)
+        except urllib.error.HTTPError as exc:
+            detail = ''
+            try:
+                detail = exc.read().decode('utf-8', errors='replace')
+            except Exception:
+                detail = str(exc)
+            raise ValueError(f'云端请求失败：HTTP {exc.code} {detail[:180]}') from exc
+        except urllib.error.URLError as exc:
+            reason = getattr(exc, 'reason', exc)
+            cert_failed = isinstance(reason, ssl.SSLCertVerificationError) or 'CERTIFICATE_VERIFY_FAILED' in str(reason)
+            if cert_failed and not used_cert_fallback:
+                used_cert_fallback = True
+                contexts.append(ssl._create_unverified_context())
+                continue
+            raise ValueError(f'无法连接 BSCE 云端：{reason}') from exc
+
+    raise ValueError('无法连接 BSCE 云端')
+
+
+def _bsce_require_success(response, fallback_message):
+    if not isinstance(response, dict):
+        raise ValueError(fallback_message)
+    if not response.get('success'):
+        raise ValueError(str(response.get('message') or fallback_message))
+    return response.get('data')
+
+
+def _bsce_cloud_login(username, password, browser_session=None):
+    browser_session = browser_session or _bsce_cloud_browser_session()
+    data = _bsce_json_post(
+        BSCE_CLOUD_AUTH_URL,
+        _bsce_cloud_request_payload('login', username, password=password),
+        browser_session=browser_session,
+    )
+    login_data = _bsce_require_success(data, 'BSCE 云端登录失败')
+    if not isinstance(login_data, dict) or not login_data.get('token'):
+        raise ValueError('BSCE 云端登录成功但没有返回 token')
+    token = str(login_data.get('token'))
+    settings_data = _bsce_json_post(
+        BSCE_CLOUD_AUTH_URL,
+        _bsce_cloud_request_payload('get_settings', username, token=token),
+        browser_session=browser_session,
+    )
+    _bsce_require_success(settings_data, '获取 BSCE 云端设置失败')
+    return token
+
+
+def _bsce_cloud_list_workspaces(username, password):
+    browser_session = _bsce_cloud_browser_session()
+    token = _bsce_cloud_login(username, password, browser_session=browser_session)
+    data = _bsce_json_post(
+        BSCE_CLOUD_WORKSPACE_URL,
+        _bsce_cloud_request_payload('list', username, token=token),
+        browser_session=browser_session,
+    )
+    rows = _bsce_require_success(data, '获取 BSCE 云端工作区失败')
+    if not isinstance(rows, list):
+        raise ValueError('BSCE 云端工作区列表格式错误')
+
+    normalized = []
+    for item in rows:
+        if not isinstance(item, dict):
+            continue
+        file_id = str(item.get('fileId') or '').strip()
+        if not file_id:
+            continue
+        metadata = item.get('metadata') if isinstance(item.get('metadata'), dict) else {}
+        normalized.append({
+            'fileId': file_id,
+            'metadata': {
+                'author': str(metadata.get('author') or ''),
+                'name': str(metadata.get('name') or ''),
+                'time': str(metadata.get('time') or ''),
+                'size': metadata.get('size') or 0,
+            },
+        })
+    return normalized
+
+
+def _bsce_cloud_load_workspace(file_id, username, password):
+    file_id = str(file_id or '').strip()
+    if not file_id:
+        raise ValueError('缺少 BSCE 云端工作区 fileId')
+
+    browser_session = _bsce_cloud_browser_session()
+    token = _bsce_cloud_login(username, password, browser_session=browser_session)
+    data = _bsce_json_post(
+        BSCE_CLOUD_WORKSPACE_URL,
+        _bsce_cloud_request_payload('load', username, token=token, file_id=file_id),
+        browser_session=browser_session,
+    )
+    workspace = _bsce_require_success(data, '加载 BSCE 云端工作区失败')
+    if not isinstance(workspace, dict):
+        raise ValueError('BSCE 云端工作区内容格式错误')
+    content = workspace.get('content')
+    if not isinstance(content, dict):
+        raise ValueError('BSCE 云端工作区没有可导入内容')
+    metadata = workspace.get('metadata') if isinstance(workspace.get('metadata'), dict) else {}
+    return {
+        'fileId': file_id,
+        'metadata': metadata,
+        'content': content,
+    }
+
+
+def _parse_bsce_number(value, default=0):
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _parse_bsce_score(value):
+    text = str(value or '').strip()
+    if not text:
+        return 0
+    try:
+        return float(text)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _is_bsce_payload(data):
+    if not isinstance(data, dict):
+        return False
+    meta = data.get('meta') if isinstance(data.get('meta'), dict) else {}
+    if str(meta.get('app') or '').strip() == 'SeatingChartEditor':
+        return True
+    return isinstance(data.get('students'), list) and isinstance(data.get('layout'), dict) and isinstance(data.get('tags'), list)
+
+
+def _extract_bsce_student_score(student_data, tag_map):
+    for tag_id in student_data.get('tags') or []:
+        score = _parse_bsce_score(tag_map.get(tag_id))
+        if score > 100:
+            return score
+    return 0
+
+
+def _build_bsce_group_columns(config):
+    group_count = _parse_bsce_number(config.get('groupCount'), 0)
+    default_columns = _parse_bsce_number(config.get('columnsPerGroup'), 2)
+    default_rows = _parse_bsce_number(config.get('seatsPerColumn'), 1)
+    raw_groups = config.get('groups') if isinstance(config.get('groups'), list) else []
+
+    group_columns = []
+    group_rows = []
+    total_groups = max(group_count, len(raw_groups), 1)
+    for index in range(total_groups):
+        group_data = raw_groups[index] if index < len(raw_groups) and isinstance(raw_groups[index], dict) else {}
+        group_columns.append(max(1, _parse_bsce_number(group_data.get('columns'), default_columns)))
+        group_rows.append(max(1, _parse_bsce_number(group_data.get('rows'), default_rows)))
+    return group_columns, group_rows
+
+
+def _apply_bsce_payload(classroom, data):
+    if not _is_bsce_payload(data):
+        raise ValueError('不是有效的 BSCE 座位表文件')
+
+    students_payload = data.get('students') if isinstance(data.get('students'), list) else []
+    tags_payload = data.get('tags') if isinstance(data.get('tags'), list) else []
+    layout = data.get('layout') if isinstance(data.get('layout'), dict) else {}
+    config = layout.get('config') if isinstance(layout.get('config'), dict) else {}
+    seats_payload = layout.get('seats') if isinstance(layout.get('seats'), list) else []
+
+    if not students_payload:
+        raise ValueError('BSCE 文件中没有学生数据')
+    if not seats_payload:
+        raise ValueError('BSCE 文件中没有座位布局')
+
+    tag_map = {}
+    for tag in tags_payload:
+        if not isinstance(tag, dict):
+            continue
+        tag_map[tag.get('id')] = str(tag.get('name') or '').strip()
+
+    group_columns, group_rows = _build_bsce_group_columns(config)
+    group_count = len(group_columns)
+    group_start_cols = []
+    cursor_col = 1
+    for columns in group_columns:
+        group_start_cols.append(cursor_col)
+        cursor_col += columns + 1
+
+    max_source_row = 0
+    for seat_data in seats_payload:
+        if not isinstance(seat_data, dict):
+            continue
+        max_source_row = max(max_source_row, _parse_bsce_number(seat_data.get('row'), 0) + 1)
+
+    row_count = max([max_source_row, *group_rows, 1])
+    col_count = sum(group_columns) + max(0, group_count - 1)
+
+    with transaction.atomic():
+        before_students = len(students_payload)
+        _sync_seats(classroom, row_count, col_count)
+        _apply_podium_guards(classroom, None, None)
+        classroom.seats.update(student=None, group=None, cell_type=SeatCellType.EMPTY)
+        SeatConstraint.objects.filter(classroom=classroom).delete()
+        SeatGroup.objects.filter(classroom=classroom).delete()
+        Student.objects.filter(classroom=classroom).delete()
+
+        student_map = {}
+        for student_data in students_payload:
+            if not isinstance(student_data, dict):
+                continue
+            name = str(student_data.get('name') or '').strip()
+            if not name:
+                continue
+            source_id = student_data.get('id')
+            student = Student.objects.create(
+                classroom=classroom,
+                name=name,
+                student_id=str(student_data.get('studentNumber') or '').strip() or None,
+                score=_extract_bsce_student_score(student_data, tag_map),
+            )
+            student_map[source_id] = student
+
+        group_map = {}
+        for group_index in range(group_count):
+            group_map[group_index] = SeatGroup.objects.create(
+                classroom=classroom,
+                name=f'第{group_index + 1}组',
+                order=group_index,
+            )
+
+        seat_map = _build_seat_map(classroom.seats.all())
+        for aisle_col in group_start_cols[1:]:
+            gap_col = aisle_col - 1
+            for row in range(1, row_count + 1):
+                seat = seat_map.get((row, gap_col))
+                if seat:
+                    seat.cell_type = SeatCellType.AISLE
+                    seat.save(update_fields=['cell_type'])
+
+        assigned_count = 0
+        source_seat_count = 0
+        for seat_data in seats_payload:
+            if not isinstance(seat_data, dict):
+                continue
+            group_index = _parse_bsce_number(seat_data.get('group'), -1)
+            if group_index < 0 or group_index >= group_count:
+                continue
+            local_col = _parse_bsce_number(seat_data.get('col'), 0)
+            row = _parse_bsce_number(seat_data.get('row'), 0) + 1
+            col = group_start_cols[group_index] + local_col
+            seat = seat_map.get((row, col))
+            if not seat:
+                continue
+
+            source_seat_count += 1
+            is_empty_cell = bool(seat_data.get('empty'))
+            if is_empty_cell:
+                seat.cell_type = SeatCellType.EMPTY
+                seat.student = None
+                seat.group = None
+            else:
+                seat.cell_type = SeatCellType.SEAT
+                seat.group = group_map.get(group_index)
+                seat.student = student_map.get(seat_data.get('studentId'))
+                if seat.student_id:
+                    assigned_count += 1
+            seat.save(update_fields=['cell_type', 'student', 'group'])
+
+    return {
+        'students': before_students,
+        'created_students': len(student_map),
+        'rows': row_count,
+        'cols': col_count,
+        'groups': group_count,
+        'source_seats': source_seat_count,
+        'assigned': assigned_count,
+    }
+
+
+def import_bsce_file(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    if request.method == 'POST' and request.FILES.get('bsce_file'):
+        bsce_file = request.FILES['bsce_file']
+        try:
+            raw = bsce_file.read().decode('utf-8-sig')
+            data = json.loads(raw)
+            before_state = _capture_history_state(classroom)
+            result = _apply_bsce_payload(classroom, data)
+            _push_snapshot_action(
+                request,
+                classroom,
+                before_state,
+                'import_bsce_file',
+                extra=result,
+            )
+            if _is_ajax_request(request):
+                return JsonResponse({'status': 'success', 'message': 'BSCE 导入完成', **result})
+        except Exception as e:
+            if _is_ajax_request(request):
+                return JsonResponse({'status': 'error', 'message': f'BSCE 导入失败：{e}'}, status=400)
+    return redirect('classroom_detail', pk=pk)
+
+
+@require_POST
+def import_bsce_cloud(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        payload = _extract_json_or_form_payload(request)
+        action = str(payload.get('action') or 'list').strip().lower()
+        username = str(payload.get('username') or '').strip()
+        password = str(payload.get('password') or '').strip()
+        if not username or not password:
+            return JsonResponse({'status': 'error', 'message': '请输入 BSCE 云端账号和密码'}, status=400)
+
+        if action in {'list', 'workspaces'}:
+            workspaces = _bsce_cloud_list_workspaces(username, password)
+            return JsonResponse({
+                'status': 'success',
+                'workspaces': workspaces,
+                'count': len(workspaces),
+            })
+
+        if action in {'load', 'import'}:
+            file_id = payload.get('fileId') or payload.get('file_id')
+            workspace = _bsce_cloud_load_workspace(file_id, username, password)
+            before_state = _capture_history_state(classroom)
+            result = _apply_bsce_payload(classroom, workspace['content'])
+            metadata = workspace.get('metadata') or {}
+            _push_snapshot_action(
+                request,
+                classroom,
+                before_state,
+                'import_bsce_cloud',
+                extra={
+                    **result,
+                    'file_id': workspace['fileId'],
+                    'workspace_name': str(metadata.get('name') or ''),
+                    'workspace_time': str(metadata.get('time') or ''),
+                },
+            )
+            return JsonResponse({
+                'status': 'success',
+                'message': 'BSCE 云导入完成',
+                'fileId': workspace['fileId'],
+                'metadata': metadata,
+                **result,
+            })
+
+        return JsonResponse({'status': 'error', 'message': '未知 BSCE 云导入操作'}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
 def undo_action(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     entry = _get_history_queryset(pk).filter(is_applied=True).order_by('-pk').first()
@@ -10723,9 +12056,45 @@ def redo_action(request, pk):
     return JsonResponse({'status': 'success'})
 
 
+def _cloud_delete_backed_up_classroom(meta):
+    if not meta:
+        return None
+
+    backed_up = bool(meta.last_sync_at and int(meta.cloud_version or 0) > 0)
+    if not backed_up:
+        return None
+
+    session = get_active_cloud_session()
+    if not session:
+        raise CloudAPIError('该班级已同步到云端，删除前请先登录云服务以同步删除操作', status_code=401)
+
+    try:
+        return cloud_api_request(session, 'DELETE', f'/api/sync/{meta.uuid}', {
+            'base_version': int(meta.cloud_version or 0),
+            'device_id': 'local-delete',
+        })
+    except CloudAPIError as exc:
+        payload = exc.payload or {}
+        message = str(payload.get('message') or exc)
+        if exc.status_code == 404 or '班级不存在' in message:
+            return {'ok': True, 'status': 'success', 'already_deleted': True, 'uuid': str(meta.uuid)}
+        raise
+
+
 def delete_classroom(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
-    classroom.delete()
+    sync_meta = SyncMeta.objects.filter(classroom=classroom).first()
+    try:
+        _cloud_delete_backed_up_classroom(sync_meta)
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+    with suspend_sync_version_bump(), transaction.atomic():
+        classroom.left_guardian = None
+        classroom.right_guardian = None
+        classroom.save(update_fields=['left_guardian', 'right_guardian'])
+        classroom.groups.update(leader=None)
+        classroom.delete()
     return redirect('index')
 
 
@@ -10858,7 +12227,869 @@ def set_group_leader(request, pk):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
+
+@require_POST
+def set_podium_guards(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            data = json.loads(request.body or '{}')
+        else:
+            data = request.POST
+
+        marker = object()
+        left_raw = data.get('left_student_id', marker)
+        right_raw = data.get('right_student_id', marker)
+
+        def _resolve_student(raw_value, label):
+            if raw_value in (None, ''):
+                return None
+            try:
+                student_id = int(raw_value)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f'{label}学生 ID 不合法') from exc
+            student = classroom.students.filter(pk=student_id).first()
+            if not student:
+                raise ValueError(f'{label}学生不存在')
+            return student
+
+        left_student = classroom.left_guardian if left_raw is marker else _resolve_student(left_raw, '左护法')
+        right_student = classroom.right_guardian if right_raw is marker else _resolve_student(right_raw, '右护法')
+
+        before_state = _capture_history_state(classroom)
+        _apply_podium_guards(classroom, left_student, right_student)
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'set_podium_guards',
+            extra={
+                'left_guardian_student_id': classroom.left_guardian_id,
+                'right_guardian_student_id': classroom.right_guardian_id,
+            },
+        )
+        return JsonResponse({
+            'status': 'success',
+            'podium_guards': _serialize_podium_guards(classroom),
+        })
+    except ValueError as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
+
+@require_POST
+def toggle_fixed_seat(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        if request.content_type and 'application/json' in request.content_type:
+            data = json.loads(request.body or '{}')
+        else:
+            data = request.POST
+
+        row = _safe_int(data.get('row'), 0)
+        col = _safe_int(data.get('col'), 0)
+        if row < 1 or col < 1:
+            raise ValueError('请选择有效座位后再固定')
+
+        seat = classroom.seats.select_related('student').filter(
+            row=row,
+            col=col,
+            cell_type=SeatCellType.SEAT,
+        ).first()
+        if not seat:
+            raise ValueError('目标位置不是可用座位')
+        if not seat.student_id or not seat.student:
+            raise ValueError('当前座位没有学生，无法固定')
+
+        constraint = classroom.constraints.filter(
+            student=seat.student,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+        ).order_by('-enabled', 'pk').first()
+
+        desired_enabled_raw = data.get('enabled') if hasattr(data, 'get') else None
+        currently_enabled = bool(constraint and constraint.enabled)
+        next_enabled = (not currently_enabled) if desired_enabled_raw in (None, '') else _parse_bool(desired_enabled_raw)
+
+        before_state = _capture_history_state(classroom)
+
+        if next_enabled:
+            payload = {
+                'constraint_type': SeatConstraint.ConstraintType.MUST_SEAT,
+                'student': seat.student,
+                'row': row,
+                'col': col,
+                'distance': 1,
+                'enabled': True,
+                'note': constraint.note if constraint else '',
+            }
+            cleaned = normalize_constraint_payload(classroom, payload, instance=constraint)
+            validate_constraint_candidate(classroom, cleaned, instance=constraint)
+
+            if constraint:
+                constraint.constraint_type = cleaned['constraint_type']
+                constraint.student = cleaned['student']
+                constraint.target_student = cleaned['target_student']
+                constraint.row = cleaned['row']
+                constraint.col = cleaned['col']
+                constraint.distance = cleaned['distance']
+                constraint.enabled = cleaned['enabled']
+                constraint.note = cleaned['note']
+                constraint.save()
+            else:
+                constraint = SeatConstraint.objects.create(
+                    classroom=classroom,
+                    constraint_type=cleaned['constraint_type'],
+                    student=cleaned['student'],
+                    target_student=cleaned['target_student'],
+                    row=cleaned['row'],
+                    col=cleaned['col'],
+                    distance=cleaned['distance'],
+                    enabled=cleaned['enabled'],
+                    note=cleaned['note'],
+                )
+        elif constraint:
+            constraint.delete()
+
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'toggle_fixed_seat',
+            extra={
+                'student_id': seat.student_id,
+                'row': row,
+                'col': col,
+                'enabled': next_enabled,
+            },
+        )
+        return JsonResponse({
+            'status': 'success',
+            'enabled': next_enabled,
+            'message': '已固定此座位' if next_enabled else '已取消固定座位',
+        })
+    except ConstraintServiceError as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    except ValueError as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+
 from django.views.decorators.csrf import csrf_exempt
+
+
+def _cloud_json_body(request):
+    try:
+        raw = request.body.decode('utf-8') if request.body else '{}'
+        return json.loads(raw or '{}')
+    except Exception:
+        raise ValueError('请求数据格式错误')
+
+
+def _cloud_error_response(exc, default_status=400):
+    if isinstance(exc, CloudAPIError):
+        payload = dict(exc.payload or {})
+        payload.setdefault('status', 'error')
+        payload.setdefault('message', str(exc))
+        return JsonResponse(payload, status=exc.status_code)
+    return JsonResponse({'status': 'error', 'message': str(exc)}, status=default_status)
+
+
+def _cloud_callback_url(request):
+    return request.build_absolute_uri(reverse('cloud_callback'))
+
+
+def _cloud_local_session_or_401():
+    session = get_active_cloud_session()
+    if not session:
+        raise CloudAPIError('尚未登录云服务', status_code=401, payload={
+            'status': 'error',
+            'error': 'not_logged_in',
+            'message': '尚未登录云服务',
+        })
+    return session
+
+
+def _refresh_cloud_subscription_if_logged_in(session, *, strict=False):
+    if not session:
+        return None
+    return refresh_cloud_subscription(session, strict=strict)
+
+
+def _cloud_remote_versions(session):
+    payload = _cloud_remote_status(session)
+    return _cloud_versions_from_status(payload)
+
+
+def _cloud_remote_status(session):
+    payload = cloud_api_request(session, 'GET', '/api/sync/status')
+    return payload if isinstance(payload, dict) else {}
+
+
+def _cloud_versions_from_status(payload):
+    versions = payload.get('versions') if isinstance(payload, dict) else {}
+    return versions if isinstance(versions, dict) else {}
+
+
+def _cloud_classrooms_from_status(payload):
+    rows = payload.get('classrooms') if isinstance(payload, dict) else []
+    return rows if isinstance(rows, list) else []
+
+
+def _cloud_remote_version_for(versions, classroom_uuid):
+    raw = versions.get(str(classroom_uuid))
+    if raw in (None, ''):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _cloud_session_payload(session, request=None):
+    callback_url = _cloud_callback_url(request) if request else None
+    return {
+        'logged_in': True,
+        'uid': session.uid,
+        'nickname': session.nickname,
+        'avatar_url': session.avatar_url,
+        'email': session.email,
+        'tier': session.subscription_tier,
+        'tier_display': session.subscription_display_name,
+        'expires_at': session.subscription_expires_at.isoformat() if session.subscription_expires_at else None,
+        'token_expires_at': session.token_expires_at.isoformat(),
+        'limits': session.limits if isinstance(session.limits, dict) else {},
+        'cloud_server_url': get_cloud_server_url(),
+        'login_url': build_cloud_login_url(callback_url) if callback_url else None,
+    }
+
+
+def _cloud_export_payload(classroom, session):
+    limits = session.limits if isinstance(session.limits, dict) else {}
+    max_history_steps = int(limits.get('max_history_steps', 0) or 0)
+    sync_ai_conversations = bool(limits.get('sync_ai_conversations', False))
+
+    payload = _serialize_seats_file_bundle(classroom)
+    payload.pop('future_mode_config', None)
+
+    history = payload.get('history')
+    if isinstance(history, dict):
+        entries = history.get('entries')
+        if isinstance(entries, list):
+            if max_history_steps == 0:
+                history['entries'] = []
+            elif max_history_steps > 0:
+                history['entries'] = entries[-max_history_steps:]
+        payload['history'] = history
+
+    legacy_history = payload.get('history_entries')
+    if isinstance(legacy_history, list):
+        if max_history_steps == 0:
+            payload['history_entries'] = []
+        elif max_history_steps > 0:
+            payload['history_entries'] = legacy_history[-max_history_steps:]
+
+    if not sync_ai_conversations:
+        payload.pop('ai_conversations', None)
+
+    return payload
+
+
+def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None):
+    if not isinstance(data, dict):
+        raise ValueError('云端班级数据格式错误')
+
+    meta = SyncMeta.objects.select_related('classroom').filter(uuid=classroom_uuid).first()
+    classroom = meta.classroom if meta else None
+    classroom_data = data.get('classroom') if isinstance(data.get('classroom'), dict) else {}
+    name = str(classroom_data.get('name') or data.get('name') or '云端班级').strip() or '云端班级'
+    rows = int(classroom_data.get('rows') or data.get('rows') or 6)
+    cols = int(classroom_data.get('cols') or data.get('cols') or 8)
+
+    with suspend_sync_version_bump():
+        if classroom is None:
+            classroom = Classroom.objects.create(name=name, rows=rows, cols=cols)
+
+        _import_seats_file_payload(classroom, data, request=request)
+        meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
+        meta.uuid = classroom_uuid
+        if version is not None:
+            meta.cloud_version = int(version or 0)
+            meta.local_version = int(version or 0)
+        else:
+            meta.local_version = max(int(meta.local_version or 0), int(meta.cloud_version or 0)) + 1
+        meta.last_sync_at = timezone.now()
+        meta.last_error = ''
+        meta.save(update_fields=['uuid', 'cloud_version', 'local_version', 'last_sync_at', 'last_error', 'updated_at'])
+
+    return classroom, meta
+
+
+def _cloud_pull_and_restore_classroom(request, session, classroom_uuid, fallback_version=None):
+    payload = cloud_api_request(session, 'GET', f'/api/sync/pull/{classroom_uuid}')
+    data = payload.get('data') or payload.get('data_snapshot')
+    version = payload.get('version') if payload.get('version') is not None else fallback_version
+    return _cloud_restore_classroom_data(request, classroom_uuid, data, version=version)
+
+
+@require_http_methods(['GET', 'POST'])
+@csrf_exempt
+def cloud_config(request):
+    try:
+        if request.method == 'POST':
+            data = _cloud_json_body(request)
+            server_url = set_cloud_server_url(data.get('cloud_server_url') or data.get('url'))
+        else:
+            server_url = get_cloud_server_url()
+        callback_url = _cloud_callback_url(request)
+        return JsonResponse({
+            'status': 'success',
+            'cloud_server_url': server_url,
+            'callback_url': callback_url,
+            'login_url': build_cloud_login_url(callback_url),
+        })
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_POST
+def cloud_open_external(request):
+    import webbrowser
+    try:
+        data = json.loads(request.body or b'{}')
+    except Exception:
+        return JsonResponse({'status': 'error', 'message': '请求格式错误'}, status=400)
+    url = str(data.get('url') or '').strip()
+    if not url:
+        return JsonResponse({'status': 'error', 'message': '缺少 url'}, status=400)
+    try:
+        webbrowser.open(url)
+        return JsonResponse({'status': 'success'})
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=500)
+
+
+@require_http_methods(['GET'])
+def cloud_login(request):
+    callback_url = request.GET.get('callback') or _cloud_callback_url(request)
+    login_url = build_cloud_login_url(callback_url)
+    if request.GET.get('format') == 'json':
+        return JsonResponse({
+            'status': 'success',
+            'cloud_server_url': get_cloud_server_url(),
+            'callback_url': callback_url,
+            'login_url': login_url,
+        })
+    return redirect(login_url)
+
+
+def _cloud_callback_done_page(success, error_detail=None):
+    from django.http import HttpResponse
+    if success:
+        title = '登录成功'
+        icon_svg = '<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="28" fill="#0a59f7" opacity="0.1"/><circle cx="28" cy="28" r="20" fill="#0a59f7" opacity="0.15"/><path d="M20 28.5L25.5 34L36 22" stroke="#0a59f7" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'
+        message = '登录完毕，请关闭此浏览器窗口'
+        sub_message = '你可以返回应用继续使用'
+    else:
+        title = '登录失败'
+        icon_svg = '<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="28" fill="#ff3b30" opacity="0.1"/><circle cx="28" cy="28" r="20" fill="#ff3b30" opacity="0.15"/><path d="M22 22L34 34M34 22L22 34" stroke="#ff3b30" stroke-width="3" stroke-linecap="round"/></svg>'
+        message = '登录失败，请关闭此窗口后重试'
+        sub_message = str(error_detail or '')[:120] if error_detail else ''
+    html = f'''<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>{title} - FuckSeats</title>
+<style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;
+background:#f5f5f7;display:flex;align-items:center;justify-content:center;min-height:100vh;
+color:#1d1d1f}}
+.card{{text-align:center;padding:48px 40px;max-width:380px}}
+.icon{{margin-bottom:20px}}
+.title{{font-size:22px;font-weight:600;margin-bottom:8px}}
+.message{{font-size:15px;color:#86868b;line-height:1.5}}
+.sub{{font-size:13px;color:#aeaeb2;margin-top:12px}}
+</style>
+</head>
+<body>
+<div class="card">
+<div class="icon">{icon_svg}</div>
+<div class="title">{title}</div>
+<div class="message">{message}</div>
+{"<div class='sub'>" + sub_message + "</div>" if sub_message else ""}
+</div>
+</body>
+</html>'''
+    return HttpResponse(html, content_type='text/html; charset=utf-8')
+
+
+@require_http_methods(['GET'])
+def cloud_callback(request):
+    code = str(request.GET.get('code') or '').strip()
+    error = str(request.GET.get('error') or '').strip()
+    is_desktop = getattr(settings, 'APP_SHELL', 'browser') != 'browser'
+
+    if error:
+        if is_desktop:
+            return _cloud_callback_done_page(False, error)
+        return redirect(f'/?cloud_login=failed&error={error}')
+    if not code:
+        if is_desktop:
+            return _cloud_callback_done_page(False, 'missing_code')
+        return redirect('/?cloud_login=missing_code')
+
+    try:
+        payload = cloud_exchange_session_code(code)
+        session = save_cloud_session_from_payload(payload)
+        try:
+            _cloud_sync_classrooms(request, session, {
+                'auto': True,
+                'device_id': 'login-auto-sync',
+            })
+        except Exception:
+            pass
+        if is_desktop:
+            return _cloud_callback_done_page(True)
+        return redirect('/?cloud_login=success')
+    except Exception as exc:
+        if is_desktop:
+            return _cloud_callback_done_page(False, str(exc))
+        return redirect('/?cloud_login=failed')
+
+
+@require_http_methods(['GET'])
+def cloud_userinfo(request):
+    session = get_active_cloud_session()
+    callback_url = _cloud_callback_url(request)
+    if not session:
+        return JsonResponse({
+            'logged_in': False,
+            'cloud_server_url': get_cloud_server_url(),
+            'callback_url': callback_url,
+            'login_url': build_cloud_login_url(callback_url),
+        })
+    _refresh_cloud_subscription_if_logged_in(session)
+    return JsonResponse(_cloud_session_payload(session, request=request))
+
+
+@csrf_exempt
+@require_POST
+def cloud_refresh_subscription(request):
+    try:
+        session = _cloud_local_session_or_401()
+        refresh_cloud_subscription(session, strict=True)
+        return JsonResponse({'status': 'success', **_cloud_session_payload(session, request=request)})
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_POST
+def cloud_logout(request):
+    session = get_active_cloud_session()
+    if session:
+        try:
+            cloud_api_request(session, 'POST', '/auth/logout')
+        except CloudAPIError:
+            pass
+    clear_cloud_session()
+    return JsonResponse({'status': 'success', 'logged_in': False})
+
+
+@require_http_methods(['GET'])
+def cloud_sync_status(request):
+    try:
+        session = _cloud_local_session_or_401()
+        remote = cloud_api_request(session, 'GET', '/api/sync/status')
+        classroom_id = request.GET.get('classroom_id')
+        local = []
+        queryset = Classroom.objects.all().order_by('pk')
+        if classroom_id not in (None, ''):
+            queryset = queryset.filter(pk=classroom_id)
+        for classroom in queryset:
+            meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
+            local.append({
+                'classroom_id': classroom.pk,
+                'name': classroom.name,
+                **_serialize_classroom_sync_meta(classroom, meta),
+            })
+        return JsonResponse({
+            'status': 'success',
+            'local': local,
+            'remote': remote,
+        })
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+def _cloud_sync_classrooms(request, session, data=None):
+    data = data if isinstance(data, dict) else {}
+    _refresh_cloud_subscription_if_logged_in(session)
+    classroom_ids = data.get('classroom_ids')
+    sync_all_classrooms = not classroom_ids
+    force = bool(data.get('force'))
+    queryset = Classroom.objects.all().order_by('pk')
+    if classroom_ids:
+        if not isinstance(classroom_ids, list):
+            classroom_ids = [classroom_ids]
+        queryset = queryset.filter(pk__in=classroom_ids)
+
+    limits = session.limits if isinstance(session.limits, dict) else {}
+    max_classrooms = int(limits.get('max_classrooms', 3) or 3)
+    remote_status = _cloud_remote_status(session)
+    remote_versions = _cloud_versions_from_status(remote_status)
+    remote_classrooms = _cloud_classrooms_from_status(remote_status)
+    results = []
+
+    for index, classroom in enumerate(queryset):
+        meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
+        sync_payload = _serialize_classroom_sync_meta(classroom, meta)
+        remote_version = _cloud_remote_version_for(remote_versions, meta.uuid)
+        local_has_changes = int(sync_payload['local_version'] or 0) > int(sync_payload['cloud_version'] or 0)
+        if max_classrooms != -1 and index >= max_classrooms:
+            results.append({
+                'classroom_id': classroom.pk,
+                'name': classroom.name,
+                **sync_payload,
+                'status': 'skipped',
+                'message': f'当前订阅最多同步 {max_classrooms} 个班级',
+            })
+            continue
+
+        if remote_version is not None and remote_version > int(meta.cloud_version or 0) and not force:
+            if not local_has_changes:
+                try:
+                    classroom, meta = _cloud_pull_and_restore_classroom(
+                        request,
+                        session,
+                        str(meta.uuid),
+                        fallback_version=remote_version,
+                    )
+                except Exception as exc:
+                    meta.last_error = str(exc)
+                    meta.save(update_fields=['last_error', 'updated_at'])
+                    results.append({
+                        'classroom_id': classroom.pk,
+                        'name': classroom.name,
+                        **_serialize_classroom_sync_meta(classroom, meta),
+                        'status': 'error',
+                        'message': str(exc),
+                    })
+                else:
+                    results.append({
+                        'classroom_id': classroom.pk,
+                        'name': classroom.name,
+                        **_serialize_classroom_sync_meta(classroom, meta),
+                        'status': 'pulled',
+                        'version': int(meta.cloud_version or remote_version or 0),
+                        'message': '已从云端更新',
+                    })
+                continue
+
+            meta.last_error = 'conflict'
+            meta.save(update_fields=['last_error', 'updated_at'])
+            results.append({
+                'classroom_id': classroom.pk,
+                'name': classroom.name,
+                **_serialize_classroom_sync_meta(classroom, meta),
+                'status': 'conflict',
+                'cloud_version': remote_version,
+                'message': '云端版本更新，请先从云恢复或处理冲突',
+            })
+            continue
+
+        if (
+            not force
+            and remote_version is not None
+            and sync_payload['backed_up']
+            and sync_payload['local_version'] <= sync_payload['cloud_version']
+            and remote_version <= sync_payload['cloud_version']
+        ):
+            results.append({
+                'classroom_id': classroom.pk,
+                'name': classroom.name,
+                **sync_payload,
+                'status': 'up_to_date',
+                'message': '云端已是最新',
+            })
+            continue
+
+        body = {
+            'uuid': str(meta.uuid),
+            'base_version': int(meta.cloud_version or 0),
+            'cloud_version': int(meta.cloud_version or 0),
+            'local_version': int(meta.local_version or 0),
+            'force': force,
+            'device_id': data.get('device_id') or 'local-desktop',
+            'data': _cloud_export_payload(classroom, session),
+        }
+
+        try:
+            payload = cloud_api_request(session, 'POST', '/api/sync/push', body)
+        except CloudAPIError as exc:
+            payload = exc.payload or {}
+            if payload.get('conflict'):
+                meta.last_error = 'conflict'
+                meta.save(update_fields=['last_error', 'updated_at'])
+                results.append({
+                    'classroom_id': classroom.pk,
+                    'name': classroom.name,
+                    **_serialize_classroom_sync_meta(classroom, meta),
+                    'status': 'conflict',
+                    'cloud_version': payload.get('version'),
+                    'message': payload.get('message') or '云端版本更新，请先拉取或让用户选择保留版本',
+                })
+                continue
+            meta.last_error = payload.get('message') or str(exc)
+            meta.save(update_fields=['last_error', 'updated_at'])
+            results.append({
+                'classroom_id': classroom.pk,
+                'name': classroom.name,
+                **_serialize_classroom_sync_meta(classroom, meta),
+                'status': 'error',
+                'message': meta.last_error,
+            })
+            continue
+
+        if payload.get('ok') or payload.get('status') == 'success':
+            version = int(payload.get('version') or meta.cloud_version or 0)
+            meta.cloud_version = version
+            meta.local_version = version
+            meta.last_sync_at = timezone.now()
+            meta.last_error = ''
+            meta.save(update_fields=['cloud_version', 'local_version', 'last_sync_at', 'last_error', 'updated_at'])
+            results.append({
+                'classroom_id': classroom.pk,
+                'name': classroom.name,
+                **_serialize_classroom_sync_meta(classroom, meta),
+                'status': 'ok',
+                'version': version,
+            })
+        else:
+            results.append({
+                'classroom_id': classroom.pk,
+                'name': classroom.name,
+                **_serialize_classroom_sync_meta(classroom, meta),
+                'status': 'error',
+                'message': payload.get('message') or payload.get('error') or '云端未接受同步',
+            })
+
+    if sync_all_classrooms:
+        local_uuids = {
+            str(value)
+            for value in SyncMeta.objects.values_list('uuid', flat=True)
+            if value
+        }
+        for remote_row in remote_classrooms:
+            if not isinstance(remote_row, dict):
+                continue
+            remote_uuid = str(remote_row.get('uuid') or '').strip()
+            if not remote_uuid or remote_uuid in local_uuids:
+                continue
+            remote_name = str(remote_row.get('name') or '云端班级')
+            remote_version = _cloud_remote_version_for(remote_versions, remote_uuid)
+            try:
+                classroom, meta = _cloud_pull_and_restore_classroom(
+                    request,
+                    session,
+                    remote_uuid,
+                    fallback_version=remote_version,
+                )
+            except Exception as exc:
+                results.append({
+                    'uuid': remote_uuid,
+                    'name': remote_name,
+                    'status': 'error',
+                    'message': str(exc),
+                })
+                continue
+
+            local_uuids.add(remote_uuid)
+            results.append({
+                'classroom_id': classroom.pk,
+                'name': classroom.name,
+                **_serialize_classroom_sync_meta(classroom, meta),
+                'status': 'pulled',
+                'remote_only': True,
+                'version': int(meta.cloud_version or remote_version or 0),
+                'message': '已从云端恢复到本地',
+            })
+
+    return results
+
+
+@csrf_exempt
+@require_POST
+def cloud_sync(request):
+    try:
+        session = _cloud_local_session_or_401()
+        try:
+            data = _cloud_json_body(request)
+        except ValueError:
+            data = {}
+        results = _cloud_sync_classrooms(request, session, data)
+        return JsonResponse({'status': 'success', 'results': results})
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_POST
+def cloud_sync_pull(request, classroom_uuid):
+    try:
+        session = _cloud_local_session_or_401()
+        payload = cloud_api_request(session, 'GET', f'/api/sync/pull/{classroom_uuid}')
+        data = payload.get('data') or payload.get('data_snapshot')
+        classroom, meta = _cloud_restore_classroom_data(request, classroom_uuid, data, version=payload.get('version'))
+        return JsonResponse({
+            'status': 'success',
+            'classroom_id': classroom.pk,
+            'name': classroom.name,
+            'version': meta.cloud_version,
+            **_serialize_classroom_sync_meta(classroom, meta),
+        })
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_http_methods(['POST', 'DELETE'])
+def cloud_sync_delete(request, classroom_uuid):
+    try:
+        session = _cloud_local_session_or_401()
+        payload = cloud_api_request(session, 'DELETE', f'/api/sync/{classroom_uuid}')
+        return JsonResponse({'status': 'success', **payload})
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_http_methods(['GET', 'POST'])
+def cloud_snapshots(request):
+    try:
+        session = _cloud_local_session_or_401()
+        if request.method == 'GET':
+            classroom_uuid = str(request.GET.get('classroom_uuid') or '').strip()
+            if not classroom_uuid:
+                raise ValueError('缺少 classroom_uuid')
+            payload = cloud_api_request(session, 'GET', f'/api/snapshots/{classroom_uuid}')
+            return JsonResponse({'status': 'success', **payload})
+
+        data = _cloud_json_body(request)
+        classroom_uuid = str(data.get('classroom_uuid') or '').strip()
+        snapshot_data = data.get('data') if isinstance(data.get('data'), dict) else None
+        classroom_id = data.get('classroom_id')
+        if classroom_id:
+            classroom = get_object_or_404(Classroom, pk=classroom_id)
+            meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
+            classroom_uuid = str(meta.uuid)
+            snapshot_data = _cloud_export_payload(classroom, session)
+        if not classroom_uuid or not snapshot_data:
+            raise ValueError('缺少快照班级或快照数据')
+
+        payload = cloud_api_request(session, 'POST', '/api/snapshots', {
+            'classroom_uuid': classroom_uuid,
+            'name': data.get('name') or '手动快照',
+            'data': snapshot_data,
+        })
+        return JsonResponse({'status': 'success', **payload})
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_POST
+def cloud_snapshot_restore(request, snapshot_id):
+    try:
+        session = _cloud_local_session_or_401()
+        payload = cloud_api_request(session, 'GET', f'/api/snapshots/{snapshot_id}/download')
+        classroom_uuid = payload.get('classroom_uuid')
+        data = payload.get('data')
+        if not classroom_uuid:
+            raise ValueError('云端快照缺少 classroom_uuid')
+        classroom, meta = _cloud_restore_classroom_data(request, classroom_uuid, data)
+        return JsonResponse({
+            'status': 'success',
+            'classroom_id': classroom.pk,
+            'uuid': str(meta.uuid),
+            'name': classroom.name,
+        })
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_http_methods(['POST', 'DELETE'])
+def cloud_snapshot_delete(request, snapshot_id):
+    try:
+        session = _cloud_local_session_or_401()
+        payload = cloud_api_request(session, 'DELETE', f'/api/snapshots/{snapshot_id}')
+        return JsonResponse({'status': 'success', **payload})
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@require_http_methods(['GET'])
+def cloud_subscription_plans(request):
+    current_tier = None
+    active_session = get_active_cloud_session()
+    if active_session:
+        _refresh_cloud_subscription_if_logged_in(active_session)
+        current_tier = active_session.subscription_tier
+    try:
+        payload = cloud_public_request('GET', '/api/subscription/plans')
+        plans = payload.get('plans', [])
+        for p in plans:
+            p.setdefault('key', p.get('tier', ''))
+        return JsonResponse({'status': 'success', 'plans': plans, 'current_tier': current_tier})
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_POST
+def cloud_subscription_redeem(request):
+    try:
+        session = _cloud_local_session_or_401()
+        data = _cloud_json_body(request)
+        payload = cloud_api_request(session, 'POST', '/api/subscription/redeem', {
+            'code': data.get('code'),
+        })
+        if payload.get('uid') or payload.get('subscription'):
+            session_payload = {
+                'uid': payload.get('uid') or session.uid,
+                'nickname': payload.get('nickname') or session.nickname,
+                'email': payload.get('email') or session.email,
+                'avatar_url': payload.get('avatar_url') or session.avatar_url,
+                'session_token': session.session_token,
+                'client_key_id': session.client_key_id,
+                'client_public_key': session.client_public_key_pem,
+                'client_private_key': session.client_private_key_pem,
+                'server_key_id': session.server_key_id,
+                'server_public_key': session.server_public_key_pem,
+                'token_expires_at': session.token_expires_at.isoformat(),
+                'subscription': payload.get('subscription') or {},
+            }
+            save_cloud_session_from_payload(session_payload)
+        elif isinstance(payload, dict):
+            apply_cloud_subscription_payload(session, payload)
+        return JsonResponse({'status': 'success', **payload})
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@require_http_methods(['GET'])
+def cloud_purchase_url(request):
+    try:
+        tier_key = request.GET.get('tier') or request.GET.get('plan') or ''
+        payload = cloud_public_request('GET', f'/api/subscription/purchase-url?tier={tier_key}')
+        return JsonResponse({'status': 'success', 'ok': payload.get('ok', False), 'tier': tier_key, 'url': payload.get('url', '')})
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
 
 def frontend_store_js(request):
     kvs = FrontendKVStore.objects.all()
@@ -10869,22 +13100,45 @@ def frontend_store_js(request):
         const oldSetItem = Storage.prototype.setItem;
         const oldGetItem = Storage.prototype.getItem;
         const oldRemoveItem = Storage.prototype.removeItem;
+        const hasBackendValue = (key) => Object.prototype.hasOwnProperty.call(window.BACKEND_STORE, key);
+        const normalizeStoreKey = (key) => {{
+            if (key === undefined || key === null) return '';
+            return String(key);
+        }};
+        const syncBackendSet = (rawKey, rawValue) => {{
+            const key = normalizeStoreKey(rawKey);
+            if (!key || key.length > 255) return;
+            const value = String(rawValue);
+            if (hasBackendValue(key) && window.BACKEND_STORE[key] === value) return;
+            window.BACKEND_STORE[key] = value;
+            fetch('/api/store/set/', {{
+                method: 'POST',
+                headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify({{key: key, value: value}})
+            }}).catch(() => {{}});
+        }};
+        const syncBackendDelete = (rawKey) => {{
+            const key = normalizeStoreKey(rawKey);
+            if (!key || key.length > 255 || !hasBackendValue(key)) return;
+            delete window.BACKEND_STORE[key];
+            fetch('/api/store/delete/', {{
+                method: 'POST',
+                headers: {{'Content-Type': 'application/json'}},
+                body: JSON.stringify({{key: key}})
+            }}).catch(() => {{}});
+        }};
 
         Storage.prototype.setItem = function(key, val) {{
             try {{ oldSetItem.call(this, key, val); }} catch(e) {{}}
             if (this === window.localStorage) {{
-                window.BACKEND_STORE[key] = String(val);
-                fetch('/api/store/set/', {{
-                    method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{key: key, value: String(val)}})
-                }}).catch(e=>console.log(e));
+                syncBackendSet(key, val);
             }}
         }};
         
         Storage.prototype.getItem = function(key) {{
-            if (this === window.localStorage && window.BACKEND_STORE.hasOwnProperty(key)) {{
-                return window.BACKEND_STORE[key];
+            const storeKey = normalizeStoreKey(key);
+            if (this === window.localStorage && hasBackendValue(storeKey)) {{
+                return window.BACKEND_STORE[storeKey];
             }}
             try {{ return oldGetItem.call(this, key); }} catch(e) {{ return null; }}
         }};
@@ -10892,12 +13146,7 @@ def frontend_store_js(request):
         Storage.prototype.removeItem = function(key) {{
             try {{ oldRemoveItem.call(this, key); }} catch(e) {{}}
             if (this === window.localStorage) {{
-                delete window.BACKEND_STORE[key];
-                fetch('/api/store/delete/', {{
-                    method: 'POST',
-                    headers: {{'Content-Type': 'application/json'}},
-                    body: JSON.stringify({{key: key}})
-                }}).catch(e=>console.log(e));
+                syncBackendDelete(key);
             }}
         }};
     }} catch(e) {{
@@ -10925,11 +13174,13 @@ def frontend_store_js(request):
 def frontend_store_set(request):
     try:
         data = json.loads(request.body)
-        key = data.get('key')
-        value = data.get('value', '')
-        if key:
+        raw_key = data.get('key', '')
+        raw_value = data.get('value', '')
+        key = '' if raw_key is None else str(raw_key)
+        value = '' if raw_value is None else str(raw_value)
+        if key and len(key) <= 255:
             FrontendKVStore.objects.update_or_create(key=key, defaults={'value': value})
-        return JsonResponse({'status': 'success'})
+        return JsonResponse({'status': 'success', 'persisted': bool(key and len(key) <= 255)})
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
@@ -10938,8 +13189,9 @@ def frontend_store_set(request):
 def frontend_store_delete(request):
     try:
         data = json.loads(request.body)
-        key = data.get('key')
-        if key:
+        raw_key = data.get('key', '')
+        key = '' if raw_key is None else str(raw_key)
+        if key and len(key) <= 255:
             FrontendKVStore.objects.filter(key=key).delete()
         return JsonResponse({'status': 'success'})
     except Exception as e:

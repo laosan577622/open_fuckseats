@@ -1,3 +1,5 @@
+import uuid
+
 from django.db import models
 
 
@@ -11,6 +13,22 @@ class Classroom(models.Model):
     name = models.CharField(max_length=100, verbose_name="班级/教室名称")
     rows = models.IntegerField(default=6, verbose_name="行数")
     cols = models.IntegerField(default=8, verbose_name="列数")
+    left_guardian = models.OneToOneField(
+        'Student',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='left_guardian_classroom',
+        verbose_name="左护法",
+    )
+    right_guardian = models.OneToOneField(
+        'Student',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='right_guardian_classroom',
+        verbose_name="右护法",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
@@ -237,3 +255,64 @@ class ClassroomHistoryEntry(models.Model):
 
     def __str__(self):
         return f"{self.classroom_id}-{self.action_type or 'action'}-{self.pk}"
+
+
+class SyncMeta(models.Model):
+    classroom = models.OneToOneField(Classroom, on_delete=models.CASCADE, related_name='sync_meta')
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, verbose_name="云端班级 UUID")
+    cloud_version = models.BigIntegerField(default=0, verbose_name="云端版本号")
+    local_version = models.BigIntegerField(default=0, verbose_name="本地版本号")
+    last_sync_at = models.DateTimeField(null=True, blank=True, verbose_name="最近同步时间")
+    last_error = models.TextField(blank=True, default='', verbose_name="最近同步错误")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "云同步元数据"
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.classroom_id}-{self.uuid}"
+
+
+class CloudSession(models.Model):
+    uid = models.CharField(max_length=64, unique=True, verbose_name="老三账户 UID")
+    nickname = models.CharField(max_length=100, blank=True, default='', verbose_name="昵称")
+    avatar_url = models.URLField(blank=True, default='', verbose_name="头像")
+    email = models.EmailField(blank=True, default='', verbose_name="邮箱")
+    session_token = models.CharField(max_length=160, verbose_name="云端会话令牌")
+    client_key_id = models.CharField(max_length=96, blank=True, default='', verbose_name="本地加密密钥 ID")
+    client_public_key_pem = models.TextField(blank=True, default='', verbose_name="本地加密公钥")
+    client_private_key_pem = models.TextField(blank=True, default='', verbose_name="本地加密私钥")
+    server_key_id = models.CharField(max_length=96, blank=True, default='', verbose_name="云端加密密钥 ID")
+    server_public_key_pem = models.TextField(blank=True, default='', verbose_name="云端加密公钥")
+    token_expires_at = models.DateTimeField(verbose_name="令牌过期时间")
+    subscription_tier = models.CharField(max_length=16, default='free', verbose_name="订阅等级")
+    subscription_display_name = models.CharField(max_length=32, default='免费版', verbose_name="订阅显示名")
+    subscription_expires_at = models.DateTimeField(null=True, blank=True, verbose_name="订阅过期时间")
+    limits = models.JSONField(default=dict, blank=True, verbose_name="订阅限制")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "云端登录会话"
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.uid}-{self.subscription_tier}"
+
+
+class LocalCloudKeyMaterial(models.Model):
+    scope = models.CharField(max_length=32, unique=True, default='default', verbose_name="密钥作用域")
+    key_id = models.CharField(max_length=96, blank=True, default='', verbose_name="本地密钥 ID")
+    public_key_pem = models.TextField(blank=True, default='', verbose_name="本地公钥")
+    private_key_pem = models.TextField(blank=True, default='', verbose_name="本地私钥")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "本地云加密密钥"
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.scope}-{self.key_id}"

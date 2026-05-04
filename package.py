@@ -17,6 +17,99 @@ OPENAI_ENV_NAMES = (
     'OPENAI_MODEL',
 )
 
+COMMON_HIDDEN_IMPORTS = (
+    'waitress',
+    'webview',
+    'whitenoise',
+    'whitenoise.middleware',
+    'whitenoise.storage',
+    'django.contrib.staticfiles',
+    'django.contrib.admin',
+    'django.contrib.auth',
+    'django.contrib.contenttypes',
+    'django.contrib.sessions',
+    'django.contrib.messages',
+    'django.contrib.humanize',
+    'pandas',
+    'openai',
+    'httpx',
+    'httpcore',
+    'anyio',
+    'sniffio',
+    'pydantic',
+    'pydantic_core',
+    'openpyxl',
+    'xlrd',
+    'pptx',
+    'pytz',
+    'tzdata',
+    'pypinyin',
+    'certifi',
+    'cryptography',
+    'cryptography.hazmat.primitives.ciphers.aead',
+    'cryptography.hazmat.bindings._rust',
+    'cryptography.hazmat.bindings._rust.openssl',
+    'cryptography.hazmat.bindings._rust.openssl.aead',
+)
+
+WINDOWS_HIDDEN_IMPORTS = (
+    'clr',
+    'pythonnet',
+    'clr_loader',
+    'webview.platforms.winforms',
+    'webview.platforms.edgechromium',
+    'webview.platforms.mshtml',
+)
+
+COMMON_COLLECT_ALL = (
+    'openai',
+    'httpx',
+    'httpcore',
+    'pptx',
+    'webview',
+    'whitenoise',
+    'cryptography',
+)
+
+WINDOWS_COLLECT_ALL = (
+    'pythonnet',
+    'clr_loader',
+)
+
+COMMON_COLLECT_DATA = (
+    'certifi',
+    'cryptography',
+)
+
+COMMON_COPY_METADATA = (
+    'pandas',
+    'pywebview',
+    'pytz',
+    'python-dateutil',
+    'tzdata',
+    'certifi',
+    'whitenoise',
+    'cryptography',
+)
+
+WINDOWS_COPY_METADATA = (
+    'pythonnet',
+)
+
+EXCLUDED_MODULES = (
+    'website',
+)
+
+UNWANTED_PROJECT_BACKEND_PATHS = (
+    os.path.join('FuckSeats', 'backend'),
+    os.path.join('FuckSeats', '_internal', 'backend'),
+    os.path.join('FuckSeats.app', 'Contents', 'backend'),
+    os.path.join('FuckSeats.app', 'Contents', 'MacOS', 'backend'),
+    os.path.join('FuckSeats.app', 'Contents', 'Resources', 'backend'),
+    os.path.join('FuckSeats.app', 'Contents', 'Frameworks', 'backend'),
+    os.path.join('FuckSeats.app', 'Contents', '_internal', 'backend'),
+)
+
 
 def _ensure_utf8_stdio():
     """在部分 Windows CI 环境中，默认输出编码可能是 cp1252，中文打印会报错。"""
@@ -27,6 +120,55 @@ def _ensure_utf8_stdio():
                 stream.reconfigure(encoding='utf-8', errors='replace')
             except Exception:
                 pass
+
+
+def _is_windows():
+    return sys.platform.startswith('win')
+
+
+def _is_macos():
+    return sys.platform == 'darwin'
+
+
+def _extend_option_pairs(args, option, values):
+    for value in values:
+        args.extend([option, value])
+
+
+def _build_pyinstaller_command(data_args):
+    cmd = [
+        sys.executable, '-m', 'PyInstaller',
+        '--noconfirm',
+        '--onedir',
+        '--clean',
+        '--name', 'FuckSeats',
+        *data_args,
+    ]
+
+    if _is_windows() or _is_macos():
+        cmd.append('--windowed')
+
+    _extend_option_pairs(cmd, '--hidden-import', COMMON_HIDDEN_IMPORTS)
+    _extend_option_pairs(cmd, '--collect-all', COMMON_COLLECT_ALL)
+    _extend_option_pairs(cmd, '--collect-data', COMMON_COLLECT_DATA)
+    _extend_option_pairs(cmd, '--copy-metadata', COMMON_COPY_METADATA)
+
+    if _is_windows():
+        _extend_option_pairs(cmd, '--hidden-import', WINDOWS_HIDDEN_IMPORTS)
+        _extend_option_pairs(cmd, '--collect-all', WINDOWS_COLLECT_ALL)
+        _extend_option_pairs(cmd, '--copy-metadata', WINDOWS_COPY_METADATA)
+
+    _extend_option_pairs(cmd, '--exclude-module', EXCLUDED_MODULES)
+    cmd.append('run_app.py')
+    return cmd
+
+
+def _build_output_path(dist_dir):
+    if _is_macos():
+        return os.path.join(dist_dir, 'FuckSeats.app')
+    if _is_windows():
+        return os.path.join(dist_dir, 'FuckSeats', 'FuckSeats.exe')
+    return os.path.join(dist_dir, 'FuckSeats', 'FuckSeats')
 
 
 def _remove_embedded_databases(dist_root):
@@ -44,6 +186,23 @@ def _remove_embedded_databases(dist_root):
                     removed.append(file_path)
                 except Exception as e:
                     print(f"移除数据库文件失败: {file_path} ({e})", flush=True)
+    return removed
+
+
+def _remove_project_backend_payload(dist_root):
+    if not os.path.exists(dist_root):
+        return []
+
+    removed = []
+    for rel_path in UNWANTED_PROJECT_BACKEND_PATHS:
+        dir_path = os.path.join(dist_root, rel_path)
+        if not os.path.isdir(dir_path):
+            continue
+        try:
+            shutil.rmtree(dir_path)
+            removed.append(dir_path)
+        except Exception as e:
+            print(f"移除项目 backend 目录失败: {dir_path} ({e})", flush=True)
     return removed
 
 
@@ -112,72 +271,20 @@ def main():
         if staged_dir:
             data_args += ['--add-data', f'{staged_dir}{os.pathsep}{data_dir}']
 
-    cmd = [
-        sys.executable, '-m', 'PyInstaller',
-        '--noconfirm',
-        '--onedir',
-        '--clean',
-        '--name', 'FuckSeats',
-
-        *data_args,
-
-        '--hidden-import', 'waitress',
-        '--hidden-import', 'webview',
-        '--hidden-import', 'clr',
-        '--hidden-import', 'pythonnet',
-        '--hidden-import', 'clr_loader',
-        '--hidden-import', 'whitenoise',
-        '--hidden-import', 'whitenoise.middleware',
-        '--hidden-import', 'django.contrib.staticfiles',
-        '--hidden-import', 'django.contrib.admin',
-        '--hidden-import', 'django.contrib.auth',
-        '--hidden-import', 'django.contrib.contenttypes',
-        '--hidden-import', 'django.contrib.sessions',
-        '--hidden-import', 'django.contrib.messages',
-        '--hidden-import', 'django.contrib.humanize',
-        '--hidden-import', 'pandas',
-        '--hidden-import', 'openai',
-        '--hidden-import', 'httpx',
-        '--hidden-import', 'httpcore',
-        '--hidden-import', 'anyio',
-        '--hidden-import', 'sniffio',
-        '--hidden-import', 'pydantic',
-        '--hidden-import', 'pydantic_core',
-        '--hidden-import', 'openpyxl',
-        '--hidden-import', 'xlrd',
-        '--hidden-import', 'pptx',
-        '--hidden-import', 'pytz',
-        '--hidden-import', 'tzdata',
-        '--hidden-import', 'pypinyin',
-        '--collect-all', 'openai',
-        '--collect-all', 'httpx',
-        '--collect-all', 'httpcore',
-        '--collect-all', 'pptx',
-        '--collect-all', 'pythonnet',
-        '--collect-all', 'clr_loader',
-        '--collect-all', 'webview',
-        '--copy-metadata', 'pandas',
-        '--copy-metadata', 'pythonnet',
-        '--copy-metadata', 'pywebview',
-        '--copy-metadata', 'pytz',
-        '--copy-metadata', 'python-dateutil',
-        '--copy-metadata', 'tzdata',
-        
-        # 这些目录已通过 add-data 带入
-        '--exclude-module', 'seats',
-        '--exclude-module', 'website',
-        '--exclude-module', 'config',
-
-        'run_app.py'
-    ]
+    cmd = _build_pyinstaller_command(data_args)
     
     print(f"执行命令: {' '.join(cmd)}", flush=True)
     
     try:
         subprocess.check_call(cmd, cwd=BASE_DIR)
+        removed_unwanted_dirs = _remove_project_backend_payload(DIST_DIR)
         removed_db_files = _remove_embedded_databases(DIST_DIR)
         print("-" * 30, flush=True)
         print("打包成功！", flush=True)
+        if removed_unwanted_dirs:
+            print(f"已移除 {len(removed_unwanted_dirs)} 个不需要的目录（含 backend）。", flush=True)
+        else:
+            print("未发现需要剔除的项目 backend 目录。", flush=True)
         if removed_db_files:
             print(f"已移除 {len(removed_db_files)} 个数据库文件，避免随安装包分发。", flush=True)
         else:
@@ -195,8 +302,8 @@ def main():
                 "当前环境未配置 OpenAI 变量。打包后的程序仍可在 Future Mode 页面中直接填写 API Key / Base URL / Model ID。",
                 flush=True
             )
-        exe_path = os.path.join(DIST_DIR, 'FuckSeats', 'FuckSeats.exe')
-        print(f"可执行文件位置: {exe_path}", flush=True)
+        output_path = _build_output_path(DIST_DIR)
+        print(f"构建产物位置: {output_path}", flush=True)
     except subprocess.CalledProcessError as e:
         print(f"打包过程中出错: {e}", flush=True)
         sys.exit(1)

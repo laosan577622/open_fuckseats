@@ -6,6 +6,7 @@ class SeatsConfig(AppConfig):
 
     def ready(self):
         from .plugin_system import plugin_registry
+        from . import sync_signals  # noqa: F401
 
         plugin_registry.ensure_loaded()
         plugin_registry.emit('app_ready')

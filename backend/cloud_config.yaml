@@ -1,0 +1,68 @@
+server:
+  base_url: "http://127.0.0.1:23947"
+  host: "0.0.0.0"
+  port: 23947
+  secret_key: "1297391728sakjsdb"
+  debug: false
+  allowed_hosts: ["*"]
+  timezone: "Asia/Shanghai"
+
+metadata:
+  developer_name: "老三"
+  developer_website: "www.577622.xyz"
+
+database:
+  name: "cloud.sqlite3"
+
+laosan_oauth:
+  client_id: "app_6f1c6a7c1c4566c43a610b37674b661f"
+  client_secret: "0f0dc06fcf5b1ecbac03ac5560d1186141675bcb6bf63dba"
+  authorize_url: "https://www.577622.xyz/oauth/authorize"
+  token_url: "https://www.577622.xyz/oauth/token"
+  userinfo_url: "https://www.577622.xyz/oauth/userinfo"
+  scope: "email nickname subscriptions"
+
+subscription:
+  fallback_tier: "free"
+  purchase_url: ""
+  tiers:
+    free:
+      display_name: "免费版"
+      limits:
+        max_classrooms: 3
+        sync_enabled: true
+        max_history_steps: 0
+        sync_ai_conversations: false
+        max_snapshots_per_classroom: 3
+    pro:
+      display_name: "Pro"
+      service_identifier: "bShVOIoLCo"
+      price: "RMB 9999"
+      purchase_url: "https://www.577621111112.xyz/manage"
+      limits:
+        max_classrooms: 10
+        sync_enabled: true
+        max_history_steps: 10
+        sync_ai_conversations: false
+        max_snapshots_per_classroom: 20
+    pro_max:
+      display_name: "Pro Max"
+      service_identifier: "fuckseats_pro_max"
+      limits:
+        max_classrooms: -1
+        sync_enabled: true
+        max_history_steps: 100
+        sync_ai_conversations: true
+        max_snapshots_per_classroom: 50
+  priority: ["pro_max", "pro", "free"]
+
+rate_limit:
+  sync_per_minute: 30
+  auth_per_minute_per_ip: 10
+  snapshot_per_hour: 20
+
+data_limits:
+  max_push_size_mb: 5
+  max_batch_push_size_mb: 20
+  session_token_ttl_days: 7
+  session_code_ttl_seconds: 60

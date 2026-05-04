@@ -1,4 +1,6 @@
 Django
+certifi
+cryptography
 pandas
 openai
 openpyxl

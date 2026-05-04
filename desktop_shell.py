@@ -3,6 +3,8 @@ import json
 import re
 import sys
 import threading
+import uuid
+import urllib.error
 import urllib.parse
 import urllib.request
 import webbrowser
@@ -224,6 +226,53 @@ def ensure_allowed_extension(file_path, accept_extensions):
     return f"{target}{allowed[0]}"
 
 
+def is_allowed_extension(file_path, accept_extensions):
+    normalized_extensions = normalize_accept_extensions(accept_extensions)
+    allowed = [ext.lower() for ext in normalized_extensions]
+    if not allowed:
+        return True
+    return Path(str(file_path or "")).suffix.lower() in allowed
+
+
+def build_multipart_form_data(fields=None, files=None):
+    boundary = f"----FuckSeatsBoundary{uuid.uuid4().hex}"
+    chunks = []
+
+    def quote_header(value):
+        return str(value or "").replace("\\", "\\\\").replace('"', '\\"')
+
+    for name, value in (fields or {}).items():
+        chunks.append(f"--{boundary}".encode("utf-8"))
+        chunks.append(f'Content-Disposition: form-data; name="{quote_header(name)}"'.encode("utf-8"))
+        chunks.append(b"")
+        chunks.append(str(value or "").encode("utf-8"))
+
+    for item in (files or []):
+        field_name = item.get("field_name") or "file"
+        filename = item.get("filename") or "upload"
+        content_type = item.get("content_type") or "application/octet-stream"
+        content = item.get("content") or b""
+        chunks.append(f"--{boundary}".encode("utf-8"))
+        chunks.append(
+            (
+                f'Content-Disposition: form-data; name="{quote_header(field_name)}"; '
+                f'filename="{quote_header(filename)}"'
+            ).encode("utf-8")
+        )
+        chunks.append(f"Content-Type: {content_type}".encode("utf-8"))
+        chunks.append(b"")
+        if isinstance(content, bytes):
+            chunks.append(content)
+        elif isinstance(content, str):
+            chunks.append(content.encode("utf-8"))
+        else:
+            chunks.append(bytes(content))
+
+    chunks.append(f"--{boundary}--".encode("utf-8"))
+    chunks.append(b"")
+    return boundary, b"\r\n".join(chunks)
+
+
 def build_file_dialog_types(accept_mime="", accept_extensions=None):
     extensions = normalize_accept_extensions(accept_extensions)
     if not extensions:
@@ -262,7 +311,9 @@ class DesktopBridge:
         self._server_origin = str(server_origin or "").rstrip("/")
         self._window = None
         self._last_export_dir = str(default_export_directory())
+        self._last_import_dir = str(default_export_directory())
         self._save_lock = threading.Lock()
+        self._import_lock = threading.Lock()
         self._active_context_menu = None
         self._windows_context_loaded_hook_registered = False
         self._windows_context_document_script_registered = False
@@ -1003,6 +1054,25 @@ class DesktopBridge:
             return str(result[0]) if result else ""
         return str(result)
 
+    def _show_open_dialog(self):
+        if self._window is None:
+            raise RuntimeError("桌面窗口尚未准备完成")
+
+        import webview
+
+        result = self._window.create_file_dialog(
+            webview.FileDialog.OPEN,
+            directory=self._last_import_dir,
+            allow_multiple=False,
+            file_types=(),
+        )
+
+        if not result:
+            return ""
+        if isinstance(result, (list, tuple)):
+            return str(result[0]) if result else ""
+        return str(result)
+
     def save_export(self, export_url, suggested_filename="", accept_mime="", accept_extensions=None):
         with self._save_lock:
             exported = self._download_export(export_url)
@@ -1030,3 +1100,95 @@ class DesktopBridge:
                 "filename": target_path.name,
                 "path": str(target_path),
             }
+
+    def _upload_selected_file(self, upload_url, csrf_token="", field_name="file", accept_extensions=None):
+        with self._import_lock:
+            normalized_exts = normalize_accept_extensions(accept_extensions)
+            selected_path = self._show_open_dialog()
+            if not selected_path:
+                return {"status": "cancelled"}
+
+            source_path = Path(selected_path).expanduser()
+            if not source_path.exists() or not source_path.is_file():
+                return {"status": "error", "message": "选择的文件不存在"}
+            if not is_allowed_extension(source_path, normalized_exts):
+                display_exts = " / ".join(normalized_exts) if normalized_exts else "有效"
+                return {"status": "error", "message": f"请选择 {display_exts} 文件"}
+
+            target_url = resolve_local_export_url(self._server_origin, upload_url)
+            content = source_path.read_bytes()
+            content_type = mimetypes.guess_type(source_path.name)[0] or "application/octet-stream"
+            fields = {}
+            csrf_value = str(csrf_token or "").strip()
+            if csrf_value:
+                fields["csrfmiddlewaretoken"] = csrf_value
+            boundary, body = build_multipart_form_data(
+                fields=fields,
+                files=[
+                    {
+                        "field_name": field_name or "file",
+                        "filename": source_path.name,
+                        "content_type": content_type,
+                        "content": content,
+                    }
+                ],
+            )
+            headers = {
+                "User-Agent": "FuckSeats Desktop",
+                "X-Requested-With": "XMLHttpRequest",
+                "Content-Type": f"multipart/form-data; boundary={boundary}",
+            }
+            if csrf_value:
+                headers["X-CSRFToken"] = csrf_value
+                headers["Cookie"] = f"csrftoken={urllib.parse.quote(csrf_value)}"
+
+            request = urllib.request.Request(
+                target_url,
+                data=body,
+                headers=headers,
+                method="POST",
+            )
+
+            try:
+                with urllib.request.urlopen(request, timeout=120) as response:
+                    status = getattr(response, "status", 200)
+                    if status >= 400:
+                        raise ValueError(f"导入失败（{status}）")
+                    raw_response = response.read().decode("utf-8", errors="replace")
+            except urllib.error.HTTPError as exc:
+                error_payload = None
+                try:
+                    error_body = exc.read().decode("utf-8", errors="replace")
+                    error_payload = json.loads(error_body)
+                except Exception:
+                    pass
+                if isinstance(error_payload, dict):
+                    raise ValueError(error_payload.get("message") or f"导入失败（{exc.code}）") from exc
+                raise ValueError(f"导入失败（{exc.code}）") from exc
+            except urllib.error.URLError as exc:
+                raise ValueError(f"无法连接本地导入服务：{exc.reason}") from exc
+
+            self._last_import_dir = str(source_path.parent)
+            result = {
+                "status": "imported",
+                "filename": source_path.name,
+                "path": str(source_path),
+            }
+            try:
+                response_payload = json.loads(raw_response) if raw_response else None
+            except Exception:
+                response_payload = None
+            if isinstance(response_payload, dict):
+                result["response"] = response_payload
+                if response_payload.get("status"):
+                    result["status"] = response_payload.get("status")
+                if response_payload.get("message"):
+                    result["message"] = response_payload.get("message")
+            return result
+
+    def upload_local_file(self, upload_url, csrf_token="", field_name="file", accept_extensions=None):
+        return self._upload_selected_file(upload_url, csrf_token, field_name, accept_extensions)
+
+    def import_seats_file(self, import_url, csrf_token="", accept_extensions=None):
+        normalized_exts = normalize_accept_extensions(accept_extensions) or [".seats", ".json"]
+        return self._upload_selected_file(import_url, csrf_token, "seats_file", normalized_exts)

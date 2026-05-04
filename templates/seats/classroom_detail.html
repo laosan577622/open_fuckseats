@@ -3,6 +3,10 @@
 
 {% block title %}{{ classroom.name }} - 排座详情{% endblock %}
 
+{% block extra_head %}
+<link rel="stylesheet" href="{% static 'css/dynamic-island.css' %}?v=1.0">
+{% endblock %}
+
 {% block ribbon_tabs %}
 <button type="button" class="ribbon-tab active" data-ribbon-tab="home">开始</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="view">视图</button>
@@ -95,6 +99,8 @@
                                     <a href="{% url 'import_layout_excel_options_page' classroom.pk %}"
                                         class="menu-item-link" id="btn-open-layout-import-modal"
                                         role="menuitem">导入座位表</a>
+                                    <button type="button" class="menu-item-button" data-bsce-import-trigger="1"
+                                        role="menuitem">BSCE 导入</button>
                                 </div>
                             </div>
                             <div class="menu-submenu">
@@ -256,6 +262,8 @@
     data-rename-classroom-url="{% url 'rename_classroom' classroom.pk %}" data-classroom-name="{{ classroom.name }}"
     data-state-url="{% url 'classroom_state' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
     data-redo-url="{% url 'redo_action' classroom.pk %}" data-set-leader-url="{% url 'set_group_leader' classroom.pk %}"
+    data-toggle-fixed-seat-url="{% url 'toggle_fixed_seat' classroom.pk %}"
+    data-add-student-url="{% url 'add_student' classroom.pk %}"
     data-command-url="{% url 'classroom_command' classroom.pk %}"
     data-csrf="{{ csrf_token }}">
 
@@ -271,13 +279,26 @@
             <div class="seat-row">
                 {% for seat in row_seats %}
                 {% if seat %}
-                <div class="seat cell-{{ seat.cell_type }} {% if seat.student %}occupied{% endif %} {% if seat.student and seat.group and seat.group.leader_id == seat.student.pk %}is-leader{% endif %}"
+                <div class="seat cell-{{ seat.cell_type }} {% if seat.student %}occupied{% endif %} {% if seat.student and seat.group and seat.group.leader_id == seat.student.pk %}is-leader{% endif %}{% if seat.student and seat.student.is_fixed_seat %} is-fixed-seat{% endif %}"
                     data-row="{{ seat.row }}" data-col="{{ seat.col }}" data-cell-type="{{ seat.cell_type }}"
-                    data-student-id="{% if seat.student %}{{ seat.student.pk }}{% endif %}">
+                    data-student-id="{% if seat.student %}{{ seat.student.pk }}{% endif %}"
+                    data-fixed-seat="{% if seat.student and seat.student.is_fixed_seat %}1{% else %}0{% endif %}">
                     {% if seat.cell_type == 'seat' %}
                     {% if seat.student %}
                     <div class="seat-content" draggable="true" data-student-id="{{ seat.student.pk }}">
                         <div class="seat-name">{{ seat.student.name }}</div>
+                        {% if seat.student.podium_guardian_side or seat.student.is_fixed_seat %}
+                        <div class="seat-badge-row">
+                            {% if seat.student.podium_guardian_side == 'left' %}
+                            <span class="guardian-badge left-guard">左护法</span>
+                            {% elif seat.student.podium_guardian_side == 'right' %}
+                            <span class="guardian-badge right-guard">右护法</span>
+                            {% endif %}
+                            {% if seat.student.is_fixed_seat %}
+                            <span class="fixed-seat-badge">固定座位</span>
+                            {% endif %}
+                        </div>
+                        {% endif %}
                         {% if seat.student.score > 0 %}
                         <div class="seat-info">{{ seat.student.display_score }}分</div>
                         {% endif %}
@@ -324,14 +345,32 @@
                 <div class="tab-panel active" data-tab-panel="students">
                     <div class="panel-header">
                         <h3>未入座</h3>
-                        <span class="panel-meta" id="unseatedCount">{{ unseated_students|length }} 人</span>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span class="panel-meta" id="unseatedCount">{{ unseated_students|length }} 人</span>
+                            <button type="button" class="icon-btn" id="btn-add-student" title="添加学生" style="width:24px;height:24px;font-size:16px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;">+</button>
+                        </div>
                     </div>
                     <input type="text" id="unseatedSearch" placeholder="搜索未入座学生（姓名）">
                     <div class="unseated-list">
                         {% for student in unseated_students %}
-                        <div class="unseated-item" draggable="true" data-student-id="{{ student.pk }}">
+                        <div class="unseated-item" draggable="true" data-student-id="{{ student.pk }}"
+                            data-student-sid="{{ student.student_id|default:'' }}"
+                            data-student-gender="{{ student.gender|default:'' }}"
+                            data-student-score="{{ student.score|default:'0' }}"
+                            data-update-url="{% url 'update_student' classroom.pk student.pk %}"
+                        >
                             <div>
-                                <div class="unseated-name">{{ student.name }}</div>
+                                <div class="unseated-name">
+                                    {{ student.name }}
+                                    {% if student.podium_guardian_side == 'left' %}
+                                    <span class="guardian-badge left-guard">左护法</span>
+                                    {% elif student.podium_guardian_side == 'right' %}
+                                    <span class="guardian-badge right-guard">右护法</span>
+                                    {% endif %}
+                                    {% if student.is_fixed_seat %}
+                                    <span class="fixed-seat-badge">固定座位</span>
+                                    {% endif %}
+                                </div>
                                 <div class="unseated-info">{% if student.score %}{{ student.display_score }}分{% endif %}
                                 </div>
                             </div>
@@ -345,31 +384,27 @@
                 </div>
 
                 <div class="tab-panel" data-tab-panel="groups">
-                    <div class="panel-header">
-                        <h3>小组管理</h3>
-                    </div>
-                    <form method="post" action="{% url 'create_group' classroom.pk %}" class="inline-form"
-                        id="createGroupForm">
-                        {% csrf_token %}
-                        <input type="text" name="name" placeholder="小组名称" required>
-                        <button type="submit" class="btn btn-primary">添加</button>
-                    </form>
-                    <div class="group-list" id="groupList">
-                        {% for group in groups %}
-                        <div class="group-item" data-group-id="{{ group.pk }}" data-group-name="{{ group.name }}">
-                            <span>{{ group.name }}</span>
-                            <div style="display: flex; gap: 4px;">
-                                <button type="button" class="btn btn-secondary"
-                                    style="padding: 2px 8px; font-size: 12px;" data-action="rename-group"
-                                    data-url="{% url 'rename_group' classroom.pk group.pk %}">重命名</button>
-                                <button type="button" class="btn btn-secondary"
-                                    style="padding: 2px 8px; font-size: 12px;" data-action="delete-group"
-                                    data-url="{% url 'delete_group' classroom.pk group.pk %}">删除</button>
-                            </div>
+                    {% if not groups %}
+                    <div class="group-empty-guide" id="groupEmptyGuide">
+                        <div class="guide-icon">
+                            <svg width="40" height="40" viewBox="0 0 24 24" fill="none">
+                                <circle cx="9" cy="7" r="3" stroke="var(--primary-color)" stroke-width="1.5"/>
+                                <path d="M2 21v-1a5 5 0 0 1 5-5h4a5 5 0 0 1 5 5v1" stroke="var(--primary-color)" stroke-width="1.5" stroke-linecap="round"/>
+                                <path d="M19 8v6M16 11h6" stroke="var(--primary-color)" stroke-width="1.5" stroke-linecap="round"/>
+                            </svg>
                         </div>
-                        {% empty %}
-                        <div class="empty-hint">暂无小组</div>
-                        {% endfor %}
+                        <div class="guide-title">还没有小组</div>
+                        <div class="guide-desc">创建小组后，可以将学生分配到不同小组，支持框选批量分组、自动编组等操作。</div>
+                        <form method="post" action="{% url 'create_group' classroom.pk %}" class="inline-form"
+                            id="createGroupForm">
+                            {% csrf_token %}
+                            <input type="text" name="name" placeholder="输入第一个小组名称" required>
+                            <button type="submit" class="btn btn-primary">创建小组</button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <div class="panel-header">
+                        <h3>分组工具</h3>
                     </div>
                     <div class="panel-note">开启分组模式后可框选或点击多选座位，再应用分组</div>
                     <div class="tool-row">
@@ -381,6 +416,8 @@
                         </select>
                         <button type="button" class="btn btn-secondary" id="groupAssignToggle">分组模式</button>
                         <button type="button" class="btn btn-secondary" id="groupApplyBtn">应用到选中</button>
+                    </div>
+                    <div class="tool-row">
                         <button type="button" class="btn btn-secondary" id="groupAutoBtn"
                             data-open-modal="group-auto-config-modal">自动编组</button>
                         <button type="button" class="btn btn-secondary" id="groupRotateBtn">小组轮换</button>
@@ -401,60 +438,156 @@
                         </select>
                         <button type="button" class="btn btn-secondary" id="groupMergeBtn">合并组</button>
                     </div>
+
+                    <div class="collapsible-section">
+                        <button type="button" class="collapsible-toggle" id="groupToolsToggle">
+                            <svg class="collapsible-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            小组详情
+                        </button>
+                        <div class="collapsible-body" id="groupToolsBody">
+                            <form method="post" action="{% url 'create_group' classroom.pk %}" class="inline-form"
+                                id="createGroupForm">
+                                {% csrf_token %}
+                                <input type="text" name="name" placeholder="小组名称" required>
+                                <button type="submit" class="btn btn-primary">添加</button>
+                            </form>
+                            <div class="group-list" id="groupList">
+                                {% for group in groups %}
+                                <div class="group-item" data-group-id="{{ group.pk }}" data-group-name="{{ group.name }}">
+                                    <span>{{ group.name }}</span>
+                                    <div style="display: flex; gap: 4px;">
+                                        <button type="button" class="btn btn-secondary"
+                                            style="padding: 2px 8px; font-size: 12px;" data-action="rename-group"
+                                            data-url="{% url 'rename_group' classroom.pk group.pk %}">重命名</button>
+                                        <button type="button" class="btn btn-secondary"
+                                            style="padding: 2px 8px; font-size: 12px;" data-action="delete-group"
+                                            data-url="{% url 'delete_group' classroom.pk group.pk %}">删除</button>
+                                    </div>
+                                </div>
+                                {% endfor %}
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
                 </div>
 
                 <div class="tab-panel" data-tab-panel="constraints">
                     <div class="panel-header">
-                        <h3>约束管理</h3>
-                    </div>
-                    <form method="post" action="{% url 'create_constraint' classroom.pk %}" class="constraint-form">
-                        {% csrf_token %}
-                        <select name="constraint_type" required>
-                            <option value="must_seat">指定座位</option>
-                            <option value="forbid_seat">禁用座位</option>
-                            <option value="must_row">指定行</option>
-                            <option value="forbid_row">禁用行</option>
-                            <option value="must_col">指定列</option>
-                            <option value="forbid_col">禁用列</option>
-                            <option value="must_together">指定相邻</option>
-                            <option value="forbid_together">禁止相邻</option>
-                        </select>
-                        <select name="student_id" required>
-                            {% for student in students %}
-                            <option value="{{ student.pk }}">{{ student.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <select name="target_student_id">
-                            <option value="">关联学生（可选）</option>
-                            {% for student in students %}
-                            <option value="{{ student.pk }}">{{ student.name }}</option>
-                            {% endfor %}
-                        </select>
-                        <div class="constraint-grid">
-                            <input type="number" name="row" placeholder="行" min="1">
-                            <input type="number" name="col" placeholder="列" min="1">
-                            <input type="number" name="distance" placeholder="距离" min="1" value="1">
+                        <div>
+                            <h3>约束管理</h3>
+                            <div class="panel-note">约束会参与自动排座、手动移动后的自动修复，以及当前布局诊断。</div>
                         </div>
-                        <input type="text" name="note" placeholder="备注（可选）">
-                        <button type="submit" class="btn btn-primary">添加约束</button>
-                    </form>
-                    <div class="constraint-list">
-                        {% for constraint in constraints %}
-                        <div class="constraint-item">
-                            <div>
-                                <div class="constraint-title">{{ constraint.get_constraint_type_display }}</div>
-                                <div class="constraint-desc">
-                                    {{ constraint.student.name }}
-                                    {% if constraint.target_student %} ↔ {{ constraint.target_student.name }}{% endif %}
-                                    {% if constraint.row %} 行 {{ constraint.row }}{% endif %}
-                                    {% if constraint.col %} 列 {{ constraint.col }}{% endif %}
-                                    {% if constraint.distance %} 距离 {{ constraint.distance }}{% endif %}
-                                </div>
+                    </div>
+                    <div class="constraint-metrics" id="constraintMetrics">
+                        <span class="constraint-metric-pill">总计 {{ constraint_metrics.total }}</span>
+                        <span class="constraint-metric-pill">启用 {{ constraint_metrics.enabled }}</span>
+                        <span class="constraint-metric-pill">停用 {{ constraint_metrics.disabled }}</span>
+                        <span class="constraint-metric-pill">异常 {{ constraint_metrics.with_issues }}</span>
+                    </div>
+                    <form method="post" action="{% url 'create_constraint' classroom.pk %}" class="constraint-form" id="constraintForm" data-create-url="{% url 'create_constraint' classroom.pk %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="constraint_id" id="constraintIdInput" value="">
+                        <div class="constraint-form-grid">
+                            <div class="form-group">
+                                <label for="constraintTypeSelect">约束类型</label>
+                                <select name="constraint_type" id="constraintTypeSelect" required>
+                                    {% for item in constraint_types %}
+                                    <option value="{{ item.value }}">{{ item.label }}</option>
+                                    {% endfor %}
+                                </select>
                             </div>
-                            <form method="post" action="{% url 'delete_constraint' classroom.pk constraint.pk %}">
-                                {% csrf_token %}
-                                <button type="submit" class="btn btn-secondary">删除</button>
-                            </form>
+                            <div class="form-group">
+                                <label for="constraintStudentSelect">学生</label>
+                                <select name="student_id" id="constraintStudentSelect" required>
+                                    {% for student in students %}
+                                    <option value="{{ student.pk }}">{{ student.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group" data-constraint-field="target_student_id">
+                                <label for="constraintTargetStudentSelect">关联学生</label>
+                                <select name="target_student_id" id="constraintTargetStudentSelect">
+                                    <option value="">请选择</option>
+                                    {% for student in students %}
+                                    <option value="{{ student.pk }}">{{ student.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group" data-constraint-field="row">
+                                <label for="constraintRowInput">行</label>
+                                <input type="number" name="row" id="constraintRowInput" placeholder="行" min="1" max="{{ classroom.rows }}">
+                            </div>
+                            <div class="form-group" data-constraint-field="col">
+                                <label for="constraintColInput">列</label>
+                                <input type="number" name="col" id="constraintColInput" placeholder="列" min="1" max="{{ classroom.cols }}">
+                            </div>
+                            <div class="form-group" data-constraint-field="distance">
+                                <label for="constraintDistanceInput">距离</label>
+                                <input type="number" name="distance" id="constraintDistanceInput" placeholder="距离" min="1" value="1">
+                            </div>
+                            <div class="form-group constraint-note-field" data-constraint-field="note">
+                                <label for="constraintNoteInput">备注</label>
+                                <input type="text" name="note" id="constraintNoteInput" placeholder="备注（可选）">
+                            </div>
+                        </div>
+                        <div class="tool-row">
+                            <button type="submit" class="btn btn-primary" id="constraintSubmitBtn">添加约束</button>
+                            <button type="button" class="btn btn-secondary" id="constraintCancelEditBtn" hidden>取消编辑</button>
+                        </div>
+                    </form>
+                    <div class="constraint-toolbar">
+                        <div class="tool-grid constraint-filter-group" id="constraintFilterGroup">
+                            <button type="button" class="tool-btn active" data-constraint-filter="all">全部</button>
+                            <button type="button" class="tool-btn" data-constraint-filter="issues">有问题</button>
+                            <button type="button" class="tool-btn" data-constraint-filter="enabled">启用中</button>
+                            <button type="button" class="tool-btn" data-constraint-filter="disabled">已停用</button>
+                        </div>
+                        <div class="panel-note" id="constraintFilterHint">可以筛选当前约束，并在列表中直接编辑或启停。</div>
+                    </div>
+                    <div class="constraint-list" id="constraintList">
+                        {% for item in constraint_items %}
+                        <div class="constraint-item {% if item.status != 'ok' and item.status != 'disabled' %}constraint-item-warning{% endif %}{% if not item.enabled %} constraint-item-disabled{% endif %}"
+                            data-constraint-pk="{{ item.pk }}"
+                            data-constraint-type="{{ item.constraint_type }}"
+                            data-student-pk="{{ item.student_pk }}"
+                            data-target-student-pk="{{ item.target_student_pk|default_if_none:'' }}"
+                            data-row="{{ item.row|default_if_none:'' }}"
+                            data-col="{{ item.col|default_if_none:'' }}"
+                            data-distance="{{ item.distance|default_if_none:'1' }}"
+                            data-enabled="{{ item.enabled|yesno:'1,0' }}"
+                            data-note="{{ item.note }}"
+                            data-update-url="{{ item.update_url }}"
+                            data-toggle-url="{{ item.toggle_url }}"
+                            data-delete-url="{{ item.delete_url }}">
+                            <div class="constraint-main">
+                                <div class="constraint-title-row">
+                                    <div class="constraint-title">{{ item.constraint_type_display }}</div>
+                                    <div class="constraint-badges">
+                                        <span class="constraint-badge constraint-badge-{{ item.status }}">
+                                            {% if item.status == 'disabled' %}已停用{% elif item.status == 'error' %}冲突{% elif item.status == 'warning' %}未满足{% else %}正常{% endif %}
+                                        </span>
+                                        {% if item.note %}<span class="constraint-badge">有备注</span>{% endif %}
+                                    </div>
+                                </div>
+                                <div class="constraint-desc">{{ item.summary }}</div>
+                                {% if item.note %}
+                                <div class="constraint-note">备注：{{ item.note }}</div>
+                                {% endif %}
+                                {% if item.issues %}
+                                <div class="constraint-issues">
+                                    {% for issue in item.issues %}
+                                    <div class="constraint-issue constraint-issue-{{ issue.type }}">{{ issue.message }}</div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                            <div class="constraint-actions">
+                                <button type="button" class="btn btn-secondary" data-constraint-action="edit">编辑</button>
+                                <button type="button" class="btn btn-secondary" data-constraint-action="toggle">
+                                    {% if item.enabled %}停用{% else %}启用{% endif %}
+                                </button>
+                                <button type="button" class="btn btn-secondary" data-constraint-action="delete">删除</button>
+                            </div>
                         </div>
                         {% empty %}
                         <div class="empty-hint">暂无约束</div>
@@ -474,6 +607,7 @@
                             成绩表</a>
                         <a href="{% url 'import_layout_excel_options_page' classroom.pk %}"
                             class="btn btn-primary">导入座位表</a>
+                        <button type="button" class="btn btn-primary" data-bsce-import-trigger="1">BSCE 导入</button>
                         <button type="button" class="btn btn-primary" data-seats-import-trigger="1">导入
                             .seats（系统操作）</button>
                     </div>
@@ -555,6 +689,38 @@
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" id="genericDialogCancel">取消</button>
                 <button type="button" class="btn btn-primary" id="genericDialogOk">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="student-form-modal" class="modal">
+        <div class="modal-content" style="max-width: 420px;">
+            <h3 id="studentFormTitle" style="margin: 0 0 16px; font-size: 16px; font-weight: 600;">添加学生</h3>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div>
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">姓名 *</label>
+                    <input type="text" id="studentFormName" placeholder="请输入姓名" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">学号</label>
+                    <input type="text" id="studentFormStudentId" placeholder="选填" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">性别</label>
+                    <select id="studentFormGender" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px; background:#fff;">
+                        <option value="">未指定</option>
+                        <option value="M">男</option>
+                        <option value="F">女</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">成绩</label>
+                    <input type="number" id="studentFormScore" step="any" placeholder="选填" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                </div>
+            </div>
+            <div class="modal-actions" style="margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" id="studentFormCancel">取消</button>
+                <button type="button" class="btn btn-primary" id="studentFormSubmit">确定</button>
             </div>
         </div>
     </div>
@@ -706,6 +872,41 @@
         </div>
     </div>
 
+    <div id="bsce-import-modal" class="modal">
+        <div class="modal-content" style="max-width: 480px;">
+            <h3 style="margin: 0 0 8px; font-size: 17px; font-weight: 600;">BSCE 导入</h3>
+            <p style="margin: 0 0 20px; font-size: 13px; color: var(--text-secondary);">选择从本地文件或云端工作区导入座位数据。</p>
+            <div id="bsce-import-stage-choose" style="display: flex; gap: 12px; justify-content: center;">
+                <button type="button" class="btn btn-primary" id="bsce-choose-local">本地导入</button>
+                <button type="button" class="btn btn-primary" id="bsce-choose-cloud">云导入</button>
+            </div>
+            <div id="bsce-import-stage-login" style="display: none;">
+                <div style="margin-bottom: 12px;">
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px;">BSCE 账号</label>
+                    <input type="text" id="bsce-cloud-username" placeholder="请输入 BSCE 账号" autocomplete="username" style="width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; font-size: 14px; outline: none;">
+                </div>
+                <div style="margin-bottom: 16px;">
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px;">BSCE 密码</label>
+                    <input type="password" id="bsce-cloud-password" placeholder="请输入 BSCE 密码" autocomplete="current-password" style="width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; font-size: 14px; outline: none;">
+                </div>
+                <div style="display: flex; gap: 8px;">
+                    <button type="button" class="btn btn-secondary" id="bsce-login-back">返回</button>
+                    <button type="button" class="btn btn-primary" id="bsce-login-submit">登录并加载</button>
+                </div>
+            </div>
+            <div id="bsce-import-stage-cloud" style="display: none;">
+                <div id="bsce-cloud-loading" style="text-align: center; padding: 24px 0; color: var(--text-secondary); font-size: 14px;">正在加载...</div>
+                <div id="bsce-cloud-list" style="display: none; max-height: 320px; overflow-y: auto;"></div>
+                <div id="bsce-cloud-empty" style="display: none; text-align: center; padding: 24px 0; color: var(--text-secondary); font-size: 14px;">暂无云端工作区</div>
+                <button type="button" class="btn btn-secondary" id="bsce-cloud-back" style="margin-top: 12px;">返回</button>
+            </div>
+            <div class="modal-actions" style="margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" data-close-modal="bsce-import-modal">取消</button>
+            </div>
+        </div>
+    </div>
+    <input type="file" id="bsce-import-input" accept=".sce" style="display: none;">
+
     <form id="seats-import-form" method="post" action="{% url 'import_seats_file' classroom.pk %}"
         enctype="multipart/form-data" style="display: none;">
         {% csrf_token %}
@@ -714,7 +915,62 @@
 
     <!-- Context Menu -->
     <div id="seat-context-menu" class="context-menu">
-        <button type="button" class="menu-item" id="ctx-set-leader">任命为组长</button>
+        <div class="context-menu-section" data-ctx-section="occupied">
+            <div class="context-menu-label" id="ctx-student-name"></div>
+            <div class="context-menu-divider"></div>
+            <button type="button" class="menu-item" id="ctx-clear-seat">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M6 6l12 12M6 18L18 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                清除座位
+            </button>
+            <button type="button" class="menu-item" id="ctx-copy-student">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><rect x="8" y="8" width="12" height="12" rx="2" stroke="currentColor" stroke-width="2"/><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2" stroke="currentColor" stroke-width="2"/></svg>
+                复制学生
+            </button>
+            <button type="button" class="menu-item" id="ctx-cut-student">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="6" cy="6" r="3" stroke="currentColor" stroke-width="2"/><circle cx="6" cy="18" r="3" stroke="currentColor" stroke-width="2"/><line x1="20" y1="4" x2="8.5" y2="15.5" stroke="currentColor" stroke-width="2"/><line x1="14.5" y1="9.5" x2="20" y2="4" stroke="currentColor" stroke-width="2"/><line x1="8.5" y1="8.5" x2="20" y2="20" stroke="currentColor" stroke-width="2"/></svg>
+                剪切学生
+            </button>
+            <div class="context-menu-divider"></div>
+            <button type="button" class="menu-item" id="ctx-set-leader">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.56 5.82 22 7 14.14l-5-4.87 6.91-1.01L12 2z" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/></svg>
+                任命为组长
+            </button>
+            <button type="button" class="menu-item" id="ctx-toggle-fixed-seat">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M7 11V8a5 5 0 0 1 10 0v3M6 11h12v9H6z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <span id="ctx-toggle-fixed-seat-label">固定此座位</span>
+            </button>
+            <button type="button" class="menu-item" id="ctx-edit-student-info" style="display:none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                编辑学生信息
+            </button>
+            <button type="button" class="menu-item" id="ctx-move-to-unseated">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M12 5v14M5 12l7 7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                移入暂存区
+            </button>
+        </div>
+        <div class="context-menu-section" data-ctx-section="empty">
+            <div class="context-menu-label">空座位</div>
+            <div class="context-menu-divider"></div>
+            <button type="button" class="menu-item" id="ctx-paste-student">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" stroke="currentColor" stroke-width="2"/><rect x="8" y="2" width="8" height="4" rx="1" stroke="currentColor" stroke-width="2"/></svg>
+                粘贴学生
+            </button>
+        </div>
+        <div class="context-menu-section" data-ctx-section="non-seat">
+            <div class="context-menu-label" id="ctx-cell-type-label">走廊</div>
+            <div class="context-menu-divider"></div>
+            <button type="button" class="menu-item" id="ctx-info-only" disabled>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 16v-4M12 8h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                非座位区域
+            </button>
+        </div>
+        <div class="context-menu-section" data-ctx-section="common">
+            <div class="context-menu-divider"></div>
+            <button type="button" class="menu-item ctx-meta" id="ctx-cell-info">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="2"/><path d="M12 16v-4M12 8h.01" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                <span id="ctx-cell-coord"></span>
+            </button>
+        </div>
     </div>
 </div>
 
@@ -928,8 +1184,6 @@
 
     function updateZoom() {
         if (!gridContainer) return;
-        // Use CSS zoom property which handles layout re-flow and scrolling automatically
-        // This is non-standard but works well in WebKit (Chrome/Safari)
         gridContainer.style.zoom = currentScale;
 
         if (zoomLevelDisplay) {
@@ -965,5 +1219,307 @@
             startTour();
         }
     });
+</script>
+
+{{ constraint_items|json_script:"constraint-initial-data" }}
+{{ constraint_types|json_script:"constraint-type-data" }}
+{{ sync_meta_payload|json_script:"classroom-sync-meta" }}
+
+<script src="{% static 'js/water-ripple.js' %}?v=1.0"></script>
+<script src="{% static 'js/metaball.js' %}?v=1.0"></script>
+<script src="{% static 'js/dynamic-island.js' %}?v=1.0"></script>
+<script>
+(function () {
+    var metaball = new MetaballManager();
+    var island = new DynamicIsland();
+    island.attachMetaball(metaball);
+    window._dynamicIsland = island;
+})();
+</script>
+<script>
+(function () {
+    var headerArea = document.getElementById('cloud-header-area');
+    if (!headerArea) return;
+    headerArea.dataset.cloudHeaderManaged = 'classroom';
+
+    var classroomId = {{ classroom.pk }};
+    var classroomName = '{{ classroom.name|escapejs }}';
+    var syncMeta = readInitialSyncMeta();
+    var currentUser = null;
+    var pillButton = null;
+    var autoOpenSyncStarted = false;
+
+    function readInitialSyncMeta() {
+        var node = document.getElementById('classroom-sync-meta');
+        if (!node) return {};
+        try {
+            return JSON.parse(node.textContent || '{}') || {};
+        } catch (error) {
+            return {};
+        }
+    }
+
+    function normalizeSyncMeta(meta) {
+        var next = meta || {};
+        var localVersion = Number(next.local_version || 0);
+        var cloudVersion = Number(next.cloud_version || 0);
+        var backedUp = Boolean(next.backed_up || (next.last_sync_at && cloudVersion > 0));
+        return {
+            uuid: next.uuid || syncMeta.uuid || '',
+            local_version: localVersion,
+            cloud_version: cloudVersion,
+            last_sync_at: next.last_sync_at || null,
+            last_error: next.last_error || '',
+            backed_up: backedUp,
+            has_local_changes: Boolean(backedUp && (next.has_local_changes || localVersion > cloudVersion)),
+            state: next.state || (!backedUp ? 'not_backed_up' : (localVersion > cloudVersion ? 'dirty' : 'synced')),
+        };
+    }
+
+    function statusForMeta(user, meta) {
+        if (!user || !user.logged_in) {
+            return { state: 'login', text: '登录后云同步', title: '登录老三账户后自动同步' };
+        }
+        if (!meta.backed_up) {
+            return { state: 'not-backed-up', text: '点击上云', title: '该班级还没有云端备份，点击同步到云端' };
+        }
+        if (meta.has_local_changes) {
+            return { state: 'dirty', text: '有更新，点击更新云端版本', title: '本地有新改动，点击更新云端版本' };
+        }
+        return { state: 'synced', text: '完成', title: '云端已是最新' };
+    }
+
+    function setPillStatus(status) {
+        if (!pillButton) return;
+        pillButton.dataset.state = status.state;
+        pillButton.disabled = status.state === 'syncing';
+        pillButton.title = status.title || status.text;
+        pillButton.querySelector('.cloud-sync-pill-text').textContent = status.text;
+    }
+
+    function renderPill() {
+        setPillStatus(statusForMeta(currentUser, syncMeta));
+    }
+
+    function updateSyncMeta(meta) {
+        syncMeta = normalizeSyncMeta(meta);
+        renderPill();
+    }
+
+    function buildAvatarHtml(user) {
+        if (user && user.logged_in && user.avatar_url) {
+            return '<img src="' + user.avatar_url + '" class="cloud-header-avatar" alt="" />';
+        }
+        return '<div class="cloud-header-avatar cloud-header-avatar-placeholder"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z" fill="currentColor"/></svg></div>';
+    }
+
+    function buildCloudHeader(user) {
+        currentUser = user || { logged_in: false };
+        var cluster = document.createElement('div');
+        cluster.className = 'cloud-header-sync-cluster';
+
+        pillButton = document.createElement('button');
+        pillButton.type = 'button';
+        pillButton.className = 'cloud-sync-pill';
+        pillButton.innerHTML = '<span class="cloud-sync-dot"></span><span class="cloud-sync-pill-text"></span>';
+        pillButton.addEventListener('click', function (event) {
+            event.preventDefault();
+            handlePillClick();
+        });
+        cluster.appendChild(pillButton);
+
+        var wrapper = document.createElement('div');
+        wrapper.className = 'cloud-header-dropdown-wrap';
+        var trigger = document.createElement('button');
+        trigger.type = 'button';
+        trigger.className = 'cloud-header-trigger';
+        trigger.innerHTML = buildAvatarHtml(currentUser);
+        trigger.title = currentUser.logged_in ? (currentUser.nickname || '云服务') + ' (' + (currentUser.tier_display || '') + ')' : '云服务';
+
+        var panel = document.createElement('div');
+        panel.className = 'cloud-header-panel';
+
+        var pullBtn = document.createElement('button');
+        pullBtn.type = 'button';
+        pullBtn.className = 'cloud-header-panel-action';
+        pullBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4v12m0 0l4-4m-4 4l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 18H4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>从云恢复</span>';
+        pullBtn.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            wrapper.classList.remove('open');
+            restoreFromCloud();
+        });
+        panel.appendChild(pullBtn);
+
+        var settingsBtn = document.createElement('button');
+        settingsBtn.type = 'button';
+        settingsBtn.className = 'cloud-header-panel-action cloud-header-panel-action-secondary';
+        settingsBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>云服务设置</span>';
+        settingsBtn.addEventListener('click', function () { window.location.href = '{% url "settings" %}'; });
+        panel.appendChild(settingsBtn);
+
+        wrapper.appendChild(trigger);
+        wrapper.appendChild(panel);
+        trigger.addEventListener('click', function (event) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (!currentUser.logged_in) {
+                CloudManager.openLogin();
+                return;
+            }
+            wrapper.classList.toggle('open');
+        });
+        document.addEventListener('click', function (event) {
+            if (!event.target.closest('.cloud-header-dropdown-wrap')) {
+                wrapper.classList.remove('open');
+            }
+        });
+
+        cluster.appendChild(wrapper);
+        renderPill();
+        return cluster;
+    }
+
+    async function ensureLoggedIn() {
+        var user = await CloudManager.getUserInfo(true);
+        currentUser = user || { logged_in: false };
+        if (!currentUser.logged_in) {
+            showToast('请先登录云服务');
+            CloudManager.openLogin();
+            renderPill();
+            return false;
+        }
+        renderPill();
+        return true;
+    }
+
+    async function syncCurrentClass(options) {
+        if (!(await ensureLoggedIn())) return;
+        setPillStatus({ state: 'syncing', text: '同步中', title: '正在同步到云端' });
+        try {
+            var result = await CloudManager.sync([classroomId], options || {});
+            var row = result && result.results && result.results[0];
+            if (!row) {
+                setPillStatus({ state: 'error', text: '同步失败，点击重试', title: '同步失败，点击重试' });
+                return;
+            }
+            if (row.status === 'ok' || row.status === 'up_to_date' || row.status === 'pulled') {
+                updateSyncMeta(row.sync_meta || row);
+                if (!options || !options.silent) {
+                    showToast(row.status === 'up_to_date' ? '云端已是最新' : (row.status === 'pulled' ? classroomName + ' 已从云端更新' : classroomName + ' 已同步到云端'));
+                }
+                if (row.status === 'pulled') {
+                    window.location.reload();
+                }
+                return;
+            }
+            if (row.status === 'conflict') {
+                updateSyncMeta(row.sync_meta || row);
+                setPillStatus({ state: 'error', text: '云端有冲突', title: '云端版本更新，请从头像菜单恢复或处理冲突' });
+                showToast('云端存在冲突，请先从云恢复');
+                return;
+            }
+            setPillStatus({ state: 'error', text: '同步失败，点击重试', title: row.message || '同步失败，点击重试' });
+            showToast(row.message || '同步失败');
+        } catch (error) {
+            setPillStatus({ state: 'error', text: '同步失败，点击重试', title: (error && error.message) || '同步失败，点击重试' });
+            showToast((error && error.message) || '同步失败');
+        }
+    }
+
+    function handlePillClick() {
+        if (!currentUser || !currentUser.logged_in) {
+            CloudManager.openLogin();
+            return;
+        }
+        if (pillButton && pillButton.dataset.state === 'syncing') return;
+        if (!syncMeta.backed_up || syncMeta.has_local_changes || (pillButton && pillButton.dataset.state === 'error')) {
+            syncCurrentClass({ force: false });
+            return;
+        }
+        showToast('云端已是最新');
+    }
+
+    async function restoreFromCloud() {
+        if (!(await ensureLoggedIn())) return;
+        if (!syncMeta.backed_up || !syncMeta.uuid) {
+            showToast('该班级还没有云端记录，请先同步本地数据');
+            return;
+        }
+        if (!await window.showConfirmModal('从云恢复会覆盖本地当前班级 ' + classroomName + '，确定继续？', { title: '从云恢复' })) {
+            return;
+        }
+        showToast('正在恢复...');
+        try {
+            var pullResult = await CloudManager.pullClassroom(syncMeta.uuid);
+            if (pullResult && pullResult.status === 'success') {
+                updateSyncMeta(pullResult);
+                showToast((pullResult.name || classroomName) + ' 已从云恢复');
+                window.location.reload();
+                return;
+            }
+            showToast((pullResult && pullResult.message) || '恢复失败');
+        } catch (err) {
+            showToast((err && err.message) || '恢复失败');
+        }
+    }
+
+    window.FuckSeatsCloudSync = {
+        update: updateSyncMeta,
+        syncAfterLogin: function (loginResult) {
+            return CloudManager.getUserInfo(true).then(function (user) {
+                currentUser = user || { logged_in: false };
+                renderPill();
+                var rows = loginResult && Array.isArray(loginResult.results) ? loginResult.results : [];
+                var matched = null;
+                for (var i = 0; i < rows.length; i++) {
+                    if (Number(rows[i].classroom_id || 0) === Number(classroomId)) {
+                        matched = rows[i];
+                        break;
+                    }
+                }
+                if (matched && (matched.status === 'ok' || matched.status === 'up_to_date' || matched.status === 'pulled')) {
+                    updateSyncMeta(matched.sync_meta || matched);
+                    if (matched.status === 'pulled') {
+                        window.location.reload();
+                    }
+                    return null;
+                }
+                if (matched && matched.status === 'conflict') {
+                    updateSyncMeta(matched.sync_meta || matched);
+                    setPillStatus({ state: 'error', text: '云端有冲突', title: '云端版本更新，请从头像菜单恢复或处理冲突' });
+                    return null;
+                }
+                return syncCurrentClass({ auto: true, silent: true });
+            });
+        },
+        markDirty: function () {
+            if (!syncMeta.backed_up) return;
+            syncMeta.has_local_changes = true;
+            syncMeta.state = 'dirty';
+            renderPill();
+        },
+    };
+
+    function startCloudHeader() {
+        if (!window.CloudManager) {
+            setTimeout(startCloudHeader, 50);
+            return;
+        }
+        CloudManager.getUserInfo().then(function (user) {
+            headerArea.innerHTML = '';
+            syncMeta = normalizeSyncMeta(syncMeta);
+            headerArea.appendChild(buildCloudHeader(user));
+            if (user && user.logged_in && syncMeta.backed_up && !autoOpenSyncStarted) {
+                autoOpenSyncStarted = true;
+                setTimeout(function () {
+                    syncCurrentClass({ auto: true, silent: true });
+                }, 350);
+            }
+        }).catch(function () {});
+    }
+
+    startCloudHeader();
+})();
 </script>
 {% endblock %}

@@ -11,11 +11,14 @@ venv/
 .DS_Store
 db.sqlite3
 db.sqlite3-journal
+backend/cloud.sqlite3
+backend/cloud.sqlite3-journal
 media/
 staticfiles/
 *.spec
 build/
 dist/
+artifacts/
 # Flask stuff:
 instance/
 .webassets-cache
@@ -102,6 +105,7 @@ open_ver/
 temp_git_backup/
 temp_imports/
 _data_stage/
+_mac_dmg_stage/
 
 # Frontend
 node_modules/

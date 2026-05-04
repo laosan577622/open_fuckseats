@@ -1,0 +1,6 @@
+Django
+waitress
+PyYAML
+certifi
+cryptography
+tzdata

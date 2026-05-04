@@ -2,8 +2,10 @@ import os
 import sys
 import threading
 import time
+import urllib.error
 import urllib.request
 import webbrowser
+import logging
 from io import StringIO
 from django.core.management import call_command
 from waitress import serve
@@ -53,6 +55,17 @@ def _wait_for_server_ready(url, timeout=20):
                 status = getattr(response, 'status', 200)
                 if status < 500:
                     return
+        except urllib.error.HTTPError as exc:
+            last_error = exc
+            if getattr(exc, 'code', 500) < 500:
+                return
+            try:
+                with urllib.request.urlopen(url.rsplit('/', 1)[0] + '/static/favicon.svg', timeout=1) as response:
+                    status = getattr(response, 'status', 200)
+                    if status < 500:
+                        return
+            except Exception:
+                pass
         except Exception as exc:
             last_error = exc
             time.sleep(0.15)
@@ -137,6 +150,7 @@ def main():
 
     os.environ['FUCKSEATS_APP_SHELL'] = 'browser' if dev_mode else 'webview'
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    logging.getLogger('waitress').setLevel(logging.ERROR)
     
     import django
     django.setup()
@@ -147,7 +161,6 @@ def main():
     openai_base_url = (os.getenv('OPENAI_BASE_URL') or '').strip()
     has_openai_key = bool((os.getenv('OPENAI_API_KEY') or '').strip())
     
-    print("准备迁移数据库...", flush=True)
     try:
         migrate_stdout = StringIO()
         migrate_stderr = StringIO()
@@ -159,17 +172,11 @@ def main():
         )
         stdout_text = _filter_migration_noise(migrate_stdout.getvalue())
         stderr_text = _filter_migration_noise(migrate_stderr.getvalue())
-        if stdout_text:
-            print(stdout_text, flush=True)
-        if stderr_text:
-            print(stderr_text, file=sys.stderr, flush=True)
-        print("迁移数据库成功。", flush=True)
     except Exception as e:
         print(f"数据库迁移出错: {e}", file=sys.stderr, flush=True)
 
 
     app_url = f'http://{HOST}:{PORT}'
-    print(f"正在启动服务器 {app_url} ...", flush=True)
 
     server_thread = threading.Thread(
         target=_start_waitress,
@@ -181,8 +188,7 @@ def main():
     _wait_for_server_ready(app_url)
 
     if dev_mode:
-        print(f"开发模式已启动，请使用浏览器访问 {app_url}", flush=True)
-        print("当前模式不会打开桌面壳，便于调试前端与网络请求。", flush=True)
+        print(f"客户端已启动：http://{HOST}:{PORT}", flush=True)
         _open_browser(app_url)
         try:
             while server_thread.is_alive():
@@ -191,7 +197,7 @@ def main():
             print("\n开发模式已停止。", flush=True)
         return
 
-    print("桌面模式已启动，正在打开原生 WebView 窗口...", flush=True)
+    print(f"客户端已启动：http://{HOST}:{PORT}", flush=True)
     _start_desktop_window(app_url)
 
 if __name__ == '__main__':

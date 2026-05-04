@@ -19,6 +19,8 @@ document.addEventListener('DOMContentLoaded', () => {
         undo: root.dataset.undoUrl,
         redo: root.dataset.redoUrl,
         setLeader: root.dataset.setLeaderUrl,
+        toggleFixedSeat: root.dataset.toggleFixedSeatUrl,
+        addStudent: root.dataset.addStudentUrl,
     };
     const csrf = root.dataset.csrf;
 
@@ -73,6 +75,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const unseatedList = document.querySelector('.unseated-list');
     const unseatedCount = document.getElementById('unseatedCount');
     const suggestionList = document.getElementById('suggestionList');
+    const constraintForm = document.getElementById('constraintForm');
+    const constraintIdInput = document.getElementById('constraintIdInput');
+    const constraintTypeSelect = document.getElementById('constraintTypeSelect');
+    const constraintStudentSelect = document.getElementById('constraintStudentSelect');
+    const constraintTargetStudentSelect = document.getElementById('constraintTargetStudentSelect');
+    const constraintRowInput = document.getElementById('constraintRowInput');
+    const constraintColInput = document.getElementById('constraintColInput');
+    const constraintDistanceInput = document.getElementById('constraintDistanceInput');
+    const constraintNoteInput = document.getElementById('constraintNoteInput');
+    const constraintSubmitBtn = document.getElementById('constraintSubmitBtn');
+    const constraintCancelEditBtn = document.getElementById('constraintCancelEditBtn');
+    const constraintList = document.getElementById('constraintList');
+    const constraintFilterGroup = document.getElementById('constraintFilterGroup');
+    const constraintMetrics = document.getElementById('constraintMetrics');
     const enabledActionSuggestionTypes = new Set(['export_suggestion', 'group_balance']);
     const selectionBox = document.createElement('div');
     selectionBox.className = 'selection-box';
@@ -82,7 +98,45 @@ document.addEventListener('DOMContentLoaded', () => {
     const seatsImportInput = document.getElementById('seats-import-input');
     const seatsImportTriggers = Array.from(document.querySelectorAll('[data-seats-import-trigger="1"]'));
     const fileMenuRoots = Array.from(document.querySelectorAll('.menu-dropdown[data-menu-root]'));
+    const GROUP_MOVE_MODE_KEY = 'seats_group_move_mode';
+    const GROUP_MOVE_MODE_FIXED = 'fixed';
+    const GROUP_MOVE_MODE_FOLLOW = 'follow';
     const SHIFT_USE_LARGE_GROUPS_KEY = 'seats_shift_use_large_groups';
+    const parseJsonScript = (id, fallback) => {
+        const node = document.getElementById(id);
+        if (!node) return fallback;
+        try {
+            return JSON.parse(node.textContent || '');
+        } catch (error) {
+            console.warn(`Unable to parse JSON script: ${id}`, error);
+            return fallback;
+        }
+    };
+    const constraintTypeDefinitions = parseJsonScript('constraint-type-data', []);
+    const constraintTypeMap = new Map(constraintTypeDefinitions.map((item) => [item.value, item]));
+    let constraintItems = parseJsonScript('constraint-initial-data', []);
+    let activeConstraintFilter = 'all';
+    let editingConstraintId = null;
+
+    const normalizeGroupMoveMode = (value) => (
+        String(value || '').trim().toLowerCase() === GROUP_MOVE_MODE_FOLLOW
+            ? GROUP_MOVE_MODE_FOLLOW
+            : GROUP_MOVE_MODE_FIXED
+    );
+
+    const getGroupMoveMode = () => {
+        try {
+            return normalizeGroupMoveMode(localStorage.getItem(GROUP_MOVE_MODE_KEY));
+        } catch (error) {
+            console.warn('Unable to read group move mode:', error);
+            return GROUP_MOVE_MODE_FIXED;
+        }
+    };
+
+    const withMovePreferences = (payload) => ({
+        ...payload,
+        group_move_mode: getGroupMoveMode(),
+    });
 
     const setShiftUseLargeGroups = (checked) => {
         const normalized = !!checked;
@@ -216,10 +270,35 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const initSeatsImport = () => {
         if (!seatsImportForm || !seatsImportInput || !seatsImportTriggers.length) return;
+        const importWithDesktopShell = async (trigger) => {
+            const desktopImport = window.FuckSeatsDesktop?.importSeatsFile;
+            if (typeof desktopImport !== 'function') return false;
+
+            if (trigger) trigger.disabled = true;
+            try {
+                const result = await desktopImport(seatsImportForm.getAttribute('action') || window.location.href, {
+                    csrf,
+                    acceptExtensions: ['.seats', '.json']
+                });
+                if (!result) return false;
+                if (result.status === 'cancelled') return true;
+                showInlineToast(`${result.filename || '文件'} 已导入`);
+                setTimeout(() => window.location.reload(), 500);
+                return true;
+            } catch (error) {
+                showInlineToast(error?.message || '导入失败');
+                return true;
+            } finally {
+                if (trigger) trigger.disabled = false;
+            }
+        };
+
         seatsImportTriggers.forEach((trigger) => {
-            trigger.addEventListener('click', (event) => {
+            trigger.addEventListener('click', async (event) => {
                 event.preventDefault();
                 closeAllFileMenus();
+                const handledByDesktop = await importWithDesktopShell(trigger);
+                if (handledByDesktop) return;
                 seatsImportInput.value = '';
                 seatsImportInput.click();
             });
@@ -227,6 +306,249 @@ document.addEventListener('DOMContentLoaded', () => {
         seatsImportInput.addEventListener('change', () => {
             if (!seatsImportInput.files || !seatsImportInput.files.length) return;
             seatsImportForm.submit();
+        });
+    };
+
+    const initBsceImport = () => {
+        const bsceModal = document.getElementById('bsce-import-modal');
+        const bsceInput = document.getElementById('bsce-import-input');
+        const bsceTriggers = Array.from(document.querySelectorAll('[data-bsce-import-trigger="1"]'));
+        if (!bsceModal || !bsceInput || !bsceTriggers.length) return;
+
+        const stageChoose = document.getElementById('bsce-import-stage-choose');
+        const stageLogin = document.getElementById('bsce-import-stage-login');
+        const stageCloud = document.getElementById('bsce-import-stage-cloud');
+        const cloudLoading = document.getElementById('bsce-cloud-loading');
+        const cloudList = document.getElementById('bsce-cloud-list');
+        const cloudEmpty = document.getElementById('bsce-cloud-empty');
+        const btnLocal = document.getElementById('bsce-choose-local');
+        const btnCloud = document.getElementById('bsce-choose-cloud');
+        const btnCloudBack = document.getElementById('bsce-cloud-back');
+        const btnLoginBack = document.getElementById('bsce-login-back');
+        const btnLoginSubmit = document.getElementById('bsce-login-submit');
+        const inputUsername = document.getElementById('bsce-cloud-username');
+        const inputPassword = document.getElementById('bsce-cloud-password');
+        const bsceBaseUrl = `/classroom/${classroomId}/layout/import/bsce/`;
+
+        let bsceCredentials = { username: '', password: '' };
+
+        const showStage = (stage) => {
+            stageChoose.style.display = stage === 'choose' ? 'flex' : 'none';
+            stageLogin.style.display = stage === 'login' ? 'block' : 'none';
+            stageCloud.style.display = stage === 'cloud' ? 'block' : 'none';
+        };
+
+        const resetModal = () => {
+            showStage('choose');
+            cloudLoading.style.display = 'block';
+            cloudList.style.display = 'none';
+            cloudEmpty.style.display = 'none';
+            cloudList.innerHTML = '';
+            btnLoginSubmit.disabled = false;
+            btnLoginSubmit.textContent = '登录并加载';
+        };
+
+        bsceTriggers.forEach((trigger) => {
+            trigger.addEventListener('click', (e) => {
+                e.preventDefault();
+                closeAllFileMenus();
+                resetModal();
+                openModal('bsce-import-modal');
+            });
+        });
+
+        const importBsceWithDesktopShell = async () => {
+            const uploadLocalFile = window.FuckSeatsDesktop?.uploadLocalFile;
+            if (typeof uploadLocalFile !== 'function') return false;
+
+            btnLocal.disabled = true;
+            try {
+                const result = await uploadLocalFile(bsceBaseUrl, {
+                    csrf,
+                    fieldName: 'bsce_file',
+                    fallbackFilename: 'import.sce',
+                    acceptExtensions: ['.sce']
+                });
+                if (!result) return false;
+                if (result.status === 'cancelled') return true;
+                const response = result.response || result;
+                if (response.status === 'success' || result.status === 'success') {
+                    closeModal('bsce-import-modal');
+                    showInlineToast(response.message || result.message || 'BSCE 导入完成');
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    showInlineToast(response.message || result.message || 'BSCE 导入失败');
+                }
+                return true;
+            } catch (error) {
+                showInlineToast(error?.message || 'BSCE 导入请求失败');
+                return true;
+            } finally {
+                btnLocal.disabled = false;
+            }
+        };
+
+        btnLocal.addEventListener('click', async () => {
+            const handledByDesktop = await importBsceWithDesktopShell();
+            if (handledByDesktop) return;
+            bsceInput.value = '';
+            bsceInput.click();
+        });
+
+        bsceInput.addEventListener('change', () => {
+            if (!bsceInput.files || !bsceInput.files.length) return;
+            closeModal('bsce-import-modal');
+            const formData = new FormData();
+            formData.append('bsce_file', bsceInput.files[0]);
+            fetch(bsceBaseUrl, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'X-CSRFToken': csrf,
+                },
+                body: formData,
+            })
+            .then((res) => res.json())
+            .then((data) => {
+                if (data.status === 'success') {
+                    showInlineToast(data.message || 'BSCE 导入完成');
+                    setTimeout(() => window.location.reload(), 800);
+                } else {
+                    showInlineToast(data.message || 'BSCE 导入失败');
+                }
+            })
+            .catch(() => {
+                showInlineToast('BSCE 导入请求失败');
+            });
+        });
+
+        const formatSize = (bytes) => {
+            if (bytes < 1024) return bytes + ' B';
+            if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+            return (bytes / 1048576).toFixed(1) + ' MB';
+        };
+
+        const formatTime = (iso) => {
+            try {
+                const d = new Date(iso);
+                return d.toLocaleString('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+            } catch (_) {
+                return iso;
+            }
+        };
+
+        btnCloud.addEventListener('click', () => {
+            showStage('login');
+            inputUsername.focus();
+        });
+
+        btnLoginBack.addEventListener('click', () => {
+            showStage('choose');
+        });
+
+        const loadWorkspaces = () => {
+            showStage('cloud');
+            cloudLoading.style.display = 'block';
+            cloudList.style.display = 'none';
+            cloudEmpty.style.display = 'none';
+
+            fetch(bsceBaseUrl + 'cloud/', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRFToken': csrf,
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: JSON.stringify({
+                    action: 'list',
+                    username: bsceCredentials.username,
+                    password: bsceCredentials.password,
+                }),
+            })
+            .then((res) => res.json())
+            .then((data) => {
+                cloudLoading.style.display = 'none';
+                if (data.status !== 'success' || !data.workspaces || !data.workspaces.length) {
+                    cloudEmpty.style.display = 'block';
+                    cloudEmpty.textContent = data.status !== 'success'
+                        ? (data.message || '加载失败')
+                        : '暂无云端工作区';
+                    return;
+                }
+                cloudList.style.display = 'block';
+                cloudList.innerHTML = '';
+                data.workspaces.forEach((ws) => {
+                    const item = document.createElement('div');
+                    item.className = 'bsce-cloud-item';
+                    item.innerHTML =
+                        '<div class="bsce-cloud-info">' +
+                            '<div class="bsce-cloud-name">' + (ws.metadata.name || ws.fileId) + '</div>' +
+                            '<div class="bsce-cloud-meta">' + formatTime(ws.metadata.time) + '  ·  ' + formatSize(ws.metadata.size) + '</div>' +
+                        '</div>' +
+                        '<button type="button" class="btn btn-primary bsce-cloud-import-btn">导入</button>';
+                    const importBtn = item.querySelector('.bsce-cloud-import-btn');
+                    importBtn.addEventListener('click', () => {
+                        importBtn.disabled = true;
+                        importBtn.textContent = '导入中...';
+                        fetch(bsceBaseUrl + 'cloud/', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json',
+                                'X-CSRFToken': csrf,
+                                'X-Requested-With': 'XMLHttpRequest',
+                            },
+                            body: JSON.stringify({
+                                action: 'import',
+                                fileId: ws.fileId,
+                                username: bsceCredentials.username,
+                                password: bsceCredentials.password,
+                            }),
+                        })
+                        .then((res) => res.json())
+                        .then((result) => {
+                            if (result.status === 'success') {
+                                closeModal('bsce-import-modal');
+                                showInlineToast(result.message || 'BSCE 云导入完成');
+                                setTimeout(() => window.location.reload(), 800);
+                            } else {
+                                importBtn.disabled = false;
+                                importBtn.textContent = '导入';
+                                showInlineToast(result.message || 'BSCE 云导入失败');
+                            }
+                        })
+                        .catch(() => {
+                            importBtn.disabled = false;
+                            importBtn.textContent = '导入';
+                            showInlineToast('BSCE 云导入请求失败');
+                        });
+                    });
+                    cloudList.appendChild(item);
+                });
+            })
+            .catch(() => {
+                cloudLoading.style.display = 'none';
+                cloudEmpty.style.display = 'block';
+                cloudEmpty.textContent = '加载失败，请检查网络';
+            });
+        };
+
+        btnLoginSubmit.addEventListener('click', () => {
+            const u = inputUsername.value.trim();
+            const p = inputPassword.value.trim();
+            if (!u || !p) {
+                showInlineToast('请输入 BSCE 账号和密码');
+                return;
+            }
+            bsceCredentials = { username: u, password: p };
+            btnLoginSubmit.disabled = true;
+            btnLoginSubmit.textContent = '登录中...';
+            loadWorkspaces();
+        });
+
+        btnCloudBack.addEventListener('click', () => {
+            showStage('login');
+            btnLoginSubmit.disabled = false;
+            btnLoginSubmit.textContent = '登录并加载';
         });
     };
 
@@ -253,6 +575,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const showInlineToast = (message) => {
         if (!message) return;
+        if (window.showToast) {
+            window.showToast(message, { duration: 2200 });
+            return;
+        }
         const container = createToastContainer();
         const toast = document.createElement('div');
         toast.className = 'toast-notification';
@@ -264,19 +590,237 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="toast-body">${message}</div>
         `;
         container.appendChild(toast);
+        if (window.updateToastStack) window.updateToastStack();
         setTimeout(() => {
             toast.classList.add('toast-exit');
             toast.addEventListener('animationend', () => {
                 if (toast.parentNode) toast.parentNode.removeChild(toast);
+                if (window.updateToastStack) window.updateToastStack();
             });
         }, 2200);
     };
 
+    const escapeHtml = (value) => {
+        const div = document.createElement('div');
+        div.textContent = value == null ? '' : String(value);
+        return div.innerHTML;
+    };
+
+    const escapeAttr = (value) => {
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/"/g, '&quot;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;');
+    };
+
+    const buildStudentBadgeHtml = (student) => {
+        if (!student) return '';
+        const badges = [];
+        if (student.podium_guardian_side === 'left') {
+            badges.push('<span class="guardian-badge left-guard">左护法</span>');
+        } else if (student.podium_guardian_side === 'right') {
+            badges.push('<span class="guardian-badge right-guard">右护法</span>');
+        }
+        if (student.is_fixed_seat) {
+            badges.push('<span class="fixed-seat-badge">固定座位</span>');
+        }
+        if (!badges.length) return '';
+        return `<div class="seat-badge-row">${badges.join('')}</div>`;
+    };
+
+    const postFormData = (url, payload = {}) => {
+        return fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrf,
+            },
+            body: new URLSearchParams(payload),
+        }).then(async (res) => {
+            const data = await res.json().catch(() => ({}));
+            if (!res.ok || (data && data.status && data.status !== 'success')) {
+                throw new Error(data.message || '操作失败');
+            }
+            return data;
+        });
+    };
+
+    const deriveConstraintMetrics = (items) => {
+        const safeItems = Array.isArray(items) ? items : [];
+        return {
+            total: safeItems.length,
+            enabled: safeItems.filter((item) => item.enabled).length,
+            disabled: safeItems.filter((item) => !item.enabled).length,
+            with_issues: safeItems.filter((item) => Number(item.issue_count || 0) > 0).length,
+        };
+    };
+
+    const renderConstraintMetrics = (metrics) => {
+        if (!constraintMetrics) return;
+        const merged = {
+            total: Number(metrics?.total || 0),
+            enabled: Number(metrics?.enabled || 0),
+            disabled: Number(metrics?.disabled || 0),
+            with_issues: Number(metrics?.with_issues || 0),
+        };
+        constraintMetrics.innerHTML = `
+            <span class="constraint-metric-pill">总计 ${merged.total}</span>
+            <span class="constraint-metric-pill">启用 ${merged.enabled}</span>
+            <span class="constraint-metric-pill">停用 ${merged.disabled}</span>
+            <span class="constraint-metric-pill">异常 ${merged.with_issues}</span>
+        `;
+    };
+
+    const getConstraintStatusLabel = (status) => {
+        if (status === 'disabled') return '已停用';
+        if (status === 'error') return '冲突';
+        if (status === 'warning') return '未满足';
+        return '正常';
+    };
+
+    const matchesConstraintFilter = (item) => {
+        if (activeConstraintFilter === 'issues') {
+            return Number(item.issue_count || 0) > 0;
+        }
+        if (activeConstraintFilter === 'enabled') {
+            return !!item.enabled;
+        }
+        if (activeConstraintFilter === 'disabled') {
+            return !item.enabled;
+        }
+        return true;
+    };
+
+    const renderConstraintList = () => {
+        if (!constraintList) return;
+        const visibleItems = (constraintItems || []).filter(matchesConstraintFilter);
+        if (!visibleItems.length) {
+            const emptyText = activeConstraintFilter === 'all' ? '暂无约束' : '当前筛选条件下没有约束';
+            constraintList.innerHTML = `<div class="empty-hint">${emptyText}</div>`;
+            return;
+        }
+
+        constraintList.innerHTML = visibleItems.map((item) => {
+            const status = item.status || 'ok';
+            const issues = Array.isArray(item.issues) ? item.issues : [];
+            const badges = [
+                `<span class="constraint-badge constraint-badge-${status}">${escapeHtml(getConstraintStatusLabel(status))}</span>`,
+                item.note ? '<span class="constraint-badge">有备注</span>' : '',
+            ].filter(Boolean).join('');
+            const issuesHtml = issues.length
+                ? `<div class="constraint-issues">${issues.map((issue) => `
+                    <div class="constraint-issue constraint-issue-${escapeAttr(issue.type || '')}">${escapeHtml(issue.message || '')}</div>
+                `).join('')}</div>`
+                : '';
+            const noteHtml = item.note ? `<div class="constraint-note">备注：${escapeHtml(item.note)}</div>` : '';
+            const itemClass = [
+                'constraint-item',
+                status !== 'ok' && status !== 'disabled' ? 'constraint-item-warning' : '',
+                !item.enabled ? 'constraint-item-disabled' : '',
+            ].filter(Boolean).join(' ');
+            return `
+                <div class="${itemClass}"
+                    data-constraint-pk="${item.pk}"
+                    data-constraint-type="${escapeAttr(item.constraint_type || '')}"
+                    data-student-pk="${escapeAttr(item.student_pk || '')}"
+                    data-target-student-pk="${escapeAttr(item.target_student_pk || '')}"
+                    data-row="${escapeAttr(item.row || '')}"
+                    data-col="${escapeAttr(item.col || '')}"
+                    data-distance="${escapeAttr(item.distance || 1)}"
+                    data-enabled="${item.enabled ? '1' : '0'}"
+                    data-note="${escapeAttr(item.note || '')}"
+                    data-update-url="${escapeAttr(item.update_url || '')}"
+                    data-toggle-url="${escapeAttr(item.toggle_url || '')}"
+                    data-delete-url="${escapeAttr(item.delete_url || '')}">
+                    <div class="constraint-main">
+                        <div class="constraint-title-row">
+                            <div class="constraint-title">${escapeHtml(item.constraint_type_display || '')}</div>
+                            <div class="constraint-badges">${badges}</div>
+                        </div>
+                        <div class="constraint-desc">${escapeHtml(item.summary || '')}</div>
+                        ${noteHtml}
+                        ${issuesHtml}
+                    </div>
+                    <div class="constraint-actions">
+                        <button type="button" class="btn btn-secondary" data-constraint-action="edit">编辑</button>
+                        <button type="button" class="btn btn-secondary" data-constraint-action="toggle">${item.enabled ? '停用' : '启用'}</button>
+                        <button type="button" class="btn btn-secondary" data-constraint-action="delete">删除</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    };
+
+    const setConstraintFieldVisible = (fieldName, visible) => {
+        if (!constraintForm) return;
+        const field = constraintForm.querySelector(`[data-constraint-field="${fieldName}"]`);
+        if (!field) return;
+        field.hidden = !visible;
+        const input = field.querySelector('input, select');
+        if (!input) return;
+        input.disabled = !visible;
+        if (!visible) {
+            if (input.tagName === 'SELECT') {
+                input.value = '';
+            } else if (fieldName === 'distance') {
+                input.value = '1';
+            } else {
+                input.value = '';
+            }
+        }
+    };
+
+    const syncConstraintFields = () => {
+        if (!constraintTypeSelect) return;
+        const typeConfig = constraintTypeMap.get(constraintTypeSelect.value) || {};
+        setConstraintFieldVisible('target_student_id', !!typeConfig.needs_target);
+        setConstraintFieldVisible('row', !!typeConfig.needs_row);
+        setConstraintFieldVisible('col', !!typeConfig.needs_col);
+        setConstraintFieldVisible('distance', !!typeConfig.needs_distance);
+        setConstraintFieldVisible('note', true);
+    };
+
+    const resetConstraintForm = () => {
+        if (!constraintForm) return;
+        editingConstraintId = null;
+        constraintForm.reset();
+        constraintForm.action = constraintForm.dataset.createUrl || constraintForm.action;
+        if (constraintIdInput) constraintIdInput.value = '';
+        if (constraintDistanceInput) constraintDistanceInput.value = '1';
+        if (constraintSubmitBtn) constraintSubmitBtn.textContent = '添加约束';
+        if (constraintCancelEditBtn) constraintCancelEditBtn.hidden = true;
+        syncConstraintFields();
+    };
+
+    const populateConstraintForm = (item) => {
+        if (!constraintForm || !item) return;
+        editingConstraintId = item.pk;
+        constraintForm.action = item.update_url || constraintForm.dataset.createUrl || constraintForm.action;
+        if (constraintIdInput) constraintIdInput.value = item.pk;
+        if (constraintTypeSelect) constraintTypeSelect.value = item.constraint_type || '';
+        if (constraintStudentSelect) constraintStudentSelect.value = item.student_pk || '';
+        if (constraintTargetStudentSelect) constraintTargetStudentSelect.value = item.target_student_pk || '';
+        if (constraintRowInput) constraintRowInput.value = item.row || '';
+        if (constraintColInput) constraintColInput.value = item.col || '';
+        if (constraintDistanceInput) constraintDistanceInput.value = item.distance || 1;
+        if (constraintNoteInput) constraintNoteInput.value = item.note || '';
+        if (constraintSubmitBtn) constraintSubmitBtn.textContent = '保存修改';
+        if (constraintCancelEditBtn) constraintCancelEditBtn.hidden = false;
+        syncConstraintFields();
+        constraintForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    };
+
     const dismissToast = (toast) => {
         if (!toast) return;
+        if (window.dismissToastElement) {
+            window.dismissToastElement(toast);
+            return;
+        }
         toast.classList.add('toast-exit');
         toast.addEventListener('animationend', () => {
             if (toast.parentNode) toast.parentNode.removeChild(toast);
+            if (window.updateToastStack) window.updateToastStack();
         });
     };
 
@@ -333,6 +877,56 @@ document.addEventListener('DOMContentLoaded', () => {
     };
     window.showConfirmModal = showConfirmModal;
     window.showPromptModal = showPromptModal;
+
+    const _sfModal = document.getElementById('student-form-modal');
+    const _sfTitle = document.getElementById('studentFormTitle');
+    const _sfName = document.getElementById('studentFormName');
+    const _sfSid = document.getElementById('studentFormStudentId');
+    const _sfGender = document.getElementById('studentFormGender');
+    const _sfScore = document.getElementById('studentFormScore');
+    const _sfOk = document.getElementById('studentFormSubmit');
+    const _sfCancel = document.getElementById('studentFormCancel');
+    let _sfResolve = null;
+    let _sfOkHandler = null;
+    let _sfCancelHandler = null;
+    let _sfKeyHandler = null;
+    let _sfBackdropHandler = null;
+
+    function openStudentForm({ title = '添加学生', name = '', student_id = '', gender = '', score = '' } = {}) {
+        return new Promise((resolve) => {
+            _sfTitle.textContent = title;
+            _sfName.value = name;
+            _sfSid.value = student_id;
+            _sfGender.value = gender;
+            _sfScore.value = score;
+            if (_sfOkHandler) _sfOk.removeEventListener('click', _sfOkHandler);
+            if (_sfCancelHandler) _sfCancel.removeEventListener('click', _sfCancelHandler);
+            if (_sfKeyHandler) _sfModal.removeEventListener('keydown', _sfKeyHandler);
+            if (_sfBackdropHandler) _sfModal.removeEventListener('click', _sfBackdropHandler);
+            _sfResolve = resolve;
+            _sfOkHandler = () => {
+                const n = _sfName.value.trim();
+                if (!n) { _sfName.focus(); return; }
+                closeModal('student-form-modal');
+                resolve({ name: n, student_id: _sfSid.value.trim(), gender: _sfGender.value, score: _sfScore.value });
+            };
+            _sfCancelHandler = () => { closeModal('student-form-modal'); resolve(null); };
+            _sfKeyHandler = (e) => { if (e.key === 'Enter') { e.preventDefault(); _sfOkHandler(); } };
+            _sfBackdropHandler = (e) => { if (e.target === _sfModal) _sfCancelHandler(); };
+            _sfOk.addEventListener('click', _sfOkHandler);
+            _sfCancel.addEventListener('click', _sfCancelHandler);
+            _sfModal.addEventListener('keydown', _sfKeyHandler);
+            _sfModal.addEventListener('click', _sfBackdropHandler);
+            openModal('student-form-modal');
+            requestAnimationFrame(() => _sfName.focus());
+        });
+    }
+
+    document.getElementById('btn-add-student').addEventListener('click', async () => {
+        const data = await openStudentForm({ title: '添加学生' });
+        if (!data) return;
+        handleResponse(postJson(urls.addStudent, data));
+    });
 
     const notify = (message) => {
         showInlineToast(message);
@@ -755,8 +1349,9 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.style.borderRadius = '999px';
             btn.style.minHeight = '34px';
             btn.style.padding = '0 14px';
-            btn.style.background = payload.variant === 'secondary' ? 'rgba(10, 89, 247, 0.12)' : '#0a59f7';
-            btn.style.color = payload.variant === 'secondary' ? '#0a59f7' : '#fff';
+            var pc = getComputedStyle(document.documentElement).getPropertyValue('--primary-color').trim() || '#0a59f7';
+            btn.style.background = payload.variant === 'secondary' ? 'rgba(var(--primary-color-rgb, 10, 89, 247), 0.12)' : pc;
+            btn.style.color = payload.variant === 'secondary' ? pc : '#fff';
             btn.style.cursor = 'pointer';
             btn.style.fontWeight = '600';
             if (typeof payload.onClick === 'function') {
@@ -768,12 +1363,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (key === 'badge') {
             const chip = document.createElement('span');
             chip.textContent = String(payload.text || '标签');
-            chip.style.border = '1px solid rgba(10, 89, 247, 0.22)';
+            chip.style.border = '1px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.22)';
             chip.style.borderRadius = '999px';
             chip.style.padding = '2px 10px';
             chip.style.fontSize = '11px';
-            chip.style.color = '#0a59f7';
-            chip.style.background = 'rgba(10, 89, 247, 0.08)';
+            chip.style.color = 'var(--primary-color, #0a59f7)';
+            chip.style.background = 'rgba(var(--primary-color-rgb, 10, 89, 247), 0.08)';
             return chip;
         }
 
@@ -1615,6 +2210,231 @@ document.addEventListener('DOMContentLoaded', () => {
         }).catch((err) => notify(err?.message || '操作失败'));
     };
 
+    const postFormAjax = (form, { onSuccess, reload = false } = {}) => {
+        const url = form.action;
+        const formData = new FormData(form);
+        const promise = fetch(url, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-CSRFToken': csrf,
+            },
+            body: new URLSearchParams(formData),
+        }).then(res => res.json());
+
+        if (reload) {
+            handleHistoryResponse(promise);
+        } else {
+            handleResponse(promise, onSuccess);
+        }
+    };
+
+    const ajaxifyForm = (formSelector, options = {}) => {
+        const form = typeof formSelector === 'string'
+            ? document.querySelector(formSelector)
+            : formSelector;
+        if (!form) return;
+        form.addEventListener('submit', (e) => {
+            e.preventDefault();
+            postFormAjax(form, options);
+            if (options.resetAfter !== false) form.reset();
+        });
+    };
+
+    const hasEmptyGuide = !!document.getElementById('groupEmptyGuide');
+    if (hasEmptyGuide) {
+        const guideForm = document.getElementById('createGroupForm');
+        if (guideForm) {
+            guideForm.addEventListener('submit', function () {
+                localStorage.setItem('group_guide_pending', 'true');
+            }, true);
+        }
+    }
+    ajaxifyForm('#createGroupForm', {
+        reload: hasEmptyGuide,
+        onSuccess: hasEmptyGuide ? null : () => showInlineToast('小组已创建'),
+    });
+
+    if (!hasEmptyGuide && localStorage.getItem('group_guide_pending') === 'true') {
+        localStorage.removeItem('group_guide_pending');
+        setTimeout(() => startGroupTour(), 400);
+    }
+
+    function startGroupTour() {
+        const driverJs = window.driver && window.driver.js;
+        if (!driverJs) return;
+
+        const switchToGroupTab = () => {
+            const tab = document.querySelector('.tab-btn[data-tab="groups"]');
+            if (tab) tab.click();
+        };
+
+        switchToGroupTab();
+
+        const groupTour = driverJs.driver({
+            showProgress: true,
+            animate: true,
+            doneBtnText: '开始使用',
+            nextBtnText: '下一步',
+            prevBtnText: '上一步',
+            steps: [
+                {
+                    element: '#groupList',
+                    popover: {
+                        title: '小组已创建',
+                        description: '这里是你的小组列表。你可以继续添加更多小组，也可以重命名或删除已有小组。',
+                    },
+                    onHighlightStarted: () => {
+                        switchToGroupTab();
+                        const section = document.querySelector('#groupToolsToggle')?.closest('.collapsible-section');
+                        if (section) section.classList.add('open');
+                    },
+                },
+                {
+                    element: '#groupAssignToggle',
+                    popover: {
+                        title: '开启分组模式',
+                        description: '点击"分组模式"后，可以在座位区框选或点击多个座位，然后批量分配到指定小组。',
+                    },
+                    onHighlightStarted: switchToGroupTab,
+                },
+                {
+                    element: '#groupSelect',
+                    popover: {
+                        title: '选择目标小组',
+                        description: '在这里选择你要分配到的小组，然后点击"应用到选中"即可将框选的座位归入该组。',
+                    },
+                    onHighlightStarted: switchToGroupTab,
+                },
+                {
+                    element: '#groupAutoBtn',
+                    popover: {
+                        title: '自动编组',
+                        description: '不想手动分？点击自动编组，系统会根据座位位置自动将学生分成小组。',
+                    },
+                    onHighlightStarted: switchToGroupTab,
+                },
+                {
+                    element: '#groupRotateBtn',
+                    popover: {
+                        title: '小组轮换',
+                        description: '一键轮换小组成员的座位，适合需要定期换座的场景。',
+                    },
+                    onHighlightStarted: switchToGroupTab,
+                },
+            ],
+            onDestroyStarted: () => {
+                groupTour.destroy();
+            },
+        });
+
+        groupTour.drive();
+    }
+
+    if (constraintTypeSelect) {
+        constraintTypeSelect.addEventListener('change', syncConstraintFields);
+    }
+
+    if (constraintCancelEditBtn) {
+        constraintCancelEditBtn.addEventListener('click', () => {
+            resetConstraintForm();
+        });
+    }
+
+    if (constraintForm) {
+        resetConstraintForm();
+        renderConstraintMetrics(deriveConstraintMetrics(constraintItems));
+        renderConstraintList();
+
+        constraintForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            const isEditing = editingConstraintId != null;
+            const formData = new FormData(constraintForm);
+            if (!isEditing) {
+                formData.delete('constraint_id');
+            }
+            const payload = Object.fromEntries(formData.entries());
+            const url = isEditing
+                ? (constraintForm.action || constraintForm.dataset.createUrl)
+                : constraintForm.dataset.createUrl;
+            handleResponse(postFormData(url, payload), (data) => {
+                showInlineToast(data?.message || (isEditing ? '约束已更新' : '约束已创建'));
+                resetConstraintForm();
+            });
+        });
+    }
+
+    if (constraintFilterGroup) {
+        constraintFilterGroup.addEventListener('click', (event) => {
+            const button = event.target.closest('[data-constraint-filter]');
+            if (!button) return;
+            activeConstraintFilter = button.dataset.constraintFilter || 'all';
+            constraintFilterGroup.querySelectorAll('[data-constraint-filter]').forEach((item) => {
+                item.classList.toggle('active', item === button);
+            });
+            renderConstraintList();
+        });
+    }
+
+    if (constraintList) {
+        constraintList.addEventListener('click', async (event) => {
+            const actionButton = event.target.closest('[data-constraint-action]');
+            if (!actionButton) return;
+            const itemElement = actionButton.closest('.constraint-item');
+            if (!itemElement) return;
+            const constraintPk = itemElement.dataset.constraintPk;
+            const item = (constraintItems || []).find((entry) => String(entry.pk) === String(constraintPk));
+            if (!item) return;
+
+            const action = actionButton.dataset.constraintAction;
+            if (action === 'edit') {
+                populateConstraintForm(item);
+                return;
+            }
+
+            if (action === 'toggle') {
+                const nextEnabled = item.enabled ? '0' : '1';
+                handleResponse(postFormData(item.toggle_url, { enabled: nextEnabled }), (data) => {
+                    showInlineToast(data?.message || (item.enabled ? '约束已停用' : '约束已启用'));
+                });
+                return;
+            }
+
+            if (action === 'delete') {
+                const confirmed = window.showConfirmModal
+                    ? await window.showConfirmModal('确定要删除这条约束吗？')
+                    : window.confirm('确定要删除这条约束吗？');
+                if (!confirmed) return;
+                handleResponse(postFormData(item.delete_url, {}), () => {
+                    if (String(editingConstraintId) === String(item.pk)) {
+                        resetConstraintForm();
+                    }
+                    showInlineToast('约束已删除');
+                });
+            }
+        });
+    }
+
+    const snapshotForm = document.querySelector('form[action*="save_layout_snapshot"]');
+    ajaxifyForm(snapshotForm, {
+        reload: true,
+    });
+
+    document.querySelectorAll('.snapshot-item form[action*="delete_layout_snapshot"]').forEach(form => {
+        ajaxifyForm(form, { reload: true, resetAfter: false });
+    });
+
+    const groupToolsToggle = document.getElementById('groupToolsToggle');
+    if (groupToolsToggle) {
+        const section = groupToolsToggle.closest('.collapsible-section');
+        const stored = localStorage.getItem('groupToolsOpen');
+        if (stored === 'true') section.classList.add('open');
+        groupToolsToggle.addEventListener('click', () => {
+            section.classList.toggle('open');
+            localStorage.setItem('groupToolsOpen', section.classList.contains('open'));
+        });
+    }
+
     const applyUnseatedFilter = () => {
         if (!unseatedList || !unseatedSearch) return;
         const keyword = unseatedSearch.value.trim().toLowerCase();
@@ -1804,19 +2624,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const col = parseInt(seat.dataset.col, 10);
 
         if (!currentStudentId) {
-            handleResponse(postJson(urls.assign, {
+            handleResponse(postJson(urls.assign, withMovePreferences({
                 student_id: targetStudentId,
                 row,
                 col
-            }));
+            })));
             return;
         }
 
-        handleResponse(postJson(urls.move, {
+        handleResponse(postJson(urls.move, withMovePreferences({
             student_id: targetStudentId,
             row,
             col
-        }));
+        })));
     };
 
     const showQuickSwapModal = (seat, matches) => {
@@ -2058,7 +2878,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const hadMulti = seat.classList.contains('multi-selected');
 
         Array.from(seat.classList).forEach(cls => {
-            if (cls.startsWith('cell-') || cls === 'occupied' || cls === 'is-leader') {
+            if (cls.startsWith('cell-') || cls === 'occupied' || cls === 'is-leader' || cls === 'is-fixed-seat') {
                 seat.classList.remove(cls);
             }
         });
@@ -2069,12 +2889,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (data.student.is_leader) {
                 seat.classList.add('is-leader');
             }
+            if (data.student.is_fixed_seat) {
+                seat.classList.add('is-fixed-seat');
+            }
         }
         if (hadSelected) seat.classList.add('selected');
         if (hadMulti) seat.classList.add('multi-selected');
 
         seat.dataset.cellType = data.cell_type;
         seat.dataset.studentId = data.student ? data.student.id : '';
+        seat.dataset.fixedSeat = data.student && data.student.is_fixed_seat ? '1' : '0';
 
         const row = seat.dataset.row;
         const col = seat.dataset.col;
@@ -2091,6 +2915,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 name.className = 'seat-name';
                 name.textContent = data.student.name;
                 content.appendChild(name);
+
+                const badgesHtml = buildStudentBadgeHtml(data.student);
+                if (badgesHtml) {
+                    content.insertAdjacentHTML('beforeend', badgesHtml);
+                }
 
                 if (data.student.score_display) {
                     const info = document.createElement('div');
@@ -2120,7 +2949,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    const refreshState = () => {
+    const refreshState = window.refreshState = () => {
         if (!urls.state) return Promise.resolve();
         const selectedSeatKey = selectedSeat ? seatKey(selectedSeat) : null;
         const selectedUnseatedId = selectedUnseated ? selectedUnseated.dataset.studentId : null;
@@ -2143,10 +2972,19 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (data.unseated && data.unseated.length) {
                         unseatedList.innerHTML = data.unseated.map(student => {
                             const score = student.score_display ? `${student.score_display}分` : '';
+                            const badges = [
+                                student.podium_guardian_side === 'left' ? '<span class="guardian-badge left-guard">左护法</span>' : '',
+                                student.podium_guardian_side === 'right' ? '<span class="guardian-badge right-guard">右护法</span>' : '',
+                                student.is_fixed_seat ? '<span class="fixed-seat-badge">固定座位</span>' : '',
+                            ].filter(Boolean).join(' ');
                             return `
-                                <div class="unseated-item" draggable="true" data-student-id="${student.id}">
+                                <div class="unseated-item" draggable="true" data-student-id="${student.id}"
+                                    data-student-sid="${escapeAttr(student.student_id || '')}"
+                                    data-student-gender="${escapeAttr(student.gender || '')}"
+                                    data-student-score="${student.score || 0}"
+                                    data-update-url="${escapeAttr(student.update_url || '')}">
                                     <div>
-                                        <div class="unseated-name">${student.name}</div>
+                                        <div class="unseated-name">${escapeHtml(student.name)}${badges ? ` ${badges}` : ''}</div>
                                         <div class="unseated-info">${score}</div>
                                     </div>
                                     <button type="button" class="icon-btn delete-student" data-delete-url="${student.delete_url}">删除</button>
@@ -2161,6 +2999,22 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (unseatedCount) {
                     unseatedCount.textContent = `${data.unseated_count} 人`;
+                }
+
+                if (Array.isArray(data.constraints)) {
+                    constraintItems = data.constraints;
+                    renderConstraintMetrics(data.constraint_metrics || deriveConstraintMetrics(constraintItems));
+                    renderConstraintList();
+                    if (editingConstraintId != null) {
+                        const editedItem = constraintItems.find((item) => String(item.pk) === String(editingConstraintId));
+                        if (!editedItem) {
+                            resetConstraintForm();
+                        }
+                    }
+                }
+
+                if (data.sync_meta && window.FuckSeatsCloudSync) {
+                    window.FuckSeatsCloudSync.update(data.sync_meta);
                 }
 
                 if (data.suggestions) {
@@ -2257,6 +3111,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             suggestionList.innerHTML = '<div class="empty-hint">当前布局没有明显问题</div>';
                         }
                     }
+                    if (window.updateToastStack) window.updateToastStack();
                 }
 
                 if (selectedSeatKey) {
@@ -2323,7 +3178,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     notify('当前版本不支持多选拖拽');
                     return;
                 }
-                handleResponse(postJson(urls.moveBatch, { moves: plan.moves }), () => {
+                handleResponse(postJson(urls.moveBatch, withMovePreferences({ moves: plan.moves })), () => {
                     clearMultiSelection();
                 });
                 return;
@@ -2334,11 +3189,11 @@ document.addEventListener('DOMContentLoaded', () => {
             clearDragFeedback();
             if (!studentId) return;
             if (sourceSeat && sourceSeat.dataset.seatKey === seat.dataset.seatKey) return;
-            handleResponse(postJson(urls.move, {
+            handleResponse(postJson(urls.move, withMovePreferences({
                 student_id: studentId,
                 row: seat.dataset.row,
                 col: seat.dataset.col
-            }));
+            })));
         });
     });
 
@@ -2622,7 +3477,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (isTemplate) {
             badge = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;background:#e8f5e9;color:#2e7d32;margin-left:6px;">智能模板</span>`;
         } else if (isColumn) {
-            badge = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;background:#e3f2fd;color:#0a59f7;margin-left:6px;">纵列轮换</span>`;
+            badge = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;background:rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);color:var(--primary-color, #0a59f7);margin-left:6px;">纵列轮换</span>`;
         } else if (isFallback) {
             badge = `<span style="display:inline-block;padding:1px 6px;border-radius:10px;font-size:10px;font-weight:600;background:#fff3e0;color:#e65100;margin-left:6px;">普通模式</span>`;
         }
@@ -2944,16 +3799,14 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    document.querySelectorAll('.modal').forEach((modal) => {
-        modal.addEventListener('click', (e) => {
-            if (e.target === modal) {
-                closeModal(modal.id);
-            }
-        });
-    });
-
     initFileMenus();
     initSeatsImport();
+    initBsceImport();
+    if (new URLSearchParams(window.location.search).get('open') === 'bsce-import') {
+        const bsceModal = document.getElementById('bsce-import-modal');
+        if (bsceModal) openModal('bsce-import-modal');
+        history.replaceState(null, '', window.location.pathname);
+    }
     bindSystemSaveLinks();
     initPluginHub();
     initShiftUseLargeGroupsPreference();
@@ -3085,11 +3938,11 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const seat = getSeatForAction();
             if (seat && seat.dataset.cellType === 'seat' && clipboardStudentId) {
-                handleResponse(postJson(urls.assign, {
+                handleResponse(postJson(urls.assign, withMovePreferences({
                     student_id: clipboardStudentId,
                     row: seat.dataset.row,
                     col: seat.dataset.col
-                }));
+                })));
             }
             return;
         }
@@ -3119,11 +3972,11 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             const seat = getSeatForAction();
             if (seat && seat.dataset.cellType === 'seat' && selectedUnseated) {
-                handleResponse(postJson(urls.assign, {
+                handleResponse(postJson(urls.assign, withMovePreferences({
                     student_id: selectedUnseated.dataset.studentId,
                     row: seat.dataset.row,
                     col: seat.dataset.col
-                }));
+                })));
             }
         }
     });
@@ -3138,6 +3991,18 @@ document.addEventListener('DOMContentLoaded', () => {
         document.body.appendChild(contextMenu);
     }
     const ctxSetLeader = document.getElementById('ctx-set-leader');
+    const ctxToggleFixedSeat = document.getElementById('ctx-toggle-fixed-seat');
+    const ctxToggleFixedSeatLabel = document.getElementById('ctx-toggle-fixed-seat-label');
+    const ctxClearSeat = document.getElementById('ctx-clear-seat');
+    const ctxCopyStudent = document.getElementById('ctx-copy-student');
+    const ctxCutStudent = document.getElementById('ctx-cut-student');
+    const ctxMoveToUnseated = document.getElementById('ctx-move-to-unseated');
+    const ctxPasteStudent = document.getElementById('ctx-paste-student');
+    const ctxStudentName = document.getElementById('ctx-student-name');
+    const ctxCellTypeLabel = document.getElementById('ctx-cell-type-label');
+    const ctxCellCoord = document.getElementById('ctx-cell-coord');
+    const ctxSections = contextMenu ? contextMenu.querySelectorAll('.context-menu-section') : [];
+    let ctxTargetSeat = null;
     let ctxTargetStudentId = null;
     let contextMenuJustOpenedAt = 0;
     let blockedContextMenuTipAt = 0;
@@ -3167,6 +4032,7 @@ document.addEventListener('DOMContentLoaded', () => {
             col: seat.dataset.col || '',
             cellType: seat.dataset.cellType || '',
             studentId: seat.dataset.studentId || '',
+            fixedSeat: seat.dataset.fixedSeat || '0',
             hasGroupTag: !!seat.querySelector('.seat-group-tag'),
             isLeader: seat.classList.contains('is-leader'),
             className: seat.className || '',
@@ -3187,19 +4053,13 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const canOpenSeatContextMenu = (seat) => {
-        if (!seat || seat.dataset.cellType !== 'seat' || !seat.dataset.studentId) return false;
-        return seat.querySelector('.seat-group-tag') !== null;
+        if (!seat) return false;
+        if (seat.closest && seat.closest('.seat-stage') !== null) return true;
+        if (seat.dataset && seat.dataset.isUnseatedMock) return true;
+        return false;
     };
 
     const showBlockedContextMenuReason = (seat) => {
-        const now = Date.now();
-        if (now - blockedContextMenuTipAt < 800) return;
-        blockedContextMenuTipAt = now;
-
-        if (!seat || !seat.dataset || !seat.dataset.studentId) return;
-        if (!seat.querySelector('.seat-group-tag')) {
-            showInlineToast('该学生尚未加入任何小组，先分组后才能设为组长');
-        }
     };
 
     const hideContextMenu = () => {
@@ -3207,18 +4067,67 @@ document.addEventListener('DOMContentLoaded', () => {
         contextMenu.style.display = 'none';
         contextMenu.style.visibility = 'visible';
         ctxTargetStudentId = null;
+        ctxTargetSeat = null;
     };
 
     const showContextMenu = (e, seat) => {
-        if (!contextMenu || !ctxSetLeader || !seat) return;
+        if (!contextMenu || !seat) return;
 
+        const cellType = seat.dataset.cellType || '';
+        const studentId = seat.dataset.studentId || '';
+        const hasStudent = cellType === 'seat' && !!studentId;
+        const isEmpty = cellType === 'seat' && !studentId;
+        const isNonSeat = cellType !== 'seat';
+        const isFixedSeat = seat.dataset.fixedSeat === '1';
+        const hasGroupTag = !!seat.querySelector('.seat-group-tag');
         const isLeader = seat.classList.contains('is-leader');
-        ctxSetLeader.textContent = isLeader ? '取消任命' : '任命为组长';
+
+        ctxTargetSeat = seat;
+
+        ctxSections.forEach(s => s.classList.remove('visible'));
+
+        const showSection = (name) => {
+            const sec = contextMenu.querySelector(`[data-ctx-section="${name}"]`);
+            if (sec) sec.classList.add('visible');
+        };
+
+        showSection('common');
+        const row = seat.dataset.row || '?';
+        const col = seat.dataset.col || '?';
+        if (ctxCellCoord) ctxCellCoord.textContent = `${row} 行 ${col} 列`;
+
+        if (hasStudent) {
+            showSection('occupied');
+            const nameEl = seat.querySelector('.seat-name');
+            if (ctxStudentName) ctxStudentName.textContent = nameEl ? nameEl.textContent : '学生';
+            if (ctxSetLeader) {
+                ctxSetLeader.textContent = isLeader ? '取消任命' : '任命为组长';
+                ctxSetLeader.style.display = hasGroupTag ? '' : 'none';
+            }
+            if (ctxToggleFixedSeat) {
+                const canToggleFixedSeat = !seat.dataset.isUnseatedMock && !!seat.dataset.row && !!seat.dataset.col;
+                ctxToggleFixedSeat.style.display = canToggleFixedSeat ? '' : 'none';
+                if (ctxToggleFixedSeatLabel) {
+                    ctxToggleFixedSeatLabel.textContent = isFixedSeat ? '取消固定座位' : '固定此座位';
+                }
+            }
+            const ctxEditInfo = document.getElementById('ctx-edit-student-info');
+            if (ctxEditInfo) {
+                ctxEditInfo.style.display = seat.dataset.isUnseatedMock ? '' : 'none';
+            }
+        } else if (isEmpty) {
+            showSection('empty');
+            if (ctxPasteStudent) {
+                ctxPasteStudent.disabled = !clipboardStudentId;
+            }
+        } else if (isNonSeat) {
+            showSection('non-seat');
+            const typeNames = { aisle: '走廊', podium: '讲台', empty: '空位' };
+            if (ctxCellTypeLabel) ctxCellTypeLabel.textContent = typeNames[cellType] || cellType;
+        }
 
         contextMenu.style.display = 'block';
         contextMenu.style.visibility = 'hidden';
-
-        // 重置位置，防止前一次点击的位置影响元素的正常测量大小
         contextMenu.style.left = '0px';
         contextMenu.style.top = '0px';
 
@@ -3241,18 +4150,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const openSeatContextMenu = (event, seat) => {
         const seatInfo = describeSeatForContextMenu(seat);
-        if (!contextMenu || !ctxSetLeader || !canOpenSeatContextMenu(seat)) {
+        if (!contextMenu || !canOpenSeatContextMenu(seat)) {
             showBlockedContextMenuReason(seat);
             contextDebug('open-blocked', {
                 seat: seatInfo,
                 hasMenu: !!contextMenu,
-                hasAction: !!ctxSetLeader,
             });
             return false;
         }
         event.preventDefault();
-        event.stopPropagation();
-        ctxTargetStudentId = seat.dataset.studentId;
+        ctxTargetStudentId = seat.dataset.studentId || null;
         contextMenuJustOpenedAt = Date.now();
         showContextMenu(event, seat);
         contextDebug('open-success', {
@@ -3264,7 +4171,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const openSeatContextMenuFromTarget = (event, target) => {
         if (!target || !target.closest) return false;
-        const seat = target.closest('.seat');
+        let seat = target.closest('.seat');
+        if (!seat) {
+            const unseated = target.closest('.unseated-item');
+            if (unseated) {
+                seat = document.createElement('div');
+                seat.dataset.cellType = 'seat';
+                seat.dataset.studentId = unseated.dataset.studentId;
+                seat.dataset.isUnseatedMock = 'true';
+                seat.dataset.studentSid = unseated.dataset.studentSid || '';
+                seat.dataset.studentGender = unseated.dataset.studentGender || '';
+                seat.dataset.studentScore = unseated.dataset.studentScore || '0';
+                seat.dataset.updateUrl = unseated.dataset.updateUrl || '';
+                const nameEl = unseated.querySelector('.unseated-name');
+                const badge = unseated.querySelector('.guardian-badge');
+                seat.innerHTML = `
+                    <div class="seat-name">${nameEl ? nameEl.childNodes[0].textContent.trim() : '学生'}</div>
+                    ${badge ? badge.outerHTML : ''}
+                `;
+            }
+        }
         if (!seat) return false;
         return openSeatContextMenu(event, seat);
     };
@@ -3275,7 +4201,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const y = Number(detail.y);
         if (!Number.isFinite(x) || !Number.isFinite(y)) return;
         const target = document.elementFromPoint(x, y);
-        const seat = target && target.closest ? target.closest('.seat') : null;
+        let seat = target && target.closest ? target.closest('.seat') : null;
+        if (!seat && target && target.closest) seat = target.closest('.unseated-item');
         contextDebug('windows-event', {
             point: { x, y },
             targetClass: target && target.className ? String(target.className) : '',
@@ -3313,6 +4240,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             return;
         }
+        if (shouldSuppressNativeSeatContextMenu(event.target)) {
+            event.preventDefault();
+        }
         const seat = event.target && event.target.closest ? event.target.closest('.seat') : null;
         const handled = openSeatContextMenuFromTarget(event, event.target);
         contextDebug('document-contextmenu', {
@@ -3333,6 +4263,102 @@ document.addEventListener('DOMContentLoaded', () => {
                 student_id: ctxTargetStudentId
             }));
             hideContextMenu();
+        });
+    }
+
+    if (ctxToggleFixedSeat) {
+        ctxToggleFixedSeat.addEventListener('click', () => {
+            if (!ctxTargetSeat || !ctxTargetSeat.dataset.row || !ctxTargetSeat.dataset.col) return;
+            const nextEnabled = ctxTargetSeat.dataset.fixedSeat === '1' ? '0' : '1';
+            contextDebug('action-toggle-fixed-seat', {
+                studentId: ctxTargetStudentId,
+                row: ctxTargetSeat.dataset.row,
+                col: ctxTargetSeat.dataset.col,
+                enabled: nextEnabled,
+            });
+            handleResponse(postJson(urls.toggleFixedSeat, {
+                row: ctxTargetSeat.dataset.row,
+                col: ctxTargetSeat.dataset.col,
+                enabled: nextEnabled,
+            }));
+            hideContextMenu();
+        });
+    }
+
+    if (ctxClearSeat) {
+        ctxClearSeat.addEventListener('click', () => {
+            if (!ctxTargetSeat) return;
+            handleResponse(postJson(urls.clear, {
+                row: ctxTargetSeat.dataset.row,
+                col: ctxTargetSeat.dataset.col,
+            }));
+            hideContextMenu();
+        });
+    }
+
+    if (ctxCopyStudent) {
+        ctxCopyStudent.addEventListener('click', () => {
+            if (!ctxTargetStudentId) return;
+            clipboardStudentId = ctxTargetStudentId;
+            showInlineToast('已复制学生');
+            hideContextMenu();
+        });
+    }
+
+    if (ctxCutStudent) {
+        ctxCutStudent.addEventListener('click', () => {
+            if (!ctxTargetStudentId || !ctxTargetSeat) return;
+            clipboardStudentId = ctxTargetStudentId;
+            handleResponse(postJson(urls.clear, {
+                row: ctxTargetSeat.dataset.row,
+                col: ctxTargetSeat.dataset.col,
+            }));
+            showInlineToast('已剪切学生');
+            hideContextMenu();
+        });
+    }
+
+    if (ctxMoveToUnseated) {
+        ctxMoveToUnseated.addEventListener('click', () => {
+            if (!ctxTargetSeat) return;
+            handleResponse(postJson(urls.clear, {
+                row: ctxTargetSeat.dataset.row,
+                col: ctxTargetSeat.dataset.col,
+            }));
+            hideContextMenu();
+        });
+    }
+
+    if (ctxPasteStudent) {
+        ctxPasteStudent.addEventListener('click', () => {
+            if (!clipboardStudentId || !ctxTargetSeat) return;
+            handleResponse(postJson(urls.assign, withMovePreferences({
+                student_id: clipboardStudentId,
+                row: ctxTargetSeat.dataset.row,
+                col: ctxTargetSeat.dataset.col,
+            })));
+            hideContextMenu();
+        });
+    }
+
+    const ctxEditStudentInfo = document.getElementById('ctx-edit-student-info');
+    if (ctxEditStudentInfo) {
+        ctxEditStudentInfo.addEventListener('click', async () => {
+            if (!ctxTargetSeat || !ctxTargetSeat.dataset.isUnseatedMock) return;
+            const seat = ctxTargetSeat;
+            hideContextMenu();
+            const nameEl = seat.querySelector('.seat-name');
+            const data = await openStudentForm({
+                title: '编辑学生信息',
+                name: nameEl ? nameEl.textContent.trim() : '',
+                student_id: seat.dataset.studentSid || '',
+                gender: seat.dataset.studentGender || '',
+                score: seat.dataset.studentScore || '',
+            });
+            if (!data) return;
+            const updateUrl = seat.dataset.updateUrl;
+            if (!updateUrl) return;
+            handleResponse(postJson(updateUrl, data));
         });
     }
 

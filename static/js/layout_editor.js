@@ -26,6 +26,87 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const seatStage = document.querySelector('.seat-stage');
+    const gridContainer = document.getElementById('seat-grid-container');
+    const zoomLevelDisplay = document.getElementById('zoom-level');
+    const zoomInBtn = document.getElementById('layoutZoomInBtn');
+    const zoomOutBtn = document.getElementById('layoutZoomOutBtn');
+    const previewToggles = Array.from(document.querySelectorAll('[data-layout-preview-toggle]'));
+    const PREVIEW_CLASS = 'layout-preview-visible';
+    const ZOOM_STORAGE_KEY = 'fuckseats_layout_editor_zoom';
+    const PREVIEW_STORAGE_KEY = 'fuckseats_layout_editor_preview';
+    const clampZoom = (value) => Math.min(Math.max(value, 0.5), 2);
+    const readStorage = (key) => {
+        try {
+            return window.localStorage ? window.localStorage.getItem(key) : null;
+        } catch (error) {
+            return null;
+        }
+    };
+    const writeStorage = (key, value) => {
+        try {
+            if (window.localStorage) {
+                window.localStorage.setItem(key, value);
+            }
+        } catch (error) {
+            // Ignore storage failures in private browsing or restricted environments.
+        }
+    };
+    let currentScale = clampZoom(parseFloat(readStorage(ZOOM_STORAGE_KEY) || '1') || 1);
+    let previewVisible = readStorage(PREVIEW_STORAGE_KEY) === '1';
+
+    const updateZoom = () => {
+        if (!gridContainer) return;
+        gridContainer.style.zoom = currentScale;
+        if (zoomLevelDisplay) {
+            zoomLevelDisplay.textContent = `${Math.round(currentScale * 100)}%`;
+        }
+        writeStorage(ZOOM_STORAGE_KEY, String(currentScale));
+    };
+
+    const zoomIn = () => {
+        currentScale = clampZoom(Number((currentScale + 0.1).toFixed(2)));
+        updateZoom();
+    };
+
+    const zoomOut = () => {
+        currentScale = clampZoom(Number((currentScale - 0.1).toFixed(2)));
+        updateZoom();
+    };
+
+    const setPreviewVisible = (visible) => {
+        previewVisible = Boolean(visible);
+        root.classList.toggle(PREVIEW_CLASS, previewVisible);
+        previewToggles.forEach((button) => {
+            button.textContent = previewVisible ? '关闭预览' : '打开预览';
+            button.setAttribute('aria-pressed', previewVisible ? 'true' : 'false');
+            button.classList.toggle('active', previewVisible);
+        });
+        writeStorage(PREVIEW_STORAGE_KEY, previewVisible ? '1' : '0');
+    };
+
+    updateZoom();
+    setPreviewVisible(previewVisible);
+
+    if (zoomInBtn) zoomInBtn.addEventListener('click', zoomIn);
+    if (zoomOutBtn) zoomOutBtn.addEventListener('click', zoomOut);
+    previewToggles.forEach((button) => {
+        button.addEventListener('click', () => {
+            setPreviewVisible(!previewVisible);
+        });
+    });
+
+    if (seatStage) {
+        seatStage.addEventListener('wheel', (event) => {
+            if (!(event.ctrlKey || event.metaKey)) return;
+            event.preventDefault();
+            if (event.deltaY < 0) {
+                zoomIn();
+            } else {
+                zoomOut();
+            }
+        }, { passive: false });
+    }
+
     const selectionBox = document.createElement('div');
     selectionBox.className = 'selection-box';
     selectionBox.style.display = 'none';

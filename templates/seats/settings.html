@@ -23,17 +23,220 @@
 {% block content %}
 <section class="settings-container animate-fade-in">
     <div class="settings-header">
-        <h1>应用设置</h1>
+        <div class="settings-header-icon">
+            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24"><rect width="24" height="24" opacity="0"></rect><g><path d="M12.02 9Q12.84 9 13.52 9.41Q14.21 9.82 14.6 10.51Q15 11.21 15 12.02Q15 12.84 14.6 13.52Q14.21 14.21 13.52 14.6Q12.84 15 12 15Q11.18 15 10.49 14.59Q9.79 14.18 9.4 13.49Q9 12.79 9 11.98Q9 11.16 9.41 10.48Q9.82 9.79 10.51 9.4Q11.21 9 12.02 9ZM12.05 7.51Q10.82 7.51 9.78 8.11Q8.74 8.71 8.12 9.73Q7.51 10.75 7.51 11.98Q7.51 13.2 8.11 14.24Q8.71 15.29 9.74 15.9Q10.78 16.51 12 16.51Q13.22 16.51 14.26 15.91Q15.29 15.31 15.9 14.28Q16.51 13.25 16.51 12.02Q16.51 10.8 15.91 9.77Q15.31 8.74 14.29 8.12Q13.27 7.51 12.05 7.51ZM13.56 22.66Q14.02 22.66 14.4 22.4Q14.78 22.15 14.98 21.74L15.79 19.85L15.98 19.75Q16.42 19.49 16.85 19.22L18.91 19.49Q19.39 19.54 19.8 19.33Q20.21 19.13 20.45 18.72L22.03 15.98Q22.27 15.58 22.24 15.12Q22.2 14.66 21.94 14.28L20.69 12.6L20.69 11.42L21.94 9.74Q22.22 9.36 22.25 8.9Q22.27 8.45 22.03 8.04L20.45 5.28Q20.23 4.9 19.82 4.68Q19.42 4.46 18.94 4.51L16.85 4.78Q16.42 4.46 15.86 4.2L15.02 2.23Q14.83 1.82 14.45 1.56Q14.06 1.3 13.61 1.3L10.44 1.3Q9.98 1.3 9.59 1.56Q9.19 1.82 9 2.23L8.16 4.2L7.92 4.34Q7.73 4.44 7.55 4.54Q7.37 4.63 7.2 4.75L5.09 4.51Q4.63 4.44 4.21 4.64Q3.79 4.85 3.55 5.26L1.97 8.02Q1.73 8.4 1.76 8.87Q1.8 9.34 2.06 9.72L3.34 11.42L3.34 12.53L2.06 14.23Q1.78 14.62 1.75 15.07Q1.73 15.53 1.97 15.94L3.53 18.67Q3.77 19.08 4.18 19.28Q4.58 19.49 5.06 19.44L7.13 19.2Q7.8 19.63 8.14 19.8L8.98 21.72Q9.14 22.15 9.53 22.4Q9.91 22.66 10.39 22.66L13.56 22.66ZM7.08 17.66L4.8 17.9L3.22 15.1L4.58 13.27Q4.8 12.94 4.8 12.6Q4.78 12.31 4.78 11.95Q4.78 11.59 4.8 11.3Q4.8 10.92 4.58 10.61L3.22 8.74L4.85 5.95L7.15 6.24Q7.37 6.26 7.55 6.22Q7.73 6.17 7.87 6.07Q8.3 5.76 8.93 5.47Q9.29 5.28 9.43 4.94L10.39 2.78L13.61 2.81L14.52 4.94Q14.64 5.26 15.02 5.47Q15.55 5.71 16.1 6.1Q16.46 6.34 16.82 6.26L19.13 6.02L20.71 8.83L19.37 10.63Q19.1 10.92 19.15 11.33Q19.18 11.64 19.18 12.01Q19.18 12.38 19.15 12.67Q19.13 13.06 19.37 13.37L20.71 15.19L19.08 17.98L16.85 17.71Q16.66 17.69 16.46 17.72Q16.27 17.76 16.13 17.88Q15.6 18.26 15 18.53Q14.83 18.62 14.69 18.76Q14.54 18.89 14.47 19.06L13.56 21.14L10.34 21.12L9.46 19.03Q9.29 18.67 8.95 18.5Q8.47 18.29 7.85 17.88Q7.58 17.69 7.25 17.69Z" fill="currentColor"></path></g></svg>
+        </div>
+        <h1>设置</h1>
         <p>管理应用的各项配置和偏好设置</p>
     </div>
 
     <div class="settings-sections">
-        <!-- 更新设置 -->
         <div class="settings-section">
             <div class="section-header">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12 2a10 10 0 0 0-7.35 16.76l.02.02A10 10 0 1 0 12 2zm0 2a8 8 0 0 1 5.9 2.64l-2.19 2.19A5 5 0 0 0 12 7a5 5 0 0 0-3.71 1.66L6.1 6.47A8 8 0 0 1 12 4zM7 12a5 5 0 0 1 .29-1.66L4.47 7.52A7.96 7.96 0 0 0 4 12c0 1.66.5 3.2 1.37 4.48l2.34-2.34A5 5 0 0 1 7 12zm5 5a5 5 0 0 1-3.14-1.1l-2.34 2.34A8 8 0 0 0 12 20a8 8 0 0 0 5.9-2.64l-2.19-2.19A5 5 0 0 1 12 17zm5-5c0 .53-.08 1.04-.23 1.52l2.76 1.6A7.96 7.96 0 0 0 20 12a7.96 7.96 0 0 0-1.37-4.48l-2.34 2.34c.18.66.28 1.37.28 2.14z" fill="#0a59f7"/>
-                    <path d="M12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z" fill="#0a59f7" fill-opacity="0.5"/>
+                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><rect width="24" height="24" opacity="0"></rect><g><path d="M11.83 21.89Q12.82 21.89 13.44 21.38Q14.06 20.88 14.23 20.16Q14.4 19.44 14.14 18.86Q13.94 18.36 13.66 18.05Q13.42 17.69 13.49 17.4Q13.56 17.11 13.88 16.96Q14.21 16.8 14.74 16.82Q16.51 16.94 18 16.45Q19.49 15.96 20.48 14.86Q21.48 13.75 21.79 12.07Q22.08 10.49 21.62 8.86Q21.17 7.22 20.35 6.17Q18.24 3.48 15.5 2.62Q12.77 1.75 10.24 2.27Q7.7 2.78 6.12 4.03Q4.42 5.35 3.26 7.33Q2.11 9.31 2.11 12.6Q2.11 14.57 3.35 16.75Q4.58 18.94 6.82 20.41Q9.05 21.89 11.83 21.89ZM7.03 5.23Q8.4 4.18 10.54 3.73Q12.67 3.29 15 4.02Q17.33 4.75 19.18 7.08Q19.8 7.9 20.16 9.24Q20.52 10.58 20.3 11.81Q19.94 13.75 18.49 14.62Q17.04 15.48 14.81 15.31Q13.46 15.24 12.74 15.86Q12.02 16.49 11.96 17.39Q11.9 18.29 12.46 18.94Q12.62 19.13 12.77 19.46Q12.82 19.56 12.78 19.79Q12.74 20.02 12.52 20.21Q12.29 20.4 11.83 20.4Q9.48 20.4 7.6 19.16Q5.71 17.93 4.66 16.09Q3.6 14.26 3.6 12.6Q3.6 9.77 4.58 8.06Q5.57 6.36 7.03 5.23ZM7.32 8.66Q6.77 8.66 6.37 9.05Q5.98 9.43 5.98 9.98Q5.98 10.54 6.37 10.93Q6.77 11.33 7.32 11.33Q7.87 11.33 8.27 10.93Q8.66 10.54 8.66 9.98Q8.66 9.43 8.27 9.05Q7.87 8.66 7.32 8.66ZM9.98 5.3Q9.43 5.3 9.05 5.7Q8.66 6.1 8.66 6.65Q8.66 7.2 9.05 7.6Q9.43 7.99 9.98 7.99Q10.54 7.99 10.93 7.6Q11.33 7.2 11.33 6.65Q11.33 6.1 10.93 5.7Q10.54 5.3 9.98 5.3ZM14.26 5.3Q13.7 5.3 13.31 5.7Q12.91 6.1 12.91 6.65Q12.91 7.2 13.31 7.6Q13.7 7.99 14.26 7.99Q14.81 7.99 15.19 7.6Q15.58 7.2 15.58 6.65Q15.58 6.1 15.19 5.7Q14.81 5.3 14.26 5.3ZM16.92 8.66Q16.37 8.66 15.97 9.05Q15.58 9.43 15.58 9.98Q15.58 10.54 15.97 10.93Q16.37 11.33 16.92 11.33Q17.47 11.33 17.87 10.93Q18.26 10.54 18.26 9.98Q18.26 9.43 17.87 9.05Q17.47 8.66 16.92 8.66Z" fill="currentColor"></path></g></svg>
+                <div>
+                    <h2>个性化</h2>
+                    <p>选择你喜欢的主题色</p>
+                </div>
+            </div>
+            <div class="section-content">
+                <div class="setting-item setting-item-stack">
+                    <div class="setting-info">
+                        <label>主题色</label>
+                        <span class="setting-description">为应用选择一个主题色，所有界面元素将随之变化。</span>
+                        <span class="setting-value" id="theme-status">星河蓝</span>
+                    </div>
+                    <div class="theme-picker" id="theme-picker"></div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="section-header">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="3" y="5" width="18" height="14" rx="4" fill="currentColor" fill-opacity="0.12"/>
+                    <rect x="3.75" y="5.75" width="16.5" height="12.5" rx="3.25" stroke="currentColor" stroke-width="1.5"/>
+                    <path d="M8 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                    <path d="M12 8v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                </svg>
+                <div>
+                    <h2>排座偏好</h2>
+                    <p>控制移动学生与布局轮换时的默认行为</p>
+                </div>
+            </div>
+            <div class="section-content">
+                <div class="setting-item setting-item-stack">
+                    <div class="setting-info">
+                        <label>小组移动模式</label>
+                        <span class="setting-description">控制拖拽换位、快捷调位和批量移动时，小组是固定在座位区域，还是跟随学生一起移动。</span>
+                        <span class="setting-value" id="group-move-mode-status">组定人动</span>
+                    </div>
+                    <div class="settings-segment" id="group-move-mode-segment">
+                        <label class="settings-segment-option">
+                            <input type="radio" name="group_move_mode" value="fixed" checked>
+                            <span class="settings-segment-card">
+                                <strong>组定人动</strong>
+                                <small>小组固定在座位区域，学生换位后会进入目标座位所属小组。</small>
+                            </span>
+                        </label>
+                        <label class="settings-segment-option">
+                            <input type="radio" name="group_move_mode" value="follow">
+                            <span class="settings-segment-card">
+                                <strong>组随人动</strong>
+                                <small>已入座学生换位时，保持原本小组不变，小组会随学生移动。</small>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="setting-divider"></div>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label>布局轮换默认按大组移动</label>
+                        <span class="setting-description">同步控制"变换"选项卡和高级轮换面板里的"按大组移动"默认值。</span>
+                    </div>
+                    <div class="setting-trail">
+                        <span class="setting-value" id="shift-use-large-groups-status">按大组移动</span>
+                        <label class="settings-switch">
+                            <input type="checkbox" id="settings-shift-use-large-groups-toggle" checked>
+                            <span class="settings-switch-track">
+                                <span class="settings-switch-thumb"></span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section" id="cloud-settings-section">
+            <div class="section-header">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" fill="currentColor" fill-opacity="0.12"/>
+                    <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" stroke="currentColor" stroke-width="1.2" fill="none"/>
+                </svg>
+                <div>
+                    <h2>云服务</h2>
+                    <p>登录老三账户，同步班级数据到云端</p>
+                </div>
+            </div>
+            <div class="section-content">
+                <div id="cloud-not-logged-in" style="display:none">
+                    <div class="setting-item setting-item-stack">
+                        <div class="setting-info">
+                            <label>登录老三账户</label>
+                            <span class="setting-description">登录后可将班级数据同步到云端，多设备共享。</span>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="cloud-login-btn" style="align-self:flex-start;margin-top:8px">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z" fill="currentColor"/></svg>
+                            登录
+                        </button>
+                    </div>
+                </div>
+                <div id="cloud-logged-in" style="display:none">
+                    <div class="setting-item cloud-account-row">
+                        <div class="cloud-account-info">
+                            <div class="cloud-avatar-wrap" id="cloud-avatar-wrap"></div>
+                            <div class="cloud-account-detail">
+                                <div class="cloud-nickname" id="cloud-nickname"></div>
+                                <div class="cloud-email" id="cloud-email"></div>
+                            </div>
+                        </div>
+                        <div class="cloud-tier-area">
+                            <span class="cloud-tier-badge" id="cloud-tier-badge"></span>
+                        </div>
+                    </div>
+
+                    <div class="setting-divider"></div>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <label>订阅到期</label>
+                            <span class="setting-description" id="cloud-expires-text">--</span>
+                        </div>
+                        <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-refresh-sub-btn">刷新订阅</button>
+                    </div>
+
+                    <div class="setting-divider"></div>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <label>云同步</label>
+                            <span class="setting-description">将所有班级数据推送到云端</span>
+                            <span class="setting-value" id="cloud-last-sync">上次同步：从未</span>
+                        </div>
+                        <button type="button" class="btn btn-primary" id="cloud-sync-btn">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/></svg>
+                            立即同步
+                        </button>
+                    </div>
+
+                    <div class="setting-divider"></div>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <label>兑换码</label>
+                            <span class="setting-description">输入兑换码激活订阅</span>
+                        </div>
+                        <div class="cloud-redeem-row">
+                            <input type="text" id="cloud-redeem-input" class="cloud-redeem-input" placeholder="输入兑换码" />
+                            <button type="button" class="btn btn-primary cloud-small-btn" id="cloud-redeem-btn">兑换</button>
+                        </div>
+                    </div>
+
+                    <div class="setting-divider"></div>
+
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <label>退出登录</label>
+                            <span class="setting-description">退出后云同步将暂停</span>
+                        </div>
+                        <button type="button" class="btn btn-secondary" id="cloud-logout-btn">退出登录</button>
+                    </div>
+                </div>
+
+                <div class="setting-divider"></div>
+
+                <div class="setting-item setting-item-stack">
+                    <div class="setting-info">
+                        <label>云服务器地址</label>
+                        <span class="setting-description">自建用户可修改为自己的云端地址，修改后需重新登录</span>
+                    </div>
+                    <div class="cloud-server-url-row">
+                        <input type="text" id="cloud-server-url-input" class="cloud-server-url-input" placeholder="https://fuckseatsapi.577622.xyz" />
+                        <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-save-url-btn">保存</button>
+                        <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-reset-url-btn" title="恢复默认">重置</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section" id="subscription-plans-section">
+            <div class="section-header">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="1.5" rx="3"/>
+                    <path d="M12 11l4-4M12 11l-4-4M12 11v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+                <div>
+                    <h2>订阅计划</h2>
+                    <p>对比不同订阅的功能权限，选择适合你的方案</p>
+                </div>
+            </div>
+            <div class="section-content">
+                <div class="subscription-plans-wrap" id="subscription-plans-wrap">
+                    <div class="subscription-plans-loading" id="subscription-plans-loading">
+                        <div class="plans-loading-spinner"></div>
+                        <span>正在加载订阅计划...</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="settings-section">
+            <div class="section-header">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/>
+                    <path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/>
                 </svg>
                 <div>
                     <h2>软件更新</h2>
@@ -44,9 +247,15 @@
                 <div class="setting-item">
                     <div class="setting-info">
                         <label>当前版本</label>
-                        <span class="setting-value" id="current-version-display">{{ app_runtime.version }}</span>
+                        <span class="setting-description">正在运行的版本</span>
+                    </div>
+                    <div class="setting-trail">
+                        <span class="setting-version-badge" id="current-version-display">{{ app_runtime.version }}</span>
                     </div>
                 </div>
+
+                <div class="setting-divider"></div>
+
                 <div class="setting-item">
                     <div class="setting-info">
                         <label>检查更新</label>
@@ -54,7 +263,8 @@
                     </div>
                     <button id="manual-check-update-btn" class="btn btn-primary" type="button">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12 2a1 1 0 0 1 1 1v3.06A7 7 0 0 1 18.94 12H22a1 1 0 1 1 0 2h-3.06A7 7 0 0 1 13 19.94V22a1 1 0 1 1-2 0v-2.06A7 7 0 0 1 5.06 14H2a1 1 0 1 1 0-2h3.06A7 7 0 0 1 11 6.06V3a1 1 0 0 1 1-1zm0 6a5 5 0 1 0 0 10 5 5 0 0 0 0-10z" fill="currentColor"/>
+                            <path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/>
+                            <path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/>
                         </svg>
                         检查更新
                     </button>
@@ -62,40 +272,21 @@
             </div>
         </div>
 
-      
-
-        <!-- 关于 -->
-        <div class="settings-section">
-            <div class="section-header">
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <circle cx="12" cy="12" r="10" fill="#0a59f7" fill-opacity="0.12"/>
-                    <circle cx="12" cy="12" r="10" stroke="#0a59f7" stroke-width="1.5"/>
-                    <rect x="11" y="11" width="2" height="5" rx="1" fill="#0a59f7"/>
-                    <circle cx="12" cy="8.5" r="1.2" fill="#0a59f7"/>
-                </svg>
-                <div>
-                    <h2>关于</h2>
-                    <p>应用信息</p>
+        <div class="settings-section settings-about-section">
+            <div class="settings-about-card">
+                <div class="settings-about-icon" style="color: var(--primary-color)">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="3" width="7" height="7" rx="2" fill="currentColor"/>
+                        <rect x="14" y="3" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.7"/>
+                        <rect x="3" y="14" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.7"/>
+                        <rect x="14" y="14" width="7" height="7" rx="2" fill="currentColor"/>
+                    </svg>
                 </div>
-            </div>
-            <div class="section-content">
-                <div class="setting-item">
-                    <div class="setting-info">
-                        <label>应用名称</label>
-                        <span class="setting-value">不想排座位</span>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-info">
-                        <label>开发者</label>
-                        <span class="setting-value">老三</span>
-                    </div>
-                </div>
-                <div class="setting-item">
-                    <div class="setting-info">
-                        <label>官网</label>
-                        <a href="https://fuckseats.577622.xyz" target="_blank" class="setting-link">https://fuckseats.577622.xyz</a>
-                    </div>
+                <div class="settings-about-name">不想排座位</div>
+                <div class="settings-about-meta">
+                    <span>老三</span>
+                    <span class="settings-about-dot"></span>
+                    <a href="https://fuckseats.577622.xyz" target="_blank" class="settings-about-link">fuckseats.577622.xyz</a>
                 </div>
             </div>
         </div>
@@ -104,105 +295,162 @@
 
 <style>
 .settings-container {
-    max-width: 900px;
+    max-width: 680px;
     margin: 0 auto;
-    padding: 40px 20px;
+    padding: 48px 20px 64px;
 }
 
 .settings-header {
-    margin-bottom: 40px;
+    text-align: center;
+    margin-bottom: 36px;
+}
+
+.settings-header-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 64px;
+    border-radius: 20px;
+    background: linear-gradient(135deg, rgba(var(--primary-color-rgb, 10, 89, 247), 0.12) 0%, rgba(var(--primary-color-rgb, 10, 89, 247), 0.06) 100%);
+    margin-bottom: 16px;
+    color: var(--primary-color);
 }
 
 .settings-header h1 {
-    font-size: 32px;
+    font-size: 28px;
     font-weight: 700;
-    color: #0a59f7;
-    margin: 0 0 8px 0;
+    color: var(--text-primary);
+    margin: 0 0 6px 0;
+    letter-spacing: -0.02em;
 }
 
 .settings-header p {
-    color: #666;
+    color: var(--text-secondary);
+    font-size: 15px;
     margin: 0;
 }
 
 .settings-sections {
     display: flex;
     flex-direction: column;
-    gap: 24px;
+    gap: 20px;
 }
 
 .settings-section {
     background: white;
-    border-radius: 16px;
+    border-radius: 14px;
     overflow: hidden;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
 .section-header {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 24px;
-    border-bottom: 1px solid #f0f0f0;
+    gap: 12px;
+    padding: 16px 20px;
+    background: rgba(0, 0, 0, 0.015);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .section-header svg {
-    color: #0a59f7;
+    color: var(--primary-color);
     flex-shrink: 0;
 }
 
 .section-header h2 {
-    font-size: 18px;
+    font-size: 15px;
     font-weight: 600;
-    margin: 0 0 4px 0;
-    color: #333;
+    margin: 0;
+    color: var(--text-primary);
 }
 
 .section-header p {
-    font-size: 14px;
-    color: #666;
-    margin: 0;
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin: 2px 0 0 0;
 }
 
 .section-content {
-    padding: 24px;
+    padding: 0;
     display: flex;
     flex-direction: column;
-    gap: 20px;
 }
 
 .setting-item {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 20px;
+    gap: 16px;
+    padding: 14px 20px;
+}
+
+.setting-item-stack {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.setting-divider {
+    height: 1px;
+    background: rgba(0, 0, 0, 0.05);
+    margin: 0 20px;
 }
 
 .setting-info {
     flex: 1;
+    min-width: 0;
 }
 
 .setting-info label {
     display: block;
-    font-weight: 600;
-    color: #333;
-    margin-bottom: 4px;
+    font-weight: 500;
+    font-size: 15px;
+    color: var(--text-primary);
+    margin-bottom: 2px;
 }
 
 .setting-description {
     display: block;
-    font-size: 14px;
-    color: #666;
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.5;
 }
 
 .setting-value {
     display: block;
-    color: #666;
-    font-size: 14px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+.setting-trail {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.setting-trail .setting-value {
+    margin-top: 0;
+    text-align: right;
+    white-space: nowrap;
+}
+
+.setting-version-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.08);
+    color: var(--primary-color);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
 }
 
 .setting-link {
-    color: #0a59f7;
+    color: var(--primary-color);
     text-decoration: none;
     font-size: 14px;
 }
@@ -216,6 +464,7 @@
     align-items: center;
     gap: 8px;
     white-space: nowrap;
+    flex-shrink: 0;
 }
 
 .settings-switch {
@@ -224,6 +473,7 @@
     align-items: center;
     cursor: pointer;
     user-select: none;
+    flex-shrink: 0;
 }
 
 .settings-switch input[type="checkbox"] {
@@ -233,79 +483,543 @@
 }
 
 .settings-switch-track {
-    width: 54px;
-    height: 32px;
+    width: 51px;
+    height: 31px;
     border-radius: 999px;
     background: rgba(15, 23, 42, 0.14);
-    box-shadow:
-        inset 0 1px 2px rgba(15, 23, 42, 0.08),
-        inset 0 0 0 1px rgba(15, 23, 42, 0.06);
-    padding: 3px;
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+    padding: 2px;
     transition: background 0.24s ease, box-shadow 0.24s ease;
     display: flex;
     align-items: center;
 }
 
 .settings-switch-thumb {
-    width: 26px;
-    height: 26px;
+    width: 27px;
+    height: 27px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.96);
-    box-shadow:
-        0 6px 16px rgba(15, 23, 42, 0.16),
-        inset 0 1px 0 rgba(255, 255, 255, 0.92);
-    transition: transform 0.24s ease;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+    transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .settings-switch input[type="checkbox"]:checked + .settings-switch-track {
-    background: rgba(10, 89, 247, 0.92);
-    box-shadow:
-        inset 0 1px 2px rgba(10, 89, 247, 0.18),
-        0 8px 18px rgba(10, 89, 247, 0.18);
+    background: var(--primary-color);
 }
 
 .settings-switch input[type="checkbox"]:checked + .settings-switch-track .settings-switch-thumb {
-    transform: translateX(22px);
+    transform: translateX(20px);
 }
 
 .settings-switch input[type="checkbox"]:focus-visible + .settings-switch-track {
-    outline: 3px solid rgba(10, 89, 247, 0.18);
+    outline: 3px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
     outline-offset: 3px;
+}
+
+.settings-segment {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+    margin-top: 4px;
+}
+
+.settings-segment-option {
+    position: relative;
+    display: block;
+    cursor: pointer;
+}
+
+.settings-segment-option input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.settings-segment-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 96px;
+    padding: 14px 16px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.02);
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-segment-card strong {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.settings-segment-card small {
+    font-size: 12px;
+    line-height: 1.6;
+    color: var(--text-secondary);
+}
+
+.settings-segment-option:hover .settings-segment-card {
+    border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.2);
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.03);
+}
+
+.settings-segment-option input[type="radio"]:checked + .settings-segment-card {
+    border-color: var(--primary-color);
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.06);
+    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+}
+
+.settings-segment-option input[type="radio"]:checked + .settings-segment-card strong {
+    color: var(--primary-color);
+}
+
+.settings-segment-option input[type="radio"]:focus-visible + .settings-segment-card {
+    outline: 3px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
+    outline-offset: 3px;
+}
+
+.settings-about-section {
+    border: none;
+    box-shadow: none;
+    background: transparent;
+}
+
+.settings-about-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 32px 20px 28px;
+    gap: 8px;
+}
+
+.settings-about-icon {
+    width: 72px;
+    height: 72px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 20px;
+    background: white;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    margin-bottom: 4px;
+}
+
+.settings-about-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
+}
+
+.settings-about-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-secondary);
+}
+
+.settings-about-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 50%;
+    background: var(--text-secondary);
+    opacity: 0.5;
+}
+
+.settings-about-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.settings-about-link:hover {
+    text-decoration: underline;
+}
+
+@media (max-width: 720px) {
+    .settings-container {
+        padding: 24px 16px 48px;
+    }
+
+    .settings-header {
+        margin-bottom: 24px;
+    }
+
+    .settings-header h1 {
+        font-size: 24px;
+    }
+
+    .settings-segment {
+        grid-template-columns: 1fr;
+    }
+
+    .setting-item {
+        padding: 12px 16px;
+    }
+
+    .setting-divider {
+        margin: 0 16px;
+    }
+
+    .section-header {
+        padding: 14px 16px;
+    }
+}
+
+.theme-picker {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+    margin-top: 4px;
+}
+
+.theme-card {
+    position: relative;
+    cursor: pointer;
+    border-radius: 12px;
+    border: 1.5px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.02);
+    padding: 14px 16px;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.theme-card:hover {
+    border-color: rgba(0, 0, 0, 0.16);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.theme-card.active {
+    border-color: var(--tc-color);
+    background: rgba(0, 0, 0, 0.02);
+    box-shadow: 0 0 0 3px rgba(var(--tc-color-rgb), 0.12);
+}
+
+.theme-card-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.theme-card-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--tc-color);
+    flex-shrink: 0;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(var(--tc-color-rgb), 0.3);
+}
+
+.theme-card.active .theme-card-swatch::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 14px;
+    height: 14px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+.theme-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.theme-card.active .theme-card-title {
+    color: var(--tc-color);
+}
+
+.theme-card-desc {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-secondary);
+    font-style: italic;
+}
+
+@media (max-width: 720px) {
+    .theme-picker {
+        grid-template-columns: 1fr;
+    }
+}
+
+.subscription-plans-wrap {
+    padding: 16px 20px 20px;
+}
+
+.subscription-plans-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    padding: 40px 0;
+}
+
+.plans-loading-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.15);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+
+.subscription-plans-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 14px;
+}
+
+.plan-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    border: 1.5px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.015);
+    overflow: hidden;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.plan-card:hover {
+    border-color: rgba(0, 0, 0, 0.14);
+}
+
+.plan-card.plan-card-current {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+}
+
+.plan-card.plan-card-recommended {
+    border-color: var(--primary-color);
+}
+
+.plan-card-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    line-height: 1.6;
+}
+
+.plan-card-badge-current {
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+    color: var(--primary-color);
+}
+
+.plan-card-header {
+    padding: 18px 16px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.plan-card-name {
+    font-size: 17px;
+    font-weight: 700;
+    color: var(--text-primary);
+}
+
+.plan-card-current .plan-card-name {
+    color: var(--primary-color);
+}
+
+.plan-card-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.plan-card-price {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-top: 4px;
+}
+
+.plan-card-limits {
+    padding: 0 16px 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    flex: 1;
+}
+
+.plan-limit-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--text-primary);
+    line-height: 1.4;
+}
+
+.plan-limit-icon {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.plan-limit-icon-check {
+    color: #34c759;
+}
+
+.plan-limit-icon-cross {
+    color: #c7c7cc;
+}
+
+.plan-card-footer {
+    padding: 0 16px 16px;
+    margin-top: auto;
+}
+
+.plan-card-footer .btn {
+    width: 100%;
+    justify-content: center;
+    font-size: 14px;
+}
+
+.plan-card-footer .btn-plan-current {
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.08);
+    color: var(--primary-color);
+    cursor: default;
+    pointer-events: none;
+    border: none;
+}
+
+@media (max-width: 720px) {
+    .subscription-plans-grid {
+        grid-template-columns: 1fr;
+    }
+    .subscription-plans-wrap {
+        padding: 12px 16px 16px;
+    }
 }
 </style>
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    const LIQUID_GLASS_KEY = 'seats_zoom_liquid_glass_enabled';
-    const checkBtn = document.getElementById('manual-check-update-btn');
-    const liquidGlassToggle = document.getElementById('liquid-glass-toggle');
-    const liquidGlassStatus = document.getElementById('liquid-glass-status');
+    // --- Theme Picker ---
+    const themePicker = document.getElementById('theme-picker');
+    const themeStatus = document.getElementById('theme-status');
 
-    const syncLiquidGlassUi = () => {
-        if (!liquidGlassToggle || !liquidGlassStatus) return;
-        const enabled = localStorage.getItem(LIQUID_GLASS_KEY) === '1';
-        liquidGlassToggle.checked = enabled;
-        liquidGlassStatus.textContent = enabled ? '液态折射玻璃' : '普通模糊玻璃';
+    if (themePicker && window.ThemeManager) {
+        const themes = ThemeManager.THEMES;
+        const currentId = ThemeManager.getThemeId();
+
+        Object.values(themes).forEach((theme) => {
+            const card = document.createElement('div');
+            card.className = 'theme-card' + (theme.id === currentId ? ' active' : '');
+            card.setAttribute('data-theme-id', theme.id);
+            card.style.setProperty('--tc-color', theme.color);
+            card.style.setProperty('--tc-color-rgb', theme.colorRgb);
+            card.innerHTML =
+                '<div class="theme-card-header">' +
+                    '<div class="theme-card-swatch"></div>' +
+                    '<span class="theme-card-title">' + theme.name + '</span>' +
+                '</div>' +
+                '<span class="theme-card-desc">' + theme.description + '</span>';
+            card.addEventListener('click', () => {
+                ThemeManager.setTheme(theme.id);
+                themePicker.querySelectorAll('.theme-card').forEach((c) => {
+                    c.classList.toggle('active', c.getAttribute('data-theme-id') === theme.id);
+                });
+                if (themeStatus) themeStatus.textContent = theme.name;
+                if (typeof showToast === 'function') {
+                    showToast('已切换为「' + theme.name + '」');
+                }
+            });
+            themePicker.appendChild(card);
+        });
+
+        if (themeStatus) themeStatus.textContent = themes[currentId].name;
+    }
+
+    // --- Existing settings ---
+    const SHIFT_USE_LARGE_GROUPS_KEY = 'seats_shift_use_large_groups';
+    const GROUP_MOVE_MODE_KEY = 'seats_group_move_mode';
+    const checkBtn = document.getElementById('manual-check-update-btn');
+    const groupMoveModeInputs = Array.from(document.querySelectorAll('input[name="group_move_mode"]'));
+    const groupMoveModeStatus = document.getElementById('group-move-mode-status');
+    const shiftUseLargeGroupsToggle = document.getElementById('settings-shift-use-large-groups-toggle');
+    const shiftUseLargeGroupsStatus = document.getElementById('shift-use-large-groups-status');
+    const GROUP_MOVE_MODE_FOLLOW = 'follow';
+    const GROUP_MOVE_MODE_FIXED = 'fixed';
+
+    const normalizeGroupMoveMode = (value) => (
+        String(value || '').trim().toLowerCase() === GROUP_MOVE_MODE_FOLLOW
+            ? GROUP_MOVE_MODE_FOLLOW
+            : GROUP_MOVE_MODE_FIXED
+    );
+
+    const getGroupMoveModeText = (mode) => (
+        mode === GROUP_MOVE_MODE_FOLLOW ? '组随人动' : '组定人动'
+    );
+
+    const syncGroupMoveModeUi = () => {
+        const currentMode = normalizeGroupMoveMode(localStorage.getItem(GROUP_MOVE_MODE_KEY));
+        groupMoveModeInputs.forEach((input) => {
+            input.checked = input.value === currentMode;
+        });
+        if (groupMoveModeStatus) {
+            groupMoveModeStatus.textContent = getGroupMoveModeText(currentMode);
+        }
     };
 
-    if (liquidGlassToggle) {
-        syncLiquidGlassUi();
-        liquidGlassToggle.addEventListener('change', () => {
-            if (liquidGlassToggle.checked) {
-                localStorage.setItem(LIQUID_GLASS_KEY, '1');
-            } else {
-                localStorage.removeItem(LIQUID_GLASS_KEY);
-            }
-            syncLiquidGlassUi();
+    const syncShiftUseLargeGroupsUi = () => {
+        if (!shiftUseLargeGroupsToggle || !shiftUseLargeGroupsStatus) return;
+        const enabled = localStorage.getItem(SHIFT_USE_LARGE_GROUPS_KEY) !== '0';
+        shiftUseLargeGroupsToggle.checked = enabled;
+        shiftUseLargeGroupsStatus.textContent = enabled ? '按大组移动' : '按列独立移动';
+    };
+
+    syncGroupMoveModeUi();
+    groupMoveModeInputs.forEach((input) => {
+        input.addEventListener('change', () => {
+            if (!input.checked) return;
+            const currentMode = normalizeGroupMoveMode(input.value);
+            localStorage.setItem(GROUP_MOVE_MODE_KEY, currentMode);
+            syncGroupMoveModeUi();
             if (typeof showToast === 'function') {
-                showToast(liquidGlassToggle.checked ? '已开启灵动液态效果' : '已切换为普通模糊玻璃');
+                showToast(currentMode === GROUP_MOVE_MODE_FOLLOW ? '已切换为组随人动' : '已切换为组定人动');
+            }
+        });
+    });
+
+    if (shiftUseLargeGroupsToggle) {
+        syncShiftUseLargeGroupsUi();
+        shiftUseLargeGroupsToggle.addEventListener('change', () => {
+            localStorage.setItem(SHIFT_USE_LARGE_GROUPS_KEY, shiftUseLargeGroupsToggle.checked ? '1' : '0');
+            syncShiftUseLargeGroupsUi();
+            if (typeof showToast === 'function') {
+                showToast(shiftUseLargeGroupsToggle.checked ? '已默认按大组移动' : '已默认按列独立移动');
             }
         });
     }
 
     checkBtn.addEventListener('click', async () => {
         checkBtn.disabled = true;
-        checkBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation: spin 1s linear infinite;"><path d="M12 2a1 1 0 0 1 1 1v3.06A7 7 0 0 1 18.94 12H22a1 1 0 1 1 0 2h-3.06A7 7 0 0 1 13 19.94V22a1 1 0 1 1-2 0v-2.06A7 7 0 0 1 5.06 14H2a1 1 0 1 1 0-2h3.06A7 7 0 0 1 11 6.06V3a1 1 0 0 1 1-1zm0 6a5 5 0 1 0 0 10 5 5 0 0 0 0-10z" fill="currentColor"/></svg>检查中...';
+        checkBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation: spin 1s linear infinite;"><path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/><path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/></svg>检查中...';
 
         try {
             const response = await fetch('/api/update/check/');
@@ -328,9 +1042,395 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Update check error:', error);
         } finally {
             checkBtn.disabled = false;
-            checkBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12 2a1 1 0 0 1 1 1v3.06A7 7 0 0 1 18.94 12H22a1 1 0 1 1 0 2h-3.06A7 7 0 0 1 13 19.94V22a1 1 0 1 1-2 0v-2.06A7 7 0 0 1 5.06 14H2a1 1 0 1 1 0-2h3.06A7 7 0 0 1 11 6.06V3a1 1 0 0 1 1-1zm0 6a5 5 0 1 0 0 10 5 5 0 0 0 0-10z" fill="currentColor"/></svg>检查更新';
+            checkBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/><path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/></svg>检查更新';
         }
     });
+
+    // --- Cloud Settings ---
+    (function initCloudSettings() {
+        if (!window.CloudManager) {
+            setTimeout(initCloudSettings, 80);
+            return;
+        }
+        const notLoggedIn = document.getElementById('cloud-not-logged-in');
+        const loggedIn = document.getElementById('cloud-logged-in');
+        const loginBtn = document.getElementById('cloud-login-btn');
+        const logoutBtn = document.getElementById('cloud-logout-btn');
+        const syncBtn = document.getElementById('cloud-sync-btn');
+        const refreshSubBtn = document.getElementById('cloud-refresh-sub-btn');
+        const redeemBtn = document.getElementById('cloud-redeem-btn');
+        const redeemInput = document.getElementById('cloud-redeem-input');
+        const saveUrlBtn = document.getElementById('cloud-save-url-btn');
+        const resetUrlBtn = document.getElementById('cloud-reset-url-btn');
+        const urlInput = document.getElementById('cloud-server-url-input');
+        const DEFAULT_CLOUD_URL = 'https://fuckseatsapi.577622.xyz';
+        const syncIdleHtml = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/></svg> 立即同步';
+
+        function formatDate(iso) {
+            if (!iso) return '永久';
+            var d = new Date(iso);
+            return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+        }
+
+        function renderCloudUI(data) {
+            if (data.logged_in) {
+                notLoggedIn.style.display = 'none';
+                loggedIn.style.display = 'block';
+                var avatarWrap = document.getElementById('cloud-avatar-wrap');
+                if (data.avatar_url) {
+                    avatarWrap.innerHTML = '<img src="' + data.avatar_url + '" class="cloud-settings-avatar" alt="" />';
+                } else {
+                    avatarWrap.innerHTML = '<div class="cloud-settings-avatar cloud-settings-avatar-placeholder"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z" fill="currentColor"/></svg></div>';
+                }
+                document.getElementById('cloud-nickname').textContent = data.nickname || '用户';
+                document.getElementById('cloud-email').textContent = data.email || '';
+                document.getElementById('cloud-tier-badge').textContent = data.tier_display || '免费版';
+                var tierBadge = document.getElementById('cloud-tier-badge');
+                tierBadge.className = 'cloud-tier-badge cloud-tier-' + (data.tier || 'free');
+                var expiresText = document.getElementById('cloud-expires-text');
+                if (data.tier === 'free') {
+                    expiresText.textContent = '当前为免费版';
+                } else {
+                    expiresText.textContent = data.expires_at ? formatDate(data.expires_at) : '永久有效';
+                }
+            } else {
+                notLoggedIn.style.display = 'block';
+                loggedIn.style.display = 'none';
+            }
+            if (data.cloud_server_url && urlInput) {
+                urlInput.value = data.cloud_server_url;
+            }
+        }
+
+        function makeSyncCounts() {
+            return { ok: 0, latest: 0, conflict: 0, skipped: 0, err: 0, pulled: 0 };
+        }
+
+        function addSyncResult(counts, result) {
+            if (!result) {
+                counts.err += 1;
+                return;
+            }
+            if (result.status === 'ok') counts.ok += 1;
+            else if (result.status === 'up_to_date') counts.latest += 1;
+            else if (result.status === 'pulled') counts.pulled += 1;
+            else if (result.status === 'conflict') counts.conflict += 1;
+            else if (result.status === 'skipped') counts.skipped += 1;
+            else counts.err += 1;
+        }
+
+        function buildSyncMessage(counts) {
+            var parts = [];
+            if (counts.ok) parts.push(counts.ok + ' 个已上传');
+            if (counts.latest) parts.push(counts.latest + ' 个已是最新');
+            if (counts.pulled) parts.push(counts.pulled + ' 个已从云端拉取');
+            if (counts.conflict) parts.push(counts.conflict + ' 个仍有冲突');
+            if (counts.skipped) parts.push(counts.skipped + ' 个跳过');
+            if (counts.err) parts.push(counts.err + ' 个失败');
+            return parts.length ? ('同步完成：' + parts.join('，')) : '没有需要同步的班级';
+        }
+
+        CloudManager.getUserInfo(true).then(renderCloudUI);
+
+        if (loginBtn) loginBtn.addEventListener('click', async function() {
+            loginBtn.disabled = true;
+            try {
+                await CloudManager.openLogin();
+                renderCloudUI(await CloudManager.getUserInfo(true));
+            } finally {
+                loginBtn.disabled = false;
+            }
+        });
+
+        window.addEventListener('cloud-login-sync-complete', async function() {
+            renderCloudUI(await CloudManager.getUserInfo(true));
+            var lastSyncEl = document.getElementById('cloud-last-sync');
+            if (lastSyncEl) {
+                lastSyncEl.textContent = '上次同步：刚刚';
+            }
+        });
+
+        if (logoutBtn) logoutBtn.addEventListener('click', async function() {
+            logoutBtn.disabled = true;
+            await CloudManager.logout();
+            if (typeof showToast === 'function') showToast('已退出云服务');
+            renderCloudUI({ logged_in: false });
+            logoutBtn.disabled = false;
+        });
+
+        if (syncBtn) syncBtn.addEventListener('click', async function() {
+            syncBtn.disabled = true;
+            syncBtn.textContent = '同步中...';
+            try {
+                var data = await CloudManager.sync();
+                if (!data || data.status !== 'success') {
+                    showToast(data && data.message ? data.message : '同步失败');
+                    return;
+                }
+                var results = data.results || [];
+                var counts = makeSyncCounts();
+                for (var i = 0; i < results.length; i++) {
+                    var r = results[i];
+                    if (r.status === 'conflict') {
+                        var choice = confirm('"' + r.name + '" 存在冲突。\n点击"确定"保留本地版本并强制推送，点击"取消"使用云端版本。');
+                        if (choice && r.classroom_id) {
+                            syncBtn.textContent = '更新云端...';
+                            var forced = await CloudManager.sync([r.classroom_id], { force: true });
+                            if (!forced || forced.status !== 'success') {
+                                counts.err += 1;
+                                continue;
+                            }
+                            var forcedResults = forced.results || [];
+                            if (!forcedResults.length) counts.err += 1;
+                            for (var j = 0; j < forcedResults.length; j++) {
+                                addSyncResult(counts, forcedResults[j]);
+                            }
+                        } else if (!choice && r.uuid) {
+                            syncBtn.textContent = '拉取云端...';
+                            await CloudManager.pullClassroom(r.uuid);
+                            counts.pulled += 1;
+                            showToast('"' + r.name + '" 已从云端拉取');
+                        } else {
+                            counts.conflict += 1;
+                        }
+                    } else {
+                        addSyncResult(counts, r);
+                    }
+                }
+                showToast(buildSyncMessage(counts));
+                var lastSyncEl = document.getElementById('cloud-last-sync');
+                if (lastSyncEl && !counts.err && !counts.conflict) {
+                    lastSyncEl.textContent = '上次同步：刚刚';
+                }
+            } catch(e) {
+                showToast('同步失败：' + (e.message || '网络错误'));
+            } finally {
+                syncBtn.disabled = false;
+                syncBtn.innerHTML = syncIdleHtml;
+            }
+        });
+
+        if (refreshSubBtn) refreshSubBtn.addEventListener('click', async function() {
+            refreshSubBtn.disabled = true;
+            refreshSubBtn.textContent = '刷新中...';
+            try {
+                var data = await CloudManager.refreshSubscription();
+                renderCloudUI(data);
+                showToast('订阅状态已刷新');
+            } catch(e) {
+                showToast('刷新失败');
+            } finally {
+                refreshSubBtn.disabled = false;
+                refreshSubBtn.textContent = '刷新订阅';
+            }
+        });
+
+        if (redeemBtn) redeemBtn.addEventListener('click', async function() {
+            var code = (redeemInput.value || '').trim();
+            if (!code) { showToast('请输入兑换码'); return; }
+            redeemBtn.disabled = true;
+            try {
+                var data = await CloudManager.redeemCode(code);
+                if (data.status === 'success') {
+                    showToast('兑换成功');
+                    redeemInput.value = '';
+                    CloudManager.getUserInfo(true).then(renderCloudUI);
+                } else {
+                    showToast(data.message || '兑换失败');
+                }
+            } catch(e) {
+                showToast('兑换失败');
+            } finally {
+                redeemBtn.disabled = false;
+            }
+        });
+
+        if (saveUrlBtn) saveUrlBtn.addEventListener('click', async function() {
+            var url = (urlInput.value || '').trim();
+            if (!url) { showToast('请输入云服务器地址'); return; }
+            saveUrlBtn.disabled = true;
+            try {
+                await CloudManager.setCloudServerUrl(url);
+                showToast('云服务器地址已保存，请重新登录');
+                await CloudManager.logout();
+                renderCloudUI({ logged_in: false });
+            } catch(e) {
+                showToast('保存失败');
+            } finally {
+                saveUrlBtn.disabled = false;
+            }
+        });
+
+        if (resetUrlBtn) resetUrlBtn.addEventListener('click', async function() {
+            urlInput.value = DEFAULT_CLOUD_URL;
+            resetUrlBtn.disabled = true;
+            try {
+                await CloudManager.setCloudServerUrl(DEFAULT_CLOUD_URL);
+                showToast('已恢复默认服务器地址，请重新登录');
+                await CloudManager.logout();
+                renderCloudUI({ logged_in: false });
+            } catch(e) {
+                showToast('重置失败');
+            } finally {
+                resetUrlBtn.disabled = false;
+            }
+        });
+    })();
+
+    // --- Subscription Plans ---
+    (function initSubscriptionPlans() {
+        var wrap = document.getElementById('subscription-plans-wrap');
+        if (!wrap) return;
+
+        var LIMIT_LABELS = {
+            max_classrooms: '班级数量',
+            sync_enabled: '云同步',
+            max_history_steps: '历史记录步数',
+            sync_ai_conversations: 'AI 对话同步',
+            max_snapshots_per_classroom: '每班快照数',
+        };
+
+        var _plansCache = null;
+
+        function formatLimitValue(key, val) {
+            if (typeof val === 'boolean') return val;
+            if (val === -1 || val === '-1') return '无限';
+            if (val === 0 || val === '0') {
+                if (key === 'max_history_steps') return '不支持';
+                return '0';
+            }
+            return String(val);
+        }
+
+        function checkSvg() {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>';
+        }
+
+        function crossSvg() {
+            return '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>';
+        }
+
+        function getPlanPurchaseUrl(tierKey) {
+            if (_plansCache) {
+                var plan = _plansCache.find(function(p) { return p.key === tierKey; });
+                if (plan && plan.purchase_url) return Promise.resolve(plan.purchase_url);
+            }
+            if (window.CloudManager && CloudManager.getPurchaseUrl) {
+                return CloudManager.getPurchaseUrl(tierKey).then(function(data) {
+                    return data.url || data.purchase_url || '';
+                });
+            }
+            return Promise.resolve('');
+        }
+
+        function renderPlans(plans, currentTier) {
+            _plansCache = plans;
+            if (!plans || !plans.length) {
+                wrap.innerHTML = '<div class="subscription-plans-loading"><span>暂无订阅计划</span></div>';
+                return;
+            }
+            var grid = document.createElement('div');
+            grid.className = 'subscription-plans-grid';
+
+            var allLimitKeys = [];
+            plans.forEach(function(p) {
+                Object.keys(p.limits || {}).forEach(function(k) {
+                    if (allLimitKeys.indexOf(k) === -1) allLimitKeys.push(k);
+                });
+            });
+
+            plans.forEach(function(plan) {
+                var isCurrent = currentTier && plan.key === currentTier;
+                var card = document.createElement('div');
+                card.className = 'plan-card' + (isCurrent ? ' plan-card-current' : '');
+
+                var badgeHtml = '';
+                if (isCurrent) {
+                    badgeHtml = '<span class="plan-card-badge plan-card-badge-current">当前</span>';
+                }
+
+                var limitsHtml = '';
+                allLimitKeys.forEach(function(key) {
+                    var val = plan.limits[key];
+                    var label = LIMIT_LABELS[key] || key;
+                    var isBool = typeof val === 'boolean';
+                    var iconClass, iconHtml, text;
+                    if (isBool) {
+                        iconClass = val ? 'plan-limit-icon-check' : 'plan-limit-icon-cross';
+                        iconHtml = val ? checkSvg() : crossSvg();
+                        text = label;
+                    } else {
+                        var formatted = formatLimitValue(key, val);
+                        var isNone = formatted === '不支持';
+                        iconClass = isNone ? 'plan-limit-icon-cross' : 'plan-limit-icon-check';
+                        iconHtml = isNone ? crossSvg() : checkSvg();
+                        text = label + '：' + formatted;
+                    }
+                    limitsHtml += '<div class="plan-limit-row"><span class="plan-limit-icon ' + iconClass + '">' + iconHtml + '</span><span>' + text + '</span></div>';
+                });
+
+                var footerHtml = '';
+                if (isCurrent) {
+                    footerHtml = '<div class="plan-card-footer"><button class="btn btn-plan-current" type="button">当前方案</button></div>';
+                } else if (plan.key !== 'free') {
+                    footerHtml = '<div class="plan-card-footer"><button class="btn btn-primary plan-purchase-btn" type="button" data-tier="' + plan.key + '">订阅</button></div>';
+                }
+
+                card.innerHTML = badgeHtml +
+                    '<div class="plan-card-header">' +
+                        '<div class="plan-card-name">' + (plan.display_name || plan.key) + '</div>' +
+                        (plan.description ? '<div class="plan-card-desc">' + plan.description + '</div>' : '') +
+                        (plan.price ? '<div class="plan-card-price">' + plan.price + '</div>' : '') +
+                    '</div>' +
+                    '<div class="plan-card-limits">' + limitsHtml + '</div>' +
+                    footerHtml;
+
+                grid.appendChild(card);
+            });
+
+            wrap.innerHTML = '';
+            wrap.appendChild(grid);
+
+            grid.querySelectorAll('.plan-purchase-btn').forEach(function(btn) {
+                btn.addEventListener('click', async function() {
+                    var tier = btn.getAttribute('data-tier');
+                    btn.disabled = true;
+                    btn.textContent = '获取中...';
+                    try {
+                        var url = await getPlanPurchaseUrl(tier);
+                        if (url) {
+                            if (window.CloudManager && typeof CloudManager.openExternalUrl === 'function') {
+                                await CloudManager.openExternalUrl(url);
+                            } else {
+                                window.open(url, '_blank', 'noopener,noreferrer');
+                            }
+                        } else {
+                            showToast('暂未配置购买地址');
+                        }
+                    } catch(e) {
+                        showToast('获取购买链接失败');
+                    } finally {
+                        btn.disabled = false;
+                        btn.textContent = '订阅';
+                    }
+                });
+            });
+        }
+
+        function loadPlans() {
+            if (window.CloudManager && CloudManager.getSubscriptionPlans) {
+                CloudManager.getSubscriptionPlans().then(function(data) {
+                    renderPlans(data.plans, data.current_tier);
+                }).catch(function() {
+                    wrap.innerHTML = '<div class="subscription-plans-loading"><span>加载订阅计划失败，请检查网络连接</span></div>';
+                });
+            } else {
+                setTimeout(loadPlans, 100);
+            }
+        }
+
+        loadPlans();
+    })();
 });
 </script>
 

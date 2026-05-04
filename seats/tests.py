@@ -1,10 +1,15 @@
-from django.test import TestCase, override_settings, Client
+from django.test import TestCase, TransactionTestCase, override_settings, Client
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
+from django.utils import timezone
+from datetime import timedelta
 import json
 import importlib.util
 import unittest
+import urllib.error
+import uuid
 import zipfile
+import ssl
 import tempfile
 from io import BytesIO
 from pathlib import Path
@@ -16,14 +21,20 @@ import openai
 import openpyxl
 import pandas as pd
 import desktop_runtime
+from seats import cloud as cloud_module
 
 from desktop_shell import (
+    DesktopBridge,
+    build_multipart_form_data,
     build_file_dialog_types,
     ensure_allowed_extension,
+    is_allowed_extension,
     normalize_accept_extensions,
     parse_content_disposition_filename,
     resolve_local_export_url,
 )
+from seats.cloud import CloudAPIError
+from seats.crypto import decrypt_payload, encrypt_payload, generate_rsa_keypair
 from .models import (
     Classroom,
     FrontendKVStore,
@@ -37,6 +48,8 @@ from .models import (
     Student,
     LayoutSnapshot,
     ClassroomHistoryEntry,
+    SyncMeta,
+    CloudSession,
 )
 from .plugin_system import plugin_registry
 from .views import (
@@ -46,6 +59,7 @@ from .views import (
     _process_import,
     IMPORT_MODE_MATCH,
     IMPORT_MODE_REPLACE,
+    _bsce_json_post,
     _create_future_mode_response,
     _run_future_mode_chat,
 )
@@ -111,6 +125,383 @@ class LayoutMirrorTests(TestCase):
         constraint = SeatConstraint.objects.get(classroom=self.classroom, student=self.student_left)
         self.assertEqual(constraint.row, 1)
         self.assertEqual(constraint.col, 4)
+
+
+class ClassroomUnseatedStudentTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="未入座测试班", rows=2, cols=2)
+        self.seated_student = Student.objects.create(classroom=self.classroom, name="已入座学生", student_id="U001")
+        self.unseated_student = Student.objects.create(classroom=self.classroom, name="未入座学生", student_id="U002")
+        self.seat = Seat.objects.get(classroom=self.classroom, row=1, col=1)
+        self.seat.student = self.seated_student
+        self.seat.save(update_fields=["student"])
+
+    def test_classroom_detail_only_lists_truly_unseated_students(self):
+        response = self.client.get(reverse("classroom_detail", args=[self.classroom.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        unseated_students = list(response.context["unseated_students"])
+        self.assertEqual([student.pk for student in unseated_students], [self.unseated_student.pk])
+
+    def test_delete_student_rejects_seated_student(self):
+        response = self.client.post(
+            reverse("delete_student", args=[self.classroom.pk, self.seated_student.pk]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertEqual(payload.get("status"), "error")
+        self.assertIn("已入座", payload.get("message", ""))
+        self.assertTrue(Student.objects.filter(pk=self.seated_student.pk).exists())
+        self.seat.refresh_from_db()
+        self.assertEqual(self.seat.student_id, self.seated_student.pk)
+
+
+class ClassroomDeleteTests(TransactionTestCase):
+    def create_cloud_session(self):
+        return CloudSession.objects.create(
+            uid="u-delete",
+            nickname="老三",
+            session_token="delete-token",
+            token_expires_at=timezone.now() + timedelta(days=1),
+        )
+
+    def test_delete_classroom_suspends_sync_bumps_during_cascade(self):
+        classroom = Classroom.objects.create(name="删除同步班", rows=2, cols=2)
+        student = Student.objects.create(classroom=classroom, name="同步学生", student_id="D001")
+        group = SeatGroup.objects.create(classroom=classroom, name="第一组", leader=student)
+        seat = Seat.objects.get(classroom=classroom, row=1, col=1)
+        seat.student = student
+        seat.group = group
+        seat.save(update_fields=["student", "group"])
+        classroom.left_guardian = student
+        classroom.save(update_fields=["left_guardian"])
+        classroom_id = classroom.pk
+        sync_meta_id = classroom.sync_meta.pk
+
+        response = self.client.post(reverse("delete_classroom", args=[classroom_id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response.url, reverse("index"))
+        self.assertFalse(Classroom.objects.filter(pk=classroom_id).exists())
+        self.assertFalse(SyncMeta.objects.filter(pk=sync_meta_id).exists())
+        self.assertFalse(Seat.objects.filter(classroom_id=classroom_id).exists())
+        self.assertFalse(Student.objects.filter(classroom_id=classroom_id).exists())
+        self.assertFalse(SeatGroup.objects.filter(classroom_id=classroom_id).exists())
+
+    def test_delete_backed_up_classroom_deletes_cloud_record_first(self):
+        classroom = Classroom.objects.create(name="云端删除班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 2
+        meta.local_version = 2
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        classroom_id = classroom.pk
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.return_value = {"ok": True, "status": "success", "uuid": str(meta.uuid), "version": 3}
+            response = self.client.post(reverse("delete_classroom", args=[classroom_id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Classroom.objects.filter(pk=classroom_id).exists())
+        cloud_request.assert_called_once()
+        self.assertEqual(cloud_request.call_args.args[1:3], ("DELETE", f"/api/sync/{meta.uuid}"))
+        delete_body = cloud_request.call_args.args[3]
+        self.assertEqual(delete_body["base_version"], 2)
+        self.assertEqual(delete_body["device_id"], "local-delete")
+
+    def test_delete_backed_up_classroom_requires_cloud_session(self):
+        classroom = Classroom.objects.create(name="未登录删除班", rows=1, cols=1)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 1
+        meta.local_version = 1
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+
+        response = self.client.post(reverse("delete_classroom", args=[classroom.pk]))
+
+        self.assertEqual(response.status_code, 401)
+        self.assertTrue(Classroom.objects.filter(pk=classroom.pk).exists())
+        self.assertIn("请先登录云服务", response.json()["message"])
+
+    def test_delete_backed_up_classroom_ignores_missing_cloud_record(self):
+        classroom = Classroom.objects.create(name="云端已删班", rows=1, cols=1)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 1
+        meta.local_version = 1
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        classroom_id = classroom.pk
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.side_effect = CloudAPIError(
+                "班级不存在",
+                status_code=404,
+                payload={"status": "error", "message": "班级不存在"},
+            )
+            response = self.client.post(reverse("delete_classroom", args=[classroom_id]))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertFalse(Classroom.objects.filter(pk=classroom_id).exists())
+
+
+class BsceCloudImportTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="BSCE云导入测试班", rows=2, cols=2)
+
+    def test_bsce_json_post_randomizes_csrf_cookie_per_request(self):
+        class FakeResponse:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b'{"success": true, "data": {}}'
+
+        captured_requests = []
+
+        def fake_urlopen(req, timeout=None, context=None):
+            captured_requests.append(req)
+            return FakeResponse()
+
+        with patch("seats.views.secrets.token_hex", side_effect=["a" * 40, "b" * 40]):
+            with patch("seats.views.urllib.request.urlopen", side_effect=fake_urlopen):
+                _bsce_json_post("https://sce.jbyc.cc/api/auth.php", {"action": "login"})
+                _bsce_json_post("https://sce.jbyc.cc/api/auth.php", {"action": "login"})
+
+        self.assertEqual(len(captured_requests), 2)
+        first_body = json.loads(captured_requests[0].data.decode("utf-8"))
+        second_body = json.loads(captured_requests[1].data.decode("utf-8"))
+
+        self.assertEqual(first_body.get("_csrf"), "a" * 40)
+        self.assertEqual(second_body.get("_csrf"), "b" * 40)
+        self.assertNotEqual(first_body.get("_csrf"), second_body.get("_csrf"))
+        self.assertEqual(captured_requests[0].get_header("X-csrf-token"), "a" * 40)
+        self.assertEqual(captured_requests[1].get_header("X-csrf-token"), "b" * 40)
+
+
+class CloudCryptoClientTests(TestCase):
+    def test_save_cloud_session_persists_local_and_server_keys(self):
+        local_keys = cloud_module.get_or_create_local_cloud_keypair()
+        server_keys = generate_rsa_keypair()
+
+        session = cloud_module.save_cloud_session_from_payload({
+            'uid': 'u-crypto',
+            'nickname': '老三',
+            'session_token': 'token-crypto',
+            'token_expires_at': (timezone.now() + timedelta(days=1)).isoformat(),
+            'client_key_id': local_keys['key_id'],
+            'server_key': {
+                'key_id': server_keys['key_id'],
+                'public_key': server_keys['public_key_pem'],
+            },
+            'subscription': {'tier': 'free', 'display_name': '免费版', 'limits': {}},
+        })
+
+        self.assertEqual(session.client_key_id, local_keys['key_id'])
+        self.assertTrue(session.client_private_key_pem)
+        self.assertEqual(session.server_key_id, server_keys['key_id'])
+        self.assertEqual(session.server_public_key_pem, server_keys['public_key_pem'])
+
+    def test_cloud_api_request_decrypts_encrypted_response(self):
+        client_keys = generate_rsa_keypair()
+        session = CloudSession.objects.create(
+            uid='u-e2ee',
+            nickname='老三',
+            session_token='token-e2ee',
+            client_key_id=client_keys['key_id'],
+            client_public_key_pem=client_keys['public_key_pem'],
+            client_private_key_pem=client_keys['private_key_pem'],
+            server_key_id='server-key',
+            server_public_key_pem=generate_rsa_keypair()['public_key_pem'],
+            token_expires_at=timezone.now() + timedelta(days=1),
+        )
+
+        encrypted_response = {
+            'ok': True,
+            'status': 'success',
+            'encrypted': encrypt_payload({'status': 'success', 'value': 42}, client_keys['public_key_pem'], sender_key_id='server-key'),
+        }
+        with patch('seats.cloud._request_json', return_value=encrypted_response):
+            payload = cloud_module.cloud_api_request(session, 'GET', '/api/me')
+
+        self.assertEqual(payload['status'], 'success')
+        self.assertEqual(payload['value'], 42)
+
+    def test_cloud_api_request_refreshes_subscription_before_server_call(self):
+        session = CloudSession.objects.create(
+            uid='u-sub-refresh',
+            nickname='老三',
+            session_token='token-sub-refresh',
+            token_expires_at=timezone.now() + timedelta(days=1),
+            subscription_tier='free',
+            subscription_display_name='免费版',
+            limits={'max_classrooms': 3},
+        )
+
+        captured_paths = []
+
+        def fake_request(method, url, body=None, headers=None, timeout=20):
+            captured_paths.append(url)
+            if url.endswith('/api/me/refresh-subscription'):
+                return {
+                    'ok': True,
+                    'status': 'success',
+                    'subscription': {
+                        'tier': 'pro',
+                        'display_name': '专业版',
+                        'limits': {'max_classrooms': 99},
+                    },
+                }
+            if url.endswith('/api/sync/status'):
+                return {'ok': True, 'status': 'success', 'versions': {}}
+            raise AssertionError(f'Unexpected URL: {url}')
+
+        with patch('seats.cloud._request_json', side_effect=fake_request):
+            payload = cloud_module.cloud_api_request(session, 'GET', '/api/sync/status')
+
+        session.refresh_from_db()
+        self.assertEqual(payload['status'], 'success')
+        self.assertEqual(session.subscription_tier, 'pro')
+        self.assertEqual(session.subscription_display_name, '专业版')
+        self.assertEqual(session.limits.get('max_classrooms'), 99)
+        self.assertEqual(len(captured_paths), 2)
+        self.assertTrue(captured_paths[0].endswith('/api/me/refresh-subscription'))
+        self.assertTrue(captured_paths[1].endswith('/api/sync/status'))
+
+
+class BsceCloudSessionTests(TestCase):
+    def test_bsce_cloud_list_reuses_browser_session_for_single_flow(self):
+        from . import views
+
+        class FakeResponse:
+            def __init__(self, payload):
+                self.payload = payload
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return json.dumps(self.payload).encode("utf-8")
+
+        captured_requests = []
+
+        def fake_urlopen(req, timeout=None, context=None):
+            captured_requests.append(req)
+            body = json.loads(req.data.decode("utf-8"))
+            if body["action"] == "login":
+                return FakeResponse({
+                    "success": True,
+                    "data": {
+                        "username": "laosan",
+                        "token": "token-123",
+                    },
+                })
+            if body["action"] == "get_settings":
+                return FakeResponse({"success": True, "data": None})
+            return FakeResponse({
+                "success": True,
+                "data": [
+                    {
+                        "fileId": "ws_1",
+                        "metadata": {
+                            "author": "laosan",
+                            "name": "test",
+                            "time": "2026-04-26T08:41:40+08:00",
+                            "size": 4,
+                        },
+                    }
+                ],
+            })
+
+        with patch("seats.views.secrets.token_hex", return_value="c" * 40):
+            with patch("seats.views.secrets.choice", side_effect=[
+                views.BSCE_CLOUD_BROWSER_PROFILES[0],
+                views.BSCE_CLOUD_ACCEPT_LANGUAGES[0],
+            ]):
+                with patch("seats.views.urllib.request.urlopen", side_effect=fake_urlopen):
+                    workspaces = views._bsce_cloud_list_workspaces("laosan", "secret")
+
+        self.assertEqual(len(workspaces), 1)
+        self.assertEqual([json.loads(req.data.decode("utf-8"))["action"] for req in captured_requests], [
+            "login",
+            "get_settings",
+            "list",
+        ])
+        csrf_values = [json.loads(req.data.decode("utf-8")).get("_csrf") for req in captured_requests]
+        self.assertEqual(csrf_values, ["c" * 40, "c" * 40, "c" * 40])
+
+        user_agents = [req.get_header("User-agent") for req in captured_requests]
+        cookies = [req.get_header("Cookie") for req in captured_requests]
+        csrf_headers = [req.get_header("X-csrf-token") for req in captured_requests]
+        self.assertEqual(len(set(user_agents)), 1)
+        self.assertEqual(len(set(cookies)), 1)
+        self.assertEqual(len(set(csrf_headers)), 1)
+        self.assertIn("Edg/147.0.0.0", user_agents[0])
+        self.assertIn("rth-uid=", cookies[0])
+        self.assertIn(f"sce_csrf={'c' * 40}", cookies[0])
+        self.assertEqual(captured_requests[0].get_header("Sec-ch-ua-platform"), '"macOS"')
+        self.assertEqual(captured_requests[0].get_header("Accept-language"), views.BSCE_CLOUD_ACCEPT_LANGUAGES[0])
+
+    def test_bsce_json_post_reports_http_403_html_body(self):
+        html_body = (
+            b"<!DOCTYPE html>\n"
+            b"<html lang=\"zh-CN\"><head><meta charset=\"utf-8\"></head>"
+            b"<body>Forbidden</body></html>"
+        )
+        error = urllib.error.HTTPError(
+            url="https://sce.jbyc.cc/api/auth.php",
+            code=403,
+            msg="Forbidden",
+            hdrs={},
+            fp=BytesIO(html_body),
+        )
+
+        with patch("seats.views.urllib.request.urlopen", side_effect=error):
+            with self.assertRaises(ValueError) as ctx:
+                _bsce_json_post("https://sce.jbyc.cc/api/auth.php", {"action": "login"})
+
+        message = str(ctx.exception)
+        self.assertIn("云端请求失败：HTTP 403", message)
+        self.assertIn("<!DOCTYPE html>", message)
+        self.assertIn("zh-CN", message)
+
+
+class BsceCloudImportErrorResponseTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="BSCE云导入测试班", rows=2, cols=2)
+
+    def test_import_bsce_cloud_returns_json_when_cloud_rejects_request(self):
+        url = reverse("import_bsce_cloud", args=[self.classroom.pk])
+
+        with patch(
+            "seats.views._bsce_cloud_list_workspaces",
+            side_effect=ValueError("云端请求失败：HTTP 403 <!DOCTYPE html><html lang=\"zh-CN\">"),
+        ):
+            response = self.client.post(
+                url,
+                data=json.dumps({
+                    "action": "list",
+                    "username": "demo",
+                    "password": "secret",
+                }),
+                content_type="application/json",
+                HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+            )
+
+        self.assertEqual(response.status_code, 400)
+        payload = response.json()
+        self.assertEqual(payload.get("status"), "error")
+        self.assertIn("云端请求失败：HTTP 403", payload.get("message", ""))
+        self.assertIn("<!DOCTYPE html>", payload.get("message", ""))
 
 
 class FutureModeErrorHandlingTests(TestCase):
@@ -756,6 +1147,142 @@ class GroupInteractionTests(TestCase):
         text = " | ".join(str(item) for item in suggestions)
         self.assertNotIn("金千竣", text)
 
+    def test_set_podium_guards_updates_state_and_supports_partial_clear(self):
+        classroom = Classroom.objects.create(name="护法班", rows=1, cols=2)
+        left_student = classroom.students.create(name="左左", student_id="L001", score=91)
+        right_student = classroom.students.create(name="右右", student_id="R001", score=87)
+
+        left_seat = classroom.seats.get(row=1, col=1)
+        right_seat = classroom.seats.get(row=1, col=2)
+        left_seat.student = left_student
+        left_seat.save(update_fields=["student"])
+        right_seat.student = right_student
+        right_seat.save(update_fields=["student"])
+
+        response = self.client.post(
+            reverse("set_podium_guards", args=[classroom.pk]),
+            data=json.dumps({"left_student_id": left_student.pk, "right_student_id": right_student.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual((payload.get("podium_guards") or {}).get("left", {}).get("id"), left_student.pk)
+        self.assertEqual((payload.get("podium_guards") or {}).get("right", {}).get("id"), right_student.pk)
+
+        state_response = self.client.get(
+            reverse("classroom_state", args=[classroom.pk]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(state_response.status_code, 200)
+        state_payload = state_response.json()
+        self.assertEqual((state_payload.get("podium_guards") or {}).get("left", {}).get("id"), left_student.pk)
+        self.assertEqual((state_payload.get("podium_guards") or {}).get("right", {}).get("id"), right_student.pk)
+
+        seat_rows = {f'{item["row"]}-{item["col"]}': item for item in state_payload.get("seats", [])}
+        self.assertEqual((seat_rows.get("1-1") or {}).get("student", {}).get("podium_guardian_side"), "left")
+        self.assertEqual((seat_rows.get("1-2") or {}).get("student", {}).get("podium_guardian_side"), "right")
+
+        clear_response = self.client.post(
+            reverse("set_podium_guards", args=[classroom.pk]),
+            data=json.dumps({"right_student_id": ""}),
+            content_type="application/json",
+        )
+        self.assertEqual(clear_response.status_code, 200)
+        classroom.refresh_from_db()
+        self.assertEqual(classroom.left_guardian_id, left_student.pk)
+        self.assertIsNone(classroom.right_guardian_id)
+
+    def test_classroom_state_auto_detects_podium_side_students(self):
+        classroom = Classroom.objects.create(name="自动护法班", rows=1, cols=4)
+        left_student = classroom.students.create(name="左左")
+        right_student = classroom.students.create(name="右右")
+
+        classroom.seats.filter(row=1, col=1).update(student=left_student)
+        classroom.seats.filter(row=1, col=2).update(cell_type=SeatCellType.PODIUM, student=None, group=None)
+        classroom.seats.filter(row=1, col=3).update(student=right_student)
+
+        state_response = self.client.get(
+            reverse("classroom_state", args=[classroom.pk]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(state_response.status_code, 200)
+        payload = state_response.json()
+        seat_rows = {f'{item["row"]}-{item["col"]}': item for item in payload.get("seats", [])}
+        self.assertEqual((seat_rows.get("1-1") or {}).get("student", {}).get("podium_guardian_side"), "left")
+        self.assertEqual((seat_rows.get("1-3") or {}).get("student", {}).get("podium_guardian_side"), "right")
+        self.assertEqual((payload.get("podium_guards") or {}).get("left", {}).get("id"), left_student.pk)
+        self.assertEqual((payload.get("podium_guards") or {}).get("right", {}).get("id"), right_student.pk)
+
+    def test_classroom_detail_renders_unseated_podium_guardian_badges(self):
+        classroom = Classroom.objects.create(name="未入座护法班", rows=1, cols=1)
+        left_student = classroom.students.create(name="左左")
+        right_student = classroom.students.create(name="右右")
+        classroom.left_guardian = left_student
+        classroom.right_guardian = right_student
+        classroom.save(update_fields=["left_guardian", "right_guardian"])
+
+        response = self.client.get(reverse("classroom_detail", args=[classroom.pk]))
+        self.assertEqual(response.status_code, 200)
+        html = response.content.decode("utf-8")
+        self.assertIn("左左", html)
+        self.assertIn("右右", html)
+        self.assertIn('<span class="guardian-badge left-guard">左护法</span>', html)
+        self.assertIn('<span class="guardian-badge right-guard">右护法</span>', html)
+
+    def test_toggle_fixed_seat_creates_and_removes_must_seat_constraint(self):
+        classroom = Classroom.objects.create(name="固定座位班", rows=1, cols=2)
+        student = classroom.students.create(name="固定同学")
+        classroom.seats.filter(row=1, col=1).update(student=student)
+
+        enable_response = self.client.post(
+            reverse("toggle_fixed_seat", args=[classroom.pk]),
+            data=json.dumps({"row": 1, "col": 1, "enabled": True}),
+            content_type="application/json",
+        )
+        self.assertEqual(enable_response.status_code, 200)
+        self.assertTrue(enable_response.json().get("enabled"))
+
+        constraint = classroom.constraints.get(
+            student=student,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+        )
+        self.assertEqual((constraint.row, constraint.col), (1, 1))
+
+        state_response = self.client.get(
+            reverse("classroom_state", args=[classroom.pk]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(state_response.status_code, 200)
+        seat_rows = {f'{item["row"]}-{item["col"]}': item for item in state_response.json().get("seats", [])}
+        self.assertTrue((seat_rows.get("1-1") or {}).get("student", {}).get("is_fixed_seat"))
+
+        disable_response = self.client.post(
+            reverse("toggle_fixed_seat", args=[classroom.pk]),
+            data=json.dumps({"row": 1, "col": 1, "enabled": False}),
+            content_type="application/json",
+        )
+        self.assertEqual(disable_response.status_code, 200)
+        self.assertFalse(disable_response.json().get("enabled"))
+        self.assertFalse(
+            classroom.constraints.filter(
+                student=student,
+                constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+            ).exists()
+        )
+
+    def test_set_podium_guards_rejects_same_student_for_both_sides(self):
+        classroom = Classroom.objects.create(name="护法互斥班", rows=1, cols=1)
+        student = classroom.students.create(name="同学甲")
+
+        response = self.client.post(
+            reverse("set_podium_guards", args=[classroom.pk]),
+            data=json.dumps({"left_student_id": student.pk, "right_student_id": student.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("status"), "error")
+        self.assertIn("不能设置为同一名学生", response.json().get("message", ""))
+
     def test_rename_group_duplicate_returns_error_in_ajax(self):
         classroom = Classroom.objects.create(name="C3", rows=1, cols=2)
         g1 = SeatGroup.objects.create(classroom=classroom, name="G1", order=1)
@@ -982,6 +1509,82 @@ class GroupInteractionTests(TestCase):
         s2.refresh_from_db()
         self.assertEqual((s1.assigned_seat.row, s1.assigned_seat.col), (2, 1))
         self.assertEqual((s2.assigned_seat.row, s2.assigned_seat.col), (2, 2))
+
+    def test_move_student_supports_group_follow_mode(self):
+        classroom = Classroom.objects.create(name="C5GF", rows=1, cols=2)
+        g1 = SeatGroup.objects.create(classroom=classroom, name="第一组", order=1)
+        g2 = SeatGroup.objects.create(classroom=classroom, name="第二组", order=2)
+        s1 = classroom.students.create(name="甲")
+        s2 = classroom.students.create(name="乙")
+        seat_a = classroom.seats.get(row=1, col=1)
+        seat_b = classroom.seats.get(row=1, col=2)
+        seat_a.student = s1
+        seat_a.group = g1
+        seat_a.save(update_fields=["student", "group"])
+        seat_b.student = s2
+        seat_b.group = g2
+        seat_b.save(update_fields=["student", "group"])
+
+        response = self.client.post(
+            reverse("move_student", args=[classroom.pk]),
+            data=json.dumps({"student_id": s1.pk, "row": 1, "col": 2, "group_move_mode": "follow"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+        seat_a.refresh_from_db()
+        seat_b.refresh_from_db()
+        self.assertEqual(seat_a.student_id, s2.pk)
+        self.assertEqual(seat_a.group_id, g2.pk)
+        self.assertEqual(seat_b.student_id, s1.pk)
+        self.assertEqual(seat_b.group_id, g1.pk)
+
+    def test_move_students_batch_supports_group_follow_mode(self):
+        classroom = Classroom.objects.create(name="C5GB", rows=2, cols=2)
+        g1 = SeatGroup.objects.create(classroom=classroom, name="第一组", order=1)
+        g2 = SeatGroup.objects.create(classroom=classroom, name="第二组", order=2)
+        s1 = classroom.students.create(name="甲")
+        s2 = classroom.students.create(name="乙")
+        seat_a = classroom.seats.get(row=1, col=1)
+        seat_b = classroom.seats.get(row=1, col=2)
+        seat_c = classroom.seats.get(row=2, col=1)
+        seat_d = classroom.seats.get(row=2, col=2)
+        seat_a.student = s1
+        seat_a.group = g1
+        seat_a.save(update_fields=["student", "group"])
+        seat_b.student = s2
+        seat_b.group = g2
+        seat_b.save(update_fields=["student", "group"])
+
+        response = self.client.post(
+            reverse("move_students_batch", args=[classroom.pk]),
+            data=json.dumps(
+                {
+                    "group_move_mode": "follow",
+                    "moves": [
+                        {"student_id": s1.pk, "row": 2, "col": 1},
+                        {"student_id": s2.pk, "row": 2, "col": 2},
+                    ],
+                }
+            ),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+        seat_a.refresh_from_db()
+        seat_b.refresh_from_db()
+        seat_c.refresh_from_db()
+        seat_d.refresh_from_db()
+        self.assertIsNone(seat_a.student_id)
+        self.assertIsNone(seat_a.group_id)
+        self.assertIsNone(seat_b.student_id)
+        self.assertIsNone(seat_b.group_id)
+        self.assertEqual(seat_c.student_id, s1.pk)
+        self.assertEqual(seat_c.group_id, g1.pk)
+        self.assertEqual(seat_d.student_id, s2.pk)
+        self.assertEqual(seat_d.group_id, g2.pk)
 
     def test_swap_suggestion_auto_repairs_when_breaking_constraint(self):
         classroom = Classroom.objects.create(name="C6", rows=1, cols=2)
@@ -1338,6 +1941,33 @@ class ClassroomHistoryTests(TestCase):
         group.refresh_from_db()
         self.assertEqual(group.leader_id, student.pk)
 
+    def test_set_podium_guards_supports_undo_and_redo(self):
+        classroom = Classroom.objects.create(name="护法回滚班", rows=1, cols=2)
+        left_student = classroom.students.create(name="左护法")
+        right_student = classroom.students.create(name="右护法")
+
+        response = self.client.post(
+            reverse("set_podium_guards", args=[classroom.pk]),
+            data=json.dumps({"left_student_id": left_student.pk, "right_student_id": right_student.pk}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        classroom.refresh_from_db()
+        self.assertEqual(classroom.left_guardian_id, left_student.pk)
+        self.assertEqual(classroom.right_guardian_id, right_student.pk)
+
+        undo_response = self.client.post(reverse("undo_action", args=[classroom.pk]))
+        self.assertEqual(undo_response.status_code, 200)
+        classroom.refresh_from_db()
+        self.assertIsNone(classroom.left_guardian_id)
+        self.assertIsNone(classroom.right_guardian_id)
+
+        redo_response = self.client.post(reverse("redo_action", args=[classroom.pk]))
+        self.assertEqual(redo_response.status_code, 200)
+        classroom.refresh_from_db()
+        self.assertEqual(classroom.left_guardian_id, left_student.pk)
+        self.assertEqual(classroom.right_guardian_id, right_student.pk)
+
     def test_history_only_keeps_latest_thousand_entries(self):
         classroom = Classroom.objects.create(name="历史上限班", rows=1, cols=1)
         url = reverse("rename_classroom", args=[classroom.pk])
@@ -1360,6 +1990,7 @@ class ClassroomHistoryTests(TestCase):
     def test_exported_seats_file_restores_full_bundle_and_undo_history(self):
         source = Classroom.objects.create(name="完整导出班", rows=1, cols=2)
         student = source.students.create(name="张三", student_id="001", gender="M", score=88)
+        assistant_student = source.students.create(name="李四", student_id="002", gender="F", score=80)
         group = SeatGroup.objects.create(classroom=source, name="第一组", order=1)
 
         source_seat = source.seats.get(row=1, col=1)
@@ -1367,10 +1998,14 @@ class ClassroomHistoryTests(TestCase):
         source_seat.group = group
         source_seat.save(update_fields=["student", "group"])
         target_seat = source.seats.get(row=1, col=2)
+        target_seat.student = assistant_student
         target_seat.group = group
-        target_seat.save(update_fields=["group"])
+        target_seat.save(update_fields=["student", "group"])
         group.leader = student
         group.save(update_fields=["leader"])
+        source.left_guardian = student
+        source.right_guardian = assistant_student
+        source.save(update_fields=["left_guardian", "right_guardian"])
 
         SeatConstraint.objects.create(
             classroom=source,
@@ -1444,10 +2079,13 @@ class ClassroomHistoryTests(TestCase):
         self.assertEqual(target.name, "完整导出班")
 
         imported_student = Student.objects.get(classroom=target, student_id="001")
+        imported_assistant_student = Student.objects.get(classroom=target, student_id="002")
         self.assertEqual((imported_student.assigned_seat.row, imported_student.assigned_seat.col), (1, 2))
 
         imported_group = SeatGroup.objects.get(classroom=target, name="第一组")
         self.assertEqual(imported_group.leader_id, imported_student.pk)
+        self.assertEqual(target.left_guardian_id, imported_student.pk)
+        self.assertEqual(target.right_guardian_id, imported_assistant_student.pk)
 
         imported_snapshot = LayoutSnapshot.objects.get(classroom=target, name="开局")
         imported_config = FutureModeConfig.objects.get(classroom=target)
@@ -1584,7 +2222,169 @@ class GroupRotationTests(TestCase):
         self.assertIn("座位数量不一致", response.json().get("message", ""))
 
 
+class ConstraintManagementTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="约束测试班", rows=2, cols=3)
+        self.student_a = self.classroom.students.create(name="张三")
+        self.student_b = self.classroom.students.create(name="李四")
+
+    def test_create_constraint_rejects_duplicate_enabled_rule(self):
+        SeatConstraint.objects.create(
+            classroom=self.classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_ROW,
+            student=self.student_a,
+            row=1,
+            enabled=True,
+        )
+
+        response = self.client.post(
+            reverse("create_constraint", args=[self.classroom.pk]),
+            {
+                "constraint_type": SeatConstraint.ConstraintType.MUST_ROW,
+                "student_id": self.student_a.pk,
+                "row": 1,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("status"), "error")
+        self.assertIn("已存在相同约束", response.json().get("message", ""))
+
+    def test_create_pair_constraint_normalizes_student_order(self):
+        response = self.client.post(
+            reverse("create_constraint", args=[self.classroom.pk]),
+            {
+                "constraint_type": SeatConstraint.ConstraintType.MUST_TOGETHER,
+                "student_id": self.student_b.pk,
+                "target_student_id": self.student_a.pk,
+                "distance": 1,
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        constraint = SeatConstraint.objects.get(classroom=self.classroom)
+        self.assertEqual(constraint.student_id, self.student_a.pk)
+        self.assertEqual(constraint.target_student_id, self.student_b.pk)
+
+    def test_update_constraint_changes_rule_payload(self):
+        constraint = SeatConstraint.objects.create(
+            classroom=self.classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_ROW,
+            student=self.student_a,
+            row=1,
+            enabled=True,
+        )
+
+        response = self.client.post(
+            reverse("update_constraint", args=[self.classroom.pk, constraint.pk]),
+            {
+                "constraint_type": SeatConstraint.ConstraintType.MUST_COL,
+                "student_id": self.student_a.pk,
+                "col": 2,
+                "note": "改成列约束",
+                "enabled": "1",
+            },
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        constraint.refresh_from_db()
+        self.assertEqual(constraint.constraint_type, SeatConstraint.ConstraintType.MUST_COL)
+        self.assertEqual(constraint.col, 2)
+        self.assertIsNone(constraint.row)
+        self.assertEqual(constraint.note, "改成列约束")
+
+    def test_toggle_constraint_rejects_enable_when_conflicting(self):
+        SeatConstraint.objects.create(
+            classroom=self.classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_ROW,
+            student=self.student_a,
+            row=1,
+            enabled=True,
+        )
+        constraint = SeatConstraint.objects.create(
+            classroom=self.classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_ROW,
+            student=self.student_a,
+            row=2,
+            enabled=False,
+        )
+
+        response = self.client.post(
+            reverse("toggle_constraint", args=[self.classroom.pk, constraint.pk]),
+            {"enabled": "1"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json().get("status"), "error")
+        self.assertIn("不能同时指定多个不同行", response.json().get("message", ""))
+
+    def test_classroom_state_returns_constraints_and_issue_metrics(self):
+        SeatConstraint.objects.create(
+            classroom=self.classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+            student=self.student_a,
+            row=1,
+            col=1,
+            enabled=True,
+        )
+        SeatConstraint.objects.create(
+            classroom=self.classroom,
+            constraint_type=SeatConstraint.ConstraintType.FORBID_SEAT,
+            student=self.student_a,
+            row=1,
+            col=1,
+            enabled=True,
+        )
+
+        response = self.client.get(
+            reverse("classroom_state", args=[self.classroom.pk]),
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(len(payload.get("constraints", [])), 2)
+        self.assertEqual((payload.get("constraint_metrics") or {}).get("with_issues"), 2)
+        self.assertTrue(all(item.get("issue_count", 0) > 0 for item in payload.get("constraints", [])))
+
+
 class LayoutShiftTests(TestCase):
+    def test_shift_layout_right_keeps_both_podium_guards_in_place(self):
+        classroom = Classroom.objects.create(name="LS-Guard-LR", rows=1, cols=4)
+        left_guardian = classroom.students.create(name="左护法")
+        middle_a = classroom.students.create(name="中间甲")
+        middle_b = classroom.students.create(name="中间乙")
+        right_guardian = classroom.students.create(name="右护法")
+
+        classroom.seats.filter(row=1, col=1).update(student=left_guardian)
+        classroom.seats.filter(row=1, col=2).update(student=middle_a)
+        classroom.seats.filter(row=1, col=3).update(student=middle_b)
+        classroom.seats.filter(row=1, col=4).update(student=right_guardian)
+        classroom.left_guardian = left_guardian
+        classroom.right_guardian = right_guardian
+        classroom.save(update_fields=["left_guardian", "right_guardian"])
+
+        response = self.client.post(
+            reverse("shift_layout", args=[classroom.pk]),
+            data=json.dumps({"direction": "right", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+
+        left_guardian.refresh_from_db()
+        middle_a.refresh_from_db()
+        middle_b.refresh_from_db()
+        right_guardian.refresh_from_db()
+        self.assertEqual((left_guardian.assigned_seat.row, left_guardian.assigned_seat.col), (1, 1))
+        self.assertEqual((right_guardian.assigned_seat.row, right_guardian.assigned_seat.col), (1, 4))
+        self.assertEqual((middle_a.assigned_seat.row, middle_a.assigned_seat.col), (1, 3))
+        self.assertEqual((middle_b.assigned_seat.row, middle_b.assigned_seat.col), (1, 2))
+
     def test_shift_layout_right_wraps_layout_and_preserves_layout_data(self):
         classroom = Classroom.objects.create(name="LS1", rows=2, cols=3)
         student = classroom.students.create(name="张三")
@@ -1627,11 +2427,68 @@ class LayoutShiftTests(TestCase):
         constraint = classroom.constraints.get(student=student)
         self.assertEqual((constraint.row, constraint.col), (1, 3))
 
+    def test_shift_layout_right_keeps_podium_guardian_constraint_in_place(self):
+        classroom = Classroom.objects.create(name="LS-Guard-Constraint", rows=1, cols=3)
+        guardian = classroom.students.create(name="护法同学")
+        other_student = classroom.students.create(name="普通同学")
+
+        classroom.seats.filter(row=1, col=1).update(student=guardian)
+        classroom.seats.filter(row=1, col=2).update(student=other_student)
+        classroom.left_guardian = guardian
+        classroom.save(update_fields=["left_guardian"])
+
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_SEAT,
+            student=guardian,
+            row=1,
+            col=1,
+        )
+
+        response = self.client.post(
+            reverse("shift_layout", args=[classroom.pk]),
+            data=json.dumps({"direction": "right", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        guardian.refresh_from_db()
+        self.assertEqual((guardian.assigned_seat.row, guardian.assigned_seat.col), (1, 1))
+
+        constraint = classroom.constraints.get(student=guardian)
+        self.assertEqual((constraint.row, constraint.col), (1, 1))
+
+    def test_shift_layout_right_keeps_manually_fixed_student_in_place(self):
+        classroom = Classroom.objects.create(name="LS-Fixed-Seat", rows=1, cols=4)
+        fixed_student = classroom.students.create(name="固定同学")
+        other_student = classroom.students.create(name="轮换同学")
+
+        classroom.seats.filter(row=1, col=2).update(student=fixed_student)
+        classroom.seats.filter(row=1, col=3).update(student=other_student)
+
+        fixed_response = self.client.post(
+            reverse("toggle_fixed_seat", args=[classroom.pk]),
+            data=json.dumps({"row": 1, "col": 2, "enabled": True}),
+            content_type="application/json",
+        )
+        self.assertEqual(fixed_response.status_code, 200)
+
+        response = self.client.post(
+            reverse("shift_layout", args=[classroom.pk]),
+            data=json.dumps({"direction": "right", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        fixed_student.refresh_from_db()
+        other_student.refresh_from_db()
+        self.assertEqual((fixed_student.assigned_seat.row, fixed_student.assigned_seat.col), (1, 2))
+        self.assertEqual((other_student.assigned_seat.row, other_student.assigned_seat.col), (1, 4))
+
     def test_shift_layout_left_wraps_and_supports_undo_and_redo(self):
         classroom = Classroom.objects.create(name="LS2", rows=1, cols=4)
         student = classroom.students.create(name="李四")
 
-        seat = classroom.seats.get(row=1, col=2)
+        seat = classroom.seats.get(row=1, col=1)
         seat.student = student
         seat.save(update_fields=["student"])
 
@@ -1647,8 +2504,8 @@ class LayoutShiftTests(TestCase):
         classroom.refresh_from_db()
         student.refresh_from_db()
         self.assertEqual(classroom.cols, 4)
-        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
-        self.assertEqual(classroom.seats.get(row=1, col=2).cell_type, SeatCellType.PODIUM)
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 4))
+        self.assertEqual(classroom.seats.get(row=1, col=3).cell_type, SeatCellType.PODIUM)
 
         undo_url = reverse("undo_action", args=[classroom.pk])
         redo_url = reverse("redo_action", args=[classroom.pk])
@@ -1658,7 +2515,7 @@ class LayoutShiftTests(TestCase):
         classroom.refresh_from_db()
         student.refresh_from_db()
         self.assertEqual(classroom.cols, 4)
-        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 2))
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
         self.assertEqual(classroom.seats.get(row=1, col=3).cell_type, SeatCellType.PODIUM)
 
         redo_response = self.client.post(redo_url)
@@ -1666,7 +2523,7 @@ class LayoutShiftTests(TestCase):
         classroom.refresh_from_db()
         student.refresh_from_db()
         self.assertEqual(classroom.cols, 4)
-        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
+        self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 4))
 
     def test_shift_layout_left_wraps_non_empty_leading_columns(self):
         classroom = Classroom.objects.create(name="LS3", rows=1, cols=3)
@@ -1771,7 +2628,7 @@ class LayoutShiftTests(TestCase):
         student.refresh_from_db()
         self.assertEqual(classroom.rows, 4)
         self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
-        self.assertEqual(classroom.seats.get(row=2, col=1).cell_type, SeatCellType.PODIUM)
+        self.assertEqual(classroom.seats.get(row=3, col=1).cell_type, SeatCellType.PODIUM)
 
         undo_url = reverse("undo_action", args=[classroom.pk])
         redo_url = reverse("redo_action", args=[classroom.pk])
@@ -1790,6 +2647,111 @@ class LayoutShiftTests(TestCase):
         student.refresh_from_db()
         self.assertEqual(classroom.rows, 4)
         self.assertEqual((student.assigned_seat.row, student.assigned_seat.col), (1, 1))
+
+    def test_shift_layout_front_keeps_podium_guardian_in_place(self):
+        classroom = Classroom.objects.create(name="LS-Guard-FB", rows=3, cols=1)
+        guardian = classroom.students.create(name="前排护法")
+        middle_student = classroom.students.create(name="中排同学")
+        back_student = classroom.students.create(name="后排同学")
+
+        classroom.seats.filter(row=1, col=1).update(student=guardian)
+        classroom.seats.filter(row=2, col=1).update(student=middle_student)
+        classroom.seats.filter(row=3, col=1).update(student=back_student)
+        classroom.left_guardian = guardian
+        classroom.save(update_fields=["left_guardian"])
+
+        response = self.client.post(
+            reverse("shift_layout", args=[classroom.pk]),
+            data=json.dumps({"direction": "front", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json().get("status"), "success")
+
+        guardian.refresh_from_db()
+        middle_student.refresh_from_db()
+        back_student.refresh_from_db()
+        self.assertEqual((guardian.assigned_seat.row, guardian.assigned_seat.col), (1, 1))
+        self.assertEqual((middle_student.assigned_seat.row, middle_student.assigned_seat.col), (3, 1))
+        self.assertEqual((back_student.assigned_seat.row, back_student.assigned_seat.col), (2, 1))
+
+    def test_shift_layout_front_skips_rows_containing_podium(self):
+        classroom = Classroom.objects.create(name="LS-Front-Skip-Podium-Row", rows=4, cols=2)
+        front_student = classroom.students.create(name="前排同学")
+        middle_student = classroom.students.create(name="中排同学")
+        podium_row_student = classroom.students.create(name="讲台同行")
+        back_student = classroom.students.create(name="后排同学")
+
+        classroom.seats.filter(row=1, col=1).update(student=front_student)
+        classroom.seats.filter(row=2, col=1).update(student=middle_student)
+        classroom.seats.filter(row=3, col=1).update(cell_type=SeatCellType.PODIUM, student=None, group=None)
+        classroom.seats.filter(row=3, col=2).update(student=podium_row_student)
+        classroom.seats.filter(row=4, col=1).update(student=back_student)
+
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_ROW,
+            student=middle_student,
+            row=2,
+        )
+        SeatConstraint.objects.create(
+            classroom=classroom,
+            constraint_type=SeatConstraint.ConstraintType.MUST_ROW,
+            student=podium_row_student,
+            row=3,
+        )
+
+        response = self.client.post(
+            reverse("shift_layout", args=[classroom.pk]),
+            data=json.dumps({"direction": "front", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        front_student.refresh_from_db()
+        middle_student.refresh_from_db()
+        podium_row_student.refresh_from_db()
+        back_student.refresh_from_db()
+        self.assertEqual((front_student.assigned_seat.row, front_student.assigned_seat.col), (4, 1))
+        self.assertEqual((middle_student.assigned_seat.row, middle_student.assigned_seat.col), (1, 1))
+        self.assertEqual((podium_row_student.assigned_seat.row, podium_row_student.assigned_seat.col), (3, 2))
+        self.assertEqual((back_student.assigned_seat.row, back_student.assigned_seat.col), (2, 1))
+        self.assertEqual(classroom.seats.get(row=3, col=1).cell_type, SeatCellType.PODIUM)
+
+        middle_constraint = classroom.constraints.get(student=middle_student)
+        podium_row_constraint = classroom.constraints.get(student=podium_row_student)
+        self.assertEqual(middle_constraint.row, 1)
+        self.assertEqual(podium_row_constraint.row, 3)
+
+    def test_shift_layout_back_skips_rows_containing_podium(self):
+        classroom = Classroom.objects.create(name="LS-Back-Skip-Podium-Row", rows=4, cols=2)
+        front_student = classroom.students.create(name="前排同学")
+        middle_student = classroom.students.create(name="中排同学")
+        podium_row_student = classroom.students.create(name="讲台同行")
+        back_student = classroom.students.create(name="后排同学")
+
+        classroom.seats.filter(row=1, col=1).update(student=front_student)
+        classroom.seats.filter(row=2, col=1).update(student=middle_student)
+        classroom.seats.filter(row=3, col=1).update(cell_type=SeatCellType.PODIUM, student=None, group=None)
+        classroom.seats.filter(row=3, col=2).update(student=podium_row_student)
+        classroom.seats.filter(row=4, col=1).update(student=back_student)
+
+        response = self.client.post(
+            reverse("shift_layout", args=[classroom.pk]),
+            data=json.dumps({"direction": "back", "steps": 1}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+        front_student.refresh_from_db()
+        middle_student.refresh_from_db()
+        podium_row_student.refresh_from_db()
+        back_student.refresh_from_db()
+        self.assertEqual((front_student.assigned_seat.row, front_student.assigned_seat.col), (2, 1))
+        self.assertEqual((middle_student.assigned_seat.row, middle_student.assigned_seat.col), (4, 1))
+        self.assertEqual((podium_row_student.assigned_seat.row, podium_row_student.assigned_seat.col), (3, 2))
+        self.assertEqual((back_student.assigned_seat.row, back_student.assigned_seat.col), (1, 1))
+        self.assertEqual(classroom.seats.get(row=3, col=1).cell_type, SeatCellType.PODIUM)
 
     def test_shift_layout_front_wraps_non_empty_leading_rows(self):
         classroom = Classroom.objects.create(name="LS7", rows=3, cols=1)
@@ -2367,6 +3329,22 @@ class ClassroomFeatureTests(TestCase):
 
 
 class DesktopExportBridgeTests(TestCase):
+    class _FakeDesktopResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b""
+
+    class _FakeJsonDesktopResponse(_FakeDesktopResponse):
+        def read(self):
+            return b'{"status":"success","message":"BSCE import ok"}'
+
     def test_parse_content_disposition_filename_supports_utf8(self):
         value = "attachment; filename*=UTF-8''%E5%BA%A7%E6%AC%A1%E5%9B%BE.svg"
         self.assertEqual(parse_content_disposition_filename(value), "座次图.svg")
@@ -2384,12 +3362,105 @@ class DesktopExportBridgeTests(TestCase):
             "/tmp/export.json",
         )
 
+    def test_is_allowed_extension_accepts_seats_snapshot(self):
+        self.assertTrue(is_allowed_extension("/tmp/测试班.seats", [".seats", ".json"]))
+        self.assertFalse(is_allowed_extension("/tmp/1000090715.jpg", [".seats", ".json"]))
+
     def test_build_file_dialog_types_uses_expected_mask(self):
         file_types = build_file_dialog_types(
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             [".xlsx"],
         )
         self.assertEqual(file_types[0], "Excel 文件 (*.xlsx)")
+
+    def test_build_multipart_form_data_contains_seats_file(self):
+        boundary, body = build_multipart_form_data(
+            fields={"csrfmiddlewaretoken": "csrf-token"},
+            files=[
+                {
+                    "field_name": "seats_file",
+                    "filename": "测试班.seats",
+                    "content_type": "application/octet-stream",
+                    "content": b'{"current_state":{}}',
+                }
+            ],
+        )
+
+        self.assertTrue(boundary.startswith("----FuckSeatsBoundary"))
+        self.assertIn(b'name="csrfmiddlewaretoken"', body)
+        self.assertIn("filename=\"测试班.seats\"".encode("utf-8"), body)
+        self.assertIn(b'{"current_state":{}}', body)
+
+    def test_desktop_import_seats_file_uses_unfiltered_open_dialog(self):
+        class FakeWindow:
+            def __init__(self, selected_path):
+                self.selected_path = selected_path
+                self.calls = []
+
+            def create_file_dialog(self, dialog_type, **kwargs):
+                self.calls.append((dialog_type, kwargs))
+                return [self.selected_path]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            seats_path = Path(temp_dir) / "测试班.seats"
+            seats_path.write_text('{"current_state":{}}', encoding="utf-8")
+            fake_window = FakeWindow(str(seats_path))
+            bridge = DesktopBridge("http://127.0.0.1:23948")
+            bridge._attach_window(fake_window)
+            captured_requests = []
+
+            def fake_urlopen(req, timeout=None):
+                captured_requests.append(req)
+                return self._FakeDesktopResponse()
+
+            with patch("desktop_shell.urllib.request.urlopen", side_effect=fake_urlopen):
+                result = bridge.import_seats_file(
+                    "/classroom/1/layout/import/",
+                    "csrf-token",
+                    [".seats", ".json"],
+                )
+
+        self.assertEqual(result["status"], "imported")
+        self.assertEqual(fake_window.calls[0][1]["file_types"], ())
+        self.assertIn("测试班.seats".encode("utf-8"), captured_requests[0].data)
+        self.assertEqual(captured_requests[0].get_header("X-csrftoken"), "csrf-token")
+        self.assertIn("csrftoken=csrf-token", captured_requests[0].get_header("Cookie"))
+
+    def test_desktop_upload_local_file_supports_custom_extension_without_dialog_filter(self):
+        class FakeWindow:
+            def __init__(self, selected_path):
+                self.selected_path = selected_path
+                self.calls = []
+
+            def create_file_dialog(self, dialog_type, **kwargs):
+                self.calls.append((dialog_type, kwargs))
+                return [self.selected_path]
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            sce_path = Path(temp_dir) / "座位表.sce"
+            sce_path.write_text('{"schema":"bsce"}', encoding="utf-8")
+            fake_window = FakeWindow(str(sce_path))
+            bridge = DesktopBridge("http://127.0.0.1:23948")
+            bridge._attach_window(fake_window)
+            captured_requests = []
+
+            def fake_urlopen(req, timeout=None):
+                captured_requests.append(req)
+                return self._FakeJsonDesktopResponse()
+
+            with patch("desktop_shell.urllib.request.urlopen", side_effect=fake_urlopen):
+                result = bridge.upload_local_file(
+                    "/classroom/1/layout/import/bsce/",
+                    "csrf-token",
+                    "bsce_file",
+                    [".sce"],
+                )
+
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(result["message"], "BSCE import ok")
+        self.assertEqual(fake_window.calls[0][1]["file_types"], ())
+        self.assertIn(b'name="bsce_file"', captured_requests[0].data)
+        self.assertEqual(captured_requests[0].get_header("X-requested-with"), "XMLHttpRequest")
 
 
 class FrontendStoreTests(TestCase):
@@ -2403,6 +3474,8 @@ class FrontendStoreTests(TestCase):
         content = response.content.decode("utf-8")
         self.assertIn('"seats_plugin_dev_mode": "1"', content)
         self.assertIn("Storage.prototype.setItem", content)
+        self.assertIn("syncBackendSet", content)
+        self.assertIn("window.BACKEND_STORE[key] === value", content)
         self.assertIn("mac_os_warning_seen", content)
 
     def test_frontend_store_set_upserts_value(self):
@@ -2427,6 +3500,29 @@ class FrontendStoreTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(FrontendKVStore.objects.count(), 1)
         self.assertEqual(FrontendKVStore.objects.get(key="plugin_mode").value, "dev")
+
+    def test_frontend_store_set_skips_invalid_key_without_bad_request(self):
+        response = self.client.post(
+            reverse("frontend_store_set"),
+            data=json.dumps({"key": "x" * 256, "value": "dev"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], "success")
+        self.assertFalse(response.json()["persisted"])
+        self.assertEqual(FrontendKVStore.objects.count(), 0)
+
+    def test_frontend_store_set_stringifies_supported_values(self):
+        response = self.client.post(
+            reverse("frontend_store_set"),
+            data=json.dumps({"key": 0, "value": None}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["persisted"])
+        self.assertEqual(FrontendKVStore.objects.get(key="0").value, "")
 
     def test_frontend_store_delete_removes_value(self):
         FrontendKVStore.objects.create(key="plugin_mode", value="dev")
@@ -2479,6 +3575,372 @@ class FrontendStoreTests(TestCase):
         self.assertEqual(response.json().get("status"), "error")
         classroom.refresh_from_db()
         self.assertEqual(classroom.name, "原班级2")
+
+
+class CloudSyncHeaderTests(TestCase):
+    class _FakeJsonResponse:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def read(self):
+            return b'{"status":"success"}'
+
+    def test_cloud_request_uses_ssl_context(self):
+        context = ssl.create_default_context()
+        captured_calls = []
+
+        def fake_urlopen(req, timeout=None, context=None):
+            captured_calls.append((req, timeout, context))
+            return self._FakeJsonResponse()
+
+        with patch("seats.cloud._get_ssl_context", return_value=context):
+            with patch("seats.cloud.urllib.request.urlopen", side_effect=fake_urlopen):
+                payload = cloud_module._request_json(
+                    "POST",
+                    "https://example.test/api",
+                    {"developer": "老三"},
+                    timeout=9,
+                )
+
+        self.assertEqual(payload["status"], "success")
+        self.assertEqual(payload["_http_status"], 200)
+        self.assertEqual(captured_calls[0][1], 9)
+        self.assertIs(captured_calls[0][2], context)
+        self.assertEqual(captured_calls[0][0].get_header("User-agent"), "fuckseats_cilent")
+
+    def test_cloud_ssl_context_builds_ssl_context(self):
+        self.assertIsInstance(cloud_module._get_ssl_context(), ssl.SSLContext)
+
+    def create_cloud_session(self):
+        return CloudSession.objects.create(
+            uid="u1",
+            nickname="老三",
+            session_token="token",
+            token_expires_at=timezone.now() + timedelta(days=1),
+        )
+
+    def cloud_classroom_payload(self, name="云端班级", rows=3, cols=3):
+        return {
+            "current_state": {
+                "classroom": {
+                    "pk": 9001,
+                    "name": name,
+                    "rows": rows,
+                    "cols": cols,
+                    "left_guardian_student_pk": None,
+                    "right_guardian_student_pk": None,
+                    "created_at": "",
+                },
+                "students": [],
+                "groups": [],
+                "seats": [],
+                "constraints": [],
+                "layout_snapshots": [],
+            },
+            "history": {"entries": []},
+            "future_mode_config": None,
+            "ai_conversations": [],
+        }
+
+    def test_classroom_detail_embeds_sync_pill_runtime(self):
+        classroom = Classroom.objects.create(name="同步班", rows=2, cols=2)
+
+        response = self.client.get(reverse("classroom_detail", args=[classroom.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "classroom-sync-meta")
+        self.assertContains(response, "cloud-sync-pill")
+        self.assertContains(response, "FuckSeatsCloudSync")
+        self.assertContains(response, "点击上云")
+
+    def test_classroom_state_includes_sync_meta(self):
+        classroom = Classroom.objects.create(name="状态班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 2
+        meta.local_version = 3
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+
+        response = self.client.get(reverse("classroom_state", args=[classroom.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()["sync_meta"]
+        self.assertTrue(payload["backed_up"])
+        self.assertTrue(payload["has_local_changes"])
+        self.assertEqual(payload["state"], "dirty")
+
+    def test_cloud_userinfo_refreshes_subscription_when_logged_in(self):
+        self.create_cloud_session()
+
+        with patch("seats.views.refresh_cloud_subscription") as refresh_subscription:
+            def fake_refresh(session, strict=False, timeout=20):
+                session.subscription_tier = "pro"
+                session.subscription_display_name = "专业版"
+                session.limits = {"max_classrooms": 8}
+                return session
+
+            refresh_subscription.side_effect = fake_refresh
+            response = self.client.get(reverse("cloud_userinfo"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["logged_in"])
+        self.assertEqual(payload["tier"], "pro")
+        self.assertEqual(payload["tier_display"], "专业版")
+        self.assertEqual(payload["limits"]["max_classrooms"], 8)
+        refresh_subscription.assert_called_once()
+
+    def test_cloud_sync_skips_up_to_date_classroom(self):
+        classroom = Classroom.objects.create(name="云端最新班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 4
+        meta.local_version = 4
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.return_value = {"ok": True, "status": "success", "versions": {str(meta.uuid): 4}}
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({"classroom_ids": [classroom.pk]}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["status"], "up_to_date")
+        self.assertEqual(row["state"], "synced")
+        cloud_request.assert_called_once()
+        self.assertEqual(cloud_request.call_args.args[1:3], ("GET", "/api/sync/status"))
+
+    def test_cloud_sync_uses_refreshed_subscription_limits_before_sync(self):
+        classroom_a = Classroom.objects.create(name="班级A", rows=2, cols=2)
+        classroom_b = Classroom.objects.create(name="班级B", rows=2, cols=2)
+        self.create_cloud_session()
+
+        with patch("seats.views.refresh_cloud_subscription") as refresh_subscription:
+            with patch("seats.views.cloud_api_request") as cloud_request:
+                def fake_refresh(session, strict=False, timeout=20):
+                    session.subscription_tier = "pro"
+                    session.subscription_display_name = "专业版"
+                    session.limits = {"max_classrooms": 1}
+                    return session
+
+                refresh_subscription.side_effect = fake_refresh
+                cloud_request.side_effect = [
+                    {"ok": True, "status": "success", "versions": {}, "classrooms": []},
+                    {"ok": True, "status": "success", "uuid": str(SyncMeta.objects.get(classroom=classroom_a).uuid), "version": 1},
+                ]
+                response = self.client.post(
+                    reverse("cloud_sync"),
+                    data=json.dumps({"classroom_ids": [classroom_a.pk, classroom_b.pk]}),
+                    content_type="application/json",
+                )
+
+        self.assertEqual(response.status_code, 200)
+        results = response.json()["results"]
+        self.assertEqual(results[0]["status"], "ok")
+        self.assertEqual(results[1]["status"], "skipped")
+        self.assertIn("最多同步 1 个班级", results[1]["message"])
+        refresh_subscription.assert_called_once()
+
+    def test_cloud_sync_pushes_when_remote_record_is_missing(self):
+        classroom = Classroom.objects.create(name="云端缺失班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 4
+        meta.local_version = 4
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.side_effect = [
+                {"ok": True, "status": "success", "versions": {}},
+                {"ok": True, "status": "success", "uuid": str(meta.uuid), "version": 1},
+            ]
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({"classroom_ids": [classroom.pk]}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["status"], "ok")
+        self.assertEqual(row["cloud_version"], 1)
+        self.assertEqual(cloud_request.call_count, 2)
+        push_body = cloud_request.call_args_list[1].args[3]
+        self.assertEqual(push_body["base_version"], 4)
+        self.assertEqual(push_body["cloud_version"], 4)
+
+    def test_cloud_sync_reports_error_when_remote_status_unavailable(self):
+        classroom = Classroom.objects.create(name="云端不可用班", rows=2, cols=2)
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.side_effect = CloudAPIError("无法连接云端服务：拒绝连接", status_code=502)
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({"classroom_ids": [classroom.pk]}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 502)
+        self.assertIn("无法连接云端服务", response.json()["message"])
+
+    def test_cloud_sync_conflicts_when_remote_version_is_newer(self):
+        classroom = Classroom.objects.create(name="远端更新班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 4
+        meta.local_version = 6
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.return_value = {"ok": True, "status": "success", "versions": {str(meta.uuid): 5}}
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({"classroom_ids": [classroom.pk]}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["status"], "conflict")
+        self.assertEqual(row["cloud_version"], 5)
+        cloud_request.assert_called_once()
+
+    def test_cloud_sync_pulls_when_remote_is_newer_without_local_changes(self):
+        classroom = Classroom.objects.create(name="本地旧班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 4
+        meta.local_version = 4
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.side_effect = [
+                {"ok": True, "status": "success", "versions": {str(meta.uuid): 5}, "classrooms": [
+                    {"uuid": str(meta.uuid), "name": "云端新班", "version": 5}
+                ]},
+                {"ok": True, "status": "success", "uuid": str(meta.uuid), "version": 5, "data": self.cloud_classroom_payload("云端新班", 3, 3)},
+            ]
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({"classroom_ids": [classroom.pk]}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["status"], "pulled")
+        self.assertEqual(row["cloud_version"], 5)
+        classroom.refresh_from_db()
+        self.assertEqual(classroom.name, "云端新班")
+        self.assertEqual(classroom.rows, 3)
+        self.assertEqual(cloud_request.call_count, 2)
+        self.assertEqual(cloud_request.call_args_list[1].args[1:3], ("GET", f"/api/sync/pull/{meta.uuid}"))
+
+    def test_cloud_sync_pulls_remote_only_classrooms_on_full_sync(self):
+        remote_uuid = uuid.uuid4()
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.side_effect = [
+                {"ok": True, "status": "success", "versions": {str(remote_uuid): 3}, "classrooms": [
+                    {"uuid": str(remote_uuid), "name": "只在云端的班", "version": 3}
+                ]},
+                {"ok": True, "status": "success", "uuid": str(remote_uuid), "version": 3, "data": self.cloud_classroom_payload("只在云端的班", 4, 5)},
+            ]
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["status"], "pulled")
+        self.assertTrue(row["remote_only"])
+        classroom = Classroom.objects.get(name="只在云端的班")
+        meta = SyncMeta.objects.get(classroom=classroom)
+        self.assertEqual(str(meta.uuid), str(remote_uuid))
+        self.assertEqual(meta.cloud_version, 3)
+        self.assertEqual(classroom.rows, 4)
+        self.assertEqual(classroom.cols, 5)
+
+    def test_cloud_sync_force_pushes_when_remote_version_is_newer(self):
+        classroom = Classroom.objects.create(name="强制更新班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 4
+        meta.local_version = 4
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.side_effect = [
+                {"ok": True, "status": "success", "versions": {str(meta.uuid): 5}},
+                {"ok": True, "status": "success", "uuid": str(meta.uuid), "version": 6},
+            ]
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({"classroom_ids": [classroom.pk], "force": True}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        row = response.json()["results"][0]
+        self.assertEqual(row["status"], "ok")
+        self.assertEqual(row["cloud_version"], 6)
+        self.assertEqual(cloud_request.call_count, 2)
+        push_body = cloud_request.call_args_list[1].args[3]
+        self.assertIs(push_body["force"], True)
+        self.assertEqual(push_body["base_version"], 4)
+
+    def test_cloud_callback_runs_auto_sync_after_login(self):
+        classroom = Classroom.objects.create(name="登录同步班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        token_expires_at = timezone.now() + timedelta(days=1)
+
+        with patch("seats.views.cloud_exchange_session_code") as exchange_code:
+            with patch("seats.views.cloud_api_request") as cloud_request:
+                exchange_code.return_value = {
+                    "status": "success",
+                    "session_token": "session-token",
+                    "token_expires_at": token_expires_at.isoformat(),
+                    "uid": "u-login",
+                    "nickname": "老三",
+                    "subscription": {
+                        "tier": "free",
+                        "display_name": "免费版",
+                        "limits": {"max_classrooms": 3},
+                    },
+                }
+                cloud_request.side_effect = [
+                    {"ok": True, "status": "success", "versions": {}, "classrooms": []},
+                    {"ok": True, "status": "success", "uuid": str(meta.uuid), "version": 1},
+                ]
+
+                response = self.client.get(reverse("cloud_callback") + "?code=login-code")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response["Location"], "/?cloud_login=success")
+        self.assertEqual(cloud_request.call_count, 2)
+        push_body = cloud_request.call_args_list[1].args[3]
+        self.assertEqual(push_body["uuid"], str(meta.uuid))
+        self.assertEqual(push_body["device_id"], "login-auto-sync")
+        meta.refresh_from_db()
+        self.assertEqual(meta.cloud_version, 1)
+        self.assertEqual(meta.local_version, 1)
 
 
 class PluginSystemTests(TestCase):

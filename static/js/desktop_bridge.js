@@ -88,9 +88,9 @@
         return window.showSaveFilePicker(pickerOptions);
     };
 
-    const waitForDesktopApi = async () => {
+    const waitForDesktopApi = async (requiredMethod = 'save_export') => {
         const readyApi = window.pywebview?.api;
-        if (readyApi && typeof readyApi.save_export === 'function') {
+        if (readyApi && typeof readyApi[requiredMethod] === 'function') {
             return readyApi;
         }
         if (APP_SHELL !== 'webview') {
@@ -107,12 +107,12 @@
             };
             const handleReady = () => {
                 const api = window.pywebview?.api;
-                finish(api && typeof api.save_export === 'function' ? api : null);
+                finish(api && typeof api[requiredMethod] === 'function' ? api : null);
             };
             window.addEventListener('pywebviewready', handleReady, { once: true });
             setTimeout(() => {
                 const api = window.pywebview?.api;
-                finish(api && typeof api.save_export === 'function' ? api : null);
+                finish(api && typeof api[requiredMethod] === 'function' ? api : null);
             }, 2500);
         });
     };
@@ -127,7 +127,7 @@
         const acceptMime = options.acceptMime || '';
         const acceptExtensions = normalizeAcceptExtensions(options.acceptExtensions || [], fallbackFilename);
 
-        const desktopApi = await waitForDesktopApi();
+        const desktopApi = await waitForDesktopApi('save_export');
         if (desktopApi) {
             const result = await desktopApi.save_export(url, fallbackFilename, acceptMime, acceptExtensions);
             if (!result || typeof result !== 'object') {
@@ -174,8 +174,42 @@
         return { status: 'downloaded', filename: finalFilename };
     };
 
+    const uploadLocalFile = async (url, options = {}) => {
+        const desktopApi = await waitForDesktopApi('upload_local_file');
+        if (!desktopApi) return null;
+
+        const acceptExtensions = normalizeAcceptExtensions(
+            options.acceptExtensions || [],
+            options.fallbackFilename || 'import.seats'
+        );
+        const result = await desktopApi.upload_local_file(
+            url,
+            options.csrf || '',
+            options.fieldName || 'file',
+            acceptExtensions
+        );
+        if (!result || typeof result !== 'object') {
+            throw new Error('桌面导入失败');
+        }
+        if (result.status === 'error') {
+            throw new Error(result.message || '桌面导入失败');
+        }
+        return result;
+    };
+
+    const importSeatsFile = async (url, options = {}) => {
+        return uploadLocalFile(url, {
+            ...options,
+            fieldName: 'seats_file',
+            fallbackFilename: 'import.seats',
+            acceptExtensions: options.acceptExtensions || ['.seats', '.json']
+        });
+    };
+
     window.FuckSeatsDesktop = {
         saveExportFromUrl,
+        importSeatsFile,
+        uploadLocalFile,
         parseAcceptExtensions: (raw) => normalizeAcceptExtensions(raw)
     };
 })();

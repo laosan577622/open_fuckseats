@@ -1,0 +1,87 @@
+# FuckSeats 云端配置文件示例
+# 复制此文件为 cloud_config.yaml 并按需修改
+# 详细说明请参阅 CONFIG_GUIDE.md
+
+server:
+  # 服务器对外访问地址，用于 OAuth 回调
+  base_url: "http://127.0.0.1:8000"
+  host: "0.0.0.0"
+  port: 8000
+  # 生产环境必须修改为随机字符串
+  secret_key: "django-insecure-change-me-to-a-random-string"
+  debug: false
+  allowed_hosts: ["*"]
+  timezone: "Asia/Shanghai"
+
+metadata:
+  developer_name: "老三"
+  developer_website: "www.577622.xyz"
+
+database:
+  # SQLite 数据库文件路径，相对于 backend/ 目录
+  name: "cloud.sqlite3"
+
+laosan_oauth:
+  # 在老三账户系统中创建 OAuth 应用后填入
+  client_id: ""
+  client_secret: ""
+  authorize_url: "https://www.577622.xyz/oauth/authorize"
+  token_url: "https://www.577622.xyz/oauth/token"
+  userinfo_url: "https://www.577622.xyz/oauth/userinfo"
+  scope: "email nickname subscriptions"
+
+subscription:
+  # 未登录或订阅过期时回退到此等级
+  fallback_tier: "free"
+  # 全局购买链接（当某等级未单独配置 purchase_url 时使用）
+  purchase_url: ""
+  tiers:
+    free:
+      display_name: "免费版"
+      description: "基础功能，满足日常排座需求"
+      price: "免费"
+      purchase_url: ""
+      limits:
+        max_classrooms: 3
+        sync_enabled: true
+        max_history_steps: 0
+        sync_ai_conversations: false
+        max_snapshots_per_classroom: 3
+    pro:
+      display_name: "Pro"
+      description: "更多班级和快照，适合多班教师"
+      price: ""
+      purchase_url: ""
+      # 对应老三账户系统中的服务标识符
+      service_identifier: "fuckseats_pro"
+      limits:
+        max_classrooms: 10
+        sync_enabled: true
+        max_history_steps: 10
+        sync_ai_conversations: false
+        max_snapshots_per_classroom: 20
+    pro_max:
+      display_name: "Pro Max"
+      description: "无限班级，完整功能，专业教师之选"
+      price: ""
+      purchase_url: ""
+      service_identifier: "fuckseats_pro_max"
+      limits:
+        max_classrooms: -1
+        sync_enabled: true
+        max_history_steps: 100
+        sync_ai_conversations: true
+        max_snapshots_per_classroom: 50
+  # 等级优先级，从高到低，用于匹配用户最高订阅
+  priority: ["pro_max", "pro", "free"]
+
+rate_limit:
+  sync_per_minute: 30
+  auth_per_minute_per_ip: 10
+  snapshot_per_hour: 20
+
+data_limits:
+  max_push_size_mb: 5
+  max_batch_push_size_mb: 20
+  session_token_ttl_days: 7
+  session_code_ttl_seconds: 60
