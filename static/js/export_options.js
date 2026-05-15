@@ -233,11 +233,11 @@ document.addEventListener('DOMContentLoaded', () => {
         const chunks = [
             `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">`,
             '<style><![CDATA[',
-            '.t{font-family:"鸿蒙黑体";font-size:20px;}',
-            '.n{font-family:"鸿蒙黑体";font-size:16px;}',
+            '.t{font-family:"鸿蒙黑体 Medium";font-size:20px;}',
+            '.n{font-family:"鸿蒙黑体 Medium";font-size:16px;}',
             '.s{font-family:"鸿蒙黑体 Light";font-size:12px;}',
-            '.k{font-family:"鸿蒙黑体";font-size:11px;}',
-            '.c{font-family:"鸿蒙黑体";font-size:13px;}',
+            '.k{font-family:"鸿蒙黑体 Medium";font-size:11px;}',
+            '.c{font-family:"鸿蒙黑体 Medium";font-size:13px;}',
             ']]></style>',
             `<rect x="0" y="0" width="${width}" height="${height}" fill="${style.bg}"/>`
         ];

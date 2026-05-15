@@ -3184,7 +3184,7 @@ class ClassroomFeatureTests(TestCase):
         self.assertEqual(ws.cell(row=2, column=1).value, "讲台")
         self.assertEqual(ws.cell(row=3, column=1).value, "A")
         self.assertEqual(ws.cell(row=4, column=2).value, "D")
-        self.assertEqual(ws.cell(row=1, column=1).font.name, "鸿蒙黑体")
+        self.assertEqual(ws.cell(row=1, column=1).font.name, "鸿蒙黑体 Medium")
         self.assertEqual(ws.cell(row=3, column=1).font.name, "鸿蒙黑体 Light")
 
     def test_export_students_rotate_180_layout(self):
@@ -3225,7 +3225,7 @@ class ClassroomFeatureTests(TestCase):
         self.assertIn("SVG班", content)
         self.assertNotIn("总座位", content)
         self.assertNotIn("网格", content)
-        self.assertIn('font-family:"鸿蒙黑体"', content)
+        self.assertIn('font-family:"鸿蒙黑体 Medium"', content)
         self.assertIn('font-family:"鸿蒙黑体 Light"', content)
         self.assertNotIn("PingFang SC", content)
         self.assertNotIn("Microsoft YaHei", content)
@@ -3304,7 +3304,7 @@ class ClassroomFeatureTests(TestCase):
         self.assertTrue(response.content.startswith(b"PK"))
         with zipfile.ZipFile(BytesIO(response.content)) as zf:
             slide_xml = zf.read("ppt/slides/slide1.xml").decode("utf-8")
-        self.assertIn('typeface="鸿蒙黑体"', slide_xml)
+        self.assertIn('typeface="鸿蒙黑体 Medium"', slide_xml)
         self.assertIn('typeface="鸿蒙黑体 Light"', slide_xml)
         self.assertNotIn('typeface="微软雅黑"', slide_xml)
         self.assertNotIn('typeface="Microsoft YaHei"', slide_xml)
@@ -3354,7 +3354,7 @@ class ClassroomFeatureTests(TestCase):
         self.assertEqual(response.status_code, 200)
         wb = openpyxl.load_workbook(BytesIO(response.content))
         ws = wb.active
-        self.assertEqual(ws.cell(row=1, column=1).font.name, "鸿蒙黑体")
+        self.assertEqual(ws.cell(row=1, column=1).font.name, "鸿蒙黑体 Medium")
         member_cells = [
             cell
             for row in ws.iter_rows()
@@ -3366,7 +3366,7 @@ class ClassroomFeatureTests(TestCase):
         with zipfile.ZipFile(BytesIO(response.content)) as zf:
             styles_xml = zf.read("xl/styles.xml").decode("utf-8")
             sheet_xml = zf.read("xl/worksheets/sheet1.xml").decode("utf-8")
-        self.assertIn('val="鸿蒙黑体"', styles_xml)
+        self.assertIn('val="鸿蒙黑体 Medium"', styles_xml)
         self.assertIn('val="鸿蒙黑体 Light"', styles_xml)
         self.assertNotIn("微软雅黑", styles_xml + sheet_xml)
         self.assertNotIn("Microsoft YaHei", styles_xml + sheet_xml)
