@@ -45,6 +45,8 @@ def _is_encrypted_request(data):
 
 def _decrypt_request_if_needed(request, data, session=None):
     if not _is_encrypted_request(data):
+        if session is not None:
+            raise ValueError('云端接口已要求端到端加密请求')
         return data
 
     service_key = ensure_service_key()
@@ -75,7 +77,7 @@ def _encrypted_json_response(payload, *, session=None, client_public_key_pem='',
         client_public_key_pem = str(getattr(session, 'client_public_key_pem', '') or client_public_key_pem or '')
         client_key_id = str(getattr(session, 'client_key_id', '') or client_key_id or '')
     if not client_public_key_pem:
-        return JsonResponse(payload, status=status)
+        return _json_error('客户端未提供加密公钥，拒绝明文返回云端数据', status=400, error='missing_client_public_key')
 
     envelope = encrypt_payload(payload, client_public_key_pem, sender_key_id=ensure_service_key().key_id)
     response_payload = {
@@ -115,6 +117,10 @@ def auth_login(request):
         return _json_error('缺少 callback')
     client_public_key = str(request.GET.get('client_public_key') or '').strip()
     client_key_id = str(request.GET.get('client_key_id') or '').strip()
+    if not client_public_key:
+        return _json_error('缺少客户端加密公钥', status=400, error='missing_client_public_key')
+    if not client_key_id:
+        return _json_error('缺少客户端密钥标识', status=400, error='missing_client_key_id')
 
     oauth_config = get_config().get('laosan_oauth', {})
     client_id = str(oauth_config.get('client_id') or '').strip()
@@ -194,6 +200,10 @@ def auth_exchange(request):
 
     client_key_id = str(data.get('client_key_id') or pending.client_key_id or '')[:96]
     client_public_key = str(data.get('client_public_key') or pending.client_public_key_pem or '')
+    if not client_public_key:
+        return _json_error('缺少客户端加密公钥，拒绝明文签发 session_token', status=400, error='missing_client_public_key')
+    if not client_key_id:
+        return _json_error('缺少客户端密钥标识，拒绝签发 session_token', status=400, error='missing_client_key_id')
     session = issue_session(
         pending.user,
         device_id=data.get('device_id') or '',
@@ -217,13 +227,11 @@ def auth_exchange(request):
         'server_key': _service_key_payload(),
         'client_key_id': client_key_id,
     }
-    if client_public_key:
-        return _encrypted_json_response(
-            response_payload,
-            client_public_key_pem=client_public_key,
-            client_key_id=client_key_id,
-        )
-    return JsonResponse(response_payload)
+    return _encrypted_json_response(
+        response_payload,
+        client_public_key_pem=client_public_key,
+        client_key_id=client_key_id,
+    )
 
 
 @require_http_methods(['POST'])
@@ -259,6 +267,7 @@ def sync_status(request):
             'name': item.name,
             'version': item.version,
             'updated_at': item.updated_at.isoformat(),
+            'last_operation_at': item.last_modified_at.isoformat() if item.last_modified_at else None,
             'last_modified_at': item.last_modified_at.isoformat() if item.last_modified_at else None,
         }
         for item in classrooms
@@ -268,6 +277,7 @@ def sync_status(request):
         'status': 'success',
         'classrooms': rows,
         'versions': {item['uuid']: item['version'] for item in rows},
+        'operation_times': {item['uuid']: item['last_operation_at'] for item in rows if item.get('last_operation_at')},
     }, session=request.cloud_session)
 
 
@@ -341,6 +351,8 @@ def sync_pull(request, classroom_uuid):
         'version': classroom.version,
         'data': classroom.data_snapshot,
         'updated_at': classroom.updated_at.isoformat(),
+        'last_operation_at': classroom.last_modified_at.isoformat() if classroom.last_modified_at else None,
+        'last_modified_at': classroom.last_modified_at.isoformat() if classroom.last_modified_at else None,
     }, session=request.cloud_session)
 
 

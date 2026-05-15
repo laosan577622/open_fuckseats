@@ -262,6 +262,7 @@ class SyncMeta(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, verbose_name="云端班级 UUID")
     cloud_version = models.BigIntegerField(default=0, verbose_name="云端版本号")
     local_version = models.BigIntegerField(default=0, verbose_name="本地版本号")
+    last_operation_at = models.DateTimeField(null=True, blank=True, verbose_name="最近操作时间")
     last_sync_at = models.DateTimeField(null=True, blank=True, verbose_name="最近同步时间")
     last_error = models.TextField(blank=True, default='', verbose_name="最近同步错误")
     created_at = models.DateTimeField(auto_now_add=True)

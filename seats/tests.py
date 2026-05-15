@@ -3184,6 +3184,8 @@ class ClassroomFeatureTests(TestCase):
         self.assertEqual(ws.cell(row=2, column=1).value, "讲台")
         self.assertEqual(ws.cell(row=3, column=1).value, "A")
         self.assertEqual(ws.cell(row=4, column=2).value, "D")
+        self.assertEqual(ws.cell(row=1, column=1).font.name, "鸿蒙黑体")
+        self.assertEqual(ws.cell(row=3, column=1).font.name, "鸿蒙黑体 Light")
 
     def test_export_students_rotate_180_layout(self):
         classroom = Classroom.objects.create(name="导出翻转", rows=2, cols=2)
@@ -3223,6 +3225,11 @@ class ClassroomFeatureTests(TestCase):
         self.assertIn("SVG班", content)
         self.assertNotIn("总座位", content)
         self.assertNotIn("网格", content)
+        self.assertIn('font-family:"鸿蒙黑体"', content)
+        self.assertIn('font-family:"鸿蒙黑体 Light"', content)
+        self.assertNotIn("PingFang SC", content)
+        self.assertNotIn("Microsoft YaHei", content)
+        self.assertNotIn("sans-serif", content)
 
     def test_export_students_svg_respects_visibility_options(self):
         classroom = Classroom.objects.create(name="SVG配置班", rows=1, cols=1)
@@ -3285,7 +3292,7 @@ class ClassroomFeatureTests(TestCase):
         seat.student = student
         seat.save(update_fields=["student"])
 
-        url = reverse("export_students_pptx", args=[classroom.pk]) + "?show_coords=0&show_score=0"
+        url = reverse("export_students_pptx", args=[classroom.pk]) + "?show_score=0"
         response = self.client.get(url)
 
         self.assertEqual(response.status_code, 200)
@@ -3295,6 +3302,12 @@ class ClassroomFeatureTests(TestCase):
         )
         self.assertIn(".pptx", response.get("Content-Disposition", ""))
         self.assertTrue(response.content.startswith(b"PK"))
+        with zipfile.ZipFile(BytesIO(response.content)) as zf:
+            slide_xml = zf.read("ppt/slides/slide1.xml").decode("utf-8")
+        self.assertIn('typeface="鸿蒙黑体"', slide_xml)
+        self.assertIn('typeface="鸿蒙黑体 Light"', slide_xml)
+        self.assertNotIn('typeface="微软雅黑"', slide_xml)
+        self.assertNotIn('typeface="Microsoft YaHei"', slide_xml)
 
     def test_export_students_svg_preview_student_returns_real_student(self):
         classroom = Classroom.objects.create(name="SVG预览班", rows=1, cols=2)
@@ -3326,6 +3339,37 @@ class ClassroomFeatureTests(TestCase):
 
         self.assertIn("&amp;20 09", sheet_xml)
         self.assertNotIn("&amp;1409", sheet_xml)
+
+    def test_export_group_report_uses_only_harmony_fonts(self):
+        classroom = Classroom.objects.create(name="字体班", rows=1, cols=1)
+        group = classroom.groups.create(name="一组", order=1)
+        student = classroom.students.create(name="张三")
+        seat = classroom.seats.get(row=1, col=1)
+        seat.student = student
+        seat.group = group
+        seat.save(update_fields=["student", "group"])
+
+        response = self.client.get(reverse("export_group_report", args=[classroom.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        wb = openpyxl.load_workbook(BytesIO(response.content))
+        ws = wb.active
+        self.assertEqual(ws.cell(row=1, column=1).font.name, "鸿蒙黑体")
+        member_cells = [
+            cell
+            for row in ws.iter_rows()
+            for cell in row
+            if cell.value == "张三"
+        ]
+        self.assertTrue(member_cells)
+        self.assertEqual(member_cells[0].font.name, "鸿蒙黑体 Light")
+        with zipfile.ZipFile(BytesIO(response.content)) as zf:
+            styles_xml = zf.read("xl/styles.xml").decode("utf-8")
+            sheet_xml = zf.read("xl/worksheets/sheet1.xml").decode("utf-8")
+        self.assertIn('val="鸿蒙黑体"', styles_xml)
+        self.assertIn('val="鸿蒙黑体 Light"', styles_xml)
+        self.assertNotIn("微软雅黑", styles_xml + sheet_xml)
+        self.assertNotIn("Microsoft YaHei", styles_xml + sheet_xml)
 
 
 class DesktopExportBridgeTests(TestCase):

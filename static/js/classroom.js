@@ -4007,19 +4007,6 @@ document.addEventListener('DOMContentLoaded', () => {
     let contextMenuJustOpenedAt = 0;
     let blockedContextMenuTipAt = 0;
 
-    const contextDebug = (source, payload = {}) => {
-        const data = payload && typeof payload === 'object' ? payload : { value: payload };
-        console.log('[classroom-context-menu]', source, data);
-        try {
-            const api = window.pywebview?.api;
-            if (api && typeof api.log_context_menu_debug === 'function') {
-                api.log_context_menu_debug(`classroom:${source}`, data);
-            }
-        } catch (_) {
-            // ignore bridge logging failures
-        }
-    };
-
     const describeSeatForContextMenu = (seat) => {
         if (!seat) {
             return {
@@ -4149,23 +4136,14 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const openSeatContextMenu = (event, seat) => {
-        const seatInfo = describeSeatForContextMenu(seat);
         if (!contextMenu || !canOpenSeatContextMenu(seat)) {
             showBlockedContextMenuReason(seat);
-            contextDebug('open-blocked', {
-                seat: seatInfo,
-                hasMenu: !!contextMenu,
-            });
             return false;
         }
         event.preventDefault();
         ctxTargetStudentId = seat.dataset.studentId || null;
         contextMenuJustOpenedAt = Date.now();
         showContextMenu(event, seat);
-        contextDebug('open-success', {
-            seat: seatInfo,
-            point: { x: event.clientX, y: event.clientY },
-        });
         return true;
     };
 
@@ -4203,11 +4181,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const target = document.elementFromPoint(x, y);
         let seat = target && target.closest ? target.closest('.seat') : null;
         if (!seat && target && target.closest) seat = target.closest('.unseated-item');
-        contextDebug('windows-event', {
-            point: { x, y },
-            targetClass: target && target.className ? String(target.className) : '',
-            seat: describeSeatForContextMenu(seat),
-        });
         detail.handled = openSeatContextMenuFromTarget({
             clientX: x,
             clientY: y,
@@ -4217,10 +4190,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!detail.handled) {
             hideContextMenu();
         }
-        contextDebug('windows-event-result', {
-            point: { x, y },
-            handled: !!detail.handled,
-        });
     });
 
     document.addEventListener('pointerdown', (event) => {
@@ -4235,30 +4204,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('contextmenu', (event) => {
         if (contextMenu && contextMenu.contains(event.target)) {
             event.preventDefault();
-            contextDebug('native-menu-self', {
-                targetClass: event.target && event.target.className ? String(event.target.className) : '',
-            });
             return;
         }
         if (shouldSuppressNativeSeatContextMenu(event.target)) {
             event.preventDefault();
         }
-        const seat = event.target && event.target.closest ? event.target.closest('.seat') : null;
-        const handled = openSeatContextMenuFromTarget(event, event.target);
-        contextDebug('document-contextmenu', {
-            handled,
-            defaultPrevented: !!event.defaultPrevented,
-            targetClass: event.target && event.target.className ? String(event.target.className) : '',
-            seat: describeSeatForContextMenu(seat),
-        });
+        openSeatContextMenuFromTarget(event, event.target);
     }, true);
 
     if (contextMenu && ctxSetLeader) {
         ctxSetLeader.addEventListener('click', () => {
             if (!ctxTargetStudentId) return;
-            contextDebug('action-click', {
-                studentId: ctxTargetStudentId,
-            });
             handleResponse(postJson(urls.setLeader, {
                 student_id: ctxTargetStudentId
             }));
@@ -4270,12 +4226,6 @@ document.addEventListener('DOMContentLoaded', () => {
         ctxToggleFixedSeat.addEventListener('click', () => {
             if (!ctxTargetSeat || !ctxTargetSeat.dataset.row || !ctxTargetSeat.dataset.col) return;
             const nextEnabled = ctxTargetSeat.dataset.fixedSeat === '1' ? '0' : '1';
-            contextDebug('action-toggle-fixed-seat', {
-                studentId: ctxTargetStudentId,
-                row: ctxTargetSeat.dataset.row,
-                col: ctxTargetSeat.dataset.col,
-                enabled: nextEnabled,
-            });
             handleResponse(postJson(urls.toggleFixedSeat, {
                 row: ctxTargetSeat.dataset.row,
                 col: ctxTargetSeat.dataset.col,

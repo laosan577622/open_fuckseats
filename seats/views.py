@@ -45,6 +45,9 @@ import urllib.request
 import math
 import zlib
 from collections import defaultdict
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from openpyxl.styles import Alignment, Border, Side, Font, PatternFill
 from openpyxl.utils import get_column_letter
 from .constraints import (
@@ -122,6 +125,8 @@ MAX_LAYOUT_GRID_SIZE = 30
 CLASSROOM_HISTORY_LIMIT = 1000
 GROUP_MOVE_MODE_FIXED = 'fixed'
 GROUP_MOVE_MODE_FOLLOW = 'follow'
+EXPORT_FONT_BLACK = '鸿蒙黑体'
+EXPORT_FONT_LIGHT = '鸿蒙黑体 Light'
 HISTORY_STUDENT_ID_KEYS = {
     'student_pk',
     'target_student_pk',
@@ -4227,6 +4232,16 @@ def _hex_to_rgb_parts(color):
         return 0, 0, 0
 
 
+def _export_svg_font_style():
+    return (
+        f'.title{{font-family:"{EXPORT_FONT_BLACK}";font-size:24px;}}'
+        f'.cell-name{{font-family:"{EXPORT_FONT_BLACK}";font-size:16px;}}'
+        f'.cell-sub{{font-family:"{EXPORT_FONT_LIGHT}";font-size:12px;}}'
+        f'.tag{{font-family:"{EXPORT_FONT_BLACK}";font-size:11px;}}'
+        f'.cell-type{{font-family:"{EXPORT_FONT_BLACK}";font-size:13px;}}'
+    )
+
+
 def _sync_seats(classroom, rows, cols):
     if classroom.rows != rows or classroom.cols != cols:
         classroom.rows = rows
@@ -6597,6 +6612,7 @@ def _serialize_classroom_sync_meta(classroom, meta=None):
     meta = meta or SyncMeta.objects.get_or_create(classroom=classroom)[0]
     local_version = int(meta.local_version or 0)
     cloud_version = int(meta.cloud_version or 0)
+    last_operation_at = _sync_meta_operation_time(meta, classroom)
     backed_up = bool(meta.last_sync_at and cloud_version > 0)
     has_local_changes = bool(backed_up and local_version > cloud_version)
     if not backed_up:
@@ -6609,6 +6625,7 @@ def _serialize_classroom_sync_meta(classroom, meta=None):
         'uuid': str(meta.uuid),
         'local_version': local_version,
         'cloud_version': cloud_version,
+        'last_operation_at': last_operation_at.isoformat() if last_operation_at else None,
         'last_sync_at': meta.last_sync_at.isoformat() if meta.last_sync_at else None,
         'last_error': meta.last_error,
         'backed_up': backed_up,
@@ -10527,10 +10544,9 @@ def export_students(request, pk):
     center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
     # 字体
-    font_name = '鸿蒙黑体'
-    header_font = Font(name=font_name, bold=True, size=20)
-    podium_font = Font(name=font_name, bold=True, size=14)
-    seat_font = Font(name=font_name, size=12, bold=False)
+    header_font = Font(name=EXPORT_FONT_BLACK, bold=False, size=20)
+    podium_font = Font(name=EXPORT_FONT_BLACK, bold=False, size=14)
+    seat_font = Font(name=EXPORT_FONT_LIGHT, size=12, bold=False)
 
     # 标题
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=classroom.cols)
@@ -10675,11 +10691,7 @@ def export_students_svg(request, pk):
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" viewBox="0 0 {width} {height}">',
         '<defs>',
         '<style><![CDATA['
-        '.title{font:700 24px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
-        '.cell-name{font:600 16px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
-        '.cell-sub{font:500 12px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
-        '.tag{font:700 11px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
-        '.cell-type{font:600 13px "鸿蒙黑体","PingFang SC","Microsoft YaHei",sans-serif;}'
+        + _export_svg_font_style() +
         ']]></style>',
         '</defs>',
         f'<rect x="0" y="0" width="{width}" height="{height}" fill="{style["bg"]}"/>',
@@ -10969,7 +10981,7 @@ def export_students_pptx(request, pk):
     def add_text(x, y, w, h, text, color, size_px, bold=False, center=False, middle=True):
         if text is None:
             return
-        font_name = '鸿蒙黑体'
+        font_name = EXPORT_FONT_BLACK if bold else EXPORT_FONT_LIGHT
         shape = slide.shapes.add_textbox(
             Inches(sx(x)),
             Inches(sy(y)),
@@ -10989,7 +11001,7 @@ def export_students_pptx(request, pk):
         run = paragraph.add_run()
         run.text = str(text)
         run.font.name = font_name
-        run.font.bold = bool(bold)
+        run.font.bold = False
         run.font.size = Pt(font_pt(size_px))
         run.font.color.rgb = rgb(color)
         # 同时设置多套字体字段
@@ -11199,13 +11211,13 @@ def export_group_report(request, pk):
         left=Side(style='thin'), right=Side(style='thin'),
         top=Side(style='thin'), bottom=Side(style='thin'),
     )
-    font_name = '鸿蒙黑体'
-    group_font = Font(name=font_name, bold=True, size=13)
-    name_font  = Font(name=font_name, size=11)
+    group_font = Font(name=EXPORT_FONT_BLACK, bold=False, size=13)
+    name_font = Font(name=EXPORT_FONT_LIGHT, bold=False, size=11, color="000000")
+    leader_name_font = Font(name=EXPORT_FONT_LIGHT, bold=False, size=11, color="FF0000")
     center     = Alignment(horizontal='center', vertical='center')
 
     # 页眉
-    header_text = f"&\"{font_name},Bold\"&20 {classroom.name} (          ) 登记表"
+    header_text = f"&\"{EXPORT_FONT_BLACK}\"&20 {classroom.name} (          ) 登记表"
     ws.oddHeader.center.text = header_text
     ws.evenHeader.center.text = header_text
 
@@ -11395,7 +11407,7 @@ def export_group_report(request, pk):
             
         elif kind == 'member':
             cell_name = ws.cell(row=row, column=start_col, value=entry['text'])
-            cell_name.font = Font(name='微软雅黑', size=11, color="FF0000" if entry.get('is_leader') else "000000")
+            cell_name.font = leader_name_font if entry.get('is_leader') else name_font
             cell_name.alignment = center
             cell_name.border = thin_border
             for b in range(1, boxes_count + 1):
@@ -11534,6 +11546,8 @@ def import_seats_file(request, pk):
 BSCE_CLOUD_AUTH_URL = 'https://sce.jbyc.cc/api/auth.php'
 BSCE_CLOUD_WORKSPACE_URL = 'https://sce.jbyc.cc/api/workspace.php'
 BSCE_CLOUD_TIMEOUT = 15
+BSCE_TRANSPORT_SALT = b'sce-transport-salt-v1'
+BSCE_PBKDF2_ITERATIONS = 100_000
 BSCE_CLOUD_HEADERS = {
     'Accept': 'application/json, text/plain, */*',
     'Content-Type': 'application/json',
@@ -11611,8 +11625,30 @@ def _bsce_cloud_cookie_header(csrf_token):
     return '; '.join(cookies)
 
 
+def _bsce_generate_csrf():
+    return secrets.token_bytes(24).hex()
+
+
+def _bsce_derive_transport_key(username):
+    key_material = f'sce-auth-{username}'.encode('utf-8')
+    kdf = PBKDF2HMAC(
+        algorithm=hashes.SHA256(),
+        length=32,
+        salt=BSCE_TRANSPORT_SALT,
+        iterations=BSCE_PBKDF2_ITERATIONS,
+    )
+    return kdf.derive(key_material)
+
+
+def _bsce_encrypt_login_password(password, username):
+    key = _bsce_derive_transport_key(username)
+    iv = secrets.token_bytes(12)
+    ciphertext = AESGCM(key).encrypt(iv, str(password or '').encode('utf-8'), None)
+    return base64.b64encode(iv + ciphertext).decode('ascii')
+
+
 def _bsce_cloud_browser_session():
-    csrf_token = secrets.token_hex(20)
+    csrf_token = _bsce_generate_csrf()
     headers = {
         **BSCE_CLOUD_HEADERS,
         **secrets.choice(BSCE_CLOUD_BROWSER_PROFILES),
@@ -11645,7 +11681,7 @@ def _bsce_cloud_request_payload(action, username, password=None, token=None, fil
         'username': username,
     }
     if action == 'login':
-        payload['password'] = password or ''
+        payload['encryptedPassword'] = _bsce_encrypt_login_password(password, username)
     if token:
         payload['token'] = token
     if file_id:
@@ -12446,6 +12482,54 @@ def _cloud_remote_version_for(versions, classroom_uuid):
         return None
 
 
+def _parse_cloud_operation_time(value):
+    if not value:
+        return None
+    parsed = parse_datetime(str(value))
+    if parsed and timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed
+
+
+def _sync_meta_operation_time(meta, classroom=None):
+    if meta is None:
+        return None
+    return meta.last_operation_at or meta.updated_at or getattr(classroom, 'created_at', None)
+
+
+def _operation_time_newer(left, right):
+    if not left:
+        return False
+    if not right:
+        return True
+    return left > right
+
+
+def _cloud_operation_times_from_status(payload):
+    if not isinstance(payload, dict):
+        return {}
+
+    operation_times = {}
+    raw_map = payload.get('operation_times')
+    if isinstance(raw_map, dict):
+        for key, value in raw_map.items():
+            if key and value:
+                operation_times[str(key)] = value
+
+    for row in _cloud_classrooms_from_status(payload):
+        if not isinstance(row, dict):
+            continue
+        classroom_uuid = str(row.get('uuid') or '').strip()
+        operation_at = row.get('last_operation_at') or row.get('last_modified_at')
+        if classroom_uuid and operation_at:
+            operation_times[classroom_uuid] = operation_at
+    return operation_times
+
+
+def _cloud_remote_operation_time_for(operation_times, classroom_uuid):
+    return _parse_cloud_operation_time(operation_times.get(str(classroom_uuid)))
+
+
 def _cloud_session_payload(session, request=None):
     callback_url = _cloud_callback_url(request) if request else None
     return {
@@ -12471,6 +12555,12 @@ def _cloud_export_payload(classroom, session):
 
     payload = _serialize_seats_file_bundle(classroom)
     payload.pop('future_mode_config', None)
+    meta = payload.get('meta') if isinstance(payload.get('meta'), dict) else {}
+    sync_meta = SyncMeta.objects.filter(classroom=classroom).first()
+    operation_at = _sync_meta_operation_time(sync_meta, classroom)
+    if operation_at:
+        meta['last_operation_at'] = operation_at.isoformat()
+        payload['meta'] = meta
 
     history = payload.get('history')
     if isinstance(history, dict):
@@ -12495,7 +12585,7 @@ def _cloud_export_payload(classroom, session):
     return payload
 
 
-def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None):
+def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None, operation_time=None):
     if not isinstance(data, dict):
         raise ValueError('云端班级数据格式错误')
 
@@ -12505,6 +12595,12 @@ def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None):
     name = str(classroom_data.get('name') or data.get('name') or '云端班级').strip() or '云端班级'
     rows = int(classroom_data.get('rows') or data.get('rows') or 6)
     cols = int(classroom_data.get('cols') or data.get('cols') or 8)
+    data_meta = data.get('meta') if isinstance(data.get('meta'), dict) else {}
+    operation_at = (
+        _parse_cloud_operation_time(operation_time)
+        or _parse_cloud_operation_time(data_meta.get('last_operation_at'))
+        or _parse_cloud_operation_time(data_meta.get('operation_time'))
+    )
 
     with suspend_sync_version_bump():
         if classroom is None:
@@ -12518,18 +12614,21 @@ def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None):
             meta.local_version = int(version or 0)
         else:
             meta.local_version = max(int(meta.local_version or 0), int(meta.cloud_version or 0)) + 1
+        if operation_at:
+            meta.last_operation_at = operation_at
         meta.last_sync_at = timezone.now()
         meta.last_error = ''
-        meta.save(update_fields=['uuid', 'cloud_version', 'local_version', 'last_sync_at', 'last_error', 'updated_at'])
+        meta.save(update_fields=['uuid', 'cloud_version', 'local_version', 'last_operation_at', 'last_sync_at', 'last_error', 'updated_at'])
 
     return classroom, meta
 
 
-def _cloud_pull_and_restore_classroom(request, session, classroom_uuid, fallback_version=None):
+def _cloud_pull_and_restore_classroom(request, session, classroom_uuid, fallback_version=None, fallback_operation_time=None):
     payload = cloud_api_request(session, 'GET', f'/api/sync/pull/{classroom_uuid}')
     data = payload.get('data') or payload.get('data_snapshot')
     version = payload.get('version') if payload.get('version') is not None else fallback_version
-    return _cloud_restore_classroom_data(request, classroom_uuid, data, version=version)
+    operation_time = payload.get('last_operation_at') or payload.get('last_modified_at') or fallback_operation_time
+    return _cloud_restore_classroom_data(request, classroom_uuid, data, version=version, operation_time=operation_time)
 
 
 @require_http_methods(['GET', 'POST'])
@@ -12731,6 +12830,7 @@ def _cloud_sync_classrooms(request, session, data=None):
     classroom_ids = data.get('classroom_ids')
     sync_all_classrooms = not classroom_ids
     force = bool(data.get('force'))
+    auto_sync = bool(data.get('auto'))
     queryset = Classroom.objects.all().order_by('pk')
     if classroom_ids:
         if not isinstance(classroom_ids, list):
@@ -12741,6 +12841,7 @@ def _cloud_sync_classrooms(request, session, data=None):
     max_classrooms = int(limits.get('max_classrooms', 3) or 3)
     remote_status = _cloud_remote_status(session)
     remote_versions = _cloud_versions_from_status(remote_status)
+    remote_operation_times = _cloud_operation_times_from_status(remote_status)
     remote_classrooms = _cloud_classrooms_from_status(remote_status)
     results = []
 
@@ -12748,6 +12849,10 @@ def _cloud_sync_classrooms(request, session, data=None):
         meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
         sync_payload = _serialize_classroom_sync_meta(classroom, meta)
         remote_version = _cloud_remote_version_for(remote_versions, meta.uuid)
+        remote_operation_at = _cloud_remote_operation_time_for(remote_operation_times, meta.uuid)
+        local_operation_at = _sync_meta_operation_time(meta, classroom)
+        cloud_operation_newer = bool(auto_sync and _operation_time_newer(remote_operation_at, local_operation_at))
+        upload_by_operation_time = bool(auto_sync and remote_operation_at and not cloud_operation_newer)
         local_has_changes = int(sync_payload['local_version'] or 0) > int(sync_payload['cloud_version'] or 0)
         if max_classrooms != -1 and index >= max_classrooms:
             results.append({
@@ -12759,7 +12864,42 @@ def _cloud_sync_classrooms(request, session, data=None):
             })
             continue
 
-        if remote_version is not None and remote_version > int(meta.cloud_version or 0) and not force:
+        if cloud_operation_newer and not force:
+            try:
+                classroom, meta = _cloud_pull_and_restore_classroom(
+                    request,
+                    session,
+                    str(meta.uuid),
+                    fallback_version=remote_version,
+                    fallback_operation_time=remote_operation_at,
+                )
+            except Exception as exc:
+                meta.last_error = str(exc)
+                meta.save(update_fields=['last_error', 'updated_at'])
+                results.append({
+                    'classroom_id': classroom.pk,
+                    'name': classroom.name,
+                    **_serialize_classroom_sync_meta(classroom, meta),
+                    'status': 'error',
+                    'message': str(exc),
+                })
+            else:
+                results.append({
+                    'classroom_id': classroom.pk,
+                    'name': classroom.name,
+                    **_serialize_classroom_sync_meta(classroom, meta),
+                    'status': 'pulled',
+                    'version': int(meta.cloud_version or remote_version or 0),
+                    'message': '检测到云端操作时间更新，已从云端拉取',
+                })
+            continue
+
+        if (
+            remote_version is not None
+            and remote_version > int(meta.cloud_version or 0)
+            and not force
+            and not upload_by_operation_time
+        ):
             if not local_has_changes:
                 try:
                     classroom, meta = _cloud_pull_and_restore_classroom(
@@ -12767,6 +12907,7 @@ def _cloud_sync_classrooms(request, session, data=None):
                         session,
                         str(meta.uuid),
                         fallback_version=remote_version,
+                        fallback_operation_time=remote_operation_at,
                     )
                 except Exception as exc:
                     meta.last_error = str(exc)
@@ -12807,6 +12948,7 @@ def _cloud_sync_classrooms(request, session, data=None):
             and sync_payload['backed_up']
             and sync_payload['local_version'] <= sync_payload['cloud_version']
             and remote_version <= sync_payload['cloud_version']
+            and not (remote_operation_at and _operation_time_newer(local_operation_at, remote_operation_at))
         ):
             results.append({
                 'classroom_id': classroom.pk,
@@ -12817,13 +12959,22 @@ def _cloud_sync_classrooms(request, session, data=None):
             })
             continue
 
+        push_force = bool(
+            force
+            or (
+                upload_by_operation_time
+                and remote_version is not None
+                and remote_version > int(meta.cloud_version or 0)
+            )
+        )
         body = {
             'uuid': str(meta.uuid),
             'base_version': int(meta.cloud_version or 0),
             'cloud_version': int(meta.cloud_version or 0),
             'local_version': int(meta.local_version or 0),
-            'force': force,
+            'force': push_force,
             'device_id': data.get('device_id') or 'local-desktop',
+            'last_operation_at': local_operation_at.isoformat() if local_operation_at else None,
             'data': _cloud_export_payload(classroom, session),
         }
 
@@ -12856,11 +13007,17 @@ def _cloud_sync_classrooms(request, session, data=None):
 
         if payload.get('ok') or payload.get('status') == 'success':
             version = int(payload.get('version') or meta.cloud_version or 0)
+            operation_at = (
+                _parse_cloud_operation_time(payload.get('last_operation_at') or payload.get('last_modified_at'))
+                or local_operation_at
+            )
             meta.cloud_version = version
             meta.local_version = version
+            if operation_at:
+                meta.last_operation_at = operation_at
             meta.last_sync_at = timezone.now()
             meta.last_error = ''
-            meta.save(update_fields=['cloud_version', 'local_version', 'last_sync_at', 'last_error', 'updated_at'])
+            meta.save(update_fields=['cloud_version', 'local_version', 'last_operation_at', 'last_sync_at', 'last_error', 'updated_at'])
             results.append({
                 'classroom_id': classroom.pk,
                 'name': classroom.name,
@@ -12891,12 +13048,16 @@ def _cloud_sync_classrooms(request, session, data=None):
                 continue
             remote_name = str(remote_row.get('name') or '云端班级')
             remote_version = _cloud_remote_version_for(remote_versions, remote_uuid)
+            remote_operation_at = _parse_cloud_operation_time(
+                remote_row.get('last_operation_at') or remote_row.get('last_modified_at')
+            )
             try:
                 classroom, meta = _cloud_pull_and_restore_classroom(
                     request,
                     session,
                     remote_uuid,
                     fallback_version=remote_version,
+                    fallback_operation_time=remote_operation_at,
                 )
             except Exception as exc:
                 results.append({
@@ -12943,7 +13104,13 @@ def cloud_sync_pull(request, classroom_uuid):
         session = _cloud_local_session_or_401()
         payload = cloud_api_request(session, 'GET', f'/api/sync/pull/{classroom_uuid}')
         data = payload.get('data') or payload.get('data_snapshot')
-        classroom, meta = _cloud_restore_classroom_data(request, classroom_uuid, data, version=payload.get('version'))
+        classroom, meta = _cloud_restore_classroom_data(
+            request,
+            classroom_uuid,
+            data,
+            version=payload.get('version'),
+            operation_time=payload.get('last_operation_at') or payload.get('last_modified_at'),
+        )
         return JsonResponse({
             'status': 'success',
             'classroom_id': classroom.pk,

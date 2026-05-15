@@ -7,7 +7,7 @@ from django.test import TestCase
 from django.utils import timezone
 
 from . import oauth
-from .crypto import decrypt_payload, encrypt_payload, ensure_service_key
+from .crypto import decrypt_payload, encrypt_payload, ensure_service_key, generate_rsa_keypair
 from .models import CloudClassroom, CloudSession, CloudUser
 from .sync import push_classroom_snapshot
 
@@ -53,16 +53,35 @@ class CloudCryptoTests(TestCase):
 
 class CloudSyncDeleteTests(TestCase):
     def create_session(self, user):
-        return CloudSession.objects.create(
+        client_keys = generate_rsa_keypair()
+        session = CloudSession.objects.create(
             user=user,
             token="delete-token",
             device_id="test-device",
+            client_key_id=client_keys["key_id"],
+            client_public_key_pem=client_keys["public_key_pem"],
             expires_at=timezone.now() + timedelta(days=1),
         )
+        return session, client_keys
+
+    def encrypted_body(self, client_keys, payload):
+        service_key = ensure_service_key()
+        return json.dumps({
+            "encrypted": encrypt_payload(
+                payload,
+                service_key.public_key_pem,
+                sender_key_id=client_keys["key_id"],
+            )
+        })
+
+    def decrypted_response(self, response, client_keys):
+        payload = response.json()
+        self.assertIn("encrypted", payload)
+        return decrypt_payload(payload["encrypted"], client_keys["private_key_pem"])
 
     def test_sync_delete_marks_classroom_deleted_and_hides_from_status(self):
         user = CloudUser.objects.create(uid="u-delete")
-        session = self.create_session(user)
+        session, client_keys = self.create_session(user)
         classroom = CloudClassroom.objects.create(
             user=user,
             uuid=uuid.uuid4(),
@@ -75,13 +94,13 @@ class CloudSyncDeleteTests(TestCase):
 
         response = self.client.delete(
             f"/api/sync/{classroom.uuid}",
-            data=json.dumps({"device_id": "local-delete"}),
+            data=self.encrypted_body(client_keys, {"device_id": "local-delete"}),
             content_type="application/json",
             HTTP_AUTHORIZATION=f"Bearer {session.token}",
         )
 
         self.assertEqual(response.status_code, 200)
-        payload = response.json()
+        payload = self.decrypted_response(response, client_keys)
         self.assertEqual(payload["status"], "success")
         self.assertEqual(payload["version"], 5)
         classroom.refresh_from_db()
@@ -93,11 +112,11 @@ class CloudSyncDeleteTests(TestCase):
             HTTP_AUTHORIZATION=f"Bearer {session.token}",
         )
         self.assertEqual(status_response.status_code, 200)
-        self.assertEqual(status_response.json()["classrooms"], [])
+        self.assertEqual(self.decrypted_response(status_response, client_keys)["classrooms"], [])
 
     def test_sync_delete_is_idempotent_for_already_deleted_classroom(self):
         user = CloudUser.objects.create(uid="u-delete-again")
-        session = self.create_session(user)
+        session, client_keys = self.create_session(user)
         classroom = CloudClassroom.objects.create(
             user=user,
             uuid=uuid.uuid4(),
@@ -111,18 +130,18 @@ class CloudSyncDeleteTests(TestCase):
 
         response = self.client.delete(
             f"/api/sync/{classroom.uuid}",
+            data=self.encrypted_body(client_keys, {}),
+            content_type="application/json",
             HTTP_AUTHORIZATION=f"Bearer {session.token}",
         )
 
         self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json()["version"], 7)
+        self.assertEqual(self.decrypted_response(response, client_keys)["version"], 7)
         classroom.refresh_from_db()
         self.assertTrue(classroom.is_deleted)
         self.assertEqual(classroom.version, 7)
 
     def test_sync_delete_returns_encrypted_payload_when_session_has_client_key(self):
-        from .crypto import generate_rsa_keypair
-
         user = CloudUser.objects.create(uid="u-delete-encrypted")
         client_keys = generate_rsa_keypair()
         session = CloudSession.objects.create(
@@ -145,13 +164,13 @@ class CloudSyncDeleteTests(TestCase):
 
         response = self.client.delete(
             f"/api/sync/{classroom.uuid}",
+            data=self.encrypted_body(client_keys, {}),
+            content_type="application/json",
             HTTP_AUTHORIZATION=f"Bearer {session.token}",
         )
 
         self.assertEqual(response.status_code, 200)
-        payload = response.json()
-        self.assertIn('encrypted', payload)
-        decrypted = decrypt_payload(payload['encrypted'], client_keys['private_key_pem'])
+        decrypted = self.decrypted_response(response, client_keys)
         self.assertEqual(decrypted['status'], 'success')
         self.assertEqual(decrypted['version'], 3)
 
@@ -244,6 +263,24 @@ class CloudSyncStorageTests(TestCase):
         self.assertEqual(classroom.cols, 4)
         self.assertEqual(classroom.version, 1)
         self.assertEqual(classroom.data_snapshot["students"][0]["name"], "张三")
+
+    def test_push_stores_client_operation_time(self):
+        user = CloudUser.objects.create(uid="u-sync-operation-time")
+        classroom_uuid = uuid.uuid4()
+        operation_at = timezone.now() - timedelta(hours=3)
+
+        result = push_classroom_snapshot(user, {
+            "uuid": str(classroom_uuid),
+            "base_version": 0,
+            "device_id": "test-device",
+            "last_operation_at": operation_at.isoformat(),
+            "data": self.fuckseats_snapshot(),
+        })
+
+        classroom = CloudClassroom.objects.get(user=user, uuid=classroom_uuid)
+        self.assertTrue(result["ok"])
+        self.assertEqual(classroom.last_modified_at, operation_at)
+        self.assertEqual(result["last_operation_at"], operation_at.isoformat())
 
     def test_force_push_overwrites_newer_cloud_version(self):
         user = CloudUser.objects.create(uid="u-force")

@@ -414,7 +414,9 @@ def bump_local_version(classroom_or_id):
         return
 
     meta, _ = SyncMeta.objects.get_or_create(classroom_id=classroom_id)
+    now = timezone.now()
     SyncMeta.objects.filter(pk=meta.pk).update(
         local_version=models.F('local_version') + 1,
-        updated_at=timezone.now(),
+        last_operation_at=now,
+        updated_at=now,
     )

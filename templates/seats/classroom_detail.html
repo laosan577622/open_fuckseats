@@ -248,8 +248,24 @@
 {% endblock %}
 
 {% block content %}
-<div id="classroom-root" class="classroom-layout animate-fade-in" data-move-url="{% url 'move_student' classroom.pk %}"
+{% if sync_meta_payload.backed_up %}
+<div id="cloud-entry-sync-screen" class="cloud-entry-sync-screen" role="status" aria-live="polite">
+    <div class="cloud-entry-sync-mark" aria-hidden="true">
+        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <path d="M10.2 22.7H23a5.2 5.2 0 0 0 .9-10.3 8 8 0 0 0-15.2-2.2A6.3 6.3 0 0 0 10.2 22.7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <path d="M16 13v8m0 0 3-3m-3 3-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+    </div>
+    <div class="cloud-entry-sync-copy">
+        <div class="cloud-entry-sync-title" data-cloud-entry-title>正在检查云端数据</div>
+        <div class="cloud-entry-sync-sub" data-cloud-entry-sub>检测到这是云班级，进入前先同步最新状态。</div>
+    </div>
+    <div class="cloud-entry-sync-progress" aria-hidden="true"></div>
+</div>
+{% endif %}
+<div id="classroom-root" class="classroom-layout animate-fade-in{% if sync_meta_payload.backed_up %} cloud-entry-pending{% endif %}" data-move-url="{% url 'move_student' classroom.pk %}"
     data-classroom-id="{{ classroom.pk }}" data-extensions-list-url="{% url 'extensions_overview' %}"
+    data-cloud-backed-up="{% if sync_meta_payload.backed_up %}1{% else %}0{% endif %}"
     data-move-batch-url="{% url 'move_students_batch' classroom.pk %}"
     data-clear-url="{% url 'clear_seat' classroom.pk %}" data-assign-url="{% url 'assign_student' classroom.pk %}"
     data-group-assign-url="{% url 'assign_group' classroom.pk %}"
@@ -1245,9 +1261,13 @@
     var classroomId = {{ classroom.pk }};
     var classroomName = '{{ classroom.name|escapejs }}';
     var syncMeta = readInitialSyncMeta();
+    var classroomRoot = document.getElementById('classroom-root');
+    var cloudEntryScreen = document.getElementById('cloud-entry-sync-screen');
+    var isCloudBackedUp = classroomRoot && classroomRoot.dataset.cloudBackedUp === '1';
     var currentUser = null;
     var pillButton = null;
     var autoOpenSyncStarted = false;
+    var skipAutoSyncOnce = consumeAutoSyncSkipFlag();
 
     function readInitialSyncMeta() {
         var node = document.getElementById('classroom-sync-meta');
@@ -1259,15 +1279,62 @@
         }
     }
 
+    function consumeAutoSyncSkipFlag() {
+        try {
+            var url = new URL(window.location.href);
+            if (url.searchParams.get('cloud_sync') !== 'pulled') return false;
+            url.searchParams.delete('cloud_sync');
+            window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+            return true;
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function reloadAfterPull(options) {
+        if (options && options.auto) {
+            try {
+                var url = new URL(window.location.href);
+                url.searchParams.set('cloud_sync', 'pulled');
+                window.location.replace(url.pathname + url.search + url.hash);
+                return;
+            } catch (error) {}
+        }
+        window.location.reload();
+    }
+
+    function setCloudEntryStatus(title, subText) {
+        if (!cloudEntryScreen) return;
+        var titleEl = cloudEntryScreen.querySelector('[data-cloud-entry-title]');
+        var subEl = cloudEntryScreen.querySelector('[data-cloud-entry-sub]');
+        if (titleEl && title) titleEl.textContent = title;
+        if (subEl && subText) subEl.textContent = subText;
+    }
+
+    function revealClassroomContent() {
+        if (classroomRoot) {
+            classroomRoot.classList.remove('cloud-entry-pending');
+        }
+        if (cloudEntryScreen) {
+            cloudEntryScreen.classList.add('done');
+        }
+    }
+
+    function shouldGateCloudEntry() {
+        return Boolean(isCloudBackedUp && !skipAutoSyncOnce);
+    }
+
     function normalizeSyncMeta(meta) {
         var next = meta || {};
         var localVersion = Number(next.local_version || 0);
         var cloudVersion = Number(next.cloud_version || 0);
         var backedUp = Boolean(next.backed_up || (next.last_sync_at && cloudVersion > 0));
+        var lastOperationAt = next.last_operation_at || next.local_operation_at || syncMeta.last_operation_at || null;
         return {
             uuid: next.uuid || syncMeta.uuid || '',
             local_version: localVersion,
             cloud_version: cloudVersion,
+            last_operation_at: lastOperationAt,
             last_sync_at: next.last_sync_at || null,
             last_error: next.last_error || '',
             backed_up: backedUp,
@@ -1394,13 +1461,21 @@
     }
 
     async function syncCurrentClass(options) {
-        if (!(await ensureLoggedIn())) return;
+        options = options || {};
+        if (options.preflight) {
+            setCloudEntryStatus('正在同步云端数据', '进入班级前先确认云端是否有更新。');
+        }
+        if (!(await ensureLoggedIn())) {
+            if (options.preflight) revealClassroomContent();
+            return;
+        }
         setPillStatus({ state: 'syncing', text: '同步中', title: '正在同步到云端' });
         try {
-            var result = await CloudManager.sync([classroomId], options || {});
+            var result = await CloudManager.sync([classroomId], options);
             var row = result && result.results && result.results[0];
             if (!row) {
                 setPillStatus({ state: 'error', text: '同步失败，点击重试', title: '同步失败，点击重试' });
+                if (options.preflight) revealClassroomContent();
                 return;
             }
             if (row.status === 'ok' || row.status === 'up_to_date' || row.status === 'pulled') {
@@ -1409,7 +1484,9 @@
                     showToast(row.status === 'up_to_date' ? '云端已是最新' : (row.status === 'pulled' ? classroomName + ' 已从云端更新' : classroomName + ' 已同步到云端'));
                 }
                 if (row.status === 'pulled') {
-                    window.location.reload();
+                    reloadAfterPull(options || {});
+                } else if (options.preflight) {
+                    revealClassroomContent();
                 }
                 return;
             }
@@ -1417,13 +1494,16 @@
                 updateSyncMeta(row.sync_meta || row);
                 setPillStatus({ state: 'error', text: '云端有冲突', title: '云端版本更新，请从头像菜单恢复或处理冲突' });
                 showToast('云端存在冲突，请先从云恢复');
+                if (options.preflight) revealClassroomContent();
                 return;
             }
             setPillStatus({ state: 'error', text: '同步失败，点击重试', title: row.message || '同步失败，点击重试' });
             showToast(row.message || '同步失败');
+            if (options.preflight) revealClassroomContent();
         } catch (error) {
             setPillStatus({ state: 'error', text: '同步失败，点击重试', title: (error && error.message) || '同步失败，点击重试' });
             showToast((error && error.message) || '同步失败');
+            if (options.preflight) revealClassroomContent();
         }
     }
 
@@ -1481,7 +1561,7 @@
                 if (matched && (matched.status === 'ok' || matched.status === 'up_to_date' || matched.status === 'pulled')) {
                     updateSyncMeta(matched.sync_meta || matched);
                     if (matched.status === 'pulled') {
-                        window.location.reload();
+                        reloadAfterPull({ auto: true });
                     }
                     return null;
                 }
@@ -1495,6 +1575,7 @@
         },
         markDirty: function () {
             if (!syncMeta.backed_up) return;
+            syncMeta.last_operation_at = new Date().toISOString();
             syncMeta.has_local_changes = true;
             syncMeta.state = 'dirty';
             renderPill();
@@ -1506,17 +1587,25 @@
             setTimeout(startCloudHeader, 50);
             return;
         }
+        if (!shouldGateCloudEntry()) {
+            revealClassroomContent();
+        }
         CloudManager.getUserInfo().then(function (user) {
             headerArea.innerHTML = '';
             syncMeta = normalizeSyncMeta(syncMeta);
             headerArea.appendChild(buildCloudHeader(user));
-            if (user && user.logged_in && syncMeta.backed_up && !autoOpenSyncStarted) {
+            if (user && user.logged_in && syncMeta.backed_up && !autoOpenSyncStarted && shouldGateCloudEntry()) {
                 autoOpenSyncStarted = true;
+                setCloudEntryStatus('正在同步云端数据', '检测到这是云班级，进入前先同步最新状态。');
                 setTimeout(function () {
-                    syncCurrentClass({ auto: true, silent: true });
+                    syncCurrentClass({ auto: true, silent: true, preflight: true });
                 }, 350);
+            } else {
+                revealClassroomContent();
             }
-        }).catch(function () {});
+        }).catch(function () {
+            revealClassroomContent();
+        });
     }
 
     startCloudHeader();

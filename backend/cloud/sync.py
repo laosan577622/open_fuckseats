@@ -425,6 +425,15 @@ def _parse_created_at(value):
     return parsed or timezone.now()
 
 
+def _parse_operation_time(value):
+    if not value:
+        return None
+    parsed = parse_datetime(str(value))
+    if parsed and timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed, timezone.get_current_timezone())
+    return parsed
+
+
 def sync_child_records(classroom, snapshot, device_id=''):
     CloudHistoryEntry.objects.filter(classroom=classroom).delete()
     history = snapshot.get('history')
@@ -467,6 +476,9 @@ def push_classroom_snapshot(user, payload):
 
     device_id = str(payload.get('device_id') or '')[:64]
     force = bool(payload.get('force'))
+    operation_at = _parse_operation_time(
+        payload.get('last_operation_at') or payload.get('local_operation_at') or payload.get('operation_time')
+    )
     client_version_value = payload.get('base_version')
     if client_version_value in (None, ''):
         client_version_value = payload.get('cloud_version')
@@ -501,7 +513,7 @@ def push_classroom_snapshot(user, payload):
     classroom.data_snapshot = snapshot
     classroom.version = int(classroom.version or 0) + 1
     classroom.last_modified_by = device_id
-    classroom.last_modified_at = timezone.now()
+    classroom.last_modified_at = operation_at or timezone.now()
     classroom.is_deleted = False
     classroom.save()
     sync_child_records(classroom, snapshot, device_id=device_id)
@@ -511,4 +523,6 @@ def push_classroom_snapshot(user, payload):
         'uuid': str(classroom.uuid),
         'version': classroom.version,
         'updated_at': classroom.updated_at.isoformat(),
+        'last_operation_at': classroom.last_modified_at.isoformat() if classroom.last_modified_at else None,
+        'last_modified_at': classroom.last_modified_at.isoformat() if classroom.last_modified_at else None,
     }
