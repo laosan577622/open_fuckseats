@@ -164,6 +164,95 @@ class Student(models.Model):
         verbose_name = "学生"
         verbose_name_plural = verbose_name
 
+
+class StudentTag(models.Model):
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='student_tags', verbose_name="所属班级")
+    name = models.CharField(max_length=40, verbose_name="标签名称")
+    color = models.CharField(max_length=20, default="#0a59f7", verbose_name="标签颜色")
+    description = models.CharField(max_length=160, blank=True, default='', verbose_name="标签说明")
+    sort_order = models.PositiveIntegerField(default=0, verbose_name="排序")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "学生标签"
+        verbose_name_plural = verbose_name
+        unique_together = ('classroom', 'name')
+        ordering = ['sort_order', 'name', 'pk']
+        indexes = [
+            models.Index(fields=['classroom', 'name'], name='student_tag_name_idx'),
+        ]
+
+    def __str__(self):
+        return f"{self.classroom.name}-{self.name}"
+
+
+class StudentTagMembership(models.Model):
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='student_tag_memberships', verbose_name="所属班级")
+    student = models.ForeignKey(Student, on_delete=models.CASCADE, related_name='tag_memberships', verbose_name="学生")
+    tag = models.ForeignKey(StudentTag, on_delete=models.CASCADE, related_name='memberships', verbose_name="标签")
+    note = models.CharField(max_length=120, blank=True, default='', verbose_name="备注")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "学生标签关系"
+        verbose_name_plural = verbose_name
+        unique_together = ('student', 'tag')
+        ordering = ['tag__sort_order', 'tag__name', 'student__name']
+        indexes = [
+            models.Index(fields=['classroom', 'tag'], name='tag_member_tag_idx'),
+            models.Index(fields=['classroom', 'student'], name='tag_member_student_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.classroom_id:
+            if self.tag_id:
+                self.classroom_id = self.tag.classroom_id
+            elif self.student_id:
+                self.classroom_id = self.student.classroom_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.student.name}-{self.tag.name}"
+
+
+class StudentTagRule(models.Model):
+    class RuleType(models.TextChoices):
+        MUST_AREA = 'must_area', '只能坐区域'
+        FORBID_AREA = 'forbid_area', '禁坐区域'
+        SEPARATE_SAME_TAG = 'separate_same_tag', '同标签保持距离'
+
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='student_tag_rules', verbose_name="所属班级")
+    tag = models.ForeignKey(StudentTag, on_delete=models.CASCADE, related_name='rules', verbose_name="标签")
+    rule_type = models.CharField(max_length=32, choices=RuleType.choices, verbose_name="规则类型")
+    row_min = models.PositiveIntegerField(null=True, blank=True, verbose_name="起始行")
+    row_max = models.PositiveIntegerField(null=True, blank=True, verbose_name="结束行")
+    col_min = models.PositiveIntegerField(null=True, blank=True, verbose_name="起始列")
+    col_max = models.PositiveIntegerField(null=True, blank=True, verbose_name="结束列")
+    distance = models.PositiveIntegerField(default=1, verbose_name="距离")
+    enabled = models.BooleanField(default=True, verbose_name="启用")
+    priority = models.PositiveIntegerField(default=0, verbose_name="优先级")
+    note = models.CharField(max_length=120, blank=True, default='', verbose_name="备注")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "学生标签排座规则"
+        verbose_name_plural = verbose_name
+        ordering = ['priority', 'created_at', 'pk']
+        indexes = [
+            models.Index(fields=['classroom', 'enabled'], name='tag_rule_enabled_idx'),
+            models.Index(fields=['classroom', 'tag'], name='tag_rule_tag_idx'),
+        ]
+
+    def save(self, *args, **kwargs):
+        if not self.classroom_id and self.tag_id:
+            self.classroom_id = self.tag.classroom_id
+        super().save(*args, **kwargs)
+
+    def __str__(self):
+        return f"{self.classroom.name}-{self.tag.name}-{self.get_rule_type_display()}"
+
 class Seat(models.Model):
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='seats')
     row = models.IntegerField(verbose_name="行")

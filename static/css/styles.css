@@ -1067,6 +1067,217 @@ input:focus {
     box-shadow: inset 0 0 0 2px rgba(15, 23, 42, 0.12);
 }
 
+.student-tag-badge {
+    display: inline-flex;
+    align-items: center;
+    font-size: 9px;
+    font-weight: 600;
+    padding: 1px 5px;
+    border-radius: 4px;
+    line-height: 1.2;
+    max-width: 56px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.tag-library {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.tag-library-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 8px;
+    border-radius: 8px;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    background: rgba(0, 0, 0, 0.02);
+    gap: 8px;
+    transition: background 0.15s;
+}
+
+.tag-library-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.tag-library-item-main {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    flex: 1;
+}
+
+.tag-library-color {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.tag-library-name {
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.tag-library-meta {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.tag-library-actions {
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    transition: opacity 0.15s;
+}
+
+.tag-library-item:hover .tag-library-actions {
+    opacity: 1;
+}
+
+.tag-library-actions .btn {
+    padding: 2px 8px;
+    font-size: 11px;
+}
+
+.tag-assign-form {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.tag-rule-form {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.tag-rule-form input,
+.tag-rule-form select {
+    padding: 6px 10px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.tag-rule-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.tag-rule-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(15, 23, 42, 0.06);
+    background: rgba(0, 0, 0, 0.02);
+    transition: background 0.15s;
+}
+
+.tag-rule-item:hover {
+    background: rgba(0, 0, 0, 0.04);
+}
+
+.tag-rule-item-disabled {
+    opacity: 0.5;
+}
+
+.tag-rule-item-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+}
+
+.tag-rule-item-title {
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.tag-rule-item-badges {
+    display: flex;
+    gap: 4px;
+}
+
+.tag-rule-item-summary {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+}
+
+.tag-rule-item-issues {
+    margin-top: 4px;
+}
+
+.tag-rule-issue {
+    font-size: 11px;
+    color: #dc2626;
+    padding: 2px 0;
+}
+
+.tag-rule-item-actions {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+}
+
+.tag-rule-item-actions .btn {
+    padding: 2px 8px;
+    font-size: 11px;
+}
+
+.tag-picker {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 32px;
+    padding: 6px 8px;
+    border: 1px solid rgba(15, 23, 42, 0.12);
+    border-radius: 8px;
+    background: #fff;
+    cursor: pointer;
+}
+
+.tag-picker-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    user-select: none;
+}
+
+.tag-picker-chip.selected {
+    box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.tag-picker-chip:not(.selected) {
+    opacity: 0.4;
+}
+
+.tag-picker-empty {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 20px;
+}
+
 .seat-info {
     font-size: 10px;
     color: var(--text-secondary);

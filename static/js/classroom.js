@@ -21,8 +21,12 @@ document.addEventListener('DOMContentLoaded', () => {
         setLeader: root.dataset.setLeaderUrl,
         toggleFixedSeat: root.dataset.toggleFixedSeatUrl,
         addStudent: root.dataset.addStudentUrl,
+        tags: root.dataset.tagsUrl,
+        tagsAssign: root.dataset.tagsAssignUrl,
+        tagRulesCreate: root.dataset.tagRulesCreateUrl,
     };
     const csrf = root.dataset.csrf;
+    const classroomIdForTags = root.dataset.classroomId || '';
 
     let selectedSeat = null;
     let lastHoveredSeat = null;
@@ -625,6 +629,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (student.is_fixed_seat) {
             badges.push('<span class="fixed-seat-badge">固定座位</span>');
         }
+        if (Array.isArray(student.tags)) {
+            student.tags.forEach(tag => {
+                badges.push(`<span class="student-tag-badge" style="background:${escapeAttr(tag.color || '#0a59f7')}22;color:${escapeAttr(tag.color || '#0a59f7')}" title="${escapeAttr(tag.name)}">${escapeHtml(tag.name)}</span>`);
+            });
+        }
         if (!badges.length) return '';
         return `<div class="seat-badge-row">${badges.join('')}</div>`;
     };
@@ -892,13 +901,14 @@ document.addEventListener('DOMContentLoaded', () => {
     let _sfKeyHandler = null;
     let _sfBackdropHandler = null;
 
-    function openStudentForm({ title = '添加学生', name = '', student_id = '', gender = '', score = '' } = {}) {
+    function openStudentForm({ title = '添加学生', name = '', student_id = '', gender = '', score = '', tag_ids = [] } = {}) {
         return new Promise((resolve) => {
             _sfTitle.textContent = title;
             _sfName.value = name;
             _sfSid.value = student_id;
             _sfGender.value = gender;
             _sfScore.value = score;
+            renderStudentFormTags(tagLibraryCache, tag_ids);
             if (_sfOkHandler) _sfOk.removeEventListener('click', _sfOkHandler);
             if (_sfCancelHandler) _sfCancel.removeEventListener('click', _sfCancelHandler);
             if (_sfKeyHandler) _sfModal.removeEventListener('keydown', _sfKeyHandler);
@@ -908,7 +918,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 const n = _sfName.value.trim();
                 if (!n) { _sfName.focus(); return; }
                 closeModal('student-form-modal');
-                resolve({ name: n, student_id: _sfSid.value.trim(), gender: _sfGender.value, score: _sfScore.value });
+                const selectedTags = getStudentFormSelectedTagIds();
+                const result = { name: n, student_id: _sfSid.value.trim(), gender: _sfGender.value, score: _sfScore.value };
+                if (selectedTags.length) { result.tag_ids = selectedTags; result.tag_mode = 'set'; }
+                resolve(result);
             };
             _sfCancelHandler = () => { closeModal('student-form-modal'); resolve(null); };
             _sfKeyHandler = (e) => { if (e.key === 'Enter') { e.preventDefault(); _sfOkHandler(); } };
@@ -931,6 +944,316 @@ document.addEventListener('DOMContentLoaded', () => {
     const notify = (message) => {
         showInlineToast(message);
     };
+
+    // ─── Tag System ───
+    let tagLibraryCache = [];
+    let tagRulesCache = [];
+    let editingTagRuleId = null;
+
+    const tagLibraryEl = document.getElementById('tagLibrary');
+    const tagAssignSelect = document.getElementById('tagAssignSelect');
+    const tagAssignMode = document.getElementById('tagAssignMode');
+    const tagAssignApplyBtn = document.getElementById('tagAssignApplyBtn');
+    const tagRuleTagSelect = document.getElementById('tagRuleTagSelect');
+    const tagRuleTypeSelect = document.getElementById('tagRuleTypeSelect');
+    const tagRuleAreaFields = document.getElementById('tagRuleAreaFields');
+    const tagRuleDistanceField = document.getElementById('tagRuleDistanceField');
+    const tagRuleRowMin = document.getElementById('tagRuleRowMin');
+    const tagRuleRowMax = document.getElementById('tagRuleRowMax');
+    const tagRuleColMin = document.getElementById('tagRuleColMin');
+    const tagRuleColMax = document.getElementById('tagRuleColMax');
+    const tagRuleDistance = document.getElementById('tagRuleDistance');
+    const tagRuleNote = document.getElementById('tagRuleNote');
+    const tagRuleCreateBtn = document.getElementById('tagRuleCreateBtn');
+    const tagRuleCancelEditBtn = document.getElementById('tagRuleCancelEditBtn');
+    const tagRuleListEl = document.getElementById('tagRuleList');
+    const btnCreateTag = document.getElementById('btn-create-tag');
+
+    const _tagModal = document.getElementById('tag-form-modal');
+    const _tagTitle = document.getElementById('tagFormTitle');
+    const _tagName = document.getElementById('tagFormName');
+    const _tagColor = document.getElementById('tagFormColor');
+    const _tagDesc = document.getElementById('tagFormDesc');
+    const _tagOk = document.getElementById('tagFormSubmit');
+    const _tagCancel = document.getElementById('tagFormCancel');
+    let _tagResolve = null;
+
+    function openTagForm({ title = '创建标签', name = '', color = '#0a59f7', description = '' } = {}) {
+        return new Promise((resolve) => {
+            _tagTitle.textContent = title;
+            _tagName.value = name;
+            _tagColor.value = color;
+            _tagDesc.value = description;
+            _tagResolve = resolve;
+            const okHandler = () => {
+                const n = _tagName.value.trim();
+                if (!n) { _tagName.focus(); return; }
+                cleanup();
+                closeModal('tag-form-modal');
+                resolve({ name: n, color: _tagColor.value, description: _tagDesc.value.trim() });
+            };
+            const cancelHandler = () => { cleanup(); closeModal('tag-form-modal'); resolve(null); };
+            const keyHandler = (e) => { if (e.key === 'Enter') { e.preventDefault(); okHandler(); } };
+            const backdropHandler = (e) => { if (e.target === _tagModal) cancelHandler(); };
+            const cleanup = () => {
+                _tagOk.removeEventListener('click', okHandler);
+                _tagCancel.removeEventListener('click', cancelHandler);
+                _tagModal.removeEventListener('keydown', keyHandler);
+                _tagModal.removeEventListener('click', backdropHandler);
+            };
+            _tagOk.addEventListener('click', okHandler);
+            _tagCancel.addEventListener('click', cancelHandler);
+            _tagModal.addEventListener('keydown', keyHandler);
+            _tagModal.addEventListener('click', backdropHandler);
+            openModal('tag-form-modal');
+            requestAnimationFrame(() => _tagName.focus());
+        });
+    }
+
+    function renderTagLibrary(tags) {
+        tagLibraryCache = tags || [];
+        if (!tagLibraryEl) return;
+        if (!tagLibraryCache.length) {
+            tagLibraryEl.innerHTML = '<div class="empty-hint">暂无标签，点击 + 创建</div>';
+            return;
+        }
+        tagLibraryEl.innerHTML = tagLibraryCache.map(tag => `
+            <div class="tag-library-item" data-tag-id="${tag.id}">
+                <div class="tag-library-item-main">
+                    <span class="tag-library-color" style="background:${escapeAttr(tag.color)}"></span>
+                    <span class="tag-library-name">${escapeHtml(tag.name)}</span>
+                    <span class="tag-library-meta">${tag.member_count || 0}人 / ${tag.rule_count || 0}条规则</span>
+                </div>
+                <div class="tag-library-actions">
+                    <button type="button" class="btn btn-secondary" data-tag-action="edit">编辑</button>
+                    <button type="button" class="btn btn-secondary" data-tag-action="delete">删除</button>
+                </div>
+            </div>
+        `).join('');
+
+        updateTagSelects(tagLibraryCache);
+
+        tagLibraryEl.querySelectorAll('[data-tag-action="edit"]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const item = btn.closest('.tag-library-item');
+                const tagId = item.dataset.tagId;
+                const tag = tagLibraryCache.find(t => String(t.id) === tagId);
+                if (!tag) return;
+                const data = await openTagForm({ title: '编辑标签', name: tag.name, color: tag.color, description: tag.description || '' });
+                if (!data) return;
+                handleResponse(postJson(tag.update_url, data));
+            });
+        });
+
+        tagLibraryEl.querySelectorAll('[data-tag-action="delete"]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const item = btn.closest('.tag-library-item');
+                const tagId = item.dataset.tagId;
+                const tag = tagLibraryCache.find(t => String(t.id) === tagId);
+                if (!tag) return;
+                const confirmed = await showConfirmModal(`确定删除标签"${tag.name}"？关联的学生标签和规则也会被删除。`, { title: '删除标签' });
+                if (!confirmed) return;
+                handleResponse(postJson(tag.delete_url, {}));
+            });
+        });
+    }
+
+    function updateTagSelects(tags) {
+        const options = tags.map(t => `<option value="${t.id}">${escapeHtml(t.name)}</option>`).join('');
+        if (tagAssignSelect) tagAssignSelect.innerHTML = '<option value="">选择标签</option>' + options;
+        if (tagRuleTagSelect) tagRuleTagSelect.innerHTML = '<option value="">选择标签</option>' + options;
+    }
+
+    function renderTagRules(rules) {
+        tagRulesCache = rules || [];
+        if (!tagRuleListEl) return;
+        if (!tagRulesCache.length) {
+            tagRuleListEl.innerHTML = '<div class="empty-hint">暂无规则</div>';
+            return;
+        }
+        tagRuleListEl.innerHTML = tagRulesCache.map(rule => {
+            const statusLabel = !rule.enabled ? '已停用' : rule.issue_count > 0 ? '有问题' : '正常';
+            const statusClass = !rule.enabled ? 'constraint-badge-disabled' : rule.issue_count > 0 ? 'constraint-badge-warning' : 'constraint-badge-ok';
+            const issuesHtml = (rule.issues || []).map(i => `<div class="tag-rule-issue">${escapeHtml(i.message || '')}</div>`).join('');
+            return `
+                <div class="tag-rule-item${rule.enabled ? '' : ' tag-rule-item-disabled'}" data-rule-id="${rule.pk}">
+                    <div class="tag-rule-item-header">
+                        <span class="tag-rule-item-title">${escapeHtml(rule.rule_type_display || rule.rule_type)}</span>
+                        <div class="tag-rule-item-badges">
+                            <span class="student-tag-badge" style="background:${escapeAttr(rule.tag_color || '#0a59f7')}22;color:${escapeAttr(rule.tag_color || '#0a59f7')}">${escapeHtml(rule.tag_name)}</span>
+                            <span class="constraint-badge ${statusClass}">${statusLabel}</span>
+                        </div>
+                    </div>
+                    <div class="tag-rule-item-summary">${escapeHtml(rule.summary || '')}</div>
+                    ${rule.note ? `<div class="tag-rule-item-summary">备注：${escapeHtml(rule.note)}</div>` : ''}
+                    ${issuesHtml ? `<div class="tag-rule-item-issues">${issuesHtml}</div>` : ''}
+                    <div class="tag-rule-item-actions">
+                        <button type="button" class="btn btn-secondary" data-rule-action="edit">编辑</button>
+                        <button type="button" class="btn btn-secondary" data-rule-action="toggle">${rule.enabled ? '停用' : '启用'}</button>
+                        <button type="button" class="btn btn-secondary" data-rule-action="delete">删除</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+
+        tagRuleListEl.querySelectorAll('[data-rule-action="edit"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const ruleId = btn.closest('.tag-rule-item').dataset.ruleId;
+                const rule = tagRulesCache.find(r => String(r.pk) === ruleId);
+                if (!rule) return;
+                editingTagRuleId = rule.pk;
+                if (tagRuleTagSelect) tagRuleTagSelect.value = rule.tag_id;
+                if (tagRuleTypeSelect) { tagRuleTypeSelect.value = rule.rule_type; syncTagRuleFields(); }
+                if (tagRuleRowMin) tagRuleRowMin.value = rule.row_min || '';
+                if (tagRuleRowMax) tagRuleRowMax.value = rule.row_max || '';
+                if (tagRuleColMin) tagRuleColMin.value = rule.col_min || '';
+                if (tagRuleColMax) tagRuleColMax.value = rule.col_max || '';
+                if (tagRuleDistance) tagRuleDistance.value = rule.distance || 1;
+                if (tagRuleNote) tagRuleNote.value = rule.note || '';
+                if (tagRuleCreateBtn) tagRuleCreateBtn.textContent = '更新规则';
+                if (tagRuleCancelEditBtn) tagRuleCancelEditBtn.hidden = false;
+            });
+        });
+
+        tagRuleListEl.querySelectorAll('[data-rule-action="toggle"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+                const ruleId = btn.closest('.tag-rule-item').dataset.ruleId;
+                const rule = tagRulesCache.find(r => String(r.pk) === ruleId);
+                if (!rule) return;
+                handleResponse(postJson(rule.toggle_url, { enabled: !rule.enabled }));
+            });
+        });
+
+        tagRuleListEl.querySelectorAll('[data-rule-action="delete"]').forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const ruleId = btn.closest('.tag-rule-item').dataset.ruleId;
+                const rule = tagRulesCache.find(r => String(r.pk) === ruleId);
+                if (!rule) return;
+                const confirmed = await showConfirmModal(`确定删除标签规则"${rule.summary || rule.rule_type_display}"？`, { title: '删除规则' });
+                if (!confirmed) return;
+                handleResponse(postJson(rule.delete_url, {}));
+            });
+        });
+    }
+
+    function syncTagRuleFields() {
+        if (!tagRuleTypeSelect) return;
+        const type = tagRuleTypeSelect.value;
+        if (tagRuleAreaFields) tagRuleAreaFields.style.display = type === 'separate_same_tag' ? 'none' : '';
+        if (tagRuleDistanceField) tagRuleDistanceField.style.display = type === 'separate_same_tag' ? '' : 'none';
+    }
+
+    function resetTagRuleForm() {
+        editingTagRuleId = null;
+        if (tagRuleTagSelect) tagRuleTagSelect.value = '';
+        if (tagRuleTypeSelect) { tagRuleTypeSelect.value = 'must_area'; syncTagRuleFields(); }
+        if (tagRuleRowMin) tagRuleRowMin.value = '';
+        if (tagRuleRowMax) tagRuleRowMax.value = '';
+        if (tagRuleColMin) tagRuleColMin.value = '';
+        if (tagRuleColMax) tagRuleColMax.value = '';
+        if (tagRuleDistance) tagRuleDistance.value = '1';
+        if (tagRuleNote) tagRuleNote.value = '';
+        if (tagRuleCreateBtn) tagRuleCreateBtn.textContent = '添加规则';
+        if (tagRuleCancelEditBtn) tagRuleCancelEditBtn.hidden = true;
+    }
+
+    if (tagRuleTypeSelect) {
+        tagRuleTypeSelect.addEventListener('change', syncTagRuleFields);
+        syncTagRuleFields();
+    }
+
+    if (tagRuleCancelEditBtn) {
+        tagRuleCancelEditBtn.addEventListener('click', resetTagRuleForm);
+    }
+
+    if (tagRuleCreateBtn) {
+        tagRuleCreateBtn.addEventListener('click', () => {
+            const tagId = tagRuleTagSelect ? tagRuleTagSelect.value : '';
+            const ruleType = tagRuleTypeSelect ? tagRuleTypeSelect.value : '';
+            if (!tagId) { notify('请选择标签'); return; }
+            const payload = { tag_id: parseInt(tagId), rule_type: ruleType, enabled: true };
+            if (ruleType !== 'separate_same_tag') {
+                if (tagRuleRowMin.value) payload.row_min = parseInt(tagRuleRowMin.value);
+                if (tagRuleRowMax.value) payload.row_max = parseInt(tagRuleRowMax.value);
+                if (tagRuleColMin.value) payload.col_min = parseInt(tagRuleColMin.value);
+                if (tagRuleColMax.value) payload.col_max = parseInt(tagRuleColMax.value);
+            } else {
+                payload.distance = parseInt(tagRuleDistance.value) || 1;
+            }
+            if (tagRuleNote.value.trim()) payload.note = tagRuleNote.value.trim();
+            const url = editingTagRuleId
+                ? tagRulesCache.find(r => r.pk === editingTagRuleId)?.update_url
+                : urls.tagRulesCreate;
+            if (!url) return;
+            handleResponse(postJson(url, payload), () => {
+                resetTagRuleForm();
+            });
+        });
+    }
+
+    if (btnCreateTag) {
+        btnCreateTag.addEventListener('click', async () => {
+            const data = await openTagForm({ title: '创建标签' });
+            if (!data) return;
+            handleResponse(postJson(urls.tags, data));
+        });
+    }
+
+    if (tagAssignApplyBtn) {
+        tagAssignApplyBtn.addEventListener('click', () => {
+            const tagId = tagAssignSelect ? tagAssignSelect.value : '';
+            const mode = tagAssignMode ? tagAssignMode.value : 'add';
+            if (!tagId) { notify('请选择标签'); return; }
+            const studentIds = [];
+            selectedSeats.forEach(key => {
+                const seat = seatElements.find(el => `${el.dataset.row}-${el.dataset.col}` === key);
+                if (seat && seat.dataset.studentId) studentIds.push(parseInt(seat.dataset.studentId));
+            });
+            if (!studentIds.length) { notify('请先选中有学生的座位'); return; }
+            handleResponse(postJson(urls.tagsAssign, {
+                student_ids: studentIds,
+                tag_ids: [parseInt(tagId)],
+                mode: mode,
+            }));
+        });
+    }
+
+    function renderStudentFormTags(allTags, selectedTagIds) {
+        const container = document.getElementById('studentFormTags');
+        if (!container) return;
+        if (!allTags || !allTags.length) {
+            container.innerHTML = '<span class="tag-picker-empty">暂无标签</span>';
+            return;
+        }
+        const selectedSet = new Set((selectedTagIds || []).map(String));
+        container.innerHTML = allTags.map(tag => {
+            const sel = selectedSet.has(String(tag.id));
+            return `<span class="tag-picker-chip${sel ? ' selected' : ''}"
+                data-tag-id="${tag.id}"
+                style="background:${escapeAttr(tag.color)}22;color:${escapeAttr(tag.color)}"
+                >${escapeHtml(tag.name)}</span>`;
+        }).join('');
+        container.querySelectorAll('.tag-picker-chip').forEach(chip => {
+            chip.addEventListener('click', () => chip.classList.toggle('selected'));
+        });
+    }
+
+    function getStudentFormSelectedTagIds() {
+        const container = document.getElementById('studentFormTags');
+        if (!container) return [];
+        return Array.from(container.querySelectorAll('.tag-picker-chip.selected')).map(el => parseInt(el.dataset.tagId));
+    }
+
+    // collapsible toggle for tag sections
+    document.querySelectorAll('#tagAssignToggle, #tagRuleToggle').forEach(toggle => {
+        if (!toggle) return;
+        toggle.addEventListener('click', () => {
+            const section = toggle.closest('.collapsible-section');
+            if (section) section.classList.toggle('open');
+        });
+    });
+
+    // ─── End Tag System ───
 
     const classroomId = root.dataset.classroomId || '';
     const extensionsListUrl = root.dataset.extensionsListUrl || '/extensions/';
@@ -2972,16 +3295,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (data.unseated && data.unseated.length) {
                         unseatedList.innerHTML = data.unseated.map(student => {
                             const score = student.score_display ? `${student.score_display}分` : '';
+                            const tagBadges = Array.isArray(student.tags) ? student.tags.map(tag =>
+                                `<span class="student-tag-badge" style="background:${escapeAttr(tag.color || '#0a59f7')}22;color:${escapeAttr(tag.color || '#0a59f7')}" title="${escapeAttr(tag.name)}">${escapeHtml(tag.name)}</span>`
+                            ).join('') : '';
                             const badges = [
                                 student.podium_guardian_side === 'left' ? '<span class="guardian-badge left-guard">左护法</span>' : '',
                                 student.podium_guardian_side === 'right' ? '<span class="guardian-badge right-guard">右护法</span>' : '',
                                 student.is_fixed_seat ? '<span class="fixed-seat-badge">固定座位</span>' : '',
+                                tagBadges,
                             ].filter(Boolean).join(' ');
+                            const studentTagIds = Array.isArray(student.tags) ? student.tags.map(t => t.id).join(',') : '';
                             return `
                                 <div class="unseated-item" draggable="true" data-student-id="${student.id}"
                                     data-student-sid="${escapeAttr(student.student_id || '')}"
                                     data-student-gender="${escapeAttr(student.gender || '')}"
                                     data-student-score="${student.score || 0}"
+                                    data-student-tag-ids="${escapeAttr(studentTagIds)}"
                                     data-update-url="${escapeAttr(student.update_url || '')}">
                                     <div>
                                         <div class="unseated-name">${escapeHtml(student.name)}${badges ? ` ${badges}` : ''}</div>
@@ -3011,6 +3340,13 @@ document.addEventListener('DOMContentLoaded', () => {
                             resetConstraintForm();
                         }
                     }
+                }
+
+                if (Array.isArray(data.tags)) {
+                    renderTagLibrary(data.tags);
+                }
+                if (Array.isArray(data.tag_rules)) {
+                    renderTagRules(data.tag_rules);
                 }
 
                 if (data.sync_meta && window.FuckSeatsCloudSync) {
@@ -3802,6 +4138,16 @@ document.addEventListener('DOMContentLoaded', () => {
     initFileMenus();
     initSeatsImport();
     initBsceImport();
+
+    if (urls.state) {
+        fetch(`${urls.state}?t=${Date.now()}`, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+            .then(res => res.json())
+            .then(data => {
+                if (Array.isArray(data.tags)) renderTagLibrary(data.tags);
+                if (Array.isArray(data.tag_rules)) renderTagRules(data.tag_rules);
+            })
+            .catch(() => {});
+    }
     if (new URLSearchParams(window.location.search).get('open') === 'bsce-import') {
         const bsceModal = document.getElementById('bsce-import-modal');
         if (bsceModal) openModal('bsce-import-modal');
@@ -4298,12 +4644,14 @@ document.addEventListener('DOMContentLoaded', () => {
             const seat = ctxTargetSeat;
             hideContextMenu();
             const nameEl = seat.querySelector('.seat-name');
+            const existingTagIds = (seat.dataset.studentTagIds || '').split(',').filter(Boolean).map(Number);
             const data = await openStudentForm({
                 title: '编辑学生信息',
                 name: nameEl ? nameEl.textContent.trim() : '',
                 student_id: seat.dataset.studentSid || '',
                 gender: seat.dataset.studentGender || '',
                 score: seat.dataset.studentScore || '',
+                tag_ids: existingTagIds,
             });
             if (!data) return;
             const updateUrl = seat.dataset.updateUrl;

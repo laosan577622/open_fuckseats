@@ -14,6 +14,9 @@ from .models import (
     SeatConstraint,
     SeatGroup,
     Student,
+    StudentTag,
+    StudentTagMembership,
+    StudentTagRule,
 )
 
 
@@ -69,6 +72,9 @@ for _model in (
     SeatGroup,
     LayoutSnapshot,
     SeatConstraint,
+    StudentTag,
+    StudentTagMembership,
+    StudentTagRule,
     FutureModeConfig,
     AIConversation,
     ClassroomHistoryEntry,

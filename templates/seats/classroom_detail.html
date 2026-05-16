@@ -280,6 +280,9 @@
     data-redo-url="{% url 'redo_action' classroom.pk %}" data-set-leader-url="{% url 'set_group_leader' classroom.pk %}"
     data-toggle-fixed-seat-url="{% url 'toggle_fixed_seat' classroom.pk %}"
     data-add-student-url="{% url 'add_student' classroom.pk %}"
+    data-tags-url="{% url 'student_tags' classroom.pk %}"
+    data-tags-assign-url="{% url 'assign_student_tags' classroom.pk %}"
+    data-tag-rules-create-url="{% url 'create_tag_rule' classroom.pk %}"
     data-command-url="{% url 'classroom_command' classroom.pk %}"
     data-csrf="{{ csrf_token }}">
 
@@ -353,6 +356,7 @@
             <div class="tab-header" id="main-tab-header">
                 <button type="button" class="tab-btn active" data-tab="students">学生</button>
                 <button type="button" class="tab-btn" data-tab="groups">小组</button>
+                <button type="button" class="tab-btn" data-tab="tags">标签</button>
                 <button type="button" class="tab-btn" data-tab="constraints">约束</button>
                 <button type="button" class="tab-btn" data-tab="files">文件</button>
             </div>
@@ -611,6 +615,79 @@
                     </div>
                 </div>
 
+                <div class="tab-panel" data-tab-panel="tags">
+                    <div class="panel-header">
+                        <h3>标签管理</h3>
+                        <button type="button" class="icon-btn" id="btn-create-tag" title="创建标签" style="width:24px;height:24px;font-size:16px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;">+</button>
+                    </div>
+                    <div class="panel-note">给学生打标签，按标签设置排座规则。</div>
+
+                    <div class="tag-library" id="tagLibrary">
+                        <div class="empty-hint">暂无标签</div>
+                    </div>
+
+                    <div class="collapsible-section" id="tagAssignSection">
+                        <button type="button" class="collapsible-toggle" id="tagAssignToggle">
+                            <svg class="collapsible-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            批量打标
+                        </button>
+                        <div class="collapsible-body" id="tagAssignBody">
+                            <div class="panel-note">选中多个座位后，可批量为学生添加或移除标签。</div>
+                            <div class="tag-assign-form">
+                                <select id="tagAssignSelect" class="group-select-control">
+                                    <option value="">选择标签</option>
+                                </select>
+                                <select id="tagAssignMode" class="group-select-control">
+                                    <option value="add">追加</option>
+                                    <option value="remove">移除</option>
+                                    <option value="set">替换</option>
+                                    <option value="toggle">切换</option>
+                                </select>
+                                <button type="button" class="btn btn-primary" id="tagAssignApplyBtn">应用</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="collapsible-section" id="tagRuleSection">
+                        <button type="button" class="collapsible-toggle" id="tagRuleToggle">
+                            <svg class="collapsible-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            标签规则
+                        </button>
+                        <div class="collapsible-body" id="tagRuleBody">
+                            <div class="panel-note">基于标签设置排座规则，自动排座和手动移动时自动校验。</div>
+                            <div class="tag-rule-form" id="tagRuleForm">
+                                <select id="tagRuleTagSelect" class="group-select-control">
+                                    <option value="">选择标签</option>
+                                </select>
+                                <select id="tagRuleTypeSelect" class="group-select-control">
+                                    <option value="must_area">只能坐区域</option>
+                                    <option value="forbid_area">不能坐区域</option>
+                                    <option value="separate_same_tag">同标签保持距离</option>
+                                </select>
+                                <div class="tag-rule-area-fields" id="tagRuleAreaFields">
+                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                                        <input type="number" id="tagRuleRowMin" placeholder="起始行" min="1">
+                                        <input type="number" id="tagRuleRowMax" placeholder="结束行" min="1">
+                                        <input type="number" id="tagRuleColMin" placeholder="起始列" min="1">
+                                        <input type="number" id="tagRuleColMax" placeholder="结束列" min="1">
+                                    </div>
+                                </div>
+                                <div class="tag-rule-distance-field" id="tagRuleDistanceField" style="display:none;">
+                                    <input type="number" id="tagRuleDistance" placeholder="曼哈顿距离" min="1" value="1">
+                                </div>
+                                <input type="text" id="tagRuleNote" placeholder="备注（可选）">
+                                <div class="tool-row">
+                                    <button type="button" class="btn btn-primary" id="tagRuleCreateBtn">添加规则</button>
+                                    <button type="button" class="btn btn-secondary" id="tagRuleCancelEditBtn" hidden>取消编辑</button>
+                                </div>
+                            </div>
+                            <div class="tag-rule-list" id="tagRuleList">
+                                <div class="empty-hint">暂无规则</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="tab-panel" data-tab-panel="files">
                     <div class="panel-header">
                         <h3>文件导入导出</h3>
@@ -734,9 +811,37 @@
                     <input type="number" id="studentFormScore" step="any" placeholder="选填" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
                 </div>
             </div>
+            <div id="studentFormTagsWrap">
+                <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">标签</label>
+                <div id="studentFormTags" class="tag-picker" style="margin-top:4px;"></div>
+            </div>
             <div class="modal-actions" style="margin-top: 20px;">
                 <button type="button" class="btn btn-secondary" id="studentFormCancel">取消</button>
                 <button type="button" class="btn btn-primary" id="studentFormSubmit">确定</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="tag-form-modal" class="modal">
+        <div class="modal-content" style="max-width: 400px;">
+            <h3 id="tagFormTitle" style="margin: 0 0 16px; font-size: 16px; font-weight: 600;">创建标签</h3>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div>
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">标签名称 *</label>
+                    <input type="text" id="tagFormName" placeholder="如：近视、班干部" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">颜色</label>
+                    <input type="color" id="tagFormColor" value="#0a59f7" style="width:100%; height:36px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; padding:2px; cursor:pointer; margin-top:4px;">
+                </div>
+                <div>
+                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">描述</label>
+                    <input type="text" id="tagFormDesc" placeholder="选填" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                </div>
+            </div>
+            <div class="modal-actions" style="margin-top: 20px;">
+                <button type="button" class="btn btn-secondary" id="tagFormCancel">取消</button>
+                <button type="button" class="btn btn-primary" id="tagFormSubmit">确定</button>
             </div>
         </div>
     </div>

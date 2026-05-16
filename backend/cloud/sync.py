@@ -17,6 +17,9 @@ TOP_LEVEL_KEYS = {
     'groups',
     'students',
     'constraints',
+    'student_tags',
+    'student_tag_memberships',
+    'student_tag_rules',
     'current_state',
     'history',
     'ai_conversations',
@@ -32,7 +35,17 @@ CLASSROOM_KEYS = {
     'right_guardian_student_id',
     'right_guardian_student_name',
 }
-CURRENT_STATE_KEYS = {'classroom', 'students', 'groups', 'seats', 'constraints', 'layout_snapshots'}
+CURRENT_STATE_KEYS = {
+    'classroom',
+    'students',
+    'groups',
+    'seats',
+    'constraints',
+    'student_tags',
+    'student_tag_memberships',
+    'student_tag_rules',
+    'layout_snapshots',
+}
 STATE_CLASSROOM_KEYS = {'pk', 'name', 'rows', 'cols', 'left_guardian_student_pk', 'right_guardian_student_pk', 'created_at'}
 STUDENT_KEYS = {'name', 'student_id', 'gender', 'score'}
 STATE_STUDENT_KEYS = {'pk', 'name', 'student_id', 'gender', 'score'}
@@ -55,6 +68,39 @@ CONSTRAINT_KEYS = {
     'note',
 }
 STATE_CONSTRAINT_KEYS = {'pk', 'constraint_type', 'student_pk', 'target_student_pk', 'row', 'col', 'distance', 'enabled', 'note', 'created_at'}
+STUDENT_TAG_KEYS = {'tag_pk', 'name', 'color', 'description', 'sort_order'}
+STATE_STUDENT_TAG_KEYS = {'pk', 'name', 'color', 'description', 'sort_order', 'created_at', 'updated_at'}
+STUDENT_TAG_MEMBERSHIP_KEYS = {'student_pk', 'student_id', 'student_name', 'tag_pk', 'tag_name', 'note'}
+STATE_STUDENT_TAG_MEMBERSHIP_KEYS = {'pk', 'student_pk', 'tag_pk', 'note', 'created_at'}
+STUDENT_TAG_RULE_KEYS = {
+    'tag_rule_pk',
+    'tag_pk',
+    'tag_name',
+    'rule_type',
+    'row_min',
+    'row_max',
+    'col_min',
+    'col_max',
+    'distance',
+    'enabled',
+    'priority',
+    'note',
+}
+STATE_STUDENT_TAG_RULE_KEYS = {
+    'pk',
+    'tag_pk',
+    'rule_type',
+    'row_min',
+    'row_max',
+    'col_min',
+    'col_max',
+    'distance',
+    'enabled',
+    'priority',
+    'note',
+    'created_at',
+    'updated_at',
+}
 LAYOUT_SNAPSHOT_KEYS = {'pk', 'name', 'data', 'created_at'}
 HISTORY_KEYS = {'entries'}
 HISTORY_ENTRY_KEYS = {'action_type', 'payload', 'is_applied', 'created_at'}
@@ -71,6 +117,7 @@ CONSTRAINT_TYPES = {
     'must_together',
     'forbid_together',
 }
+STUDENT_TAG_RULE_TYPES = {'must_area', 'forbid_area', 'separate_same_tag'}
 AI_ROLES = {'user', 'assistant', 'system', 'tool'}
 
 
@@ -214,6 +261,56 @@ def _validate_constraint_payload(item, path, allowed_keys, rows, cols):
         raise ValueError(f'{_format_path(path)} enabled 必须是布尔值')
 
 
+def _validate_student_tag_payload(item, path, allowed_keys):
+    item = _ensure_dict(item, path)
+    _reject_unknown_keys(item, allowed_keys, path)
+    pk_key = 'pk' if 'pk' in allowed_keys else 'tag_pk'
+    if pk_key in item:
+        _to_int(item.get(pk_key), f'{path}.{pk_key}', minimum=1, allow_none=True)
+    if not str(item.get('name') or '').strip():
+        raise ValueError(f'{_format_path(path)} 缺少标签名称')
+    _to_int(item.get('sort_order') or 0, f'{path}.sort_order', minimum=0)
+
+
+def _validate_student_tag_membership_payload(item, path, allowed_keys):
+    item = _ensure_dict(item, path)
+    _reject_unknown_keys(item, allowed_keys, path)
+    if 'pk' in allowed_keys:
+        _to_int(item.get('pk'), f'{path}.pk', minimum=1, allow_none=True)
+    _to_int(item.get('student_pk'), f'{path}.student_pk', minimum=1)
+    _to_int(item.get('tag_pk'), f'{path}.tag_pk', minimum=1)
+
+
+def _validate_axis_range(item, path, prefix, maximum):
+    min_key = f'{prefix}_min'
+    max_key = f'{prefix}_max'
+    start = _to_int(item.get(min_key), f'{path}.{min_key}', minimum=1, maximum=maximum, allow_none=True)
+    end = _to_int(item.get(max_key), f'{path}.{max_key}', minimum=1, maximum=maximum, allow_none=True)
+    if start is not None and end is not None and start > end:
+        raise ValueError(f'{_format_path(path)} {prefix} 起点不能大于终点')
+    return start, end
+
+
+def _validate_student_tag_rule_payload(item, path, allowed_keys, rows, cols):
+    item = _ensure_dict(item, path)
+    _reject_unknown_keys(item, allowed_keys, path)
+    pk_key = 'pk' if 'pk' in allowed_keys else 'tag_rule_pk'
+    if pk_key in item:
+        _to_int(item.get(pk_key), f'{path}.{pk_key}', minimum=1, allow_none=True)
+    _to_int(item.get('tag_pk'), f'{path}.tag_pk', minimum=1)
+    rule_type = str(item.get('rule_type') or '').strip()
+    if rule_type not in STUDENT_TAG_RULE_TYPES:
+        raise ValueError(f'{_format_path(path)} 标签规则类型不合法')
+    row_min, row_max = _validate_axis_range(item, path, 'row', rows)
+    col_min, col_max = _validate_axis_range(item, path, 'col', cols)
+    if rule_type in {'must_area', 'forbid_area'} and row_min is None and row_max is None and col_min is None and col_max is None:
+        raise ValueError(f'{_format_path(path)} 标签区域规则缺少行列范围')
+    _to_int(item.get('distance') or 1, f'{path}.distance', minimum=1)
+    _to_int(item.get('priority') or 0, f'{path}.priority', minimum=0)
+    if item.get('enabled') not in (None, True, False):
+        raise ValueError(f'{_format_path(path)} enabled 必须是布尔值')
+
+
 def _validate_classroom_payload(classroom, path, allowed_keys=CLASSROOM_KEYS):
     classroom = _ensure_dict(classroom, path)
     _reject_unknown_keys(classroom, allowed_keys, path)
@@ -242,7 +339,17 @@ def _validate_seat_grid(seats, path, rows, cols, allowed_keys):
 
 def _validate_layout_payload_data(data, path):
     data = _ensure_dict(data, path)
-    allowed = {'meta', 'classroom', 'seats', 'groups', 'students', 'constraints'}
+    allowed = {
+        'meta',
+        'classroom',
+        'seats',
+        'groups',
+        'students',
+        'constraints',
+        'student_tags',
+        'student_tag_memberships',
+        'student_tag_rules',
+    }
     _reject_unknown_keys(data, allowed, path)
     _validate_meta(data.get('meta'), f'{path}.meta', require_full_schema=False)
     rows, cols = _validate_classroom_payload(data.get('classroom'), f'{path}.classroom')
@@ -255,6 +362,19 @@ def _validate_layout_payload_data(data, path):
     if 'constraints' in data:
         for index, item in enumerate(_ensure_list(data.get('constraints'), f'{path}.constraints')):
             _validate_constraint_payload(item, f'{path}.constraints[{index}]', CONSTRAINT_KEYS, rows, cols)
+    if 'student_tags' in data:
+        for index, item in enumerate(_ensure_list(data.get('student_tags'), f'{path}.student_tags')):
+            _validate_student_tag_payload(item, f'{path}.student_tags[{index}]', STUDENT_TAG_KEYS)
+    if 'student_tag_memberships' in data:
+        for index, item in enumerate(_ensure_list(data.get('student_tag_memberships'), f'{path}.student_tag_memberships')):
+            _validate_student_tag_membership_payload(
+                item,
+                f'{path}.student_tag_memberships[{index}]',
+                STUDENT_TAG_MEMBERSHIP_KEYS,
+            )
+    if 'student_tag_rules' in data:
+        for index, item in enumerate(_ensure_list(data.get('student_tag_rules'), f'{path}.student_tag_rules')):
+            _validate_student_tag_rule_payload(item, f'{path}.student_tag_rules[{index}]', STUDENT_TAG_RULE_KEYS, rows, cols)
 
 
 def _validate_current_state(state, path):
@@ -268,6 +388,25 @@ def _validate_current_state(state, path):
     _validate_seat_grid(state.get('seats'), f'{path}.seats', rows, cols, STATE_SEAT_KEYS)
     for index, item in enumerate(_ensure_list(state.get('constraints'), f'{path}.constraints')):
         _validate_constraint_payload(item, f'{path}.constraints[{index}]', STATE_CONSTRAINT_KEYS, rows, cols)
+    if 'student_tags' in state:
+        for index, item in enumerate(_ensure_list(state.get('student_tags'), f'{path}.student_tags')):
+            _validate_student_tag_payload(item, f'{path}.student_tags[{index}]', STATE_STUDENT_TAG_KEYS)
+    if 'student_tag_memberships' in state:
+        for index, item in enumerate(_ensure_list(state.get('student_tag_memberships'), f'{path}.student_tag_memberships')):
+            _validate_student_tag_membership_payload(
+                item,
+                f'{path}.student_tag_memberships[{index}]',
+                STATE_STUDENT_TAG_MEMBERSHIP_KEYS,
+            )
+    if 'student_tag_rules' in state:
+        for index, item in enumerate(_ensure_list(state.get('student_tag_rules'), f'{path}.student_tag_rules')):
+            _validate_student_tag_rule_payload(
+                item,
+                f'{path}.student_tag_rules[{index}]',
+                STATE_STUDENT_TAG_RULE_KEYS,
+                rows,
+                cols,
+            )
     for index, item in enumerate(_ensure_list(state.get('layout_snapshots'), f'{path}.layout_snapshots')):
         item = _ensure_dict(item, f'{path}.layout_snapshots[{index}]')
         _reject_unknown_keys(item, LAYOUT_SNAPSHOT_KEYS, f'{path}.layout_snapshots[{index}]')
@@ -333,6 +472,19 @@ def validate_fuckseats_snapshot(data):
     _validate_seat_grid(data.get('seats'), 'seats', rows, cols, SEAT_KEYS)
     for index, item in enumerate(_ensure_list(data.get('constraints'), 'constraints')):
         _validate_constraint_payload(item, f'constraints[{index}]', CONSTRAINT_KEYS, rows, cols)
+    if 'student_tags' in data:
+        for index, item in enumerate(_ensure_list(data.get('student_tags'), 'student_tags')):
+            _validate_student_tag_payload(item, f'student_tags[{index}]', STUDENT_TAG_KEYS)
+    if 'student_tag_memberships' in data:
+        for index, item in enumerate(_ensure_list(data.get('student_tag_memberships'), 'student_tag_memberships')):
+            _validate_student_tag_membership_payload(
+                item,
+                f'student_tag_memberships[{index}]',
+                STUDENT_TAG_MEMBERSHIP_KEYS,
+            )
+    if 'student_tag_rules' in data:
+        for index, item in enumerate(_ensure_list(data.get('student_tag_rules'), 'student_tag_rules')):
+            _validate_student_tag_rule_payload(item, f'student_tag_rules[{index}]', STUDENT_TAG_RULE_KEYS, rows, cols)
     _validate_current_state(data.get('current_state'), 'current_state')
     history_entries = _validate_history(data)
     if 'ai_conversations' in data:

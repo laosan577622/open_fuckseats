@@ -20,6 +20,9 @@ from .models import (
     SeatGroup,
     LayoutSnapshot,
     SeatConstraint,
+    StudentTag,
+    StudentTagMembership,
+    StudentTagRule,
     FutureModeConfig,
     AIConversation,
     AIConversationMessage,
@@ -55,8 +58,12 @@ from .constraints import (
     compile_constraint_maps,
     constraint_issue_messages,
     get_constraint_type_definitions,
+    get_tag_rule_type_definitions,
     normalize_constraint_payload,
+    normalize_tag_rule_payload,
     serialize_constraints,
+    serialize_tag_rules,
+    tag_rule_issue_messages,
     validate_constraint_candidate,
 )
 from .plugin_components import plugin_component_library
@@ -152,6 +159,9 @@ HISTORY_GROUP_ID_KEYS = {
 HISTORY_GROUP_ID_LIST_KEYS = {'source_group_ids'}
 HISTORY_SNAPSHOT_ID_KEYS = {'snapshot_id'}
 HISTORY_CONSTRAINT_ID_KEYS = {'constraint_id'}
+HISTORY_TAG_ID_KEYS = {'tag_id', 'tag_pk'}
+HISTORY_TAG_ID_LIST_KEYS = {'tag_ids'}
+HISTORY_TAG_RULE_ID_KEYS = {'tag_rule_id'}
 
 AI_TOOL_DEFINITIONS = [
     {
@@ -236,6 +246,7 @@ AI_TOOL_DEFINITIONS = [
                             'group',
                             'is_seated',
                             'is_group_leader',
+                            'tags',
                         ],
                     },
                     'uniqueItems': True,
@@ -249,6 +260,12 @@ AI_TOOL_DEFINITIONS = [
                         'min_score': {'type': 'number'},
                         'max_score': {'type': 'number'},
                         'group_query': {'type': 'string'},
+                        'tag_id': {'type': 'integer'},
+                        'tag_ids': {'type': 'array', 'items': {'type': 'integer'}, 'uniqueItems': True},
+                        'tag_name': {'type': 'string'},
+                        'tag_names': {'type': 'array', 'items': {'type': 'string'}, 'uniqueItems': True},
+                        'tag_match': {'type': 'string', 'enum': ['any', 'all', 'none']},
+                        'untagged': {'type': 'boolean'},
                         'row': {'type': 'integer'},
                         'col': {'type': 'integer'},
                     },
@@ -1315,6 +1332,7 @@ def _serialize_student_profile(
     constraints=None,
     guardian_student_ids=None,
     fixed_student_ids=None,
+    tag_map=None,
 ):
     seat = getattr(student, 'assigned_seat', None)
     group = seat.group if seat else None
@@ -1325,6 +1343,9 @@ def _serialize_student_profile(
         if fixed_student_ids is not None
         else _get_fixed_seat_student_ids(resolved_classroom, constraints=constraints)
     )
+    resolved_tag_map = tag_map
+    if resolved_tag_map is None and resolved_classroom and student.pk:
+        resolved_tag_map = _build_student_tag_map(resolved_classroom, [student.pk])
     return {
         'id': student.pk,
         'name': student.name,
@@ -1348,7 +1369,232 @@ def _serialize_student_profile(
             guardian_student_ids=resolved_guardian_ids,
         ),
         'is_fixed_seat': student.pk in resolved_fixed_student_ids,
+        'tags': list((resolved_tag_map or {}).get(student.pk, [])),
     }
+
+
+DEFAULT_STUDENT_TAG_COLOR = '#0a59f7'
+
+
+def _request_payload(request):
+    content_type = str(request.headers.get('content-type') or '')
+    if 'application/json' in content_type:
+        try:
+            payload = json.loads(request.body or '{}')
+        except (json.JSONDecodeError, ValueError):
+            raise ValueError('无效的请求数据')
+        if not isinstance(payload, dict):
+            raise ValueError('请求数据必须是对象')
+        return payload
+
+    payload = {}
+    for key in request.POST.keys():
+        values = request.POST.getlist(key)
+        payload[key] = values if len(values) > 1 else request.POST.get(key)
+    return payload
+
+
+def _normalize_tag_name(value):
+    return re.sub(r'\s+', ' ', str(value or '').strip())
+
+
+def _normalize_tag_color(value):
+    color = str(value or '').strip()
+    if not color:
+        return DEFAULT_STUDENT_TAG_COLOR
+    if not color.startswith('#'):
+        color = f'#{color}'
+    if re.fullmatch(r'#[0-9a-fA-F]{3}([0-9a-fA-F]{3})?', color):
+        return color.lower()
+    return DEFAULT_STUDENT_TAG_COLOR
+
+
+def _normalize_id_list(value):
+    if value in (None, ''):
+        return []
+    if isinstance(value, (list, tuple, set)):
+        raw_items = value
+    else:
+        raw_items = re.split(r'[,，\s]+', str(value))
+    ids = []
+    seen = set()
+    for raw in raw_items:
+        try:
+            item = int(raw)
+        except (TypeError, ValueError):
+            continue
+        if item <= 0 or item in seen:
+            continue
+        ids.append(item)
+        seen.add(item)
+    return ids
+
+
+def _normalize_name_list(value):
+    if value in (None, ''):
+        return []
+    if isinstance(value, str):
+        raw_items = re.split(r'[,，;；\n]+', value)
+    elif isinstance(value, (list, tuple, set)):
+        raw_items = value
+    else:
+        raw_items = [value]
+    names = []
+    seen = set()
+    for raw in raw_items:
+        if isinstance(raw, dict):
+            raw = raw.get('name')
+        name = _normalize_tag_name(raw)
+        key = name.lower()
+        if name and key not in seen:
+            names.append(name)
+            seen.add(key)
+    return names
+
+
+def _serialize_student_tag(tag, *, member_count=None, rule_count=None, include_urls=False):
+    data = {
+        'id': tag.pk,
+        'name': tag.name,
+        'color': tag.color or DEFAULT_STUDENT_TAG_COLOR,
+        'description': tag.description or '',
+        'sort_order': tag.sort_order or 0,
+    }
+    if member_count is not None:
+        data['member_count'] = int(member_count or 0)
+    if rule_count is not None:
+        data['rule_count'] = int(rule_count or 0)
+    if include_urls:
+        data.update({
+            'update_url': reverse('update_student_tag', args=[tag.classroom_id, tag.pk]),
+            'delete_url': reverse('delete_student_tag', args=[tag.classroom_id, tag.pk]),
+        })
+    return data
+
+
+def _build_student_tag_map(classroom, student_ids=None):
+    queryset = StudentTagMembership.objects.filter(classroom=classroom).select_related('tag')
+    if student_ids is not None:
+        queryset = queryset.filter(student_id__in=list(student_ids))
+    tag_map = defaultdict(list)
+    for membership in queryset.order_by('tag__sort_order', 'tag__name', 'tag__pk'):
+        tag_map[membership.student_id].append(_serialize_student_tag(membership.tag))
+    return dict(tag_map)
+
+
+def _serialize_student_tag_catalog(classroom):
+    tags = list(classroom.student_tags.all().order_by('sort_order', 'name', 'pk'))
+    member_counts = defaultdict(int)
+    for row in (
+        StudentTagMembership.objects
+        .filter(classroom=classroom)
+        .values('tag_id')
+        .annotate(count=models.Count('id'))
+    ):
+        member_counts[row['tag_id']] = row['count']
+    rule_counts = defaultdict(int)
+    for row in (
+        StudentTagRule.objects
+        .filter(classroom=classroom)
+        .values('tag_id')
+        .annotate(count=models.Count('id'))
+    ):
+        rule_counts[row['tag_id']] = row['count']
+    return [
+        _serialize_student_tag(
+            tag,
+            member_count=member_counts.get(tag.pk, 0),
+            rule_count=rule_counts.get(tag.pk, 0),
+            include_urls=True,
+        )
+        for tag in tags
+    ]
+
+
+def _resolve_tags_from_payload(classroom, payload, *, allow_create=False):
+    tag_ids = _normalize_id_list(payload.get('tag_ids') or payload.get('tags_ids') or payload.get('tag_id'))
+    raw_tags = payload.get('tags')
+    if isinstance(raw_tags, (list, tuple, set)):
+        extra_ids = []
+        for item in raw_tags:
+            raw_id = item.get('id') if isinstance(item, dict) else item
+            try:
+                extra_ids.append(int(raw_id))
+            except (TypeError, ValueError):
+                continue
+        tag_ids.extend([tag_id for tag_id in extra_ids if tag_id not in tag_ids])
+    tags = []
+    seen = set()
+    if tag_ids:
+        tag_map = classroom.student_tags.in_bulk(tag_ids)
+        missing = [tag_id for tag_id in tag_ids if tag_id not in tag_map]
+        if missing:
+            raise ValueError('存在不属于当前班级的标签')
+        for tag_id in tag_ids:
+            tag = tag_map[tag_id]
+            tags.append(tag)
+            seen.add(tag.pk)
+
+    names = _normalize_name_list(payload.get('tag_names') or payload.get('tags'))
+    for name in names:
+        tag = classroom.student_tags.filter(name=name).first()
+        if not tag and allow_create:
+            tag = StudentTag.objects.create(classroom=classroom, name=name, color=DEFAULT_STUDENT_TAG_COLOR)
+        if not tag:
+            raise ValueError(f'标签不存在：{name}')
+        if tag.pk not in seen:
+            tags.append(tag)
+            seen.add(tag.pk)
+    return tags
+
+
+def _set_student_tags(classroom, student, tags, *, mode='set'):
+    if student.classroom_id != classroom.pk:
+        raise ValueError('学生不属于当前班级')
+    tag_ids = {tag.pk for tag in tags}
+    existing_ids = set(
+        StudentTagMembership.objects
+        .filter(classroom=classroom, student=student)
+        .values_list('tag_id', flat=True)
+    )
+
+    normalized_mode = str(mode or 'set').strip().lower()
+    if normalized_mode == 'add':
+        target_ids = existing_ids | tag_ids
+    elif normalized_mode == 'remove':
+        target_ids = existing_ids - tag_ids
+    elif normalized_mode == 'toggle':
+        target_ids = set(existing_ids)
+        for tag_id in tag_ids:
+            if tag_id in target_ids:
+                target_ids.remove(tag_id)
+            else:
+                target_ids.add(tag_id)
+    else:
+        target_ids = set(tag_ids)
+
+    remove_ids = existing_ids - target_ids
+    add_ids = target_ids - existing_ids
+    if remove_ids:
+        StudentTagMembership.objects.filter(classroom=classroom, student=student, tag_id__in=list(remove_ids)).delete()
+    for tag in tags:
+        if tag.pk in add_ids:
+            StudentTagMembership.objects.get_or_create(classroom=classroom, student=student, tag=tag)
+    return len(add_ids), len(remove_ids)
+
+
+def _apply_student_tag_payload(classroom, students, payload, *, default_mode='set'):
+    if not any(key in payload for key in ('tag_ids', 'tags_ids', 'tag_id', 'tag_names', 'tags')):
+        return {'added': 0, 'removed': 0}
+    tags = _resolve_tags_from_payload(classroom, payload, allow_create=True)
+    mode = payload.get('tag_mode') or payload.get('mode') or default_mode
+    added = 0
+    removed = 0
+    for student in students:
+        item_added, item_removed = _set_student_tags(classroom, student, tags, mode=mode)
+        added += item_added
+        removed += item_removed
+    return {'added': added, 'removed': removed}
 
 
 def _get_group_score_rows(classroom):
@@ -1656,7 +1902,11 @@ def _build_student_list_payload(classroom, arguments):
 
     keyword = str(filters.get('keyword') or '').strip()
     if keyword:
-        queryset = queryset.filter(models.Q(name__icontains=keyword) | models.Q(student_id__icontains=keyword))
+        queryset = queryset.filter(
+            models.Q(name__icontains=keyword)
+            | models.Q(student_id__icontains=keyword)
+            | models.Q(tag_memberships__tag__name__icontains=keyword)
+        ).distinct()
 
     if 'seated' in filters:
         seated_raw = filters.get('seated')
@@ -1678,6 +1928,27 @@ def _build_student_list_payload(classroom, arguments):
     if filters.get('group_query') not in (None, ''):
         group = _resolve_group_query(classroom, filters.get('group_query'))
         queryset = queryset.filter(assigned_seat__group=group)
+
+    tag_ids = _normalize_id_list(filters.get('tag_ids') or filters.get('tags') or filters.get('tag_id'))
+    tag_names = _normalize_name_list(filters.get('tag_names') or filters.get('tag_name'))
+    if tag_names:
+        tag_ids.extend(
+            tag_id
+            for tag_id in classroom.student_tags.filter(name__in=tag_names).values_list('pk', flat=True)
+            if tag_id not in tag_ids
+        )
+    tag_match = str(filters.get('tag_match') or filters.get('match') or 'any').strip().lower()
+    if tag_ids:
+        if tag_match == 'all':
+            for tag_id in tag_ids:
+                queryset = queryset.filter(tag_memberships__tag_id=tag_id)
+        elif tag_match == 'none':
+            queryset = queryset.exclude(tag_memberships__tag_id__in=tag_ids)
+        else:
+            queryset = queryset.filter(tag_memberships__tag_id__in=tag_ids)
+        queryset = queryset.distinct()
+    if 'untagged' in filters and _parse_bool(filters.get('untagged')):
+        queryset = queryset.filter(tag_memberships__isnull=True)
 
     if filters.get('row') not in (None, ''):
         queryset = queryset.filter(assigned_seat__row=_safe_int(filters.get('row')))
@@ -1717,12 +1988,15 @@ def _build_student_list_payload(classroom, arguments):
         'group',
         'is_seated',
         'is_group_leader',
+        'tags',
     }
     field_set = [item for item in requested_fields if item in allowed_fields]
     if not field_set:
-        field_set = ['id', 'name', 'student_id', 'gender', 'score_display', 'seat', 'group', 'is_seated']
+        field_set = ['id', 'name', 'student_id', 'gender', 'score_display', 'seat', 'group', 'is_seated', 'tags']
 
     items = []
+    tag_map = _build_student_tag_map(classroom, [student.pk for student in students])
+
     for student in students:
         seat = getattr(student, 'assigned_seat', None)
         group = seat.group if seat else None
@@ -1737,6 +2011,7 @@ def _build_student_list_payload(classroom, arguments):
             'group': {'id': group.pk, 'name': group.name} if group else None,
             'is_seated': bool(seat),
             'is_group_leader': bool(group and group.leader_id == student.pk),
+            'tags': tag_map.get(student.pk, []),
         }
         items.append({key: row.get(key) for key in field_set})
 
@@ -2224,6 +2499,7 @@ def _get_classroom_overview_payload(classroom):
     constraints = list(classroom.constraints.select_related('student', 'target_student').all())
     guardian_student_ids = _get_podium_guardian_ids(classroom, seats=seats)
     fixed_student_ids = _get_fixed_seat_student_ids(classroom, constraints=constraints)
+    tag_map = _build_student_tag_map(classroom, [student.pk for student in students])
     seated_count = sum(1 for student in students if getattr(student, 'assigned_seat', None))
     suggestions = _evaluate_layout(classroom, None)
     normalized_suggestions = []
@@ -2241,6 +2517,7 @@ def _get_classroom_overview_payload(classroom):
                 constraints=constraints,
                 guardian_student_ids=guardian_student_ids,
                 fixed_student_ids=fixed_student_ids,
+                tag_map=tag_map,
             )
             for student in students
         ),
@@ -5135,6 +5412,9 @@ def _snapshot_payload(classroom, include_students=True, include_constraints=True
     groups = list(classroom.groups.all())
     students = list(classroom.students.all())
     constraints = list(classroom.constraints.all())
+    student_tags = list(classroom.student_tags.all())
+    student_tag_memberships = list(StudentTagMembership.objects.filter(classroom=classroom))
+    student_tag_rules = list(classroom.student_tag_rules.all())
 
     data = {
         'meta': {
@@ -5171,6 +5451,16 @@ def _snapshot_payload(classroom, include_students=True, include_constraints=True
                 'order': group.order
             }
             for group in groups
+        ],
+        'student_tags': [
+            {
+                'tag_pk': tag.pk,
+                'name': tag.name,
+                'color': tag.color,
+                'description': tag.description,
+                'sort_order': tag.sort_order,
+            }
+            for tag in student_tags
         ]
     }
 
@@ -5183,6 +5473,17 @@ def _snapshot_payload(classroom, include_students=True, include_constraints=True
                 'score': student.score
             }
             for student in students
+        ]
+        data['student_tag_memberships'] = [
+            {
+                'student_pk': membership.student_id,
+                'student_id': membership.student.student_id if membership.student else None,
+                'student_name': membership.student.name if membership.student else None,
+                'tag_pk': membership.tag_id,
+                'tag_name': membership.tag.name if membership.tag else None,
+                'note': membership.note,
+            }
+            for membership in student_tag_memberships
         ]
 
     if include_constraints:
@@ -5202,6 +5503,23 @@ def _snapshot_payload(classroom, include_students=True, include_constraints=True
                 'note': c.note
             }
             for c in constraints
+        ]
+        data['student_tag_rules'] = [
+            {
+                'tag_rule_pk': rule.pk,
+                'tag_pk': rule.tag_id,
+                'tag_name': rule.tag.name if rule.tag else None,
+                'rule_type': rule.rule_type,
+                'row_min': rule.row_min,
+                'row_max': rule.row_max,
+                'col_min': rule.col_min,
+                'col_max': rule.col_max,
+                'distance': rule.distance,
+                'enabled': rule.enabled,
+                'priority': rule.priority,
+                'note': rule.note,
+            }
+            for rule in student_tag_rules
         ]
 
     return data
@@ -5223,6 +5541,18 @@ def _find_student(classroom, payload):
     return None
 
 
+def _find_student_tag(classroom, payload):
+    tag_pk = payload.get('tag_pk') or payload.get('tag_id')
+    if tag_pk:
+        tag = classroom.student_tags.filter(pk=tag_pk).first()
+        if tag:
+            return tag
+    name = payload.get('tag_name') or payload.get('name')
+    if name:
+        return classroom.student_tags.filter(name=str(name).strip()).first()
+    return None
+
+
 def _apply_layout_data(classroom, data, replace_students=False):
     with transaction.atomic():
         classroom_data = data.get('classroom', {})
@@ -5232,6 +5562,9 @@ def _apply_layout_data(classroom, data, replace_students=False):
 
         if replace_students:
             SeatConstraint.objects.filter(classroom=classroom).delete()
+            StudentTagRule.objects.filter(classroom=classroom).delete()
+            StudentTagMembership.objects.filter(classroom=classroom).delete()
+            StudentTag.objects.filter(classroom=classroom).delete()
             SeatGroup.objects.filter(classroom=classroom).delete()
             Student.objects.filter(classroom=classroom).delete()
 
@@ -5248,6 +5581,26 @@ def _apply_layout_data(classroom, data, replace_students=False):
             group.order = int(group_data.get('order', group.order))
             group.save(update_fields=['order'])
             group_map[name] = group
+
+        tag_map = {}
+        if data.get('student_tags') is not None:
+            for tag_data in data.get('student_tags', []):
+                name = _normalize_tag_name(tag_data.get('name'))
+                if not name:
+                    continue
+                tag = None
+                if not replace_students:
+                    tag = classroom.student_tags.filter(name=name).first()
+                if not tag:
+                    tag = StudentTag(classroom=classroom)
+                tag.name = name
+                tag.color = _normalize_tag_color(tag_data.get('color'))
+                tag.description = str(tag_data.get('description') or '').strip()[:160]
+                tag.sort_order = max(0, _safe_int(tag_data.get('sort_order'), 0))
+                tag.save()
+                tag_map[name] = tag
+                if tag_data.get('tag_pk'):
+                    tag_map[str(tag_data.get('tag_pk'))] = tag
 
         if data.get('students') is not None:
             for student_data in data.get('students', []):
@@ -5268,6 +5621,23 @@ def _apply_layout_data(classroom, data, replace_students=False):
                 student.gender = student_data.get('gender') or None
                 student.score = float(student_data.get('score') or 0)
                 student.save()
+
+        if data.get('student_tag_memberships') is not None:
+            StudentTagMembership.objects.filter(classroom=classroom).delete()
+            for membership_data in data.get('student_tag_memberships', []):
+                student = _find_student(classroom, membership_data)
+                tag = _find_student_tag(classroom, membership_data)
+                if not tag:
+                    tag_name = _normalize_tag_name(membership_data.get('tag_name'))
+                    tag = tag_map.get(tag_name)
+                if not student or not tag:
+                    continue
+                StudentTagMembership.objects.get_or_create(
+                    classroom=classroom,
+                    student=student,
+                    tag=tag,
+                    defaults={'note': str(membership_data.get('note') or '')[:120]},
+                )
 
         left_guardian = _find_student(classroom, {
             'student_pk': classroom_data.get('left_guardian_student_pk'),
@@ -5337,6 +5707,29 @@ def _apply_layout_data(classroom, data, replace_students=False):
                     note=str(cdata.get('note') or '')
                 )
 
+        if data.get('student_tag_rules') is not None:
+            StudentTagRule.objects.filter(classroom=classroom).delete()
+            for rule_data in data.get('student_tag_rules', []):
+                tag = _find_student_tag(classroom, rule_data)
+                if not tag:
+                    continue
+                try:
+                    cleaned = normalize_tag_rule_payload(classroom, {
+                        'tag_id': tag.pk,
+                        'rule_type': rule_data.get('rule_type'),
+                        'row_min': rule_data.get('row_min'),
+                        'row_max': rule_data.get('row_max'),
+                        'col_min': rule_data.get('col_min'),
+                        'col_max': rule_data.get('col_max'),
+                        'distance': rule_data.get('distance'),
+                        'enabled': rule_data.get('enabled'),
+                        'priority': rule_data.get('priority'),
+                        'note': rule_data.get('note'),
+                    })
+                except ConstraintServiceError:
+                    continue
+                StudentTagRule.objects.create(classroom=classroom, **cleaned)
+
 
 def _serialize_history_datetime(value):
     if not value:
@@ -5358,6 +5751,9 @@ def _capture_history_state(classroom):
     students = list(classroom.students.all().order_by('pk'))
     groups = list(classroom.groups.all().order_by('pk'))
     constraints = list(classroom.constraints.all().order_by('pk'))
+    student_tags = list(classroom.student_tags.all().order_by('pk'))
+    student_tag_memberships = list(StudentTagMembership.objects.filter(classroom=classroom).order_by('pk'))
+    student_tag_rules = list(classroom.student_tag_rules.all().order_by('pk'))
     layout_snapshots = list(classroom.layout_snapshots.all().order_by('pk'))
     return {
         'classroom': {
@@ -5413,6 +5809,46 @@ def _capture_history_state(classroom):
                 'created_at': _serialize_history_datetime(constraint.created_at),
             }
             for constraint in constraints
+        ],
+        'student_tags': [
+            {
+                'pk': tag.pk,
+                'name': tag.name,
+                'color': tag.color,
+                'description': tag.description,
+                'sort_order': tag.sort_order,
+                'created_at': _serialize_history_datetime(tag.created_at),
+                'updated_at': _serialize_history_datetime(tag.updated_at),
+            }
+            for tag in student_tags
+        ],
+        'student_tag_memberships': [
+            {
+                'pk': membership.pk,
+                'student_pk': membership.student_id,
+                'tag_pk': membership.tag_id,
+                'note': membership.note,
+                'created_at': _serialize_history_datetime(membership.created_at),
+            }
+            for membership in student_tag_memberships
+        ],
+        'student_tag_rules': [
+            {
+                'pk': rule.pk,
+                'tag_pk': rule.tag_id,
+                'rule_type': rule.rule_type,
+                'row_min': rule.row_min,
+                'row_max': rule.row_max,
+                'col_min': rule.col_min,
+                'col_max': rule.col_max,
+                'distance': rule.distance,
+                'enabled': rule.enabled,
+                'priority': rule.priority,
+                'note': rule.note,
+                'created_at': _serialize_history_datetime(rule.created_at),
+                'updated_at': _serialize_history_datetime(rule.updated_at),
+            }
+            for rule in student_tag_rules
         ],
         'layout_snapshots': [
             {
@@ -5515,6 +5951,8 @@ def _collect_state_reference_pks(state, collector=None):
         'group': set(),
         'constraint': set(),
         'snapshot': set(),
+        'tag': set(),
+        'tag_rule': set(),
     }
     if not isinstance(state, dict):
         return collector
@@ -5553,6 +5991,32 @@ def _collect_state_reference_pks(state, collector=None):
             pass
         try:
             collector['student'].add(int(item.get('target_student_pk')))
+        except (TypeError, ValueError):
+            pass
+
+    for item in state.get('student_tags', []):
+        try:
+            collector['tag'].add(int(item.get('pk')))
+        except (TypeError, ValueError):
+            pass
+
+    for item in state.get('student_tag_memberships', []):
+        try:
+            collector['student'].add(int(item.get('student_pk')))
+        except (TypeError, ValueError):
+            pass
+        try:
+            collector['tag'].add(int(item.get('tag_pk')))
+        except (TypeError, ValueError):
+            pass
+
+    for item in state.get('student_tag_rules', []):
+        try:
+            collector['tag_rule'].add(int(item.get('pk')))
+        except (TypeError, ValueError):
+            pass
+        try:
+            collector['tag'].add(int(item.get('tag_pk')))
         except (TypeError, ValueError):
             pass
 
@@ -5632,6 +6096,8 @@ def _build_seats_file_pk_mappings(classroom, data):
         'group': _build_entity_pk_mapping(SeatGroup, collector['group'], classroom=classroom),
         'constraint': _build_entity_pk_mapping(SeatConstraint, collector['constraint'], classroom=classroom),
         'snapshot': _build_entity_pk_mapping(LayoutSnapshot, collector['snapshot'], classroom=classroom),
+        'tag': _build_entity_pk_mapping(StudentTag, collector['tag'], classroom=classroom),
+        'tag_rule': _build_entity_pk_mapping(StudentTagRule, collector['tag_rule'], classroom=classroom),
     }
 
 
@@ -5662,6 +6128,20 @@ def _remap_snapshot_payload_data(data, mappings):
             continue
         item['student_pk'] = _remap_scalar_pk(item.get('student_pk'), mappings['student'])
         item['target_student_pk'] = _remap_scalar_pk(item.get('target_student_pk'), mappings['student'])
+    for item in payload.get('student_tags', []):
+        if not isinstance(item, dict):
+            continue
+        item['tag_pk'] = _remap_scalar_pk(item.get('tag_pk'), mappings['tag'])
+    for item in payload.get('student_tag_memberships', []):
+        if not isinstance(item, dict):
+            continue
+        item['student_pk'] = _remap_scalar_pk(item.get('student_pk'), mappings['student'])
+        item['tag_pk'] = _remap_scalar_pk(item.get('tag_pk'), mappings['tag'])
+    for item in payload.get('student_tag_rules', []):
+        if not isinstance(item, dict):
+            continue
+        item['tag_rule_pk'] = _remap_scalar_pk(item.get('tag_rule_pk'), mappings['tag_rule'])
+        item['tag_pk'] = _remap_scalar_pk(item.get('tag_pk'), mappings['tag'])
     return payload
 
 
@@ -5698,6 +6178,23 @@ def _remap_history_state(state, mappings, classroom_pk):
         item['pk'] = _remap_scalar_pk(item.get('pk'), mappings['constraint'])
         item['student_pk'] = _remap_scalar_pk(item.get('student_pk'), mappings['student'])
         item['target_student_pk'] = _remap_scalar_pk(item.get('target_student_pk'), mappings['student'])
+
+    for item in payload.get('student_tags', []):
+        if not isinstance(item, dict):
+            continue
+        item['pk'] = _remap_scalar_pk(item.get('pk'), mappings['tag'])
+
+    for item in payload.get('student_tag_memberships', []):
+        if not isinstance(item, dict):
+            continue
+        item['student_pk'] = _remap_scalar_pk(item.get('student_pk'), mappings['student'])
+        item['tag_pk'] = _remap_scalar_pk(item.get('tag_pk'), mappings['tag'])
+
+    for item in payload.get('student_tag_rules', []):
+        if not isinstance(item, dict):
+            continue
+        item['pk'] = _remap_scalar_pk(item.get('pk'), mappings['tag_rule'])
+        item['tag_pk'] = _remap_scalar_pk(item.get('tag_pk'), mappings['tag'])
 
     for item in payload.get('layout_snapshots', []):
         if not isinstance(item, dict):
@@ -5739,14 +6236,25 @@ def _remap_history_payload(payload, mappings, classroom_pk):
                 if key in HISTORY_CONSTRAINT_ID_KEYS:
                     remapped[key] = _remap_scalar_pk(item, mappings['constraint'])
                     continue
+                if key in HISTORY_TAG_ID_KEYS:
+                    remapped[key] = _remap_scalar_pk(item, mappings['tag'])
+                    continue
+                if key in HISTORY_TAG_RULE_ID_KEYS:
+                    remapped[key] = _remap_scalar_pk(item, mappings['tag_rule'])
+                    continue
                 if key in HISTORY_GROUP_ID_LIST_KEYS and isinstance(item, list):
                     remapped[key] = [_remap_scalar_pk(entry, mappings['group']) for entry in item]
+                    continue
+                if key in HISTORY_TAG_ID_LIST_KEYS and isinstance(item, list):
+                    remapped[key] = [_remap_scalar_pk(entry, mappings['tag']) for entry in item]
                     continue
                 remapped[key] = _walk(item, key)
             return remapped
         if isinstance(value, list):
             if current_key in HISTORY_GROUP_ID_LIST_KEYS:
                 return [_remap_scalar_pk(item, mappings['group']) for item in value]
+            if current_key in HISTORY_TAG_ID_LIST_KEYS:
+                return [_remap_scalar_pk(item, mappings['tag']) for item in value]
             return [_walk(item) for item in value]
         return value
 
@@ -5793,6 +6301,9 @@ def _restore_history_state(classroom, state):
 
         classroom.seats.update(student=None, group=None, cell_type=SeatCellType.SEAT)
         classroom.constraints.all().delete()
+        classroom.student_tag_rules.all().delete()
+        StudentTagMembership.objects.filter(classroom=classroom).delete()
+        classroom.student_tags.all().delete()
         classroom.layout_snapshots.all().delete()
         classroom.groups.update(leader=None)
         classroom.groups.all().delete()
@@ -5811,6 +6322,24 @@ def _restore_history_state(classroom, state):
             )
             student.save(force_insert=True)
             student_map[pk] = student
+
+        tag_map = {}
+        for item in state.get('student_tags', []):
+            pk = int(item.get('pk'))
+            tag = StudentTag(
+                pk=pk,
+                classroom=classroom,
+                name=_normalize_tag_name(item.get('name')),
+                color=_normalize_tag_color(item.get('color')),
+                description=str(item.get('description') or '')[:160],
+                sort_order=max(0, _safe_int(item.get('sort_order'), 0)),
+            )
+            if not tag.name:
+                continue
+            tag.save(force_insert=True)
+            _restore_history_datetime(StudentTag, pk, item.get('created_at'))
+            _restore_history_datetime(StudentTag, pk, item.get('updated_at'), field_name='updated_at')
+            tag_map[pk] = tag
 
         group_map = {}
         for item in state.get('groups', []):
@@ -5880,6 +6409,48 @@ def _restore_history_state(classroom, state):
                 continue
             constraint.save(force_insert=True)
             _restore_history_datetime(SeatConstraint, pk, item.get('created_at'))
+
+        for item in state.get('student_tag_memberships', []):
+            student = student_map.get(item.get('student_pk'))
+            tag = tag_map.get(item.get('tag_pk'))
+            if not student or not tag:
+                continue
+            membership = StudentTagMembership(
+                classroom=classroom,
+                student=student,
+                tag=tag,
+                note=str(item.get('note') or '')[:120],
+            )
+            membership_pk = _safe_int(item.get('pk'), 0)
+            if membership_pk and not StudentTagMembership.objects.filter(pk=membership_pk).exists():
+                membership.pk = membership_pk
+                membership.save(force_insert=True)
+            else:
+                membership.save()
+            _restore_history_datetime(StudentTagMembership, membership.pk, item.get('created_at'))
+
+        for item in state.get('student_tag_rules', []):
+            pk = int(item.get('pk'))
+            tag = tag_map.get(item.get('tag_pk'))
+            if not tag:
+                continue
+            rule = StudentTagRule(
+                pk=pk,
+                classroom=classroom,
+                tag=tag,
+                rule_type=item.get('rule_type'),
+                row_min=item.get('row_min') or None,
+                row_max=item.get('row_max') or None,
+                col_min=item.get('col_min') or None,
+                col_max=item.get('col_max') or None,
+                distance=int(item.get('distance') or 1),
+                enabled=bool(item.get('enabled', True)),
+                priority=max(0, _safe_int(item.get('priority'), 0)),
+                note=str(item.get('note') or '')[:120],
+            )
+            rule.save(force_insert=True)
+            _restore_history_datetime(StudentTagRule, pk, item.get('created_at'))
+            _restore_history_datetime(StudentTagRule, pk, item.get('updated_at'), field_name='updated_at')
 
         for item in state.get('layout_snapshots', []):
             pk = int(item.get('pk'))
@@ -6314,6 +6885,7 @@ def _layout_hard_issues(classroom):
     if unseated_count:
         issues.append(f"当前有 {unseated_count} 名学生未入座")
     issues.extend(_constraint_issues(classroom))
+    issues.extend(tag_rule_issue_messages(classroom))
     return issues
 
 
@@ -6507,7 +7079,9 @@ def _stabilize_layout_with_rules(classroom, request=None, trigger_student_id=Non
     _enforce_constraints_by_moves(classroom)
     _apply_internal_policy(classroom, request, trigger_student_id=trigger_student_id)
     _normalize_group_leaders(classroom)
-    return _constraint_issues(classroom)
+    issues = _constraint_issues(classroom)
+    issues.extend(tag_rule_issue_messages(classroom))
+    return issues
 
 
 def _filter_internal_issues(issues):
@@ -6676,6 +7250,7 @@ def classroom_detail(request, pk):
     groups = classroom.groups.all()
     snapshots = classroom.layout_snapshots.all()
     constraint_items, constraint_metrics = serialize_constraints(classroom, constraints=constraints)
+    tag_rule_items, tag_rule_metrics = serialize_tag_rules(classroom)
     
     return render(request, 'seats/classroom_detail.html', {
         'classroom': classroom,
@@ -6687,6 +7262,10 @@ def classroom_detail(request, pk):
         'constraint_items': constraint_items,
         'constraint_metrics': constraint_metrics,
         'constraint_types': get_constraint_type_definitions(),
+        'student_tags': _serialize_student_tag_catalog(classroom),
+        'tag_rule_items': tag_rule_items,
+        'tag_rule_metrics': tag_rule_metrics,
+        'tag_rule_types': get_tag_rule_type_definitions(),
         'suggestions': suggestions,
         'sync_meta': sync_meta,
         'sync_meta_payload': _serialize_classroom_sync_meta(classroom, sync_meta),
@@ -7410,6 +7989,14 @@ def classroom_state(request, pk):
     guardian_student_ids = _get_podium_guardian_ids(classroom, seats=seats)
     fixed_student_ids = _get_fixed_seat_student_ids(classroom, constraints=constraints)
     constraint_items, constraint_metrics = serialize_constraints(classroom, constraints=constraints)
+    all_state_student_ids = {
+        seat.student_id
+        for seat in seats
+        if seat.student_id
+    }
+    all_state_student_ids.update(student.pk for student in unseated_students)
+    tag_map = _build_student_tag_map(classroom, all_state_student_ids)
+    tag_rule_items, tag_rule_metrics = serialize_tag_rules(classroom)
 
     seat_payload = []
     for seat in seats:
@@ -7430,10 +8017,12 @@ def classroom_state(request, pk):
             'student': {
                 'id': student.pk,
                 'name': student.name,
+                'student_id': student.student_id or '',
                 'score_display': score_value,
                 'is_leader': (group and getattr(group, 'leader_id', None) == student.pk),
                 'podium_guardian_side': guardian_side,
                 'is_fixed_seat': student.pk in fixed_student_ids,
+                'tags': tag_map.get(student.pk, []),
             } if student else None,
             'group': {
                 'id': group.pk,
@@ -7458,6 +8047,7 @@ def classroom_state(request, pk):
                 guardian_student_ids=guardian_student_ids,
             ),
             'is_fixed_seat': student.pk in fixed_student_ids,
+            'tags': tag_map.get(student.pk, []),
             'delete_url': reverse('delete_student', args=[classroom.pk, student.pk]),
             'update_url': reverse('update_student', args=[classroom.pk, student.pk]),
         })
@@ -7472,6 +8062,10 @@ def classroom_state(request, pk):
         ),
         'constraints': constraint_items,
         'constraint_metrics': constraint_metrics,
+        'tags': _serialize_student_tag_catalog(classroom),
+        'tag_rules': tag_rule_items,
+        'tag_rule_types': get_tag_rule_type_definitions(),
+        'tag_rule_metrics': tag_rule_metrics,
         'suggestions': suggestions,
         'unseated_count': len(unseated_payload),
         'sync_meta': _serialize_classroom_sync_meta(classroom),
@@ -9306,19 +9900,37 @@ def move_students_batch(request, pk):
 def search_students(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     query = request.GET.get('q', '').strip().lower()
-    if not query:
+    tag_filter_ids = _normalize_id_list(request.GET.get('tag_ids') or request.GET.get('tags') or request.GET.get('tag_id'))
+    tag_match = str(request.GET.get('tag_match') or request.GET.get('match') or 'any').strip().lower()
+    if tag_match not in {'any', 'all', 'none'}:
+        tag_match = 'any'
+    if not query and not tag_filter_ids:
         return JsonResponse({'students': []})
 
     all_students = list(classroom.students.select_related('assigned_seat').all())
+    tag_map = _build_student_tag_map(classroom, [student.pk for student in all_students])
     matches = []
 
     for student in all_students:
+        student_tags = tag_map.get(student.pk, [])
+        student_tag_ids = {tag['id'] for tag in student_tags}
+        tag_filter_set = set(tag_filter_ids)
+        if tag_filter_set:
+            if tag_match == 'all' and not tag_filter_set.issubset(student_tag_ids):
+                continue
+            if tag_match == 'any' and not (tag_filter_set & student_tag_ids):
+                continue
+            if tag_match == 'none' and (tag_filter_set & student_tag_ids):
+                continue
+
         name_lower = student.name.lower()
         pinyin_parts = [part.lower() for part in lazy_pinyin(student.name) if part]
         pinyin = ''.join(pinyin_parts)
         pinyin_initials = ''.join(part[0] for part in pinyin_parts if part)
+        student_number = str(student.student_id or '').lower()
+        tag_text = ' '.join(tag['name'].lower() for tag in student_tags)
 
-        if query in name_lower or query in pinyin or query in pinyin_initials:
+        if not query or query in name_lower or query in pinyin or query in pinyin_initials or query in student_number or query in tag_text:
             seat_info = None
             assigned_seat = getattr(student, 'assigned_seat', None)
             if assigned_seat:
@@ -9326,7 +9938,9 @@ def search_students(request, pk):
             matches.append({
                 'id': student.pk,
                 'name': student.name,
-                'seat': seat_info
+                'student_id': student.student_id or '',
+                'seat': seat_info,
+                'tags': student_tags,
             })
 
     return JsonResponse({'students': matches})
@@ -9443,16 +10057,22 @@ def add_student(request, pk):
     except (ValueError, TypeError):
         score = 0
     before_state = _capture_history_state(classroom)
-    student = Student.objects.create(
-        classroom=classroom,
-        name=name,
-        student_id=student_id_val,
-        gender=gender,
-        score=score,
-    )
+    with transaction.atomic():
+        student = Student.objects.create(
+            classroom=classroom,
+            name=name,
+            student_id=student_id_val,
+            gender=gender,
+            score=score,
+        )
+        tag_changes = _apply_student_tag_payload(classroom, [student], data, default_mode='set')
     _push_snapshot_action(request, classroom, before_state, 'add_student',
-                          extra={'student_id': student.pk, 'student_name': student.name})
-    return JsonResponse({'status': 'success', 'student_pk': student.pk})
+                          extra={'student_id': student.pk, 'student_name': student.name, **tag_changes})
+    return JsonResponse({'status': 'success', 'student_pk': student.pk, 'student': _serialize_student_profile(
+        student,
+        classroom=classroom,
+        tag_map=_build_student_tag_map(classroom, [student.pk]),
+    )})
 
 
 @require_POST
@@ -9475,9 +10095,331 @@ def update_student(request, pk, student_id):
         student.score = float(data.get('score', 0) or 0)
     except (ValueError, TypeError):
         student.score = 0
-    student.save()
+    with transaction.atomic():
+        student.save()
+        tag_changes = _apply_student_tag_payload(classroom, [student], data, default_mode='set')
     _push_snapshot_action(request, classroom, before_state, 'update_student',
-                          extra={'student_id': student.pk, 'student_name': student.name})
+                          extra={'student_id': student.pk, 'student_name': student.name, **tag_changes})
+    return JsonResponse({'status': 'success', 'student': _serialize_student_profile(
+        student,
+        classroom=classroom,
+        tag_map=_build_student_tag_map(classroom, [student.pk]),
+    )})
+
+
+@require_http_methods(["GET", "POST"])
+def student_tags(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    if request.method == 'GET':
+        tag_rules = list(classroom.student_tag_rules.select_related('tag').prefetch_related('tag__memberships').all())
+        tag_rule_items, tag_rule_metrics = serialize_tag_rules(classroom, tag_rules=tag_rules)
+        return JsonResponse({
+            'status': 'success',
+            'tags': _serialize_student_tag_catalog(classroom),
+            'tag_rule_types': get_tag_rule_type_definitions(),
+            'tag_rules': tag_rule_items,
+            'tag_rule_metrics': tag_rule_metrics,
+        })
+
+    try:
+        data = _request_payload(request)
+        name = _normalize_tag_name(data.get('name'))
+        if not name:
+            return JsonResponse({'status': 'error', 'message': '标签名称不能为空'}, status=400)
+        description = str(data.get('description') or '').strip()
+        sort_order = _safe_int(data.get('sort_order'), 0)
+        color = _normalize_tag_color(data.get('color'))
+        before_state = _capture_history_state(classroom)
+        tag = StudentTag.objects.create(
+            classroom=classroom,
+            name=name,
+            color=color,
+            description=description[:160],
+            sort_order=max(0, sort_order),
+        )
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'create_student_tag',
+            extra={'tag_id': tag.pk, 'tag_name': tag.name},
+        )
+        return JsonResponse({'status': 'success', 'tag': _serialize_student_tag(tag, member_count=0, rule_count=0, include_urls=True)})
+    except IntegrityError:
+        return JsonResponse({'status': 'error', 'message': '同名标签已存在'}, status=400)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+
+@require_POST
+def update_student_tag(request, pk, tag_id):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    tag = get_object_or_404(StudentTag, pk=tag_id, classroom=classroom)
+    try:
+        data = _request_payload(request)
+        name = _normalize_tag_name(data.get('name')) if 'name' in data else tag.name
+        if not name:
+            return JsonResponse({'status': 'error', 'message': '标签名称不能为空'}, status=400)
+        before_state = _capture_history_state(classroom)
+        tag.name = name
+        if 'color' in data:
+            tag.color = _normalize_tag_color(data.get('color'))
+        if 'description' in data:
+            tag.description = str(data.get('description') or '').strip()[:160]
+        if 'sort_order' in data:
+            tag.sort_order = max(0, _safe_int(data.get('sort_order'), 0))
+        tag.save()
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'update_student_tag',
+            extra={'tag_id': tag.pk, 'tag_name': tag.name},
+        )
+        return JsonResponse({'status': 'success', 'tag': _serialize_student_tag(tag, include_urls=True)})
+    except IntegrityError:
+        return JsonResponse({'status': 'error', 'message': '同名标签已存在'}, status=400)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+
+@require_POST
+def delete_student_tag(request, pk, tag_id):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    tag = get_object_or_404(StudentTag, pk=tag_id, classroom=classroom)
+    before_state = _capture_history_state(classroom)
+    tag_name = tag.name
+    tag.delete()
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'delete_student_tag',
+        extra={'tag_id': tag_id, 'tag_name': tag_name},
+    )
+    return JsonResponse({'status': 'success'})
+
+
+@require_POST
+def assign_student_tags(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        data = _request_payload(request)
+        student_ids = _normalize_id_list(data.get('student_ids') or data.get('student_id'))
+        if not student_ids:
+            return JsonResponse({'status': 'error', 'message': '请选择学生'}, status=400)
+        students_map = classroom.students.in_bulk(student_ids)
+        if len(students_map) != len(student_ids):
+            return JsonResponse({'status': 'error', 'message': '存在不属于当前班级的学生'}, status=400)
+        mode = str(data.get('mode') or 'add').strip().lower()
+        if mode not in {'add', 'remove', 'set', 'toggle'}:
+            mode = 'add'
+        tags = _resolve_tags_from_payload(classroom, data, allow_create=mode != 'remove')
+        if not tags and mode != 'set':
+            return JsonResponse({'status': 'error', 'message': '请选择标签'}, status=400)
+
+        before_state = _capture_history_state(classroom)
+        added = 0
+        removed = 0
+        with transaction.atomic():
+            for student_id in student_ids:
+                item_added, item_removed = _set_student_tags(classroom, students_map[student_id], tags, mode=mode)
+                added += item_added
+                removed += item_removed
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'assign_student_tags',
+            extra={
+                'student_ids': student_ids,
+                'tag_ids': [tag.pk for tag in tags],
+                'mode': mode,
+                'added': added,
+                'removed': removed,
+            },
+        )
+        tag_map = _build_student_tag_map(classroom, student_ids)
+        return JsonResponse({
+            'status': 'success',
+            'added': added,
+            'removed': removed,
+            'students': [
+                {
+                    'id': student_id,
+                    'tags': tag_map.get(student_id, []),
+                }
+                for student_id in student_ids
+            ],
+            'tags': _serialize_student_tag_catalog(classroom),
+        })
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+
+def search_students_by_tags(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    query = str(request.GET.get('q') or '').strip().lower()
+    match_mode = str(request.GET.get('match') or 'any').strip().lower()
+    if match_mode not in {'any', 'all', 'none'}:
+        match_mode = 'any'
+    include_untagged = _parse_bool(request.GET.get('untagged'))
+    limit = max(1, min(300, _safe_int(request.GET.get('limit'), 100)))
+    tag_filter_ids = _normalize_id_list(request.GET.get('tag_ids') or request.GET.get('tags') or request.GET.get('tag_id'))
+    tag_names = _normalize_name_list(request.GET.get('tag_names') or request.GET.get('tag_name'))
+    if tag_names:
+        found_tags = list(classroom.student_tags.filter(name__in=tag_names))
+        if len(found_tags) != len(tag_names):
+            return JsonResponse({'status': 'success', 'students': [], 'total': 0})
+        tag_filter_ids.extend([tag.pk for tag in found_tags if tag.pk not in tag_filter_ids])
+    tag_filter_set = set(tag_filter_ids)
+
+    students = list(classroom.students.select_related('assigned_seat__group').all().order_by('name', 'pk'))
+    tag_map = _build_student_tag_map(classroom, [student.pk for student in students])
+    results = []
+    for student in students:
+        student_tags = tag_map.get(student.pk, [])
+        student_tag_ids = {tag['id'] for tag in student_tags}
+        if include_untagged and student_tag_ids:
+            continue
+        if tag_filter_set:
+            if match_mode == 'all' and not tag_filter_set.issubset(student_tag_ids):
+                continue
+            if match_mode == 'any' and not (tag_filter_set & student_tag_ids):
+                continue
+            if match_mode == 'none' and (tag_filter_set & student_tag_ids):
+                continue
+        if query:
+            name_lower = student.name.lower()
+            sid_lower = str(student.student_id or '').lower()
+            pinyin_parts = [part.lower() for part in lazy_pinyin(student.name) if part]
+            pinyin = ''.join(pinyin_parts)
+            pinyin_initials = ''.join(part[0] for part in pinyin_parts if part)
+            tag_text = ' '.join(tag['name'].lower() for tag in student_tags)
+            if query not in name_lower and query not in sid_lower and query not in pinyin and query not in pinyin_initials and query not in tag_text:
+                continue
+        seat = getattr(student, 'assigned_seat', None)
+        group = seat.group if seat else None
+        results.append({
+            'id': student.pk,
+            'name': student.name,
+            'student_id': student.student_id or '',
+            'gender': student.gender or '',
+            'score': student.score or 0,
+            'score_display': student.display_score if student.score is not None else '',
+            'seat': {'row': seat.row, 'col': seat.col} if seat else None,
+            'group': {'id': group.pk, 'name': group.name} if group else None,
+            'tags': student_tags,
+        })
+        if len(results) >= limit:
+            break
+    return JsonResponse({'status': 'success', 'students': results, 'total': len(results)})
+
+
+def _tag_rule_payload(request):
+    if str(request.headers.get('content-type') or '').lower().find('application/json') >= 0:
+        return _request_payload(request)
+    payload = _request_payload(request)
+    if 'tag_id' not in payload and request.POST.get('tag'):
+        payload['tag_id'] = request.POST.get('tag')
+    return payload
+
+
+@require_POST
+def create_tag_rule(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    try:
+        cleaned = normalize_tag_rule_payload(classroom, _tag_rule_payload(request))
+        before_state = _capture_history_state(classroom)
+        rule = StudentTagRule.objects.create(classroom=classroom, **cleaned)
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'create_tag_rule',
+            extra={'tag_rule_id': rule.pk, 'tag_id': rule.tag_id, 'rule_type': rule.rule_type},
+        )
+        return JsonResponse({'status': 'success', 'tag_rule': serialize_tag_rules(classroom, [rule])[0][0]})
+    except ConstraintServiceError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+
+@require_POST
+def update_tag_rule(request, pk, rule_id):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    rule = get_object_or_404(StudentTagRule, pk=rule_id, classroom=classroom)
+    try:
+        cleaned = normalize_tag_rule_payload(classroom, _tag_rule_payload(request), instance=rule)
+        before_state = _capture_history_state(classroom)
+        for field, value in cleaned.items():
+            setattr(rule, field, value)
+        rule.save()
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'update_tag_rule',
+            extra={'tag_rule_id': rule.pk, 'tag_id': rule.tag_id, 'rule_type': rule.rule_type},
+        )
+        return JsonResponse({'status': 'success', 'tag_rule': serialize_tag_rules(classroom, [rule])[0][0]})
+    except ConstraintServiceError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+
+@require_POST
+def toggle_tag_rule(request, pk, rule_id):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    rule = get_object_or_404(StudentTagRule, pk=rule_id, classroom=classroom)
+    try:
+        data = _tag_rule_payload(request)
+        desired_enabled = data.get('enabled')
+        next_enabled = (not rule.enabled) if desired_enabled in (None, '') else _parse_bool(desired_enabled)
+        before_state = _capture_history_state(classroom)
+        rule.enabled = next_enabled
+        rule.save(update_fields=['enabled', 'updated_at'])
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'toggle_tag_rule',
+            extra={'tag_rule_id': rule.pk, 'tag_id': rule.tag_id, 'rule_type': rule.rule_type, 'enabled': rule.enabled},
+        )
+        return JsonResponse({'status': 'success', 'tag_rule': serialize_tag_rules(classroom, [rule])[0][0]})
+    except ValueError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+
+
+@require_POST
+def delete_tag_rule(request, pk, rule_id):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    rule = get_object_or_404(StudentTagRule, pk=rule_id, classroom=classroom)
+    before_state = _capture_history_state(classroom)
+    rule_type = rule.rule_type
+    tag_id = rule.tag_id
+    rule.delete()
+    _push_snapshot_action(
+        request,
+        classroom,
+        before_state,
+        'delete_tag_rule',
+        extra={'tag_rule_id': rule_id, 'tag_id': tag_id, 'rule_type': rule_type},
+    )
     return JsonResponse({'status': 'success'})
 
 

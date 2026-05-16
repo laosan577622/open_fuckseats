@@ -46,6 +46,9 @@ from .models import (
     AIConversationMessage,
     Seat,
     Student,
+    StudentTag,
+    StudentTagMembership,
+    StudentTagRule,
     LayoutSnapshot,
     ClassroomHistoryEntry,
     SyncMeta,
@@ -4416,3 +4419,92 @@ class SettingsPageVersionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, '灵动液态效果（液态玻璃）')
         self.assertContains(response, 'id="liquid-glass-toggle"', html=False)
+
+
+class StudentTagSystemTests(TestCase):
+    def setUp(self):
+        self.classroom = Classroom.objects.create(name="标签测试班", rows=2, cols=2)
+        self.alice = Student.objects.create(classroom=self.classroom, name="张三", student_id="T001", score=90)
+        self.bob = Student.objects.create(classroom=self.classroom, name="李四", student_id="T002", score=80)
+
+    def post_json(self, url, payload):
+        return self.client.post(
+            url,
+            data=json.dumps(payload),
+            content_type="application/json",
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+
+    def test_tag_crud_assignment_search_and_state_payload(self):
+        create_response = self.post_json(
+            reverse("student_tags", args=[self.classroom.pk]),
+            {"name": "近视", "color": "0a59f7", "description": "需要靠前"},
+        )
+        self.assertEqual(create_response.status_code, 200)
+        tag_id = create_response.json()["tag"]["id"]
+
+        assign_response = self.post_json(
+            reverse("assign_student_tags", args=[self.classroom.pk]),
+            {"student_ids": [self.alice.pk], "tag_ids": [tag_id], "mode": "add"},
+        )
+        self.assertEqual(assign_response.status_code, 200)
+        self.assertTrue(StudentTagMembership.objects.filter(student=self.alice, tag_id=tag_id).exists())
+
+        search_response = self.client.get(reverse("search_students", args=[self.classroom.pk]), {"q": "近视"})
+        self.assertEqual(search_response.status_code, 200)
+        self.assertEqual([item["id"] for item in search_response.json()["students"]], [self.alice.pk])
+
+        tag_search_response = self.client.get(
+            reverse("search_students_by_tags", args=[self.classroom.pk]),
+            {"tag_ids": str(tag_id)},
+        )
+        self.assertEqual(tag_search_response.status_code, 200)
+        self.assertEqual([item["id"] for item in tag_search_response.json()["students"]], [self.alice.pk])
+
+        state_response = self.client.get(reverse("classroom_state", args=[self.classroom.pk]))
+        self.assertEqual(state_response.status_code, 200)
+        state = state_response.json()
+        self.assertEqual(state["tags"][0]["name"], "近视")
+        self.assertIn("tag_rule_types", state)
+
+    def test_tag_must_area_rule_affects_auto_arrange(self):
+        tag = StudentTag.objects.create(classroom=self.classroom, name="近视")
+        StudentTagMembership.objects.create(classroom=self.classroom, student=self.alice, tag=tag)
+        StudentTagRule.objects.create(
+            classroom=self.classroom,
+            tag=tag,
+            rule_type=StudentTagRule.RuleType.MUST_AREA,
+            row_min=1,
+            row_max=1,
+            enabled=True,
+        )
+
+        response = self.client.post(
+            reverse("auto_arrange_seats", args=[self.classroom.pk]),
+            {"method": "random"},
+            HTTP_X_REQUESTED_WITH="XMLHttpRequest",
+        )
+        self.assertEqual(response.status_code, 200, response.content.decode("utf-8"))
+        self.alice.refresh_from_db()
+        self.assertEqual(self.alice.assigned_seat.row, 1)
+
+    def test_tag_rule_blocks_manual_move_outside_allowed_area(self):
+        tag = StudentTag.objects.create(classroom=self.classroom, name="近视")
+        StudentTagMembership.objects.create(classroom=self.classroom, student=self.alice, tag=tag)
+        StudentTagRule.objects.create(
+            classroom=self.classroom,
+            tag=tag,
+            rule_type=StudentTagRule.RuleType.MUST_AREA,
+            row_min=1,
+            row_max=1,
+            enabled=True,
+        )
+        self.classroom.seats.filter(row=1, col=1).update(student=self.alice)
+        self.classroom.seats.filter(row=1, col=2).update(student=self.bob)
+
+        response = self.post_json(
+            reverse("move_student", args=[self.classroom.pk]),
+            {"student_id": self.alice.pk, "row": 2, "col": 1},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("未坐在要求区域", response.json()["message"])

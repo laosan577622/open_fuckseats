@@ -282,6 +282,101 @@ class CloudSyncStorageTests(TestCase):
         self.assertEqual(classroom.last_modified_at, operation_at)
         self.assertEqual(result["last_operation_at"], operation_at.isoformat())
 
+    def test_push_accepts_student_tag_fields(self):
+        user = CloudUser.objects.create(uid="u-tags")
+        classroom_uuid = uuid.uuid4()
+        data = self.fuckseats_snapshot()
+        data["student_tags"] = [{
+            "tag_pk": 1,
+            "name": "近视",
+            "color": "#0a59f7",
+            "description": "需要靠前",
+            "sort_order": 0,
+        }]
+        data["student_tag_memberships"] = [{
+            "student_pk": 1,
+            "student_id": "001",
+            "student_name": "张三",
+            "tag_pk": 1,
+            "tag_name": "近视",
+            "note": "",
+        }]
+        data["student_tag_rules"] = [{
+            "tag_rule_pk": 1,
+            "tag_pk": 1,
+            "tag_name": "近视",
+            "rule_type": "must_area",
+            "row_min": 1,
+            "row_max": 2,
+            "col_min": None,
+            "col_max": None,
+            "distance": 1,
+            "enabled": True,
+            "priority": 0,
+            "note": "近视学生安排前两排",
+        }]
+        data["current_state"]["student_tags"] = [{
+            "pk": 1,
+            "name": "近视",
+            "color": "#0a59f7",
+            "description": "需要靠前",
+            "sort_order": 0,
+            "created_at": "",
+            "updated_at": "",
+        }]
+        data["current_state"]["student_tag_memberships"] = [{
+            "pk": 1,
+            "student_pk": 1,
+            "tag_pk": 1,
+            "note": "",
+            "created_at": "",
+        }]
+        data["current_state"]["student_tag_rules"] = [{
+            "pk": 1,
+            "tag_pk": 1,
+            "rule_type": "must_area",
+            "row_min": 1,
+            "row_max": 2,
+            "col_min": None,
+            "col_max": None,
+            "distance": 1,
+            "enabled": True,
+            "priority": 0,
+            "note": "近视学生安排前两排",
+            "created_at": "",
+            "updated_at": "",
+        }]
+        data["current_state"]["layout_snapshots"] = [{
+            "pk": 1,
+            "name": "带标签快照",
+            "created_at": "",
+            "data": {
+                "meta": {
+                    "app": "不想排座位",
+                    "version": "1.0",
+                    "exported_at": timezone.now().isoformat(),
+                },
+                "classroom": data["classroom"],
+                "seats": data["seats"],
+                "groups": data["groups"],
+                "constraints": data["constraints"],
+                "student_tags": data["student_tags"],
+                "student_tag_rules": data["student_tag_rules"],
+            },
+        }]
+
+        result = push_classroom_snapshot(user, {
+            "uuid": str(classroom_uuid),
+            "base_version": 0,
+            "device_id": "test-device",
+            "data": data,
+        })
+
+        self.assertTrue(result["ok"])
+        classroom = CloudClassroom.objects.get(user=user, uuid=classroom_uuid)
+        self.assertEqual(classroom.data_snapshot["student_tags"][0]["name"], "近视")
+        self.assertEqual(classroom.data_snapshot["student_tag_rules"][0]["rule_type"], "must_area")
+
     def test_force_push_overwrites_newer_cloud_version(self):
         user = CloudUser.objects.create(uid="u-force")
         classroom_uuid = uuid.uuid4()
