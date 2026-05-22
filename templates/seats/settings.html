@@ -272,6 +272,102 @@
             </div>
         </div>
 
+        <div class="settings-section" id="data-sharing-section">
+            <div class="section-header">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor" fill-opacity="0.12"/>
+                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" stroke="currentColor" stroke-width="0.8" fill="none"/>
+                </svg>
+                <div>
+                    <h2>帮助我们改进</h2>
+                    <p>发送使用统计、登录 UID 和脱敏日志以帮助改进不想排座位</p>
+                </div>
+            </div>
+            <div class="section-content">
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label>数据共享</label>
+                        <span class="setting-description">开启后，将发送功能使用频率、耗时、登录账号 UID 和脱敏日志到官方服务器。不会收集学生、班级、座位表、邮箱、密钥或 Token。</span>
+                        <span class="setting-value" id="data-sharing-status">加载中...</span>
+                    </div>
+                    <div class="setting-trail">
+                        <label class="settings-switch">
+                            <input type="checkbox" id="data-sharing-toggle">
+                            <span class="settings-switch-track">
+                                <span class="settings-switch-thumb"></span>
+                            </span>
+                        </label>
+                    </div>
+                </div>
+
+                <div class="setting-divider"></div>
+
+                <div class="setting-item">
+                    <div class="setting-info">
+                        <label>本地日志保存天数</label>
+                        <span class="setting-description">仅修改本机记录的日志保存偏好，不会影响官方服务器上的日志保存天数</span>
+                    </div>
+                    <div class="setting-trail">
+                        <select id="data-sharing-retention" class="data-sharing-retention-select">
+                            <option value="7">7 天</option>
+                            <option value="14">14 天</option>
+                            <option value="30" selected>30 天</option>
+                            <option value="60">60 天</option>
+                            <option value="90">90 天</option>
+                            <option value="180">180 天</option>
+                            <option value="365">365 天</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="setting-divider"></div>
+
+                <div class="setting-item setting-item-stack data-sharing-privacy-note">
+                    <div class="setting-info">
+                        <label>隐私承诺</label>
+                    </div>
+                    <div class="data-sharing-privacy-list">
+                        <div class="data-sharing-privacy-item data-sharing-privacy-collect">
+                            <span class="data-sharing-privacy-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>
+                            </span>
+                            <span>功能使用次数、频率和耗时</span>
+                        </div>
+                        <div class="data-sharing-privacy-item data-sharing-privacy-collect">
+                            <span class="data-sharing-privacy-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>
+                            </span>
+                            <span>已登录账号的 UID</span>
+                        </div>
+                        <div class="data-sharing-privacy-item data-sharing-privacy-collect">
+                            <span class="data-sharing-privacy-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>
+                            </span>
+                            <span>脱敏后的错误日志和错误码</span>
+                        </div>
+                        <div class="data-sharing-privacy-item data-sharing-privacy-no">
+                            <span class="data-sharing-privacy-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>
+                            </span>
+                            <span>不会收集学生姓名、班级、座位表</span>
+                        </div>
+                        <div class="data-sharing-privacy-item data-sharing-privacy-no">
+                            <span class="data-sharing-privacy-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>
+                            </span>
+                            <span>不会收集邮箱、密钥或 Token</span>
+                        </div>
+                        <div class="data-sharing-privacy-item data-sharing-privacy-no">
+                            <span class="data-sharing-privacy-icon">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>
+                            </span>
+                            <span>不会收集请求 IP 或原始 User-Agent</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="settings-section settings-about-section">
             <div class="settings-about-card">
                 <div class="settings-about-icon" style="color: var(--primary-color)">
@@ -915,6 +1011,66 @@
         padding: 12px 16px 16px;
     }
 }
+
+.data-sharing-retention-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 6px 32px 6px 12px;
+    border-radius: 8px;
+    border: 1.5px solid rgba(0, 0, 0, 0.1);
+    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+    font-size: 14px;
+    color: var(--text-primary);
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.data-sharing-retention-select:hover {
+    border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.3);
+}
+
+.data-sharing-retention-select:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+}
+
+.data-sharing-privacy-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+}
+
+.data-sharing-privacy-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--text-primary);
+}
+
+.data-sharing-privacy-icon {
+    flex-shrink: 0;
+    width: 18px;
+    height: 18px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.data-sharing-privacy-collect .data-sharing-privacy-icon {
+    color: #34c759;
+}
+
+.data-sharing-privacy-no .data-sharing-privacy-icon {
+    color: #c7c7cc;
+}
+
+.data-sharing-privacy-no span:last-child {
+    color: var(--text-secondary);
+}
 </style>
 
 <script>
@@ -1430,6 +1586,102 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         loadPlans();
+    })();
+
+    // --- Data Sharing Settings ---
+    (function initDataSharingSettings() {
+        var toggle = document.getElementById('data-sharing-toggle');
+        var statusEl = document.getElementById('data-sharing-status');
+        var retentionSelect = document.getElementById('data-sharing-retention');
+        if (!toggle || !statusEl) return;
+
+        function updateUI(config) {
+            if (!config) return;
+            var enabled = !!config.enabled;
+            toggle.checked = enabled;
+            statusEl.textContent = enabled ? '已开启' : '已关闭';
+            if (retentionSelect && (config.local_log_retention_days || config.log_retention_days)) {
+                var days = String(config.local_log_retention_days || config.log_retention_days);
+                var found = false;
+                for (var i = 0; i < retentionSelect.options.length; i++) {
+                    if (retentionSelect.options[i].value === days) {
+                        retentionSelect.selectedIndex = i;
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found) retentionSelect.value = '30';
+            }
+        }
+
+        fetch('/cloud/config')
+            .then(function(r) { return r.json(); })
+            .then(function(data) { updateUI(data.data_sharing || {}); })
+            .catch(function() { statusEl.textContent = '加载失败'; });
+
+        toggle.addEventListener('change', function() {
+            var enabled = toggle.checked;
+            statusEl.textContent = '保存中...';
+            toggle.disabled = true;
+            if (window.DataSharing && DataSharing.setEnabled) {
+                DataSharing.setEnabled(enabled).then(function(config) {
+                    updateUI(config);
+                    if (typeof showToast === 'function') {
+                        showToast(config.enabled ? '数据共享已开启' : '数据共享已关闭');
+                    }
+                }).catch(function() {
+                    toggle.checked = !enabled;
+                    statusEl.textContent = enabled ? '已关闭' : '已开启';
+                    if (typeof showToast === 'function') showToast('保存失败');
+                }).finally(function() { toggle.disabled = false; });
+            } else {
+                fetch('/cloud/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ data_sharing_enabled: enabled })
+                })
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        updateUI(data.data_sharing || {});
+                        if (typeof showToast === 'function') {
+                            showToast(enabled ? '数据共享已开启' : '数据共享已关闭');
+                        }
+                    })
+                    .catch(function() {
+                        toggle.checked = !enabled;
+                        statusEl.textContent = enabled ? '已关闭' : '已开启';
+                        if (typeof showToast === 'function') showToast('保存失败');
+                    })
+                    .finally(function() { toggle.disabled = false; });
+            }
+        });
+
+        if (retentionSelect) {
+            retentionSelect.addEventListener('change', function() {
+                var days = parseInt(retentionSelect.value) || 30;
+                var successMessage = '本地日志保存天数已更新，不会影响服务端保存天数';
+                var saveLocalRetention = window.DataSharing && (
+                    DataSharing.setLocalLogRetentionDays || DataSharing.setLogRetentionDays
+                );
+                if (saveLocalRetention) {
+                    (DataSharing.setLocalLogRetentionDays || DataSharing.setLogRetentionDays)(days).then(function(config) {
+                        updateUI(config);
+                        if (typeof showToast === 'function') showToast(successMessage);
+                    });
+                } else {
+                    fetch('/cloud/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ data_sharing_local_log_retention_days: days })
+                    })
+                        .then(function(r) { return r.json(); })
+                        .then(function(data) {
+                            updateUI(data.data_sharing || {});
+                            if (typeof showToast === 'function') showToast(successMessage);
+                        });
+                }
+            });
+        }
     })();
 });
 </script>

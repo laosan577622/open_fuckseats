@@ -85,6 +85,18 @@ DEFAULT_CONFIG = {
         'session_token_ttl_days': 7,
         'session_code_ttl_seconds': 60,
     },
+    'data_sharing': {
+        'enabled': True,
+        'database': 'improve_data.sqlite3',
+        'usage_retention_days': 365,
+        'log_retention_days': 90,
+        'cleanup_interval_seconds': 3600,
+        'max_events_per_request': 200,
+        'max_logs_per_request': 200,
+        'max_metadata_keys': 24,
+        'max_metadata_value_length': 160,
+        'hash_salt': '',
+    },
 }
 
 _config = None
@@ -134,6 +146,10 @@ def _build_config():
         config['laosan_oauth']['client_secret'] = os.getenv('LAOSAN_OAUTH_CLIENT_SECRET').strip()
     if os.getenv('CLOUD_SQLITE_PATH'):
         config['database']['name'] = os.getenv('CLOUD_SQLITE_PATH').strip()
+    if os.getenv('FUCKSEATS_IMPROVE_DB_PATH'):
+        config.setdefault('data_sharing', {})['database'] = os.getenv('FUCKSEATS_IMPROVE_DB_PATH').strip()
+    if os.getenv('FUCKSEATS_IMPROVE_ENABLED') is not None:
+        config.setdefault('data_sharing', {})['enabled'] = _bool_env(os.getenv('FUCKSEATS_IMPROVE_ENABLED'))
 
     return config
 

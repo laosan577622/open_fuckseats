@@ -20,6 +20,7 @@ laosan_oauth:  # OAuth 认证配置
 subscription:  # 订阅计划与权限配置
 rate_limit:    # 速率限制
 data_limits:   # 数据传输限制
+data_sharing:  # 帮助改进数据接收
 ```
 
 ---
@@ -143,6 +144,35 @@ data_limits:   # 数据传输限制
 
 ---
 
+## data_sharing - 帮助改进数据接收
+
+该配置由后端插件 `backend/plugins/data_sharing_plugin.py` 使用。插件会把匿名使用统计与脱敏日志写入单独的 SQLite 文件，不写入主云同步数据库。
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| `enabled` | bool | `true` | 是否启用数据接收接口 |
+| `database` | string | `improve_data.sqlite3` | 独立 SQLite 数据库路径，相对于 `backend/` 目录 |
+| `usage_retention_days` | int | `365` | 使用统计保存天数 |
+| `log_retention_days` | int | `90` | 脱敏日志保存天数 |
+| `cleanup_interval_seconds` | int | `3600` | 自动清理间隔 |
+| `max_events_per_request` | int | `200` | 单次最多接收使用统计条数 |
+| `max_logs_per_request` | int | `200` | 单次最多接收日志条数 |
+| `max_metadata_keys` | int | `24` | 单条记录最多保留的扩展字段数量 |
+| `max_metadata_value_length` | int | `160` | 扩展字段字符串最大长度 |
+| `hash_salt` | string | 空 | 匿名客户端标识哈希盐，生产环境建议设置 |
+
+插件接口：
+- `GET /api/improve/config`
+- `POST /api/improve/events`
+- `POST /api/improve/logs`
+- `GET /api/improve/stats`
+
+环境变量覆盖：
+- `FUCKSEATS_IMPROVE_ENABLED` -> `data_sharing.enabled`
+- `FUCKSEATS_IMPROVE_DB_PATH` -> `data_sharing.database`
+
+---
+
 ## 环境变量汇总
 
 | 环境变量 | 对应配置 |
@@ -156,6 +186,8 @@ data_limits:   # 数据传输限制
 | `LAOSAN_OAUTH_CLIENT_ID` | `laosan_oauth.client_id` |
 | `LAOSAN_OAUTH_CLIENT_SECRET` | `laosan_oauth.client_secret` |
 | `CLOUD_REQUIRE_YAML` | 设为 `1` 时，缺少 PyYAML 会报错而非静默跳过 |
+| `FUCKSEATS_IMPROVE_ENABLED` | `data_sharing.enabled` |
+| `FUCKSEATS_IMPROVE_DB_PATH` | `data_sharing.database` |
 
 ---
 

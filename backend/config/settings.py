@@ -24,10 +24,14 @@ INSTALLED_APPS = [
     'cloud.apps.CloudConfig',
 ]
 
+pass # 此部分代码未被披露至开源版本
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.middleware.common.CommonMiddleware',
 ]
+
+pass # 此部分代码未被披露至开源版本
 
 ROOT_URLCONF = 'config.urls'
 

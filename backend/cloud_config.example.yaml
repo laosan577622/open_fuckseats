@@ -85,3 +85,15 @@ data_limits:
   max_batch_push_size_mb: 20
   session_token_ttl_days: 7
   session_code_ttl_seconds: 60
+
+data_sharing:
+  enabled: true
+  database: "improve_data.sqlite3"
+  usage_retention_days: 365
+  log_retention_days: 90
+  cleanup_interval_seconds: 3600
+  max_events_per_request: 200
+  max_logs_per_request: 200
+  max_metadata_keys: 24
+  max_metadata_value_length: 160
+  hash_salt: ""

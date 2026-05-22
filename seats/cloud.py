@@ -16,7 +16,8 @@ from .crypto import compute_key_id, decrypt_payload, encrypt_payload, generate_r
 from .models import CloudSession, FrontendKVStore, LocalCloudKeyMaterial, SyncMeta
 
 
-DEFAULT_CLOUD_SERVER_URL = os.getenv('FUCKSEATS_CLOUD_URL', 'https://fuckseatsapi.577622.xyz').strip() or 'https://fuckseatsapi.577622.xyz'
+OFFICIAL_CLOUD_SERVER_URL = 'https://fuckseatsapi.577622.xyz'
+DEFAULT_CLOUD_SERVER_URL = OFFICIAL_CLOUD_SERVER_URL
 DEFAULT_CLOUD_CALLBACK_URL = os.getenv('FUCKSEATS_CLOUD_CALLBACK_URL', 'http://localhost:23948/cloud/callback').strip() or 'http://localhost:23948/cloud/callback'
 CLOUD_USER_AGENT = os.getenv('FUCKSEATS_CLOUD_USER_AGENT', 'fuckseats_cilent').strip() or 'fuckseats_cilent'
 CLOUD_SERVER_URL_KEY = 'cloud_server_url'
@@ -58,20 +59,15 @@ def _get_ssl_context():
 
 
 def get_cloud_server_url():
-    row = FrontendKVStore.objects.filter(key=CLOUD_SERVER_URL_KEY).first()
-    value = (row.value if row else '') or DEFAULT_CLOUD_SERVER_URL
-    value = str(value).strip().rstrip('/') or DEFAULT_CLOUD_SERVER_URL
-    if value and not value.startswith(('http://', 'https://')):
-        value = 'http://' + value
-    return value
+    return OFFICIAL_CLOUD_SERVER_URL
 
 
 def set_cloud_server_url(url):
-    value = str(url or '').strip().rstrip('/') or DEFAULT_CLOUD_SERVER_URL
-    if value and not value.startswith(('http://', 'https://')):
-        value = 'https://' + value
-    FrontendKVStore.objects.update_or_create(key=CLOUD_SERVER_URL_KEY, defaults={'value': value})
-    return value
+    FrontendKVStore.objects.update_or_create(
+        key=CLOUD_SERVER_URL_KEY,
+        defaults={'value': OFFICIAL_CLOUD_SERVER_URL},
+    )
+    return OFFICIAL_CLOUD_SERVER_URL
 
 
 def build_cloud_login_url(callback_url=None):

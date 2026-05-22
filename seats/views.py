@@ -92,6 +92,15 @@ from .cloud import (
     set_cloud_server_url,
     suspend_sync_version_bump,
 )
+from .data_sharing import (
+    get_data_sharing_config,
+    get_data_sharing_enabled,
+    set_data_sharing_enabled,
+    set_data_sharing_log_retention_days,
+    set_data_sharing_prompt_seen_version,
+    share_log,
+    share_usage_event,
+)
 
 try:
     import pandas as pd
@@ -13486,6 +13495,9 @@ def _cloud_session_payload(session, request=None):
         'token_expires_at': session.token_expires_at.isoformat(),
         'limits': session.limits if isinstance(session.limits, dict) else {},
         'cloud_server_url': get_cloud_server_url(),
+        'cloud_server_locked': True,
+        'official_cloud_server_url': get_cloud_server_url(),
+        'data_sharing': get_data_sharing_config(),
         'login_url': build_cloud_login_url(callback_url) if callback_url else None,
     }
 
@@ -13580,14 +13592,33 @@ def cloud_config(request):
         if request.method == 'POST':
             data = _cloud_json_body(request)
             server_url = set_cloud_server_url(data.get('cloud_server_url') or data.get('url'))
+            if 'data_sharing_enabled' in data:
+                set_data_sharing_enabled(data.get('data_sharing_enabled'))
+            data_sharing_payload = data.get('data_sharing') if isinstance(data.get('data_sharing'), dict) else {}
+            if data_sharing_payload:
+                if 'enabled' in data_sharing_payload:
+                    set_data_sharing_enabled(data_sharing_payload.get('enabled'))
+                if 'local_log_retention_days' in data_sharing_payload:
+                    set_data_sharing_log_retention_days(data_sharing_payload.get('local_log_retention_days'))
+                if 'log_retention_days' in data_sharing_payload:
+                    set_data_sharing_log_retention_days(data_sharing_payload.get('log_retention_days'))
+            if 'data_sharing_local_log_retention_days' in data:
+                set_data_sharing_log_retention_days(data.get('data_sharing_local_log_retention_days'))
+            if 'data_sharing_log_retention_days' in data:
+                set_data_sharing_log_retention_days(data.get('data_sharing_log_retention_days'))
+            if 'data_sharing_prompt_seen_version' in data:
+                set_data_sharing_prompt_seen_version(data.get('data_sharing_prompt_seen_version'))
         else:
             server_url = get_cloud_server_url()
         callback_url = _cloud_callback_url(request)
         return JsonResponse({
             'status': 'success',
             'cloud_server_url': server_url,
+            'cloud_server_locked': True,
+            'official_cloud_server_url': server_url,
             'callback_url': callback_url,
             'login_url': build_cloud_login_url(callback_url),
+            'data_sharing': get_data_sharing_config(),
         })
     except Exception as exc:
         return _cloud_error_response(exc)
@@ -13619,6 +13650,9 @@ def cloud_login(request):
         return JsonResponse({
             'status': 'success',
             'cloud_server_url': get_cloud_server_url(),
+            'cloud_server_locked': True,
+            'official_cloud_server_url': get_cloud_server_url(),
+            'data_sharing': get_data_sharing_config(),
             'callback_url': callback_url,
             'login_url': login_url,
         })
@@ -13709,6 +13743,9 @@ def cloud_userinfo(request):
         return JsonResponse({
             'logged_in': False,
             'cloud_server_url': get_cloud_server_url(),
+            'cloud_server_locked': True,
+            'official_cloud_server_url': get_cloud_server_url(),
+            'data_sharing': get_data_sharing_config(),
             'callback_url': callback_url,
             'login_url': build_cloud_login_url(callback_url),
         })
@@ -14388,3 +14425,54 @@ def desktop_update_install(request):
 @require_http_methods(['GET'])
 def desktop_update_status(request):
     return JsonResponse({'status': 'success', **desktop_runtime.get_update_status()})
+
+
+@csrf_exempt
+@require_POST
+def frontend_improve_events(request):
+    if not get_data_sharing_enabled():
+        return JsonResponse({'ok': False, 'status': 'disabled'}, status=503)
+    try:
+        data = json.loads(request.body or b'{}')
+    except Exception:
+        return JsonResponse({'ok': False, 'status': 'error', 'message': '请求格式错误'}, status=400)
+    events = data.get('events') if isinstance(data.get('events'), list) else []
+    accepted = 0
+    for item in events[:200]:
+        if not isinstance(item, dict):
+            continue
+        share_usage_event(
+            item.get('feature', 'unknown'),
+            item.get('action', 'use'),
+            success=item.get('success', True),
+            duration_ms=int(item.get('duration_ms') or 0),
+            count=int(item.get('count') or 1),
+            metadata=item.get('metadata') if isinstance(item.get('metadata'), dict) else None,
+        )
+        accepted += 1
+    return JsonResponse({'ok': True, 'status': 'success', 'accepted': accepted})
+
+
+@csrf_exempt
+@require_POST
+def frontend_improve_logs(request):
+    if not get_data_sharing_enabled():
+        return JsonResponse({'ok': False, 'status': 'disabled'}, status=503)
+    try:
+        data = json.loads(request.body or b'{}')
+    except Exception:
+        return JsonResponse({'ok': False, 'status': 'error', 'message': '请求格式错误'}, status=400)
+    logs = data.get('logs') if isinstance(data.get('logs'), list) else []
+    accepted = 0
+    for item in logs[:200]:
+        if not isinstance(item, dict):
+            continue
+        share_log(
+            item.get('level', 'INFO'),
+            item.get('source', 'frontend'),
+            item.get('code', ''),
+            message=str(item.get('message') or '')[:240],
+            context=item.get('context') if isinstance(item.get('context'), dict) else None,
+        )
+        accepted += 1
+    return JsonResponse({'ok': True, 'status': 'success', 'accepted': accepted})

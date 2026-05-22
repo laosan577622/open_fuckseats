@@ -104,11 +104,195 @@
     </div>
 
     <script src="{% static 'js/cloud.js' %}?v=1.4"></script>
+    <script src="{% static 'js/data_sharing.js' %}?v=1.0"></script>
     <script src="{% static 'js/toast.js' %}?v=2.0"></script>
     <script src="{% static 'js/update.js' %}?v=2.0"></script>
     <script src="{% static 'js/effects.js' %}?v=2.0"></script>
     <script src="{% static 'js/desktop_bridge.js' %}?v=20260430"></script>
     <script src="{% static 'js/main.js' %}"></script>
+
+    <!-- Data Sharing Prompt -->
+    <div id="data-sharing-prompt-overlay" style="display:none">
+        <div class="ds-prompt-backdrop"></div>
+        <div class="ds-prompt-card">
+            <div class="ds-prompt-icon">
+                <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <circle cx="24" cy="24" r="24" fill="var(--primary-color)" fill-opacity="0.1"/>
+                    <circle cx="24" cy="24" r="16" fill="var(--primary-color)" fill-opacity="0.12"/>
+                    <path d="M24 14C18.48 14 14 18.48 14 24s4.48 10 10 10 10-4.48 10-10S29.52 14 24 14zm-1 15v-6h2v6h-2zm0-8v-2h2v2h-2z" fill="var(--primary-color)"/>
+                </svg>
+            </div>
+            <h3 class="ds-prompt-title">帮助我们做得更好</h3>
+            <p class="ds-prompt-desc">允许发送匿名使用统计和脱敏日志，帮助改进「不想排座位」。</p>
+            <div class="ds-prompt-privacy">
+                <div class="ds-prompt-privacy-row ds-prompt-privacy-yes">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>
+                    <span>功能使用频率和耗时</span>
+                </div>
+                <div class="ds-prompt-privacy-row ds-prompt-privacy-yes">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>
+                    <span>脱敏后的错误日志</span>
+                </div>
+                <div class="ds-prompt-privacy-row ds-prompt-privacy-no">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>
+                    <span>不收集学生、班级或座位数据</span>
+                </div>
+            </div>
+            <div class="ds-prompt-actions">
+                <button type="button" class="btn btn-secondary ds-prompt-btn" id="ds-prompt-skip">暂不开启</button>
+                <button type="button" class="btn btn-primary ds-prompt-btn" id="ds-prompt-enable">开启数据共享</button>
+            </div>
+            <p class="ds-prompt-footnote">你随时可以在「设置」中更改此选项</p>
+        </div>
+    </div>
+    <style>
+    #data-sharing-prompt-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 10000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .ds-prompt-backdrop {
+        position: absolute;
+        inset: 0;
+        background: rgba(0,0,0,0.35);
+        -webkit-backdrop-filter: blur(6px);
+        backdrop-filter: blur(6px);
+    }
+    .ds-prompt-card {
+        position: relative;
+        background: #fff;
+        border-radius: 20px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05);
+        max-width: 400px;
+        width: calc(100% - 32px);
+        padding: 36px 32px 28px;
+        text-align: center;
+        animation: dsPromptIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes dsPromptIn {
+        from { opacity: 0; transform: translateY(24px) scale(0.96); }
+        to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    .ds-prompt-icon {
+        margin-bottom: 16px;
+    }
+    .ds-prompt-title {
+        font-size: 20px;
+        font-weight: 700;
+        color: var(--text-primary, #1a1a1a);
+        margin: 0 0 8px 0;
+        letter-spacing: -0.02em;
+    }
+    .ds-prompt-desc {
+        font-size: 14px;
+        color: var(--text-secondary, #6b7280);
+        margin: 0 0 20px 0;
+        line-height: 1.6;
+    }
+    .ds-prompt-privacy {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        text-align: left;
+        margin-bottom: 24px;
+        padding: 14px 16px;
+        background: rgba(0,0,0,0.025);
+        border-radius: 12px;
+    }
+    .ds-prompt-privacy-row {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        line-height: 1.4;
+    }
+    .ds-prompt-privacy-yes { color: #34c759; }
+    .ds-prompt-privacy-yes span { color: var(--text-primary, #1a1a1a); }
+    .ds-prompt-privacy-no { color: #c7c7cc; }
+    .ds-prompt-privacy-no span { color: var(--text-secondary, #6b7280); }
+    .ds-prompt-actions {
+        display: flex;
+        gap: 10px;
+    }
+    .ds-prompt-btn {
+        flex: 1;
+        padding: 10px 0;
+        font-size: 15px;
+        font-weight: 600;
+        border-radius: 999px;
+    }
+    .ds-prompt-footnote {
+        font-size: 12px;
+        color: var(--text-secondary, #9ca3af);
+        margin: 14px 0 0 0;
+    }
+    @media (max-width: 480px) {
+        .ds-prompt-card { padding: 28px 20px 22px; }
+    }
+    </style>
+    <script>
+    (function() {
+        function showDataSharingPrompt() {
+            var overlay = document.getElementById('data-sharing-prompt-overlay');
+            if (!overlay) return;
+            overlay.style.display = '';
+
+            function dismiss(enable) {
+                var version = '0.0.0';
+                try {
+                    var el = document.querySelector('[data-app-version]');
+                    if (el) version = el.dataset.appVersion;
+                } catch(e) {}
+                if (!version || version === '0.0.0') {
+                    try { version = '{{ app_runtime.version }}'; } catch(e) {}
+                }
+
+                var body = { data_sharing_prompt_seen_version: version };
+                if (enable) body.data_sharing_enabled = true;
+
+                fetch('/cloud/config', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body)
+                }).catch(function(){});
+
+                if (enable && window.DataSharing && DataSharing.setEnabled) {
+                    DataSharing.setEnabled(true).catch(function(){});
+                }
+
+                overlay.style.display = 'none';
+                if (enable && typeof showToast === 'function') {
+                    showToast('感谢你的支持，数据共享已开启');
+                }
+            }
+
+            document.getElementById('ds-prompt-skip').addEventListener('click', function() { dismiss(false); });
+            document.getElementById('ds-prompt-enable').addEventListener('click', function() { dismiss(true); });
+            overlay.querySelector('.ds-prompt-backdrop').addEventListener('click', function() { dismiss(false); });
+        }
+
+        function checkDataSharingPrompt() {
+            fetch('/cloud/config')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    var ds = data.data_sharing || {};
+                    if (ds.show_prompt) {
+                        setTimeout(showDataSharingPrompt, 800);
+                    }
+                })
+                .catch(function() {});
+        }
+
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', checkDataSharingPrompt);
+        } else {
+            checkDataSharingPrompt();
+        }
+    })();
+    </script>
     <script>
     (function() {
         function initCloudHeader() {

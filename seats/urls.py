@@ -128,4 +128,8 @@ urlpatterns = [
     path('api/update/start/', views.desktop_update_start, name='desktop_update_start'),
     path('api/update/install/', views.desktop_update_install, name='desktop_update_install'),
     path('api/update/status/', views.desktop_update_status, name='desktop_update_status'),
+    path('api/improve/events', views.frontend_improve_events, name='frontend_improve_events'),
+    path('api/improve/events/', views.frontend_improve_events, name='frontend_improve_events_slash'),
+    path('api/improve/logs', views.frontend_improve_logs, name='frontend_improve_logs'),
+    path('api/improve/logs/', views.frontend_improve_logs, name='frontend_improve_logs_slash'),
 ]
