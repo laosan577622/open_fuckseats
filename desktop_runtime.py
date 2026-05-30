@@ -13,7 +13,7 @@ from pathlib import Path
 
 
 APP_NAME = "不想排座位"
-DEFAULT_UPDATE_MANIFEST_URL = "https://fuckseats.577622.xyz/api.json"
+DEFAULT_UPDATE_MANIFEST_URL = "https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/api.json"
 LOCAL_RELEASE_MANIFEST_RELATIVE_PATHS = (
     ("runtime", "release.json"),
     ("website", "public", "api.json"),

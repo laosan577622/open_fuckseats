@@ -2,7 +2,7 @@
     let pollingInterval = null;
     const INSTALL_LAUNCH_DELAY_MS = 2000;
     const INSTALL_LAUNCH_DELAY_TEXT = '2 秒';
-    const UPDATE_DETAILS_URL = 'https://fuckseats.577622.xyz/update.txt';
+    const UPDATE_DETAILS_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/update.txt';
     let updateDetailsRequestId = 0;
 
     window.updateInfo = null;
