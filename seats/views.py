@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, JsonResponse, StreamingHttpResponse
+from django.http import HttpResponse, HttpResponseRedirect, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from django.db import transaction, models, IntegrityError, OperationalError, ProgrammingError
 from django.utils import timezone
@@ -31,6 +31,7 @@ from .models import (
     SyncMeta,
 )
 from io import BytesIO
+from http.cookies import CookieError, SimpleCookie
 import json
 import random
 import os
@@ -101,6 +102,26 @@ from .data_sharing import (
     share_log,
     share_usage_event,
 )
+
+APP_MANIFEST_REDIRECT_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/api.json'
+UPDATE_DETAILS_REDIRECT_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/update.txt'
+
+
+def _redirect_preserving_query(request, target_url):
+    query_string = request.META.get('QUERY_STRING', '')
+    if query_string:
+        separator = '&' if '?' in target_url else '?'
+        target_url = f'{target_url}{separator}{query_string}'
+    return HttpResponseRedirect(target_url)
+
+
+def app_manifest_redirect(request):
+    return _redirect_preserving_query(request, APP_MANIFEST_REDIRECT_URL)
+
+
+def update_details_redirect(request):
+    return _redirect_preserving_query(request, UPDATE_DETAILS_REDIRECT_URL)
+
 
 try:
     import pandas as pd
@@ -12577,7 +12598,73 @@ def _bsce_cloud_cookie_header(csrf_token):
 
 
 def _bsce_generate_csrf():
-    return secrets.token_bytes(24).hex()
+    return secrets.token_hex(20)
+
+
+def _bsce_parse_cookie_header(cookie_header):
+    cookies = {}
+    for part in str(cookie_header or '').split(';'):
+        if '=' not in part:
+            continue
+        name, value = part.split('=', 1)
+        name = name.strip()
+        if not name:
+            continue
+        cookies[name] = value.strip()
+    return cookies
+
+
+def _bsce_format_cookie_header(cookies):
+    return '; '.join(
+        f'{name}={value}'
+        for name, value in cookies.items()
+        if name and value is not None
+    )
+
+
+def _bsce_extract_set_cookie_headers(response):
+    headers = getattr(response, 'headers', None)
+    if headers is None and callable(getattr(response, 'info', None)):
+        headers = response.info()
+
+    cookie_headers = []
+    if headers is not None:
+        get_all = getattr(headers, 'get_all', None)
+        if callable(get_all):
+            cookie_headers.extend(get_all('Set-Cookie') or [])
+        elif hasattr(headers, 'get'):
+            header_value = headers.get('Set-Cookie')
+            if header_value:
+                cookie_headers.append(header_value)
+
+    getheaders = getattr(response, 'getheaders', None)
+    if callable(getheaders):
+        for name, value in getheaders():
+            if str(name).lower() == 'set-cookie' and value:
+                cookie_headers.append(value)
+
+    return cookie_headers
+
+
+def _bsce_update_browser_session_cookies(browser_session, response):
+    cookie_headers = _bsce_extract_set_cookie_headers(response)
+    if not cookie_headers:
+        return
+
+    cookie_jar = browser_session.setdefault(
+        'cookies',
+        _bsce_parse_cookie_header(browser_session.get('headers', {}).get('Cookie')),
+    )
+    for header in cookie_headers:
+        parsed = SimpleCookie()
+        try:
+            parsed.load(header)
+        except CookieError:
+            continue
+        for name, morsel in parsed.items():
+            cookie_jar[name] = morsel.value
+
+    browser_session.setdefault('headers', {})['Cookie'] = _bsce_format_cookie_header(cookie_jar)
 
 
 def _bsce_derive_transport_key(username):
@@ -12600,16 +12687,18 @@ def _bsce_encrypt_login_password(password, username):
 
 def _bsce_cloud_browser_session():
     csrf_token = _bsce_generate_csrf()
+    cookie_header = _bsce_cloud_cookie_header(csrf_token)
     headers = {
         **BSCE_CLOUD_HEADERS,
         **secrets.choice(BSCE_CLOUD_BROWSER_PROFILES),
         'Accept-Language': secrets.choice(BSCE_CLOUD_ACCEPT_LANGUAGES),
-        'Cookie': _bsce_cloud_cookie_header(csrf_token),
+        'Cookie': cookie_header,
         'X-CSRF-Token': csrf_token,
     }
     return {
         'csrf': csrf_token,
         'headers': headers,
+        'cookies': _bsce_parse_cookie_header(cookie_header),
     }
 
 
@@ -12654,6 +12743,7 @@ def _bsce_json_post(url, payload, timeout=BSCE_CLOUD_TIMEOUT, browser_session=No
             method='POST',
         )
         with urllib.request.urlopen(req, timeout=timeout, context=context) as response:
+            _bsce_update_browser_session_cookies(browser_session, response)
             raw = response.read().decode('utf-8', errors='replace')
         try:
             return json.loads(raw)
@@ -12700,10 +12790,10 @@ def _bsce_cloud_login(username, password, browser_session=None):
         _bsce_cloud_request_payload('login', username, password=password),
         browser_session=browser_session,
     )
-    login_data = _bsce_require_success(data, 'BSCE 云端登录失败')
-    if not isinstance(login_data, dict) or not login_data.get('token'):
-        raise ValueError('BSCE 云端登录成功但没有返回 token')
-    token = str(login_data.get('token'))
+    _bsce_require_success(data, 'BSCE 云端登录失败')
+    token = str(browser_session.get('cookies', {}).get('sce_token') or '').strip()
+    if not token:
+        raise ValueError('BSCE 云端登录成功但响应 Cookie 没有返回 sce_token')
     settings_data = _bsce_json_post(
         BSCE_CLOUD_AUTH_URL,
         _bsce_cloud_request_payload('get_settings', username, token=token),

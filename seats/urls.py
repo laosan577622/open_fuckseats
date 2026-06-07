@@ -2,6 +2,8 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
+    path('api.json', views.app_manifest_redirect, name='app_manifest_redirect'),
+    path('update.txt', views.update_details_redirect, name='update_details_redirect'),
     path('', views.index, name='index'),
     path('settings/', views.settings_page, name='settings'),
     path('plugins/', views.plugins_overview, name='plugins_overview'),

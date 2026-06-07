@@ -56,6 +56,8 @@ from .models import (
 )
 from .plugin_system import plugin_registry
 from .views import (
+    APP_MANIFEST_REDIRECT_URL,
+    UPDATE_DETAILS_REDIRECT_URL,
     _arrange_standard,
     _arrange_grouped,
     _apply_internal_policy,
@@ -382,9 +384,19 @@ class BsceCloudSessionTests(TestCase):
     def test_bsce_cloud_list_reuses_browser_session_for_single_flow(self):
         from . import views
 
+        class FakeHeaders:
+            def __init__(self, set_cookie_headers=None):
+                self.set_cookie_headers = list(set_cookie_headers or [])
+
+            def get_all(self, name):
+                if str(name).lower() == "set-cookie":
+                    return list(self.set_cookie_headers)
+                return []
+
         class FakeResponse:
-            def __init__(self, payload):
+            def __init__(self, payload, set_cookie_headers=None):
                 self.payload = payload
+                self.headers = FakeHeaders(set_cookie_headers)
 
             def __enter__(self):
                 return self
@@ -405,9 +417,11 @@ class BsceCloudSessionTests(TestCase):
                     "success": True,
                     "data": {
                         "username": "laosan",
-                        "token": "token-123",
                     },
-                })
+                }, [
+                    "sce_token=token-cookie; Domain=sce.jbyc.cc; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax",
+                    "sce_username=laosan; Domain=sce.jbyc.cc; Path=/; Max-Age=2592000; HttpOnly; SameSite=Lax",
+                ])
             if body["action"] == "get_settings":
                 return FakeResponse({"success": True, "data": None})
             return FakeResponse({
@@ -439,6 +453,8 @@ class BsceCloudSessionTests(TestCase):
             "get_settings",
             "list",
         ])
+        self.assertEqual(json.loads(captured_requests[1].data.decode("utf-8")).get("token"), "token-cookie")
+        self.assertEqual(json.loads(captured_requests[2].data.decode("utf-8")).get("token"), "token-cookie")
         csrf_values = [json.loads(req.data.decode("utf-8")).get("_csrf") for req in captured_requests]
         self.assertEqual(csrf_values, ["c" * 40, "c" * 40, "c" * 40])
 
@@ -446,11 +462,14 @@ class BsceCloudSessionTests(TestCase):
         cookies = [req.get_header("Cookie") for req in captured_requests]
         csrf_headers = [req.get_header("X-csrf-token") for req in captured_requests]
         self.assertEqual(len(set(user_agents)), 1)
-        self.assertEqual(len(set(cookies)), 1)
         self.assertEqual(len(set(csrf_headers)), 1)
         self.assertIn("Edg/147.0.0.0", user_agents[0])
         self.assertIn("rth-uid=", cookies[0])
         self.assertIn(f"sce_csrf={'c' * 40}", cookies[0])
+        self.assertNotIn("sce_token=token-cookie", cookies[0])
+        self.assertIn("sce_token=token-cookie", cookies[1])
+        self.assertIn("sce_username=laosan", cookies[1])
+        self.assertEqual(cookies[1], cookies[2])
         self.assertEqual(captured_requests[0].get_header("Sec-ch-ua-platform"), '"macOS"')
         self.assertEqual(captured_requests[0].get_header("Accept-language"), views.BSCE_CLOUD_ACCEPT_LANGUAGES[0])
 
@@ -4359,30 +4378,9 @@ class RuntimeReleaseManifestTests(unittest.TestCase):
                 encoding='utf-8',
             )
 
-            legacy_manifest = root / 'website' / 'public' / 'api.json'
-            legacy_manifest.parent.mkdir(parents=True, exist_ok=True)
-            legacy_manifest.write_text(
-                json.dumps({'version': '1.0.0'}, ensure_ascii=False),
-                encoding='utf-8',
-            )
-
             with patch.object(desktop_runtime, 'iter_runtime_roots', return_value=[root]):
                 with patch.dict('os.environ', {'FUCKSEATS_APP_VERSION': ''}, clear=False):
                     self.assertEqual(desktop_runtime.get_current_version(), '2.3.4')
-
-    def test_get_current_version_falls_back_to_legacy_website_manifest(self):
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            legacy_manifest = root / 'website' / 'public' / 'api.json'
-            legacy_manifest.parent.mkdir(parents=True, exist_ok=True)
-            legacy_manifest.write_text(
-                json.dumps({'version': '1.9.8'}, ensure_ascii=False),
-                encoding='utf-8',
-            )
-
-            with patch.object(desktop_runtime, 'iter_runtime_roots', return_value=[root]):
-                with patch.dict('os.environ', {'FUCKSEATS_APP_VERSION': ''}, clear=False):
-                    self.assertEqual(desktop_runtime.get_current_version(), '1.9.8')
 
     def test_get_current_version_prefers_env_over_manifest(self):
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -4399,6 +4397,32 @@ class RuntimeReleaseManifestTests(unittest.TestCase):
                     self.assertEqual(desktop_runtime.get_current_version(), '9.9.9')
 
 
+class PublicRedirectTests(TestCase):
+    def test_api_json_redirects_to_app_manifest_api(self):
+        response = self.client.get(reverse('app_manifest_redirect'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], APP_MANIFEST_REDIRECT_URL)
+
+    def test_api_json_redirect_preserves_query_string(self):
+        response = self.client.get('/api.json?t=123&cache=no-store')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], f'{APP_MANIFEST_REDIRECT_URL}?t=123&cache=no-store')
+
+    def test_update_txt_redirects_to_update_details_api(self):
+        response = self.client.get(reverse('update_details_redirect'))
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], UPDATE_DETAILS_REDIRECT_URL)
+
+    def test_update_txt_redirect_preserves_query_string(self):
+        response = self.client.get('/update.txt?t=123')
+
+        self.assertEqual(response.status_code, 302)
+        self.assertEqual(response['Location'], f'{UPDATE_DETAILS_REDIRECT_URL}?t=123')
+
+
 class SettingsPageVersionTests(TestCase):
     @patch('seats.context_processors.desktop_runtime.get_current_version', return_value='7.8.9')
     def test_settings_page_renders_current_version(self, _mock_get_current_version):
@@ -4411,7 +4435,7 @@ class SettingsPageVersionTests(TestCase):
         response = self.client.get(reverse('settings'))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'update-details-content')
-        self.assertContains(response, 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/update.txt')
+        self.assertContains(response, '/update.txt')
 
     @patch('seats.context_processors.desktop_runtime.get_current_version', return_value='7.8.9')
     def test_settings_page_contains_liquid_glass_toggle(self, _mock_get_current_version):

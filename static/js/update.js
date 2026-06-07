@@ -2,7 +2,7 @@
     let pollingInterval = null;
     const INSTALL_LAUNCH_DELAY_MS = 2000;
     const INSTALL_LAUNCH_DELAY_TEXT = '2 秒';
-    const UPDATE_DETAILS_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/update.txt';
+    const DEFAULT_UPDATE_DETAILS_URL = '/update.txt';
     let updateDetailsRequestId = 0;
 
     window.updateInfo = null;
@@ -49,11 +49,13 @@
     async function loadUpdateDetails() {
         const requestId = ++updateDetailsRequestId;
         const fallbackText = String((window.updateInfo && window.updateInfo.notes) || '').trim();
+        const detailsEl = document.getElementById('update-details-content');
+        const updateDetailsUrl = (detailsEl && detailsEl.dataset.detailsUrl) || DEFAULT_UPDATE_DETAILS_URL;
 
         renderUpdateDetails('正在加载更新详情...', 'loading');
 
         try {
-            const detailUrl = `${UPDATE_DETAILS_URL}?t=${Date.now()}`;
+            const detailUrl = `${updateDetailsUrl}?t=${Date.now()}`;
             const response = await fetch(detailUrl, { cache: 'no-store' });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
