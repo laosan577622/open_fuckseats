@@ -31,7 +31,7 @@
 
 <section class="classrooms-grid animate-fade-in">
     {% for classroom in classrooms %}
-    <a href="{% url 'classroom_detail' classroom.pk %}" class="classroom-card-link" style="--card-index: {{ forloop.counter0 }}">
+    <a href="{% url 'classroom_detail' classroom.pk %}" class="classroom-card-link" style="--card-index: {{ forloop.counter0 }}"{% if onboarding_sample_pk and classroom.pk == onboarding_sample_pk %} data-sample="1"{% endif %}>
         <article class="card classroom-card">
             <header class="classroom-card-header">
                 <h3>{{ classroom.name }}</h3>

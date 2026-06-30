@@ -27,8 +27,11 @@ from .models import (
     AIConversation,
     AIConversationMessage,
     FrontendKVStore,
+    ONBOARDING_SEEN_STORE_KEY,
+    ONBOARDING_SEEN_STORE_VALUE,
     ClassroomHistoryEntry,
     SyncMeta,
+    OnboardingState,
 )
 from io import BytesIO
 from http.cookies import CookieError, SimpleCookie
@@ -38,6 +41,7 @@ import os
 import re
 import shlex
 import secrets
+import threading
 import uuid
 import time
 import html
@@ -588,9 +592,177 @@ CLASSROOM_COMMAND_HELP = {
 }
 
 
+ONBOARDING_SAMPLE_NAME = '示例班级（新手引导）'
+ONBOARDING_SAMPLE_STUDENTS = [
+    ('张明', 'M', 92), ('李华', 'M', 85), ('王芳', 'F', 78),
+    ('刘伟', 'M', 88), ('陈静', 'F', 95), ('杨磊', 'M', 70),
+    ('赵敏', 'F', 82), ('黄强', 'M', 76), ('周婷', 'F', 90),
+    ('吴鹏', 'M', 68), ('徐丽', 'F', 84), ('孙杰', 'M', 73),
+]
+ONBOARDING_SAMPLE_GROUPS = ('第一组', '第二组')
+
+# 串行化示例班级的创建：客户端首次打开时可能并发发出多个首页请求（预加载等），
+# 各请求会话尚未带 cookie，若不加锁会各自建出一个示例班级，导致首页出现多个示例卡片。
+_onboarding_sample_lock = threading.Lock()
+
+
+def _frontend_onboarding_seen():
+    try:
+        value = FrontendKVStore.objects.filter(
+            key=ONBOARDING_SEEN_STORE_KEY,
+        ).values_list('value', flat=True).first()
+        if str(value or '').strip().lower() in {'1', 'true', 'yes', 'seen'}:
+            return True
+    except Exception:
+        pass
+    try:
+        if OnboardingState.objects.filter(seen=True).exists():
+            FrontendKVStore.objects.update_or_create(
+                key=ONBOARDING_SEEN_STORE_KEY,
+                defaults={'value': ONBOARDING_SEEN_STORE_VALUE},
+            )
+            return True
+    except Exception:
+        pass
+    return False
+
+
+def _ensure_onboarding_sample_classroom(request):
+    """为首次访客创建（或复用）一个带示例学生的示例班级，pk 记入会话。
+
+    并发的首次请求可能在会话 cookie 下发前同时到达，各自建出示例班级；这里用锁串行化，
+    并优先复用已存在的同名示例班级，确保全局只保留一个。
+    """
+    pk = request.session.get('onboarding_sample_pk')
+    if pk:
+        try:
+            classroom = Classroom.objects.get(pk=pk)
+            _ensure_onboarding_sample_groups(classroom)
+            return classroom
+        except Classroom.DoesNotExist:
+            pass
+
+    with _onboarding_sample_lock:
+        # 锁内再查一次会话 pk（等待期间可能已被同会话的另一请求写入）
+        pk = request.session.get('onboarding_sample_pk')
+        if pk:
+            try:
+                classroom = Classroom.objects.get(pk=pk)
+                _ensure_onboarding_sample_groups(classroom)
+                return classroom
+            except Classroom.DoesNotExist:
+                pass
+        # 复用已存在的示例班级，避免重复创建（可能来自上次未完成的引导）
+        existing = Classroom.objects.filter(name=ONBOARDING_SAMPLE_NAME).order_by('-created_at').first()
+        if existing:
+            _ensure_onboarding_sample_groups(existing)
+            request.session['onboarding_sample_pk'] = existing.pk
+            request.session.modified = True
+            return existing
+        classroom = Classroom.objects.create(name=ONBOARDING_SAMPLE_NAME, rows=6, cols=8)
+        Student.objects.bulk_create([
+            Student(classroom=classroom, name=name, gender=gender, score=score)
+            for name, gender, score in ONBOARDING_SAMPLE_STUDENTS
+        ])
+        _ensure_onboarding_sample_groups(classroom)
+        request.session['onboarding_sample_pk'] = classroom.pk
+        request.session.modified = True
+        return classroom
+
+
+def _ensure_onboarding_sample_groups(classroom):
+    for index, name in enumerate(ONBOARDING_SAMPLE_GROUPS, start=1):
+        SeatGroup.objects.get_or_create(
+            classroom=classroom,
+            name=name,
+            defaults={'order': index},
+        )
+
+
+def _delete_onboarding_sample(request, prefer_pk=0):
+    """删除当前会话的示例班级。
+
+    示例班级以「名字」为身份，pk 仅作定位线索。优先按 prefer_pk（用户当前
+    所在班级）定位，其次会话记录的 onboarding_sample_pk，最后按名字兜底
+    清理残留（会话漂移、示例班级被重建等情形）。仅删除名为
+    ONBOARDING_SAMPLE_NAME 的班级，用户自己的班级名字不同，绝不会被误删。
+    """
+    session_pk = _safe_int(request.session.get('onboarding_sample_pk'), 0)
+    prefer_pk = _safe_int(prefer_pk, 0)
+    classroom = None
+    for pk in [prefer_pk, session_pk]:
+        if not pk:
+            continue
+        classroom = Classroom.objects.filter(pk=pk, name=ONBOARDING_SAMPLE_NAME).first()
+        if classroom:
+            break
+    if not classroom:
+        classroom = Classroom.objects.filter(name=ONBOARDING_SAMPLE_NAME).order_by('-created_at').first()
+    if not classroom:
+        # 没有示例班级可删，仍然清掉会话里可能残留的旧 pk，保持干净。
+        if session_pk:
+            request.session.pop('onboarding_sample_pk', None)
+            request.session.modified = True
+        return False
+    with suspend_sync_version_bump(), transaction.atomic():
+        classroom.left_guardian = None
+        classroom.right_guardian = None
+        classroom.save(update_fields=['left_guardian', 'right_guardian'])
+        classroom.groups.update(leader=None)
+        classroom.delete()
+    # 无论删的是不是会话原记录的那个，清空示例班级 pk，防止下次残留。
+    request.session.pop('onboarding_sample_pk', None)
+    request.session.modified = True
+    return True
+
+
+_CLEANUP_PENDING_KEY = 'onboarding_cleanup_pending'
+
+
 def index(request):
+    # 完成引导跳回主页时，再清理示例班级（POST 只挂了待清理标记）。
+    # 必须在查询班级列表之前执行，否则示例班级会出现在主页列表里。
+    if request.session.get(_CLEANUP_PENDING_KEY):
+        request.session.pop(_CLEANUP_PENDING_KEY, None)
+        request.session.modified = True
+        _delete_onboarding_sample(request)
     classrooms = Classroom.objects.all().order_by('-created_at')
-    return render(request, 'seats/index.html', {'classrooms': classrooms})
+    sample_pk = None
+    if _onboarding_should_show_flag(request):
+        try:
+            sample = _ensure_onboarding_sample_classroom(request)
+            sample_pk = sample.pk
+            classrooms = Classroom.objects.all().order_by('-created_at')
+        except Exception:
+            sample_pk = request.session.get('onboarding_sample_pk')
+    return render(request, 'seats/index.html', {
+        'classrooms': classrooms,
+        'onboarding_sample_pk': sample_pk,
+    })
+
+
+def _onboarding_should_show_flag(request):
+    """轻量判定：当前会话是否需要展示新手引导（与 context_processor 一致）。"""
+    path = getattr(request, 'path', '') or ''
+    if path.startswith('/admin') or path.startswith('/static') or path.startswith('/media'):
+        return False
+    if getattr(request, 'method', 'GET') != 'GET':
+        return False
+    if _frontend_onboarding_seen():
+        return False
+    try:
+        from seats.models import OnboardingState
+        sk = request.session.session_key
+        if not sk:
+            request.session['ob_init'] = True
+            request.session.save()
+            sk = request.session.session_key
+        if not sk:
+            return False
+        state = OnboardingState.objects.filter(session_key=sk).first()
+        return state is None or not state.seen
+    except Exception:
+        return False
 
 
 def settings_page(request):
@@ -14515,6 +14687,45 @@ def desktop_update_install(request):
 @require_http_methods(['GET'])
 def desktop_update_status(request):
     return JsonResponse({'status': 'success', **desktop_runtime.get_update_status()})
+
+
+@require_POST
+def mark_onboarding_seen(request):
+    """前端完成/跳过新手引导后调用，落库标记当前会话已看过引导。"""
+    sk = request.session.session_key
+    if not sk:
+        request.session['ob_init'] = True
+        request.session.save()
+        sk = request.session.session_key
+    completed = ''
+    body = {}
+    try:
+        body = json.loads(request.body or b'{}')
+        if not isinstance(body, dict):
+            body = {}
+        if isinstance(body, dict) and isinstance(body.get('completed_steps'), str):
+            completed = body['completed_steps'][:120]
+    except Exception:
+        completed = ''
+        body = {}
+    if sk:
+        OnboardingState.objects.update_or_create(
+            session_key=sk,
+            defaults={'seen': True, 'completed_steps': completed},
+        )
+    FrontendKVStore.objects.update_or_create(
+        key=ONBOARDING_SEEN_STORE_KEY,
+        defaults={'value': ONBOARDING_SEEN_STORE_VALUE},
+    )
+    # 示例班级的清理推迟到「跳回主页」之后执行：这里只在完成引导时挂一个
+    # 待清理标记，由首页 index 视图消费。跳回主页前示例班级仍保留，避免在
+    # 班级详情页就消失造成跳转突兀。
+    stage = str((body or {}).get('completed_steps') or '').strip()
+    if stage in {'detail_done', 'tour_done'}:
+        request.session[_CLEANUP_PENDING_KEY] = True
+        request.session.modified = True
+    payload = {'ok': True, 'sample_deleted': False}
+    return JsonResponse(payload)
 
 
 @csrf_exempt

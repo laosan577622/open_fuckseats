@@ -29,6 +29,7 @@ DEFAULT_CONFIG = {
         'authorize_url': 'https://www.577622.xyz/oauth/authorize',
         'token_url': 'https://www.577622.xyz/oauth/token',
         'userinfo_url': 'https://www.577622.xyz/oauth/userinfo',
+        'developer_subscriptions_url': 'https://www.577622.xyz/api/developer/subscriptions',
         'scope': 'email nickname subscriptions',
     },
     'subscription': {

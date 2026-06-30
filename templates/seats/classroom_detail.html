@@ -226,7 +226,7 @@
 
     <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="help">
         <div class="ribbon-group">
-            <button type="button" class="btn btn-secondary" onclick="startTour()" id="btn-tour">教程</button>
+            <button type="button" class="btn btn-secondary" onclick="startOnboarding(true)" id="btn-tour">新手引导</button>
             <span class="ribbon-group-label">帮助</span>
         </div>
     </div>
@@ -1121,167 +1121,6 @@
 
 <script src="{% static 'js/classroom.js' %}?v={{ request.session.session_key|default:'dev' }}"></script>
 <script>
-    function startTour(startIndex = 0) {
-        const switchRibbon = (tabKey) => {
-            const tab = document.querySelector(`.ribbon-tab[data-ribbon-tab="${tabKey}"]`);
-            if (tab) tab.click();
-        };
-
-        const finishTour = () => {
-            localStorage.setItem('seat_app_tour_seen', 'true');
-            window.scrollTo(0, 0);
-            document.documentElement.scrollTop = 0;
-            document.body.scrollTop = 0;
-        };
-
-        let exitByCloseButton = false;
-
-        const driver = window.driver.js.driver({
-            showProgress: true,
-            animate: true,
-            doneBtnText: '开始使用',
-            nextBtnText: '下一步',
-            prevBtnText: '上一步',
-            steps: [
-                {
-                    element: '.header-content',
-                    popover: {
-                        title: '欢迎使用 不想排座位 智能排座系统',
-                        description: '这是一个简单而强大的排座工具。让我们花一分钟熟悉一下基本操作吧。'
-                    }
-                },
-                {
-                    element: '.seat-stage',
-                    popover: {
-                        title: '排座区域',
-                        description: '这里显示当前的座位布局。您可以直接拖拽学生进行位置交换，或点击空位查看详细信息。'
-                    }
-                },
-                {
-                    element: '#shortcut-actions',
-                    popover: {
-                        title: '后悔药',
-                        description: '操作失误不用担心，这里可以随时撤销 (Ctrl+Z) 或重做 (Ctrl+Y) 您的最后一步操作。'
-                    }
-                },
-                {
-                    element: '#main-tab-header',
-                    popover: {
-                        title: '多功能面板',
-                        description: '在这里切换不同功能：<br>• <b>学生</b>：管理未入座学生<br>• <b>小组</b>：创建和管理学习小组<br>• <b>约束</b>：设置固定座位或互斥规则<br>• <b>文件</b>：导入导出数据与快照'
-                    }
-                },
-                {
-                    element: '.tab-panel[data-tab-panel="groups"]',
-                    popover: {
-                        title: '小组管理',
-                        description: '切换到“小组”标签页，您可以创建学习小组。开启“分组模式”后，框选多个座位即可批量分配小组。'
-                    },
-                    onHighlightStarted: (element) => {
-                        document.querySelector('.tab-btn[data-tab="groups"]').click();
-                    }
-                },
-                {
-                    element: '#btn-open-excel-import-modal',
-                    popover: {
-                        title: '班级名单导入',
-                        description: '点击这里打开导入菜单，再选择 Excel 成绩表或座位表导入方式。'
-                    },
-                    onHighlightStarted: (element) => {
-                        switchRibbon('file');
-                        document.querySelector('.tab-btn[data-tab="files"]').click();
-                    }
-                },
-                {
-                    element: 'form[action*="save_layout_snapshot"]',
-                    popover: {
-                        title: '布局快照系统',
-                        description: '保存当前座位布局为快照，随时一键恢复。适用于保存考试座位、日常座位等不同方案。'
-                    },
-                    onHighlightStarted: (element) => {
-                        document.querySelector('.tab-btn[data-tab="files"]').click();
-                    }
-                },
-                {
-                    element: '#btn-auto-arrange',
-                    popover: {
-                        title: '自动排座',
-                        description: '点击这里可以使用多种算法自动生成座位表，例如按成绩排序或确保小组均衡。'
-                    },
-                    onHighlightStarted: () => {
-                        switchRibbon('home');
-                    }
-                },
-                {
-                    element: '#btn-layout-editor',
-                    popover: {
-                        title: '布局自定义',
-                        description: '需要修改教室形状？点击这里可以自由添加座位、过道，调整教室大小。'
-                    },
-                    onHighlightStarted: () => {
-                        switchRibbon('view');
-                    }
-                },
-                {
-                    element: '#btn-export',
-                    popover: {
-                        title: '导出结果',
-                        description: '满意后，点击这里打开导出菜单，可按“导出 > 第三方软件 > 座位表”导出结果。'
-                    },
-                    onHighlightStarted: () => {
-                        switchRibbon('file');
-                    }
-                },
-                {
-                    element: '#btn-fullscreen',
-                    popover: {
-                        title: '沉浸式体验',
-                        description: '点击全屏按钮，让排座界面充满整个屏幕，获得更大的操作空间。'
-                    },
-                    onHighlightStarted: () => {
-                        switchRibbon('view');
-                    }
-                },
-                {
-                    element: '.zoom-controls',
-                    popover: {
-                        title: '视图缩放',
-                        description: '座位太多看不全？使用这里或者按住 Ctrl 滚动鼠标滚轮来缩放视图。'
-                    }
-                }
-            ],
-            onCloseClick: () => {
-                const activeIndex = typeof driver.getActiveIndex === 'function' ? driver.getActiveIndex() : 0;
-                exitByCloseButton = true;
-                driver.destroy();
-                window.setTimeout(() => {
-                    showConfirmModal('确定要结束教程吗？', {
-                        title: '结束教程',
-                        okText: '结束教程',
-                        cancelText: '继续观看'
-                    }).then(ok => {
-                        if (ok) {
-                            finishTour();
-                            return;
-                        }
-                        startTour(activeIndex);
-                    });
-                }, 0);
-            },
-            onDestroyStarted: () => {
-                if (exitByCloseButton) {
-                    exitByCloseButton = false;
-                    driver.destroy();
-                    return;
-                }
-                driver.destroy();
-                finishTour();
-            },
-        });
-
-        driver.drive(startIndex);
-    }
-
     function toggleFullScreen() {
         const doc = document;
         const root = document.documentElement;
@@ -1333,13 +1172,6 @@
             }
         });
     }
-
-    document.addEventListener('DOMContentLoaded', function () {
-        const hasSeenTour = localStorage.getItem('seat_app_tour_seen');
-        if (!hasSeenTour) {
-            startTour();
-        }
-    });
 </script>
 
 {{ constraint_items|json_script:"constraint-initial-data" }}

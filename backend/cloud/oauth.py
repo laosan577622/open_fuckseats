@@ -147,15 +147,69 @@ def upsert_cloud_user(userinfo, token_payload):
     return user
 
 
+def fetch_subscriptions_via_developer_api(uid):
+    """通过开发者订阅查询接口拉取用户订阅。
+
+    该接口凭 client_id + client_secret + user_uid 鉴权，不依赖 OAuth access_token
+    的有效期，因此即使 access_token 已过期也能正常查询。只要用户未撤销授权即可。
+
+    返回 subscriptions 列表（结构与 userinfo.subscriptions 一致，可直接喂给 determine_tier）。
+    """
+    config = get_config().get('laosan_oauth', {})
+    url = str(config.get('developer_subscriptions_url') or '').strip()
+    client_id = str(config.get('client_id') or '').strip()
+    client_secret = str(config.get('client_secret') or '').strip()
+    if not url:
+        raise OAuthError('云端 developer_subscriptions_url 未配置')
+    if not client_id or not client_secret:
+        raise OAuthError('云端 OAuth client_id/client_secret 未配置')
+
+    body = json.dumps({'client_id': client_id, 'client_secret': client_secret, 'user_uid': str(uid)}).encode('utf-8')
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+            'User-Agent': CLOUD_USER_AGENT,
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        },
+        method='POST',
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20, context=_get_ssl_context()) as response:
+            raw = response.read()
+            payload = json.loads(raw.decode('utf-8')) if raw else {}
+    except urllib.error.HTTPError as exc:
+        error_body = ''
+        try:
+            error_body = exc.read().decode('utf-8', errors='replace')
+        except Exception:
+            pass
+        print(f'[oauth developer_subscriptions] {exc.code} {exc.reason} uid={uid} body={error_body[:500]}')
+        raise OAuthError(f'查询订阅失败：HTTP {exc.code} {exc.reason}') from exc
+    except Exception as exc:
+        raise OAuthError(f'查询订阅失败：{exc}') from exc
+
+    if not isinstance(payload, dict) or not payload.get('success'):
+        err = (payload.get('error') if isinstance(payload, dict) else None) or '服务端未返回成功结果'
+        raise OAuthError(f'查询订阅失败：{err}')
+
+    subscriptions = payload.get('subscriptions')
+    if not isinstance(subscriptions, list):
+        subscriptions = []
+    return subscriptions
+
+
 def refresh_user_subscription(user):
-    if not user.laosan_access_token:
-        return user
-    userinfo = fetch_userinfo(user.laosan_access_token)
-    tier, subscription_expires_at = determine_tier(userinfo.get('subscriptions') if isinstance(userinfo.get('subscriptions'), list) else [])
-    user.nickname = str(userinfo.get('nickname') or userinfo.get('name') or user.nickname or '')
-    user.email = str(userinfo.get('email') or user.email or '')
-    user.avatar_url = str(userinfo.get('avatar_url') or userinfo.get('avatar') or user.avatar_url or '')
+    """刷新用户订阅。
+
+    使用开发者订阅查询接口（凭 user_uid），不依赖 access_token 有效期，
+    因此即使 access_token 已过期也能正常刷新订阅。
+    """
+    subscriptions = fetch_subscriptions_via_developer_api(user.uid)
+    tier, subscription_expires_at = determine_tier(subscriptions)
     user.subscription_tier = tier
     user.subscription_expires_at = subscription_expires_at
-    user.save(update_fields=['nickname', 'email', 'avatar_url', 'subscription_tier', 'subscription_expires_at', 'updated_at'])
+    user.save(update_fields=['subscription_tier', 'subscription_expires_at', 'updated_at'])
     return user

@@ -102,9 +102,33 @@ document.addEventListener('DOMContentLoaded', () => {
     const seatsImportInput = document.getElementById('seats-import-input');
     const seatsImportTriggers = Array.from(document.querySelectorAll('[data-seats-import-trigger="1"]'));
     const fileMenuRoots = Array.from(document.querySelectorAll('.menu-dropdown[data-menu-root]'));
+    const touchPointerQuery = window.matchMedia ? window.matchMedia('(pointer: coarse)') : null;
     const GROUP_MOVE_MODE_KEY = 'seats_group_move_mode';
     const GROUP_MOVE_MODE_FIXED = 'fixed';
     const GROUP_MOVE_MODE_FOLLOW = 'follow';
+    let suppressNextTouchClick = false;
+    let touchDragCandidate = null;
+    let touchDragSession = null;
+    const isTouchUi = () => Boolean(
+        (touchPointerQuery && touchPointerQuery.matches) ||
+        navigator.maxTouchPoints > 0 ||
+        'ontouchstart' in window
+    );
+    const markNextTouchClickSuppressed = () => {
+        suppressNextTouchClick = true;
+        window.setTimeout(() => {
+            suppressNextTouchClick = false;
+        }, 650);
+    };
+    const consumeSuppressedTouchClick = (event) => {
+        if (!suppressNextTouchClick) return false;
+        suppressNextTouchClick = false;
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        return true;
+    };
     const SHIFT_USE_LARGE_GROUPS_KEY = 'seats_shift_use_large_groups';
     const parseJsonScript = (id, fallback) => {
         const node = document.getElementById(id);
@@ -2406,7 +2430,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         document.addEventListener('keydown', (event) => {
-            if (!(event.ctrlKey || event.metaKey) || event.key.toLowerCase() !== 'k') {
+            if (!(event.ctrlKey || event.metaKey) || (event.key || '').toLowerCase() !== 'k') {
                 return;
             }
             const target = event.target;
@@ -2512,14 +2536,23 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    const handleResponse = (promise, onSuccess = null) => {
+    const dispatchStudentMoved = (detail = {}) => {
+        document.dispatchEvent(new CustomEvent('fuckseats:student-moved', {
+            detail
+        }));
+    };
+
+    const handleResponse = (promise, onSuccess = null, afterRefresh = null) => {
         promise.then(data => {
             if (data && data.status && data.status !== 'success') {
                 notify(data.message || '操作失败');
                 return;
             }
             if (onSuccess) onSuccess(data);
-            refreshState();
+            const refreshed = refreshState();
+            if (afterRefresh) {
+                refreshed.then(() => afterRefresh(data)).catch(() => {});
+            }
         }).catch((err) => notify(err?.message || '操作失败'));
     };
 
@@ -2579,11 +2612,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (!hasEmptyGuide && localStorage.getItem('group_guide_pending') === 'true') {
-        localStorage.removeItem('group_guide_pending');
-        setTimeout(() => startGroupTour(), 400);
+        if (window.FUCKSEATS_ONBOARDING_ACTIVE === true) {
+            localStorage.removeItem('group_guide_pending');
+        } else {
+            localStorage.removeItem('group_guide_pending');
+            setTimeout(() => startGroupTour(), 400);
+        }
     }
 
     function startGroupTour() {
+        if (window.FUCKSEATS_ONBOARDING_ACTIVE === true) {
+            try { localStorage.removeItem('group_guide_pending'); } catch (e) {}
+            return;
+        }
         const driverJs = window.driver && window.driver.js;
         if (!driverJs) return;
 
@@ -2951,7 +2992,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 student_id: targetStudentId,
                 row,
                 col
-            })));
+            })), null, () => dispatchStudentMoved({
+                source: 'quick-swap-assign',
+                student_id: targetStudentId,
+                row,
+                col
+            }));
             return;
         }
 
@@ -2959,7 +3005,12 @@ document.addEventListener('DOMContentLoaded', () => {
             student_id: targetStudentId,
             row,
             col
-        })));
+        })), null, () => dispatchStudentMoved({
+            source: 'quick-swap',
+            student_id: targetStudentId,
+            row,
+            col
+        }));
     };
 
     const showQuickSwapModal = (seat, matches) => {
@@ -3164,6 +3215,190 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         setTimeout(() => ghost.remove(), 0);
+    };
+
+    const resetDragState = () => {
+        dragState.active = false;
+        dragState.mode = null;
+        dragState.anchorKey = null;
+        dragState.sourceKeys = [];
+        dragState.sourceStudentId = null;
+    };
+
+    const getSeatFromPoint = (clientX, clientY) => {
+        const target = document.elementFromPoint(clientX, clientY);
+        if (!target || !target.closest) return null;
+        const seat = target.closest('.seat');
+        if (!seat || seat.dataset.cellType !== 'seat') return null;
+        return seat;
+    };
+
+    const createTouchDragGhost = (sourceEl, label) => {
+        const ghost = document.createElement('div');
+        ghost.className = 'drag-ghost touch-drag-ghost';
+
+        if (sourceEl) {
+            const wrapper = document.createElement('div');
+            wrapper.className = 'drag-preview-clone';
+            wrapper.style.width = `${sourceEl.offsetWidth}px`;
+            wrapper.style.height = `${sourceEl.offsetHeight}px`;
+
+            const clone = sourceEl.cloneNode(true);
+            clone.style.margin = '0';
+            clone.style.transform = 'none';
+            clone.style.width = '100%';
+            clone.style.height = '100%';
+
+            wrapper.appendChild(clone);
+            ghost.appendChild(wrapper);
+        }
+
+        if (label) {
+            const badge = document.createElement('div');
+            badge.className = 'drag-ghost-badge';
+            badge.textContent = label;
+            ghost.appendChild(badge);
+        }
+
+        document.body.appendChild(ghost);
+        return ghost;
+    };
+
+    const moveTouchDragGhost = (clientX, clientY) => {
+        if (!touchDragSession || !touchDragSession.ghost) return;
+        touchDragSession.ghost.style.transform = `translate3d(${clientX + 12}px, ${clientY + 12}px, 0)`;
+    };
+
+    const cleanupTouchDragSession = () => {
+        if (touchDragSession && touchDragSession.ghost) {
+            touchDragSession.ghost.remove();
+        }
+        touchDragSession = null;
+        touchDragCandidate = null;
+        document.body.classList.remove('touch-dragging');
+    };
+
+    const beginTouchDrag = (event) => {
+        if (!touchDragCandidate || groupMode) return false;
+        const { sourceEl, sourceType, sourceSeat, studentId, pointerId } = touchDragCandidate;
+        if (!studentId) return false;
+
+        if (typeof clearTouchContextTimer === 'function') {
+            clearTouchContextTimer();
+        }
+
+        dragState.active = true;
+        dragState.sourceStudentId = studentId;
+
+        let label = '安排入座';
+        if (sourceType === 'seat') {
+            const sourceKey = seatKey(sourceSeat);
+            const selectedMovableSeats = collectMovableSelectedSeats();
+            const canMultiDrag = selectedMovableSeats.length > 1 && selectedSeats.has(sourceKey);
+            dragState.anchorKey = sourceKey;
+            if (canMultiDrag) {
+                dragState.mode = 'multi';
+                dragState.sourceKeys = selectedMovableSeats.map((seat) => seatKey(seat));
+                label = `移动 ${dragState.sourceKeys.length} 人`;
+            } else {
+                dragState.mode = 'single';
+                dragState.sourceKeys = [sourceKey];
+                label = '移动';
+            }
+        } else {
+            dragState.mode = 'single';
+            dragState.anchorKey = null;
+            dragState.sourceKeys = [];
+        }
+
+        touchDragSession = {
+            pointerId,
+            ghost: createTouchDragGhost(sourceEl, label),
+            lastSeat: null,
+        };
+        document.body.classList.add('touch-dragging');
+        markNextTouchClickSuppressed();
+        moveTouchDragGhost(event.clientX, event.clientY);
+
+        const previewSeat = getSeatFromPoint(event.clientX, event.clientY);
+        if (previewSeat) {
+            applyDragPreviewForSeat(previewSeat);
+            touchDragSession.lastSeat = previewSeat;
+        } else if (sourceSeat) {
+            sourceSeat.classList.add('drag-origin');
+        }
+        return true;
+    };
+
+    const updateTouchDrag = (event) => {
+        if (!touchDragSession || touchDragSession.pointerId !== event.pointerId) return;
+        moveTouchDragGhost(event.clientX, event.clientY);
+        const seat = getSeatFromPoint(event.clientX, event.clientY);
+        if (seat !== touchDragSession.lastSeat) {
+            touchDragSession.lastSeat = seat;
+            if (seat) {
+                applyDragPreviewForSeat(seat);
+            } else {
+                clearDragFeedback();
+                dragState.sourceKeys.forEach((key) => {
+                    const sourceSeat = getSeatByKey(key);
+                    if (sourceSeat) sourceSeat.classList.add('drag-origin');
+                });
+            }
+        }
+    };
+
+    const completeTouchDrop = (dropSeat) => {
+        if (!dropSeat || dropSeat.dataset.cellType !== 'seat') return;
+
+        if (dragState.active && dragState.mode === 'multi') {
+            const plan = buildMultiDropPlan(dropSeat);
+            clearDragFeedback();
+            if (!plan.ok) {
+                notify(plan.reason || '批量拖拽失败');
+                return;
+            }
+            if (plan.deltaRow === 0 && plan.deltaCol === 0) {
+                return;
+            }
+            if (!urls.moveBatch) {
+                notify('当前版本不支持多选拖拽');
+                return;
+            }
+            handleResponse(postJson(urls.moveBatch, withMovePreferences({ moves: plan.moves })), () => {
+                clearMultiSelection();
+            }, () => {
+                dispatchStudentMoved({
+                    source: 'touch-drop-batch',
+                    row: dropSeat.dataset.row,
+                    col: dropSeat.dataset.col,
+                    moves: plan.moves
+                });
+            });
+            return;
+        }
+
+        const studentId = dragState.sourceStudentId;
+        const sourceSeat = getSeatByKey(dragState.anchorKey);
+        clearDragFeedback();
+        if (!studentId) return;
+        if (sourceSeat && sourceSeat.dataset.seatKey === dropSeat.dataset.seatKey) return;
+        handleResponse(postJson(urls.move, withMovePreferences({
+            student_id: studentId,
+            row: dropSeat.dataset.row,
+            col: dropSeat.dataset.col
+        })), null, () => dispatchStudentMoved({
+            source: 'touch-drop',
+            student_id: studentId,
+            row: dropSeat.dataset.row,
+            col: dropSeat.dataset.col
+        }));
+    };
+
+    const cancelTouchDrag = () => {
+        clearDragFeedback();
+        resetDragState();
+        cleanupTouchDragSession();
     };
 
     const setDragEnabled = (enabled) => {
@@ -3474,6 +3709,7 @@ document.addEventListener('DOMContentLoaded', () => {
             lastHoveredSeat = seat;
         });
         seat.addEventListener('click', (e) => {
+            if (consumeSuppressedTouchClick(e)) return;
             if (seat.dataset.cellType !== 'seat') return;
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
                 addToMultiSelection(seat);
@@ -3481,6 +3717,19 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (groupMode) {
                 toggleMultiSelection(seat);
+                return;
+            }
+            if (isTouchUi() && selectedUnseated && !seat.dataset.studentId) {
+                handleResponse(postJson(urls.assign, withMovePreferences({
+                    student_id: selectedUnseated.dataset.studentId,
+                    row: seat.dataset.row,
+                    col: seat.dataset.col
+                })), null, () => dispatchStudentMoved({
+                    source: 'touch-assign',
+                    student_id: selectedUnseated.dataset.studentId,
+                    row: seat.dataset.row,
+                    col: seat.dataset.col
+                }));
                 return;
             }
             setSelectedSeat(seat);
@@ -3516,6 +3765,13 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 handleResponse(postJson(urls.moveBatch, withMovePreferences({ moves: plan.moves })), () => {
                     clearMultiSelection();
+                }, () => {
+                    dispatchStudentMoved({
+                        source: 'html5-drop-batch',
+                        row: seat.dataset.row,
+                        col: seat.dataset.col,
+                        moves: plan.moves
+                    });
                 });
                 return;
             }
@@ -3529,12 +3785,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 student_id: studentId,
                 row: seat.dataset.row,
                 col: seat.dataset.col
-            })));
+            })), null, () => dispatchStudentMoved({
+                source: 'html5-drop',
+                student_id: studentId,
+                row: seat.dataset.row,
+                col: seat.dataset.col
+            }));
         });
     });
 
     if (unseatedList) {
         unseatedList.addEventListener('click', async (e) => {
+            if (consumeSuppressedTouchClick(e)) return;
             const deleteBtn = e.target.closest('.delete-student');
             if (deleteBtn) {
                 e.stopPropagation();
@@ -3591,12 +3853,104 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.addEventListener('dragend', () => {
-        dragState.active = false;
-        dragState.mode = null;
-        dragState.anchorKey = null;
-        dragState.sourceKeys = [];
-        dragState.sourceStudentId = null;
+        resetDragState();
         clearDragFeedback();
+    });
+
+    const getTouchDragSource = (event) => {
+        if (!isTouchUi()) return null;
+        if (event.pointerType === 'mouse') return null;
+        if (event.button !== undefined && event.button !== 0) return null;
+        if (!event.target || !event.target.closest) return null;
+        if (event.target.closest('button, a, input, textarea, select')) return null;
+        if (groupMode) return null;
+
+        const seatContent = event.target.closest('.seat-content');
+        if (seatContent) {
+            const sourceSeat = seatContent.closest('.seat');
+            const studentId = seatContent.dataset.studentId;
+            if (!sourceSeat || !studentId) return null;
+            return {
+                sourceType: 'seat',
+                sourceEl: sourceSeat,
+                sourceSeat,
+                studentId,
+            };
+        }
+
+        const unseatedItem = event.target.closest('.unseated-item');
+        if (unseatedItem) {
+            const studentId = unseatedItem.dataset.studentId;
+            if (!studentId) return null;
+            return {
+                sourceType: 'unseated',
+                sourceEl: unseatedItem,
+                sourceSeat: null,
+                studentId,
+            };
+        }
+
+        return null;
+    };
+
+    document.addEventListener('pointerdown', (event) => {
+        const source = getTouchDragSource(event);
+        if (!source) return;
+        touchDragCandidate = {
+            ...source,
+            pointerId: event.pointerId,
+            startX: event.clientX,
+            startY: event.clientY,
+        };
+        if (event.target.setPointerCapture) {
+            try {
+                event.target.setPointerCapture(event.pointerId);
+            } catch (_) { }
+        }
+    });
+
+    document.addEventListener('pointermove', (event) => {
+        if (touchDragSession) {
+            if (touchDragSession.pointerId !== event.pointerId) return;
+            event.preventDefault();
+            updateTouchDrag(event);
+            return;
+        }
+
+        if (!touchDragCandidate || touchDragCandidate.pointerId !== event.pointerId) return;
+        const dx = event.clientX - touchDragCandidate.startX;
+        const dy = event.clientY - touchDragCandidate.startY;
+        if (Math.hypot(dx, dy) < 12) return;
+
+        event.preventDefault();
+        if (beginTouchDrag(event)) {
+            updateTouchDrag(event);
+        } else {
+            touchDragCandidate = null;
+        }
+    }, { passive: false });
+
+    document.addEventListener('pointerup', (event) => {
+        if (touchDragSession && touchDragSession.pointerId === event.pointerId) {
+            event.preventDefault();
+            const dropSeat = getSeatFromPoint(event.clientX, event.clientY);
+            completeTouchDrop(dropSeat);
+            resetDragState();
+            cleanupTouchDragSession();
+            return;
+        }
+        if (touchDragCandidate && touchDragCandidate.pointerId === event.pointerId) {
+            touchDragCandidate = null;
+        }
+    }, { passive: false });
+
+    document.addEventListener('pointercancel', (event) => {
+        if (touchDragSession && touchDragSession.pointerId === event.pointerId) {
+            cancelTouchDrag();
+        }
+        if (touchDragCandidate && touchDragCandidate.pointerId === event.pointerId) {
+            touchDragCandidate = null;
+        }
     });
 
     if (groupAssignToggle) {
@@ -4244,7 +4598,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', (e) => {
         if (isEditableTarget()) return;
-        const key = e.key.toLowerCase();
+        // e.key 在某些合成事件 / IME 组合输入下可能为 undefined，做空值保护避免 toLowerCase 报错
+        const key = (e.key || '').toLowerCase();
         if (key === 'escape') {
             e.preventDefault();
             clearMultiSelection();
@@ -4518,6 +4873,72 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!seat) return false;
         return openSeatContextMenu(event, seat);
     };
+
+    let touchContextTimer = null;
+    let touchContextStart = null;
+
+    const clearTouchContextTimer = () => {
+        if (touchContextTimer) {
+            window.clearTimeout(touchContextTimer);
+            touchContextTimer = null;
+        }
+        touchContextStart = null;
+    };
+
+    const scheduleTouchContextMenu = (event) => {
+        if (!isTouchUi()) return;
+        if (event.pointerType === 'mouse') return;
+        if (!event.target || !event.target.closest) return;
+        if (contextMenu && contextMenu.contains(event.target)) return;
+        if (event.target.closest('button, a, input, textarea, select')) return;
+
+        const target = event.target.closest('.seat, .unseated-item');
+        if (!target) return;
+
+        clearTouchContextTimer();
+        touchContextStart = {
+            x: event.clientX,
+            y: event.clientY,
+            target,
+        };
+        touchContextTimer = window.setTimeout(() => {
+            const current = touchContextStart;
+            clearTouchContextTimer();
+            if (!current || !current.target || !current.target.isConnected) return;
+            const opened = openSeatContextMenuFromTarget({
+                clientX: current.x,
+                clientY: current.y,
+                preventDefault() { },
+                stopPropagation() { },
+            }, current.target);
+            if (opened) {
+                touchDragCandidate = null;
+                markNextTouchClickSuppressed();
+                if (navigator.vibrate) {
+                    navigator.vibrate(8);
+                }
+            }
+        }, 540);
+    };
+
+    document.addEventListener('pointerdown', scheduleTouchContextMenu);
+
+    document.addEventListener('pointermove', (event) => {
+        if (!touchContextStart) return;
+        const dx = Math.abs(event.clientX - touchContextStart.x);
+        const dy = Math.abs(event.clientY - touchContextStart.y);
+        if (dx > 10 || dy > 10) {
+            clearTouchContextTimer();
+        }
+    });
+
+    ['pointerup', 'pointercancel'].forEach((eventName) => {
+        document.addEventListener(eventName, clearTouchContextTimer);
+    });
+
+    if (seatStage) {
+        seatStage.addEventListener('scroll', clearTouchContextTimer, { passive: true });
+    }
 
     document.addEventListener('fuckseats:windows-contextmenu', (event) => {
         const detail = event.detail || {};

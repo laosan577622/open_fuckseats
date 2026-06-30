@@ -7,9 +7,10 @@
     <title>{% block title %}不想排座位{% endblock %}</title>
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=3.4">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=3.5">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css" />
     {% block extra_head %}{% endblock %}
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <script src="{% static 'js/theme.js' %}?v=1.0"></script>
     <script src="{% url 'frontend_store_js' %}?v=1.0"></script>
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
@@ -103,13 +104,183 @@
         </div>
     </div>
 
+    <script src="{% static 'js/popup_manager.js' %}?v=1.0"></script>
     <script src="{% static 'js/cloud.js' %}?v=1.4"></script>
     <script src="{% static 'js/data_sharing.js' %}?v=1.0"></script>
     <script src="{% static 'js/toast.js' %}?v=2.0"></script>
-    <script src="{% static 'js/update.js' %}?v=2.0"></script>
+    <script src="{% static 'js/update.js' %}?v=2.2"></script>
     <script src="{% static 'js/effects.js' %}?v=2.0"></script>
     <script src="{% static 'js/desktop_bridge.js' %}?v=20260430"></script>
-    <script src="{% static 'js/main.js' %}"></script>
+    <script src="{% static 'js/main.js' %}?v=1.1"></script>
+
+    <!-- Welcome Finale Overlay（新手引导收官动画） -->
+    <div id="welcome-finale-overlay" style="display:none" aria-hidden="true">
+        <div class="wf-backdrop"></div>
+        <div class="wf-scene">
+            <div class="wf-orbs" aria-hidden="true">
+                <span class="wf-orb wf-orb-1"></span>
+                <span class="wf-orb wf-orb-2"></span>
+                <span class="wf-orb wf-orb-3"></span>
+            </div>
+            <div class="wf-card">
+                <div class="wf-emblem" aria-hidden="true">
+                    <span class="wf-emblem-glow"></span>
+                    <svg width="84" height="84" viewBox="0 0 84 84" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <circle class="wf-emblem-ring" cx="42" cy="42" r="40"/>
+                        <path class="wf-emblem-seat" d="M20 56h44M24 56V36a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4v20M30 56v6M54 56v6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+                        <defs>
+                            <linearGradient id="wfGrad" x1="0" y1="0" x2="84" y2="84" gradientUnits="userSpaceOnUse">
+                                <stop stop-color="#0a59f7"/>
+                                <stop offset="1" stop-color="#7db1ff"/>
+                            </linearGradient>
+                        </defs>
+                    </svg>
+                </div>
+                <div class="wf-lines">
+                    <p class="wf-line">挺好，基本操作你都摸过一遍了</p>
+                    <p class="wf-line">排座、换座、分组、右键菜单，也都试过了</p>
+                    <p class="wf-line">示例班级待会儿会自己清掉，不用管它</p>
+                    <p class="wf-line">接下来建一个你自己的班级就行</p>
+                    <p class="wf-line">名字、名单随便填，排错了随时能撤销</p>
+                    <p class="wf-line">哪步忘了，随时点右上角「帮助」再看一遍</p>
+                </div>
+                <h2 class="wf-title">这就上手啦，欢迎使用 <span class="wf-brand">不想排座位</span></h2>
+                <div class="wf-progress" aria-hidden="true"><span class="wf-progress-bar"></span></div>
+            </div>
+            <div class="wf-confetti" aria-hidden="true">
+                <span class="wf-conf"></span><span class="wf-conf"></span><span class="wf-conf"></span>
+                <span class="wf-conf"></span><span class="wf-conf"></span><span class="wf-conf"></span>
+                <span class="wf-conf"></span><span class="wf-conf"></span><span class="wf-conf"></span>
+                <span class="wf-conf"></span><span class="wf-conf"></span><span class="wf-conf"></span>
+            </div>
+        </div>
+        <button type="button" id="wf-skip" class="wf-skip">跳过</button>
+    </div>
+    <style>
+    #welcome-finale-overlay {
+        position: fixed; inset: 0; z-index: 10001;
+        display: flex; align-items: center; justify-content: center;
+    }
+    #welcome-finale-overlay.wf-hidden { opacity: 0; transition: opacity .6s ease; }
+    .wf-backdrop {
+        position: absolute; inset: 0;
+        background:
+            radial-gradient(120% 120% at 50% 16%, rgba(10,89,247,0.20), transparent 55%),
+            radial-gradient(90% 70% at 50% 124%, rgba(125,177,255,0.14), transparent 60%),
+            linear-gradient(160deg, #0b1020 0%, #0a0f1d 55%, #070a14 100%);
+        -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+        animation: wfBackdropIn .8s ease both, wfBackdropShift 18s ease-in-out infinite alternate;
+    }
+    @keyframes wfBackdropIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes wfBackdropShift { 0% { transform: scale(1); } 100% { transform: scale(1.08); } }
+    .wf-scene { position: relative; width: min(560px, calc(100% - 48px)); }
+    .wf-orbs { position: absolute; inset: -120px; pointer-events: none; }
+    .wf-orb { position: absolute; border-radius: 50%; filter: blur(48px); opacity: .55; }
+    .wf-orb-1 { width: 260px; height: 260px; left: -40px; top: -60px; background: rgba(10,89,247,.50); animation: wfFloat1 12s ease-in-out infinite; }
+    .wf-orb-2 { width: 200px; height: 200px; right: -20px; top: 40px; background: rgba(125,177,255,.40); animation: wfFloat2 14s ease-in-out infinite; }
+    .wf-orb-3 { width: 180px; height: 180px; left: 40%; bottom: -80px; background: rgba(10,89,247,.30); animation: wfFloat3 16s ease-in-out infinite; }
+    @keyframes wfFloat1 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(30px,24px)} }
+    @keyframes wfFloat2 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(-28px,18px)} }
+    @keyframes wfFloat3 { 0%,100%{transform:translate(0,0)} 50%{transform:translate(18px,-26px)} }
+    .wf-card {
+        position: relative; padding: 56px 44px 44px; text-align: center; border-radius: 24px;
+        background: linear-gradient(180deg, rgba(255,255,255,.06), rgba(255,255,255,.02));
+        border: 1px solid rgba(255,255,255,.12);
+        box-shadow: 0 30px 90px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.08);
+        -webkit-backdrop-filter: blur(20px); backdrop-filter: blur(20px);
+        overflow: hidden;
+        animation: wfCardIn 1.1s cubic-bezier(.16,1,.3,1) both, wfBob 6s ease-in-out 1.6s infinite;
+    }
+    .wf-card::after {
+        content: ''; position: absolute; inset: 0; border-radius: 24px; pointer-events: none;
+        background: linear-gradient(120deg, transparent 30%, rgba(125,177,255,.18) 50%, transparent 70%);
+        background-size: 250% 100%; background-position: 250% 0;
+        animation: wfBorderSweep 6s ease-in-out 1.4s infinite;
+        mix-blend-mode: screen;
+    }
+    @keyframes wfBorderSweep { 0%{background-position:250% 0} 55%,100%{background-position:-150% 0} }
+    @keyframes wfCardIn { from { opacity:0; transform: translateY(28px) scale(.95); filter: blur(8px); } to { opacity:1; transform: translateY(0) scale(1); filter: blur(0); } }
+    @keyframes wfBob { 0%,100%{ transform: translateY(0) } 50%{ transform: translateY(-6px) } }
+    .wf-emblem { position: relative; margin: 0 auto 26px; width: 84px; height: 84px; }
+    .wf-emblem-glow {
+        position: absolute; inset: -18px; border-radius: 50%; pointer-events: none;
+        background: radial-gradient(circle, rgba(10,89,247,.45), rgba(125,177,255,.18) 55%, transparent 72%);
+        filter: blur(10px); opacity: 0; animation: wfGlowIn 1.2s ease 1s forwards, wfGlowPulse 3.4s ease-in-out 2.2s infinite;
+    }
+    @keyframes wfGlowIn { to { opacity: 1; } }
+    @keyframes wfGlowPulse { 0%,100%{ transform: scale(1); opacity: .85 } 50%{ transform: scale(1.18); opacity: 1 } }
+    .wf-emblem-ring { stroke: url(#wfGrad); stroke-width: 1.5; fill: none; stroke-dasharray: 260; stroke-dashoffset: 260; animation: wfDraw 1.6s ease .3s forwards; }
+    .wf-emblem-seat { stroke: url(#wfGrad); stroke-width: 2.4; stroke-dasharray: 220; stroke-dashoffset: 220; animation: wfDraw 1.8s ease .6s forwards; }
+    @keyframes wfDraw { to { stroke-dashoffset: 0; } }
+    .wf-confetti { position: absolute; inset: 0; pointer-events: none; overflow: visible; }
+    .wf-conf {
+        position: absolute; left: 50%; top: 42%; width: 8px; height: 8px; border-radius: 2px;
+        opacity: 0; transform: translate(-50%,-50%) scale(0);
+        animation: wfConfBurst 1.6s cubic-bezier(.12,.8,.3,1) 8s forwards;
+    }
+    .wf-conf:nth-child(1){ --tx: 150px;  --ty: -120px; --rot: 200deg; background:#0a59f7; animation-delay: 8s; }
+    .wf-conf:nth-child(2){ --tx: -140px; --ty: -90px;  --rot: -160deg; background:#7db1ff; animation-delay: 8.05s; }
+    .wf-conf:nth-child(3){ --tx: 110px;  --ty: 130px;  --rot: 120deg;  background:#ffffff; animation-delay: 8.1s; }
+    .wf-conf:nth-child(4){ --tx: -160px; --ty: 60px;   --rot: -220deg; background:#0a59f7; animation-delay: 8.08s; }
+    .wf-conf:nth-child(5){ --tx: 60px;   --ty: -160px; --rot: 80deg;   background:#7db1ff; animation-delay: 8.12s; }
+    .wf-conf:nth-child(6){ --tx: -80px;  --ty: -150px; --rot: -90deg;  background:#ffffff; animation-delay: 8.04s; }
+    .wf-conf:nth-child(7){ --tx: 180px;  --ty: 30px;   --rot: 240deg;  background:#0a59f7; animation-delay: 8.15s; }
+    .wf-conf:nth-child(8){ --tx: -120px; --ty: 140px;  --rot: -120deg; background:#7db1ff; animation-delay: 8.02s; }
+    .wf-conf:nth-child(9){ --tx: 40px;   --ty: 170px;  --rot: 160deg;  background:#ffffff; animation-delay: 8.18s; }
+    .wf-conf:nth-child(10){ --tx: -180px; --ty: -40px; --rot: -200deg; background:#0a59f7; animation-delay: 8.1s; }
+    .wf-conf:nth-child(11){ --tx: 130px; --ty: -60px;  --rot: 100deg;  background:#7db1ff; animation-delay: 8.14s; }
+    .wf-conf:nth-child(12){ --tx: -60px; --ty: 120px;  --rot: -80deg;  background:#ffffff; animation-delay: 8.06s; }
+    @keyframes wfConfBurst {
+        0%   { opacity: 0; transform: translate(-50%,-50%) scale(0) rotate(0); }
+        25%  { opacity: 1; transform: translate(calc(-50% + var(--tx)*.6), calc(-50% + var(--ty)*.6)) scale(1.1) rotate(calc(var(--rot)*.5)); }
+        100% { opacity: 0; transform: translate(calc(-50% + var(--tx)), calc(-50% + var(--ty) + 60px)) scale(.6) rotate(var(--rot)); }
+    }
+    .wf-lines { display: flex; flex-direction: column; gap: 10px; margin-bottom: 26px; }
+    .wf-line {
+        margin: 0; font-size: 16px; line-height: 1.7; color: rgba(235,240,255,.82);
+        letter-spacing: .04em; opacity: 0; transform: translateY(10px);
+        animation: wfLineIn .9s cubic-bezier(.16,1,.3,1) forwards;
+    }
+    .wf-line:nth-child(1){ animation-delay: 1.5s; }
+    .wf-line:nth-child(2){ animation-delay: 2.5s; }
+    .wf-line:nth-child(3){ animation-delay: 3.5s; }
+    .wf-line:nth-child(4){ animation-delay: 4.7s; }
+    .wf-line:nth-child(5){ animation-delay: 5.7s; }
+    .wf-line:nth-child(6){ animation-delay: 6.7s; }
+    @keyframes wfLineIn { to { opacity: 1; transform: translateY(0); } }
+    .wf-title {
+        margin: 8px 0 22px; font-size: 30px; font-weight: 700; letter-spacing: .02em;
+        color: #fff; opacity: 0; transform: translateY(12px);
+        animation: wfTitleIn 1.1s cubic-bezier(.16,1,.3,1) 8s forwards;
+    }
+    .wf-brand {
+        background: linear-gradient(90deg, #7db1ff, #ffffff, #7db1ff);
+        background-size: 200% 100%;
+        -webkit-background-clip: text; background-clip: text; color: transparent;
+        animation: wfShimmer 3.2s linear 9s infinite;
+    }
+    @keyframes wfTitleIn { to { opacity: 1; transform: translateY(0); } }
+    @keyframes wfShimmer { to { background-position: 200% 0; } }
+    .wf-progress { width: 180px; height: 3px; margin: 0 auto; border-radius: 999px; background: rgba(255,255,255,.12); overflow: hidden; opacity: 0; animation: wfFade .8s ease .8s forwards; }
+    .wf-progress-bar { display: block; width: 0; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #0a59f7, #7db1ff); animation: wfFill 10s linear 1s forwards; }
+    @keyframes wfFade { to { opacity: 1; } }
+    @keyframes wfFill { to { width: 100%; } }
+    .wf-skip {
+        position: fixed; right: 24px; bottom: 22px; z-index: 10002;
+        padding: 8px 18px; font-size: 13px; color: rgba(255,255,255,.7);
+        background: rgba(255,255,255,.08); border: 1px solid rgba(255,255,255,.16);
+        border-radius: 999px; cursor: pointer;
+        -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px);
+        transition: color .25s, background .25s, transform .25s;
+        opacity: 0; animation: wfFade .8s ease 1s forwards;
+    }
+    .wf-skip:hover { color: #fff; background: rgba(255,255,255,.16); transform: translateY(-1px); }
+    @media (max-width: 480px) {
+        .wf-card { padding: 44px 24px 32px; }
+        .wf-line { font-size: 15px; }
+        .wf-title { font-size: 24px; }
+    }
+    </style>
 
     <!-- Data Sharing Prompt -->
     <div id="data-sharing-prompt-overlay" style="display:none">
@@ -236,6 +407,7 @@
     <script>
     (function() {
         var PROMPT_SEEN_KEY = 'fuckseats_data_sharing_prompt_seen_version';
+        var AFTER_ONBOARDING_KEY = 'fuckseats_show_data_sharing_after_onboarding';
         var promptVisible = false;
 
         function getCurrentVersion() {
@@ -258,6 +430,20 @@
             try { localStorage.setItem(PROMPT_SEEN_KEY, version); } catch(e) {}
         }
 
+        function consumeAfterOnboardingPromptRequest() {
+            try {
+                if (sessionStorage.getItem(AFTER_ONBOARDING_KEY) !== '1') return false;
+                sessionStorage.removeItem(AFTER_ONBOARDING_KEY);
+                return true;
+            } catch(e) {
+                return false;
+            }
+        }
+
+        function shouldDeferForOnboarding() {
+            return window.FUCKSEATS_ONBOARDING_ACTIVE === true || window.ONBOARDING_SHOULD_SHOW === true;
+        }
+
         function persistPromptDecision(body) {
             var payload = JSON.stringify(body);
             if (navigator.sendBeacon) {
@@ -278,8 +464,11 @@
             var overlay = document.getElementById('data-sharing-prompt-overlay');
             if (!overlay) return;
             if (promptVisible) return;
-            promptVisible = true;
-            overlay.style.display = '';
+
+            function doShow() {
+                promptVisible = true;
+                overlay.style.display = '';
+            }
 
             function dismiss(enable) {
                 var version = getCurrentVersion();
@@ -295,6 +484,7 @@
 
                 promptVisible = false;
                 overlay.style.display = 'none';
+                if (window.PopupManager) PopupManager.notifyDismissed('data_sharing');
                 if (enable && typeof showToast === 'function') {
                     showToast('感谢你的支持，数据共享已开启');
                 }
@@ -303,19 +493,87 @@
             document.getElementById('ds-prompt-skip').addEventListener('click', function() { dismiss(false); });
             document.getElementById('ds-prompt-enable').addEventListener('click', function() { dismiss(true); });
             overlay.querySelector('.ds-prompt-backdrop').addEventListener('click', function() { dismiss(false); });
+
+            // 通过弹窗队列保证同一时刻只有一个弹窗显示
+            if (window.PopupManager) {
+                PopupManager.request('data_sharing', doShow);
+            } else {
+                doShow();
+            }
         }
 
-        function checkDataSharingPrompt() {
+        function requestDataSharingPrompt(delayMs) {
             fetch('/cloud/config')
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
                     var ds = data.data_sharing || {};
                     if (ds.show_prompt && getLocalSeenVersion() !== getCurrentVersion()) {
-                        setTimeout(showDataSharingPrompt, 800);
+                        setTimeout(showDataSharingPrompt, delayMs == null ? 800 : delayMs);
                     }
                 })
                 .catch(function() {});
         }
+
+        // 新手引导收官动画：在数据共享弹窗之前播放，整体动效不少于 10 秒，
+        // 只能点击「跳过」按钮结束，点击空白区域不会关闭。
+        function showWelcomeFinale(onDone) {
+            var overlay = document.getElementById('welcome-finale-overlay');
+            if (!overlay) { if (typeof onDone === 'function') onDone(); return; }
+            if (overlay.dataset.busy === '1') return;
+
+            function resetAnimations() {
+                var els = overlay.querySelectorAll('.wf-backdrop, .wf-card, .wf-emblem-ring, .wf-emblem-seat, .wf-emblem-glow, .wf-line, .wf-title, .wf-progress, .wf-progress-bar, .wf-skip, .wf-conf');
+                els.forEach(function (el) {
+                    el.style.animation = 'none';
+                    void el.offsetWidth;
+                    el.style.animation = '';
+                });
+            }
+
+            var finished = false;
+            var timer = null;
+
+            function play() {
+                overlay.dataset.busy = '1';
+                overlay.style.display = '';
+                overlay.classList.remove('wf-hidden');
+                resetAnimations();
+
+                function finish() {
+                    if (finished) return;
+                    finished = true;
+                    if (timer) { clearTimeout(timer); timer = null; }
+                    overlay.classList.add('wf-hidden');
+                    if (window.PopupManager) PopupManager.notifyDismissed('welcome_finale');
+                    setTimeout(function () {
+                        overlay.style.display = 'none';
+                        overlay.dataset.busy = '';
+                        if (typeof onDone === 'function') onDone();
+                    }, 620);
+                }
+
+                timer = setTimeout(finish, 11000);
+                var skipBtn = document.getElementById('wf-skip');
+                if (skipBtn) { skipBtn.onclick = finish; }
+            }
+
+            if (window.PopupManager) PopupManager.request('welcome_finale', play);
+            else play();
+        }
+
+        function checkDataSharingPrompt() {
+            if (consumeAfterOnboardingPromptRequest()) {
+                showWelcomeFinale(function () { requestDataSharingPrompt(700); });
+                return;
+            }
+            if (shouldDeferForOnboarding()) return;
+            requestDataSharingPrompt(800);
+        }
+
+        window.showDataSharingPromptAfterOnboarding = function(delayMs) {
+            consumeAfterOnboardingPromptRequest();
+            showWelcomeFinale(function () { requestDataSharingPrompt(delayMs == null ? 500 : delayMs); });
+        };
 
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', checkDataSharingPrompt);
@@ -562,23 +820,42 @@
     (function() {
         var QQ_GROUP_KEY = 'qq_group_prompt_seen';
 
+        function shouldDeferForOnboarding() {
+            return window.FUCKSEATS_ONBOARDING_ACTIVE === true || window.ONBOARDING_SHOULD_SHOW === true;
+        }
+
         function showQQGroupPrompt() {
             var overlay = document.getElementById('qq-group-overlay');
             if (!overlay) return;
-            overlay.style.display = '';
+
+            function doShow() {
+                overlay.style.display = '';
+            }
 
             function dismiss() {
                 localStorage.setItem(QQ_GROUP_KEY, '1');
                 overlay.style.display = 'none';
+                if (window.PopupManager) PopupManager.notifyDismissed('qq_group');
             }
 
             document.getElementById('qq-group-close').addEventListener('click', dismiss);
             document.getElementById('qq-group-confirm').addEventListener('click', dismiss);
             overlay.querySelector('.qq-group-backdrop').addEventListener('click', dismiss);
+
+            // 通过弹窗队列保证同一时刻只有一个弹窗显示
+            if (window.PopupManager) {
+                PopupManager.request('qq_group', doShow);
+            } else {
+                doShow();
+            }
         }
 
         function checkQQGroupPrompt() {
             if (localStorage.getItem(QQ_GROUP_KEY)) return;
+            if (shouldDeferForOnboarding()) {
+                setTimeout(checkQQGroupPrompt, 1000);
+                return;
+            }
             setTimeout(showQQGroupPrompt, 1200);
         }
 
@@ -591,6 +868,12 @@
     </script>
 
     {% block extra_scripts %}{% endblock %}
+
+    <script>
+        window.ONBOARDING_SHOULD_SHOW = {% if onboarding_should_show %}true{% else %}false{% endif %};
+        window.ONBOARDING_SAMPLE_PK = {{ onboarding_sample_pk|default_if_none:'null' }};
+    </script>
+    <script src="{% static 'js/onboarding.js' %}?v=1.9"></script>
 </body>
 
 </html>

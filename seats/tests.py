@@ -35,6 +35,7 @@ from desktop_shell import (
 )
 from seats.cloud import CloudAPIError
 from seats.crypto import decrypt_payload, encrypt_payload, generate_rsa_keypair
+from seats.data_sharing import DATA_SHARING_ENABLED_KEY, DATA_SHARING_PROMPT_SEEN_VERSION_KEY
 from .models import (
     Classroom,
     FrontendKVStore,
@@ -53,6 +54,9 @@ from .models import (
     ClassroomHistoryEntry,
     SyncMeta,
     CloudSession,
+    OnboardingState,
+    ONBOARDING_SEEN_STORE_KEY,
+    ONBOARDING_SEEN_STORE_VALUE,
 )
 from .plugin_system import plugin_registry
 from .views import (
@@ -67,6 +71,7 @@ from .views import (
     _bsce_json_post,
     _create_future_mode_response,
     _run_future_mode_chat,
+    ONBOARDING_SAMPLE_NAME,
 )
 
 
@@ -3602,6 +3607,112 @@ class FrontendStoreTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["status"], "success")
         self.assertFalse(FrontendKVStore.objects.filter(key="plugin_mode").exists())
+
+    def test_cloud_config_persists_data_sharing_prompt_decision(self):
+        with patch("desktop_runtime.get_current_version", return_value="9.8.7"):
+            response = self.client.post(
+                reverse("cloud_config"),
+                data=json.dumps({
+                    "data_sharing_enabled": True,
+                    "data_sharing_prompt_seen_version": "9.8.7",
+                }),
+                content_type="application/json",
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["status"], "success")
+            self.assertEqual(
+                FrontendKVStore.objects.get(key=DATA_SHARING_PROMPT_SEEN_VERSION_KEY).value,
+                "9.8.7",
+            )
+            self.assertEqual(
+                FrontendKVStore.objects.get(key=DATA_SHARING_ENABLED_KEY).value,
+                "1",
+            )
+            self.assertFalse(response.json()["data_sharing"]["show_prompt"])
+
+    def test_mark_onboarding_seen_persists_stable_frontend_store_key(self):
+        response = self.client.post(
+            reverse("mark_onboarding_seen"),
+            data=json.dumps({"completed_steps": "detail_done"}),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["ok"], True)
+        self.assertEqual(
+            FrontendKVStore.objects.get(key=ONBOARDING_SEEN_STORE_KEY).value,
+            ONBOARDING_SEEN_STORE_VALUE,
+        )
+        state = OnboardingState.objects.get()
+        self.assertTrue(state.seen)
+        self.assertEqual(state.completed_steps, "detail_done")
+        self.assertFalse(response.json()["sample_deleted"])
+
+    def test_index_creates_onboarding_sample_with_groups(self):
+        response = self.client.get(reverse("index"))
+
+        self.assertEqual(response.status_code, 200)
+        sample = Classroom.objects.get(name=ONBOARDING_SAMPLE_NAME)
+        self.assertEqual(sample.students.count(), 12)
+        self.assertEqual(list(sample.groups.values_list("name", flat=True)), ["第一组", "第二组"])
+
+    def test_mark_onboarding_seen_deletes_completed_sample_classroom(self):
+        sample = Classroom.objects.create(name=ONBOARDING_SAMPLE_NAME, rows=2, cols=2)
+        session = self.client.session
+        session["onboarding_sample_pk"] = sample.pk
+        session.save()
+
+        # 完成引导：只挂「待清理」标记，不立即删，跳回主页前示例班级仍在
+        response = self.client.post(
+            reverse("mark_onboarding_seen"),
+            data=json.dumps({
+                "completed_steps": "detail_done",
+                "current_classroom_id": sample.pk,
+            }),
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertTrue(payload["ok"])
+        self.assertFalse(payload["sample_deleted"])
+        self.assertNotIn("redirect_url", payload)
+        self.assertTrue(Classroom.objects.filter(pk=sample.pk).exists())
+
+        # 跳回主页：此时才清理示例班级
+        response = self.client.get(reverse("index"))
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(Classroom.objects.filter(pk=sample.pk).exists())
+
+    def test_index_uses_stable_frontend_store_key_to_suppress_onboarding(self):
+        FrontendKVStore.objects.create(
+            key=ONBOARDING_SEEN_STORE_KEY,
+            value=ONBOARDING_SEEN_STORE_VALUE,
+        )
+
+        response = self.client.get(reverse("index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "window.ONBOARDING_SHOULD_SHOW = false;")
+        self.assertFalse(Classroom.objects.filter(name="示例班级（新手引导）").exists())
+
+    def test_index_backfills_stable_key_from_legacy_onboarding_state(self):
+        OnboardingState.objects.create(
+            session_key="old-session",
+            seen=True,
+            completed_steps="detail_done",
+        )
+
+        response = self.client.get(reverse("index"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "window.ONBOARDING_SHOULD_SHOW = false;")
+        self.assertEqual(
+            FrontendKVStore.objects.get(key=ONBOARDING_SEEN_STORE_KEY).value,
+            ONBOARDING_SEEN_STORE_VALUE,
+        )
+        self.assertFalse(Classroom.objects.filter(name="示例班级（新手引导）").exists())
 
     @override_settings(APP_SHELL="webview")
     def test_index_template_exposes_app_shell_runtime(self):

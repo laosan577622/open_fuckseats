@@ -327,6 +327,10 @@ class FrontendKVStore(models.Model):
         return self.key
 
 
+ONBOARDING_SEEN_STORE_KEY = "fuckseats_onboarding_seen"
+ONBOARDING_SEEN_STORE_VALUE = "1"
+
+
 class ClassroomHistoryEntry(models.Model):
     classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='history_entries')
     action_type = models.CharField(max_length=40, blank=True, default='', verbose_name="动作类型")
@@ -406,3 +410,21 @@ class LocalCloudKeyMaterial(models.Model):
 
     def __str__(self):
         return f"{self.scope}-{self.key_id}"
+
+
+class OnboardingState(models.Model):
+    """记录每个访客是否已看过新手引导（落库，跨会话持久）。"""
+
+    session_key = models.CharField(max_length=64, unique=True, verbose_name="会话 key")
+    cloud_uid = models.CharField(max_length=64, blank=True, default='', verbose_name="云端 UID")
+    seen = models.BooleanField(default=False, verbose_name="已看过新手引导")
+    completed_steps = models.CharField(max_length=120, blank=True, default='', verbose_name="已完成步骤")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "新手引导状态"
+        verbose_name_plural = verbose_name
+
+    def __str__(self):
+        return f"{self.session_key}-{'seen' if self.seen else 'new'}"

@@ -7,7 +7,15 @@
 
     window.updateInfo = null;
 
+    function shouldDeferForOnboarding() {
+        return window.FUCKSEATS_ONBOARDING_ACTIVE === true || window.ONBOARDING_SHOULD_SHOW === true;
+    }
+
     async function checkUpdate() {
+        if (shouldDeferForOnboarding()) {
+            window.setTimeout(checkUpdate, 1000);
+            return;
+        }
         try {
             const response = await fetch('/api/update/check/');
             const data = await response.json();
@@ -90,6 +98,19 @@
 
     function showUpdateModal() {
         if (!window.updateInfo) return;
+        if (shouldDeferForOnboarding()) {
+            window.setTimeout(showUpdateModal, 1000);
+            return;
+        }
+        // 通过弹窗队列保证同一时刻只有一个弹窗显示
+        if (window.PopupManager) {
+            PopupManager.request('update', doShowUpdateModal);
+        } else {
+            doShowUpdateModal();
+        }
+    }
+
+    function doShowUpdateModal() {
         const modal = document.getElementById('update-modal');
         const currentVersion = document.getElementById('current-version');
         const latestVersion = document.getElementById('latest-version');
@@ -116,6 +137,8 @@
             clearInterval(pollingInterval);
             pollingInterval = null;
         }
+        // 通知队列：本弹窗已关闭，可显示下一个
+        if (window.PopupManager) PopupManager.notifyDismissed('update');
     }
 
     async function startUpdate() {

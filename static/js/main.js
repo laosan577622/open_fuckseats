@@ -1,6 +1,16 @@
 document.addEventListener('DOMContentLoaded', () => {
     const header = document.querySelector('.app-header');
     const titlebarBadge = document.querySelector('.titlebar-badge');
+    const touchPointerQuery = window.matchMedia ? window.matchMedia('(pointer: coarse)') : null;
+
+    const syncTouchMode = () => {
+        const hasTouch = Boolean(
+            (touchPointerQuery && touchPointerQuery.matches) ||
+            navigator.maxTouchPoints > 0 ||
+            'ontouchstart' in window
+        );
+        document.documentElement.classList.toggle('has-touch-ui', hasTouch);
+    };
 
     const syncHeaderHeight = () => {
         if (!header) return;
@@ -65,7 +75,15 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     initRibbonTabs();
+    syncTouchMode();
     syncHeaderHeight();
     window.addEventListener('resize', syncHeaderHeight);
     window.addEventListener('load', syncHeaderHeight);
+    if (touchPointerQuery) {
+        if (typeof touchPointerQuery.addEventListener === 'function') {
+            touchPointerQuery.addEventListener('change', syncTouchMode);
+        } else if (typeof touchPointerQuery.addListener === 'function') {
+            touchPointerQuery.addListener(syncTouchMode);
+        }
+    }
 });

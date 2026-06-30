@@ -18,6 +18,7 @@
 
 {% block content %}
 <div id="layout-root" class="classroom-layout animate-fade-in"
+    data-classroom-id="{{ classroom.pk }}"
     data-cell-url="{% url 'update_cell_type' classroom.pk %}"
     data-shift-url="{% url 'shift_layout' classroom.pk %}"
     data-row-col-op-url="{% url 'insert_delete_row_col' classroom.pk %}"
@@ -122,5 +123,5 @@
     </div>
 </div>
 
-<script src="{% static 'js/layout_editor.js' %}"></script>
+<script src="{% static 'js/layout_editor.js' %}?v=1.2"></script>
 {% endblock %}

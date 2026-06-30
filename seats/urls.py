@@ -134,4 +134,6 @@ urlpatterns = [
     path('api/improve/events/', views.frontend_improve_events, name='frontend_improve_events_slash'),
     path('api/improve/logs', views.frontend_improve_logs, name='frontend_improve_logs'),
     path('api/improve/logs/', views.frontend_improve_logs, name='frontend_improve_logs_slash'),
+    path('onboarding/seen', views.mark_onboarding_seen, name='mark_onboarding_seen'),
+    path('onboarding/seen/', views.mark_onboarding_seen, name='mark_onboarding_seen_slash'),
 ]

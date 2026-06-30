@@ -12,10 +12,32 @@ document.addEventListener('DOMContentLoaded', () => {
     let contextSeat = null;
     let contextRowCol = null;  // {row, col} for empty-space right-click
     let contextMenuJustOpenedAt = 0;
+    let suppressNextTouchClick = false;
 
     const selectedSeats = new Set();
     let selecting = false;
     let selectStart = null;
+    const touchPointerQuery = window.matchMedia ? window.matchMedia('(pointer: coarse)') : null;
+    const isTouchUi = () => Boolean(
+        (touchPointerQuery && touchPointerQuery.matches) ||
+        navigator.maxTouchPoints > 0 ||
+        'ontouchstart' in window
+    );
+    const markNextTouchClickSuppressed = () => {
+        suppressNextTouchClick = true;
+        window.setTimeout(() => {
+            suppressNextTouchClick = false;
+        }, 650);
+    };
+    const consumeSuppressedTouchClick = (event) => {
+        if (!suppressNextTouchClick) return false;
+        suppressNextTouchClick = false;
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        return true;
+    };
     const notify = (message) => {
         if (!message) return;
         if (typeof window.showToast === 'function') {
@@ -331,6 +353,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         contextMenu.style.left = `${left}px`;
         contextMenu.style.top = `${top}px`;
+        document.dispatchEvent(new CustomEvent('fuckseats:layout-contextmenu', {
+            detail: {
+                mode: 'seat',
+                row: parseInt(seat.dataset.row, 10),
+                col: parseInt(seat.dataset.col, 10)
+            }
+        }));
         return true;
     };
 
@@ -358,6 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.seat').forEach(seat => {
         seat.dataset.seatKey = seatKey(seat);
         seat.addEventListener('click', (e) => {
+            if (consumeSuppressedTouchClick(e)) return;
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
                 toggleSelection(seat);
             } else {
@@ -448,8 +478,85 @@ document.addEventListener('DOMContentLoaded', () => {
         const top = Math.min(event.clientY + gap, window.innerHeight - menuHeight - gap);
         contextMenu.style.left = `${left}px`;
         contextMenu.style.top = `${top}px`;
+        document.dispatchEvent(new CustomEvent('fuckseats:layout-contextmenu', {
+            detail: {
+                mode: 'empty',
+                row: rc.row,
+                col: rc.col
+            }
+        }));
         return true;
     };
+
+    let touchContextTimer = null;
+    let touchContextStart = null;
+
+    const clearTouchContextTimer = () => {
+        if (touchContextTimer) {
+            window.clearTimeout(touchContextTimer);
+            touchContextTimer = null;
+        }
+        touchContextStart = null;
+    };
+
+    const scheduleTouchContextMenu = (event) => {
+        if (!isTouchUi()) return;
+        if (event.pointerType === 'mouse') return;
+        if (!event.target || !event.target.closest) return;
+        if (contextMenu && contextMenu.contains(event.target)) return;
+        if (event.target.closest('button, a, input, textarea, select')) return;
+
+        const seatTarget = event.target.closest('.seat');
+        const stageTarget = event.target.closest('.seat-stage') || event.target.closest('.seat-grid');
+        if (!seatTarget && !stageTarget) return;
+
+        clearTouchContextTimer();
+        touchContextStart = {
+            x: event.clientX,
+            y: event.clientY,
+            target: seatTarget || stageTarget,
+            mode: seatTarget ? 'seat' : 'empty',
+        };
+        touchContextTimer = window.setTimeout(() => {
+            const current = touchContextStart;
+            clearTouchContextTimer();
+            if (!current || !current.target || !current.target.isConnected) return;
+            const eventLike = {
+                clientX: current.x,
+                clientY: current.y,
+                preventDefault() { },
+                stopPropagation() { },
+            };
+            const opened = current.mode === 'seat'
+                ? openSeatContextMenuFromTarget(eventLike, current.target)
+                : openEmptyContextMenu(eventLike);
+            if (opened) {
+                markNextTouchClickSuppressed();
+                if (navigator.vibrate) {
+                    navigator.vibrate(8);
+                }
+            }
+        }, 540);
+    };
+
+    document.addEventListener('pointerdown', scheduleTouchContextMenu);
+
+    document.addEventListener('pointermove', (event) => {
+        if (!touchContextStart) return;
+        const dx = Math.abs(event.clientX - touchContextStart.x);
+        const dy = Math.abs(event.clientY - touchContextStart.y);
+        if (dx > 10 || dy > 10) {
+            clearTouchContextTimer();
+        }
+    });
+
+    ['pointerup', 'pointercancel'].forEach((eventName) => {
+        document.addEventListener(eventName, clearTouchContextTimer);
+    });
+
+    if (seatStage) {
+        seatStage.addEventListener('scroll', clearTouchContextTimer, { passive: true });
+    }
 
     document.addEventListener('contextmenu', (event) => {
         if (!event.target || !event.target.closest) return;
