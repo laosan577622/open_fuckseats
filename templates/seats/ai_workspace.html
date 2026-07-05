@@ -29,18 +29,14 @@
         </defs>
     </svg>
 
-    <!-- 流体光效层 -->
     <div class="fluid-glow-container" id="glowContainer">
         <div class="fluid-glow"></div>
     </div>
 
-    <!-- 整个应用的视口 -->
     <div class="app-screen" id="appScreen">
 
-        <!-- 启动水波纹 -->
         <div class="startup-ripple"></div>
 
-        <!-- 顶部通栏：半透明白色模糊特效 -->
         <div class="topbar">
             <a href="{% url 'classroom_detail' classroom.pk %}" class="btn-capsule back-btn">
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="margin-right: 4px;">
@@ -53,7 +49,6 @@
         </div>
 
         <div class="main-layout">
-            <!-- 左侧聊天区域 -->
             <div class="chat-section">
                 <div class="conversation-toolbar">
                     <select id="conversationSelect" class="conversation-select" aria-label="选择对话"></select>
@@ -61,7 +56,6 @@
                     <button id="deleteConversationBtn" type="button" class="btn-capsule"
                         style="background:#E5E5EA; color:#1f2937;">删除</button>
                 </div>
-                <!-- 聊天区域 -->
                 <div class="chat-container" id="chatContainer">
                     <div class="message ai">
                         你好，我是 {{ classroom.name }} 的 Window Inteligence ｜
@@ -69,9 +63,7 @@
                     </div>
                 </div>
 
-                <!-- 底部输入区域 -->
                 <div class="input-wrapper">
-                    <!-- 快捷提示词组 -->
                     <div class="prompt-chips" id="promptChips">
                         <button class="future-prompt-chip" data-prompt="帮我统计当前小组评分排行">小组评分排行</button>
                         <button class="future-prompt-chip" data-prompt="有哪些人还没有排座位？">未排座名单</button>
@@ -87,7 +79,6 @@
                     </form>
                 </div>
             </div>
-            <!-- 连接设置模态框 (使用绝对定位) -->
             <div id="configModal" class="config-modal">
                 <div class="modal-content">
                     <h3>OpenAI API 设置</h3>
@@ -114,7 +105,6 @@
 
         </div>
 
-        <!-- 引用重写后的脚本 -->
         <script src="{% static 'js/ai_workspace.js' %}?v=3.9"></script>
 </body>
 

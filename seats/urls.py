@@ -1,7 +1,8 @@
-from django.urls import path
+from django.urls import include, path, re_path
 from . import views
 
 urlpatterns = [
+    re_path(r'^open_api(?:/|$)', include('seats.open_api.urls')),
     path('api.json', views.app_manifest_redirect, name='app_manifest_redirect'),
     path('update.txt', views.update_details_redirect, name='update_details_redirect'),
     path('', views.index, name='index'),
@@ -33,6 +34,7 @@ urlpatterns = [
     path('classroom/<int:pk>/import/options/', views.import_students_options_page, name='import_students_options_page'),
     path('classroom/<int:pk>/export/', views.export_students, name='export_students'),
     path('classroom/<int:pk>/export/options/', views.export_students_options_page, name='export_students_options_page'),
+    path('classroom/<int:pk>/export/csis/', views.export_students_csis, name='export_students_csis'),
     path('classroom/<int:pk>/export/svg/', views.export_students_svg, name='export_students_svg'),
     path('classroom/<int:pk>/export/svg/preview-student/', views.export_students_svg_preview_student, name='export_students_svg_preview_student'),
     path('classroom/<int:pk>/export/svg/options/', views.export_students_svg_options_page, name='export_students_svg_options_page'),
@@ -136,4 +138,10 @@ urlpatterns = [
     path('api/improve/logs/', views.frontend_improve_logs, name='frontend_improve_logs_slash'),
     path('onboarding/seen', views.mark_onboarding_seen, name='mark_onboarding_seen'),
     path('onboarding/seen/', views.mark_onboarding_seen, name='mark_onboarding_seen_slash'),
+    path('api/ai-session', views.ai_session_status, name='ai_session_status'),
+    path('api/ai-session/', views.ai_session_status, name='ai_session_status_slash'),
+    path('api/ai-session/end', views.ai_session_end, name='ai_session_end'),
+    path('api/ai-session/end/', views.ai_session_end, name='ai_session_end_slash'),
+    path('api/ai-session/stream', views.ai_session_stream, name='ai_session_stream'),
+    path('api/ai-session/stream/', views.ai_session_stream, name='ai_session_stream_slash'),
 ]

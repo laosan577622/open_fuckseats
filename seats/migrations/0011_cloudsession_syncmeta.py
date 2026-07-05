@@ -1,4 +1,3 @@
-# Django 自动生成
 
 import uuid
 from django.db import migrations, models

@@ -13,7 +13,6 @@
 
 {% block content %}
 <div class="create-wizard animate-fade-in">
-    <!-- 步骤一：选择创建方式 -->
     <div class="wizard-step" id="step-choose">
         <div class="wizard-header">
             <h1 class="wizard-title">创建新班级</h1>
@@ -66,7 +65,6 @@
         </div>
     </div>
 
-    <!-- 步骤二A：从第三方导入 -->
     <div class="wizard-step wizard-step-hidden" id="step-import">
         <div class="wizard-header">
             <button type="button" class="wizard-back-btn" onclick="showStep('choose')">
@@ -102,7 +100,6 @@
                         <p>导入姓名、成绩等学生信息</p>
                     </div>
                 </button>
-                <!-- 成绩表的行列设置（初始隐藏） -->
                 <div class="wizard-excel-grid-config" id="excel-grid-config">
                     <div class="form-grid-two">
                         <div class="form-group">
@@ -155,7 +152,6 @@
         </div>
     </div>
 
-    <!-- 步骤二B：空白班级 -->
     <div class="wizard-step wizard-step-hidden" id="step-blank">
         <div class="wizard-header">
             <button type="button" class="wizard-back-btn" onclick="showStep('choose')">

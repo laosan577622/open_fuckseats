@@ -196,6 +196,7 @@ HISTORY_CONSTRAINT_ID_KEYS = {'constraint_id'}
 HISTORY_TAG_ID_KEYS = {'tag_id', 'tag_pk'}
 HISTORY_TAG_ID_LIST_KEYS = {'tag_ids'}
 HISTORY_TAG_RULE_ID_KEYS = {'tag_rule_id'}
+FIXED_SEAT_NOTE_MARKER = '系统固定座位'
 
 AI_TOOL_DEFINITIONS = [
     {
@@ -601,8 +602,6 @@ ONBOARDING_SAMPLE_STUDENTS = [
 ]
 ONBOARDING_SAMPLE_GROUPS = ('第一组', '第二组')
 
-# 串行化示例班级的创建：客户端首次打开时可能并发发出多个首页请求（预加载等），
-# 各请求会话尚未带 cookie，若不加锁会各自建出一个示例班级，导致首页出现多个示例卡片。
 _onboarding_sample_lock = threading.Lock()
 
 
@@ -628,11 +627,6 @@ def _frontend_onboarding_seen():
 
 
 def _ensure_onboarding_sample_classroom(request):
-    """为首次访客创建（或复用）一个带示例学生的示例班级，pk 记入会话。
-
-    并发的首次请求可能在会话 cookie 下发前同时到达，各自建出示例班级；这里用锁串行化，
-    并优先复用已存在的同名示例班级，确保全局只保留一个。
-    """
     pk = request.session.get('onboarding_sample_pk')
     if pk:
         try:
@@ -643,7 +637,6 @@ def _ensure_onboarding_sample_classroom(request):
             pass
 
     with _onboarding_sample_lock:
-        # 锁内再查一次会话 pk（等待期间可能已被同会话的另一请求写入）
         pk = request.session.get('onboarding_sample_pk')
         if pk:
             try:
@@ -652,7 +645,6 @@ def _ensure_onboarding_sample_classroom(request):
                 return classroom
             except Classroom.DoesNotExist:
                 pass
-        # 复用已存在的示例班级，避免重复创建（可能来自上次未完成的引导）
         existing = Classroom.objects.filter(name=ONBOARDING_SAMPLE_NAME).order_by('-created_at').first()
         if existing:
             _ensure_onboarding_sample_groups(existing)
@@ -680,13 +672,6 @@ def _ensure_onboarding_sample_groups(classroom):
 
 
 def _delete_onboarding_sample(request, prefer_pk=0):
-    """删除当前会话的示例班级。
-
-    示例班级以「名字」为身份，pk 仅作定位线索。优先按 prefer_pk（用户当前
-    所在班级）定位，其次会话记录的 onboarding_sample_pk，最后按名字兜底
-    清理残留（会话漂移、示例班级被重建等情形）。仅删除名为
-    ONBOARDING_SAMPLE_NAME 的班级，用户自己的班级名字不同，绝不会被误删。
-    """
     session_pk = _safe_int(request.session.get('onboarding_sample_pk'), 0)
     prefer_pk = _safe_int(prefer_pk, 0)
     classroom = None
@@ -699,7 +684,6 @@ def _delete_onboarding_sample(request, prefer_pk=0):
     if not classroom:
         classroom = Classroom.objects.filter(name=ONBOARDING_SAMPLE_NAME).order_by('-created_at').first()
     if not classroom:
-        # 没有示例班级可删，仍然清掉会话里可能残留的旧 pk，保持干净。
         if session_pk:
             request.session.pop('onboarding_sample_pk', None)
             request.session.modified = True
@@ -710,7 +694,6 @@ def _delete_onboarding_sample(request, prefer_pk=0):
         classroom.save(update_fields=['left_guardian', 'right_guardian'])
         classroom.groups.update(leader=None)
         classroom.delete()
-    # 无论删的是不是会话原记录的那个，清空示例班级 pk，防止下次残留。
     request.session.pop('onboarding_sample_pk', None)
     request.session.modified = True
     return True
@@ -720,8 +703,6 @@ _CLEANUP_PENDING_KEY = 'onboarding_cleanup_pending'
 
 
 def index(request):
-    # 完成引导跳回主页时，再清理示例班级（POST 只挂了待清理标记）。
-    # 必须在查询班级列表之前执行，否则示例班级会出现在主页列表里。
     if request.session.get(_CLEANUP_PENDING_KEY):
         request.session.pop(_CLEANUP_PENDING_KEY, None)
         request.session.modified = True
@@ -5565,6 +5546,8 @@ def _get_fixed_student_ids_from_snapshot(payload):
             continue
         if not _parse_bool(item.get('enabled') if isinstance(item, dict) else True):
             continue
+        if str(item.get('note') or '').strip() != FIXED_SEAT_NOTE_MARKER:
+            continue
         student_pk = _safe_int(item.get('student_pk'), 0) if isinstance(item, dict) else 0
         if student_pk > 0:
             fixed_student_ids.add(student_pk)
@@ -6847,7 +6830,6 @@ def _apply_move_action(classroom, action):
         seat_from = classroom.seats.filter(row=from_row, col=from_col).first()
 
     with transaction.atomic():
-        # 先清空，避免唯一性冲突
         if seat_from:
             seat_from.student = None
             seat_from.save(update_fields=['student'])
@@ -6856,7 +6838,6 @@ def _apply_move_action(classroom, action):
             seat_to.student = None
             seat_to.save(update_fields=['student'])
 
-        # 再写回
         if seat_from and target_student:
              seat_from.student = target_student
              seat_from.save(update_fields=['student'])
@@ -7011,7 +6992,6 @@ def _apply_seat_layout_action(classroom, action, forward=True):
     group_map = {g.pk: g for g in classroom.groups.filter(pk__in=list(group_ids))}
 
     with transaction.atomic():
-        # 先清空，避免唯一性冲突
         for payload in seat_map.values():
             seat = payload['seat']
             seat.student = None
@@ -7305,12 +7285,9 @@ def _evaluate_layout(classroom, request=None):
     issues.extend(_constraint_issues(classroom))
     _apply_internal_policy(classroom, request)
 
-    # 小组平衡
     groups = list(classroom.groups.all())
 
-    # 导出建议
     ignore_export = request.session.get(f'ignore_export_{classroom.pk}', False) if request else False
-    # 检查是否都已分组
     ungrouped_count = sum(1 for s in seats if s.student_id and not s.group_id)
     if unseated_count == 0 and ungrouped_count == 0 and len(groups) > 0 and not ignore_export:
         issues.append({
@@ -7345,7 +7322,7 @@ def _evaluate_layout(classroom, request=None):
             max_g = group_data[-1]
             diff = max_g['avg'] - min_g['avg']
             
-            if diff > 5: # 阈值
+            if diff > 5:
                  best_swap = None
                  current_improvement = 0
                  
@@ -7354,7 +7331,6 @@ def _evaluate_layout(classroom, request=None):
                          if _is_internal_policy_student(s_high) or _is_internal_policy_student(s_low):
                              continue
                          score_diff = (s_high.score or 0) - (s_low.score or 0)
-                         # 尝试交换缩小分差
                          if score_diff > 0:
                              new_max_sum = max_g['sum'] - score_diff
                              new_min_sum = min_g['sum'] + score_diff
@@ -7362,7 +7338,6 @@ def _evaluate_layout(classroom, request=None):
                              new_max_avg = new_max_sum / max_g['count']
                              new_min_avg = new_min_sum / min_g['count']
                              
-                             # 新分差
                              new_diff = abs(new_max_avg - new_min_avg)
                              improvement = diff - new_diff
                              
@@ -8867,7 +8842,6 @@ def _apply_layout_excel_import(classroom, temp_path, start_row, end_row, options
         seats = list(classroom.seats.select_related('student').all())
         seat_map = _build_seat_map(seats)
 
-        # 先清空座位，避免唯一性冲突
         for seat in seats:
             seat.student = None
             seat.group = None
@@ -9041,14 +9015,12 @@ def import_students(request, pk):
             except RuntimeError as e:
                 return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
         
-        # 首次上传
         if action == 'upload' and request.FILES.get('excel_file'):
             excel_file = request.FILES['excel_file']
             clear_existing = request.POST.get('clear_existing') == '1'
             import_mode = _resolve_student_import_mode(request.POST.get('import_mode'), clear_existing)
             
             try:
-                # 先尝试自动识别
                 df = pd_module.read_excel(excel_file)
                 columns = list(df.columns)
 
@@ -9070,7 +9042,6 @@ def import_students(request, pk):
                 name_col = find_column(['姓名', '名字', '学生姓名', '学生'])
                 score_col = find_exact_column(['总分', '学生总分'])
                 
-                # 识别成功则直接导入
                 if name_col and score_col:
                     student_id_col = find_column(['学号', '学生号', '编号', 'ID'])
                     gender_col = find_column(['性别', '男女性别'])
@@ -9100,7 +9071,6 @@ def import_students(request, pk):
                     )
                     return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
                 
-                # 识别失败则返回预览
                 import os
                 import uuid
                 from django.conf import settings
@@ -9110,12 +9080,10 @@ def import_students(request, pk):
                 os.makedirs(temp_dir, exist_ok=True)
                 temp_path = os.path.join(temp_dir, f'{file_id}.xlsx')
                 
-                # 重置指针或直接保存
                 with open(temp_path, 'wb+') as destination:
                     for chunk in excel_file.chunks():
                         destination.write(chunk)
                 
-                # 读取前 20 行预览
                 df_preview = pd_module.read_excel(temp_path, header=None)
                 preview_data = df_preview.head(20).fillna('').values.tolist()
                 
@@ -9129,10 +9097,9 @@ def import_students(request, pk):
             except Exception as e:
                 return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
-        # 确认映射
         elif action == 'confirm':
             file_id = request.POST.get('file_id')
-            start_row = int(request.POST.get('start_row', 0)) # 0-indexed
+            start_row = int(request.POST.get('start_row', 0))
             name_col_idx = int(request.POST.get('name_col_index'))
             score_col_idx = request.POST.get('score_col_index')
             clear_existing = request.POST.get('clear_existing') == 'true'
@@ -9147,13 +9114,10 @@ def import_students(request, pk):
                 
             try:
                 before_state = _capture_history_state(classroom)
-                # 读取原始文件
                 df = pd_module.read_excel(temp_path, header=None)
                 
-                # 截取数据区
                 df_data = df.iloc[start_row + 1:].copy()
                 
-                # 重建列名以复用导入逻辑
                 df_data.columns = [i for i in range(df_data.shape[1])]
                 
                 name_col = name_col_idx
@@ -9169,7 +9133,6 @@ def import_students(request, pk):
                     import_mode
                 )
                 
-                # 清理临时文件
                 os.remove(temp_path)
 
                 _emit_plugin_hook(
@@ -9303,7 +9266,6 @@ def _process_import(classroom, df, name_col, student_id_col, gender_col, score_c
             if not name:
                 continue
 
-            # 兜底处理标题行混入
             if name.lower() in {'姓名', 'name'}:
                 continue
 
@@ -9377,14 +9339,12 @@ def _swap_seats(seat_a, seat_b):
     student_a = seat_a.student
     student_b = seat_b.student
     with transaction.atomic():
-        # 避免唯一性冲突
         seat_a.student = None
         seat_a.save(update_fields=['student'])
         
         seat_b.student = None
         seat_b.save(update_fields=['student'])
 
-        # 交换
         seat_a.student = student_b
         seat_b.student = student_a
         seat_a.save(update_fields=['student'])
@@ -9396,7 +9356,6 @@ def _get_adjacent_seats(classroom, seat):
     """返回与给定座位相邻的有效座位对象列表。"""
     if not seat:
         return []
-    # 优先级：左、右、前、后
     coords = [
         (seat.row, seat.col - 1),
         (seat.row, seat.col + 1),
@@ -9561,7 +9520,6 @@ def _arrange_grouped(classroom, students, method):
     group_buckets = {group.pk: [] for group in groups}
 
     if method == 'group_balanced':
-        # 按成绩分段，同水平归组
         num_groups = len(groups)
         students_per_group = len(students_sorted) // num_groups
         for i, group in enumerate(groups):
@@ -9569,8 +9527,6 @@ def _arrange_grouped(classroom, students, method):
             end = start + students_per_group if i < num_groups - 1 else len(students_sorted)
             group_buckets[group.pk] = students_sorted[start:end]
     elif method == 'group_mentor':
-        # 平衡高低分配对
-        # 先首尾配对
         pairs = []
         left = 0
         right = len(students_sorted) - 1
@@ -9582,7 +9538,6 @@ def _arrange_grouped(classroom, students, method):
             left += 1
             right -= 1
         
-        # 再按总分贪心分配
         pairs_with_sum = []
         for p in pairs:
              s = sum(st.score or 0 for st in p)
@@ -9660,7 +9615,6 @@ def _arrange_grouped(classroom, students, method):
 
 def _run_arrangement(classroom, method):
     students = list(classroom.students.all())
-    # 成绩排座用竖排，其余用横排
     if method in ['score_desc', 'score_asc', 'good_front', 'good_back']:
         seats = list(classroom.seats.select_related('student').order_by('col', 'row'))
     else:
@@ -9764,7 +9718,6 @@ def auto_arrange_seats(request, pk):
                 if violations:
                     raise ValueError(f'约束未满足，排座已回滚：{_format_issues_preview(violations)}')
         except ValueError as e:
-            # 自动修复，不直接失败
             if _attempt_auto_constraint_fix(classroom, preferred_method=method):
                 _push_snapshot_action(
                     request,
@@ -9810,38 +9763,30 @@ def _perform_move_fixed_group(classroom, student, target_seat):
         current_seat = getattr(student, 'assigned_seat', None)
         target_student = target_seat.student
 
-        # 释放当前座位
         if current_seat:
             current_seat.student = None
             current_seat.save(update_fields=['student'])
 
-        # 释放目标座位
         if target_student:
             target_seat.student = None
             target_seat.save(update_fields=['student'])
         
-        # 目标学生回旧座
         if current_seat and target_student:
             current_seat.student = target_student
             current_seat.save(update_fields=['student'])
 
-        # 当前学生入新座
         target_seat.student = student
         target_seat.save(update_fields=['student'])
 
-    # 检查组长变更
     def _check_leader_lost(stu):
         if not stu: return
         led_group = getattr(stu, 'led_group', None)
         if led_group:
             current_s = getattr(stu, 'assigned_seat', None)
-            # 无座位或已离组
             if not current_s or current_s.group != led_group:
-                # 确认离组后取消组长
                 led_group.leader = None
                 led_group.save(update_fields=['leader'])
 
-    # 刷新关联
     if student: student.refresh_from_db()
     if target_student: target_student.refresh_from_db()
     
@@ -11059,7 +11004,6 @@ def auto_group_from_reference(request, pk):
             if remainder_strategy == 'new_group':
                 groups_needed = full_groups + (1 if remainder > 0 else 0)
             else:
-                # merge_prev: 余数并入上一组
                 if full_groups > 0:
                     groups_needed = full_groups
                 else:
@@ -11666,6 +11610,114 @@ def delete_constraint(request, pk, constraint_id):
     return redirect('classroom_detail', pk=pk)
 
 
+def _csis_gender_value(student):
+    if student.gender == 'M':
+        return 'male'
+    if student.gender == 'F':
+        return 'female'
+    return 'unknown'
+
+
+def _csis_student_number(student):
+    raw_student_id = str(student.student_id or '').strip()
+    if raw_student_id.isdigit():
+        number = int(raw_student_id)
+        if number > 0:
+            return number
+    return None
+
+
+def _csis_seat_extra(classroom, seat):
+    if not seat:
+        return {
+            'assigned': False,
+            'row': None,
+            'col': None,
+            'coordinate': '',
+            'position': None,
+            'cell_type': None,
+            'cell_type_display': '',
+            'classroom_rows': classroom.rows,
+            'classroom_cols': classroom.cols,
+        }
+
+    return {
+        'assigned': True,
+        'row': seat.row,
+        'col': seat.col,
+        'coordinate': f'{seat.row}-{seat.col}',
+        'position': [seat.col - 1, seat.row - 1],
+        'cell_type': seat.cell_type,
+        'cell_type_display': seat.get_cell_type_display(),
+        'classroom_rows': classroom.rows,
+        'classroom_cols': classroom.cols,
+    }
+
+
+def _build_csis_csls_payload(classroom):
+    students = list(
+        classroom.students
+        .prefetch_related('tag_memberships__tag')
+        .order_by('pk')
+    )
+    seat_by_student_id = {
+        seat.student_id: seat
+        for seat in classroom.seats.select_related('student', 'group').filter(student__isnull=False)
+    }
+    group_names = {group.name for group in classroom.groups.all()}
+    csis_students = []
+
+    for student in students:
+        seat = seat_by_student_id.get(student.pk)
+        group_name = seat.group.name if seat and seat.group_id and seat.group else 'unknown'
+        group_names.add(group_name)
+        number = _csis_student_number(student)
+        tag_names = [
+            membership.tag.name
+            for membership in student.tag_memberships.all()
+            if membership.tag_id and membership.tag
+        ]
+        student_payload = {
+            'id': student.pk,
+            'name': student.name,
+            'group': group_name,
+            'tags': tag_names,
+            'gender': _csis_gender_value(student),
+            'extra': {
+                'source': 'fuckseats',
+                'student_pk': student.pk,
+                'student_id': student.student_id or '',
+                'score': student.score,
+                'seat': _csis_seat_extra(classroom, seat),
+            },
+        }
+        if number is not None:
+            student_payload['number'] = number
+        csis_students.append(student_payload)
+
+    groups = [
+        {
+            'name': name,
+            'tags': [],
+            'extra': {},
+        }
+        for name in sorted(group_names)
+    ]
+
+    return {
+        'version': 1,
+        'classes': [
+            {
+                'name': classroom.name,
+                'class': 0,
+                'grade': 0,
+                'groups': groups,
+                'students': csis_students,
+            }
+        ],
+    }
+
+
 def export_students(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
 
@@ -11675,24 +11727,20 @@ def export_students(request, pk):
         rotate_flag = str(request.GET.get('rotate_180', '')).strip().lower()
         rotate_180 = rotate_flag in {'1', 'true', 'yes', 'on'}
 
-    # 导出网格
     wb = openpyxl.Workbook()
     ws = wb.active
     ws.title = classroom.name
 
-    # 样式
     thin_border = Border(left=Side(style='thin'),
                          right=Side(style='thin'),
                          top=Side(style='thin'),
                          bottom=Side(style='thin'))
     center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
 
-    # 字体
     header_font = Font(name=EXPORT_FONT_BLACK, bold=False, size=20)
     podium_font = Font(name=EXPORT_FONT_BLACK, bold=False, size=14)
     seat_font = Font(name=EXPORT_FONT_LIGHT, size=12, bold=False)
 
-    # 标题
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=classroom.cols)
     title_suffix = "（180°翻转）" if rotate_180 else ""
     cell = ws.cell(row=1, column=1, value=f"{classroom.name} 座位表{title_suffix}")
@@ -11703,7 +11751,6 @@ def export_students(request, pk):
     seat_start_row = 2 if rotate_180 else 3
     podium_row = seat_start_row + classroom.rows if rotate_180 else 2
 
-    # 讲台
     ws.merge_cells(start_row=podium_row, start_column=1, end_row=podium_row, end_column=classroom.cols)
     podium_cell = ws.cell(row=podium_row, column=1, value="讲台")
     podium_cell.font = podium_font
@@ -11743,11 +11790,9 @@ def export_students(request, pk):
             cell.alignment = center_align
             cell.font = seat_font
 
-            # 仅入座座位加边框
             if is_seat and seat.student:
                 cell.border = thin_border
 
-    # A4 横向
     from openpyxl.worksheet.page import PageMargins
     ws.page_setup.orientation = ws.ORIENTATION_LANDSCAPE
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
@@ -11755,7 +11800,6 @@ def export_students(request, pk):
     ws.print_options.horizontalCentered = True
     ws.print_options.verticalCentered = True
 
-    # 适应页面
     ws.page_setup.fitToPage = True
     ws.page_setup.fitToHeight = 1
     ws.page_setup.fitToWidth = 1
@@ -11765,6 +11809,16 @@ def export_students(request, pk):
     response['Content-Disposition'] = f'attachment; filename="{classroom.name}{filename_suffix}"'
     wb.save(response)
 
+    return response
+
+
+def export_students_csis(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    payload = _build_csis_csls_payload(classroom)
+    content = json.dumps(payload, ensure_ascii=False, indent=2)
+    response = HttpResponse(content, content_type='application/json; charset=utf-8')
+    filename = escape_uri_path(f'{classroom.name}_CSIS.csls')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
     return response
 
 
@@ -12107,7 +12161,6 @@ def export_students_pptx(request, pk):
             shape.line.width = Pt(max(0.75, scale * 72))
         else:
             shape.line.fill.background()
-        # 降低阴影透明度
         sp_pr = shape._element.spPr
         for child in list(sp_pr):
             if child.tag == qn('a:effectLst'):
@@ -12148,7 +12201,6 @@ def export_students_pptx(request, pk):
         run.font.bold = False
         run.font.size = Pt(font_pt(size_px))
         run.font.color.rgb = rgb(color)
-        # 同时设置多套字体字段
         r_pr = run._r.get_or_add_rPr()
         for tag in ('latin', 'ea', 'cs'):
             node = r_pr.find(qn(f'a:{tag}'))
@@ -12350,7 +12402,6 @@ def export_group_report(request, pk):
     
     from openpyxl.worksheet.page import PageMargins
 
-    # 样式
     thin_border = Border(
         left=Side(style='thin'), right=Side(style='thin'),
         top=Side(style='thin'), bottom=Side(style='thin'),
@@ -12360,13 +12411,10 @@ def export_group_report(request, pk):
     leader_name_font = Font(name=EXPORT_FONT_LIGHT, bold=False, size=11, color="FF0000")
     center     = Alignment(horizontal='center', vertical='center')
 
-    # 页眉
     header_text = f"&\"{EXPORT_FONT_BLACK}\"&20 {classroom.name} (          ) 登记表"
     ws.oddHeader.center.text = header_text
     ws.evenHeader.center.text = header_text
 
-    # 生成线性列表
-    # 类型：header、member、gap
     
     flat_entries = []
     
@@ -12377,7 +12425,6 @@ def export_group_report(request, pk):
     total_weight = 0
     
     for i, group in enumerate(groups):
-        # 组头
         flat_entries.append({
             'type': 'header', 
             'text': group.name, 
@@ -12386,14 +12433,12 @@ def export_group_report(request, pk):
         })
         total_weight += WEIGHT_HEADER
         
-        # 成员
         seats = group.seats.select_related('student').filter(student__isnull=False)
         members = []
         for s in seats:
              is_ldr = (group.leader_id == s.student_id)
              members.append({'name': s.student.name, 'is_leader': is_ldr})
         
-        # 组长排第一
         members.sort(key=lambda x: not x['is_leader'])
 
         for m in members:
@@ -12402,17 +12447,15 @@ def export_group_report(request, pk):
                 'text': m['name'], 
                 'is_leader': m['is_leader'],
                 'group_id': group.pk,
-                'group_name': group.name, # 用于断行时补标题
+                'group_name': group.name,
                 'weight': WEIGHT_MEMBER
             })
             total_weight += WEIGHT_MEMBER
             
-        # 组间隔
         if i < len(groups) - 1:
             flat_entries.append({'type': 'gap', 'weight': WEIGHT_GAP})
             total_weight += WEIGHT_GAP
 
-    # 寻找最佳切分点
     target_weight = total_weight / 2
     current_weight = 0
     split_index = 0
@@ -12426,16 +12469,13 @@ def export_group_report(request, pk):
     left_entries = flat_entries[:split_index]
     right_entries = flat_entries[split_index:]
     
-    # 处理断行衔接
     if right_entries:
         first = right_entries[0]
-        # 移除首行间隔
         if first['type'] == 'gap':
             right_entries.pop(0)
             if right_entries:
                 first = right_entries[0]
                 
-        # 切断时补标题
         if right_entries and first['type'] == 'member':
             continuation_header = {
                 'type': 'header',
@@ -12445,34 +12485,27 @@ def export_group_report(request, pk):
             }
             right_entries.insert(0, continuation_header)
 
-    # 动态计算布局
-    # A4: 210mm x 297mm
-    # 纵向 1mm ≈ 2.835pts
     PAGE_H_MM = 297
-    MARGIN_V_MM = 12.7 * 2  # 上下留白
-    HEADER_RES_MM = 15      # 页眉预留
+    MARGIN_V_MM = 12.7 * 2
+    HEADER_RES_MM = 15
     AVAILABLE_H_MM = PAGE_H_MM - MARGIN_V_MM - HEADER_RES_MM
     AVAILABLE_H_PTS = AVAILABLE_H_MM * 2.835
     
-    # 总行数
     max_rows = max(len(left_entries), len(right_entries))
     if max_rows == 0:
         max_rows = 1
         
-    # 高度权重
     W_HEADER = 1.0
     W_MEMBER = 1.0
     W_GAP    = 0.4
     
-    # 总权重
     total_weight = 0
-    row_weights = [] # 记录每一行的权重
+    row_weights = []
     
     for i in range(max_rows):
         l = left_entries[i] if i < len(left_entries) else None
         r = right_entries[i] if i < len(right_entries) else None
         
-        # 取本行最大权重
         w_l = 0
         if l:
             if l['type'] == 'header': w_l = W_HEADER
@@ -12485,27 +12518,22 @@ def export_group_report(request, pk):
             elif r['type'] == 'member': w_r = W_MEMBER
             elif r['type'] == 'gap': w_r = W_GAP
             
-        # 默认权重
         cur_w = max(w_l, w_r)
         if cur_w == 0: cur_w = W_GAP
         
         row_weights.append(cur_w)
         total_weight += cur_w
         
-    # 计算单位高度
     unit_h = AVAILABLE_H_PTS / total_weight
     
-    # 高度限制
     MAX_UNIT_H = 45 
     MIN_UNIT_H = 18
     
     if unit_h > MAX_UNIT_H:
         unit_h = MAX_UNIT_H
     if unit_h < MIN_UNIT_H:
-        unit_h = MIN_UNIT_H # 此时可能会溢出第一页，依赖fitToHeight压回来，或者自然分页
+        unit_h = MIN_UNIT_H
         
-    # 水平方向
-    # 1 unit ≈ 2mm
     TOTAL_COL_WIDTH = 98
     
     boxes_count = 5
@@ -12516,15 +12544,12 @@ def export_group_report(request, pk):
     remain_for_names = TOTAL_COL_WIDTH - fixed_used
     name_col_width = remain_for_names / 2
     
-    # 保证最小列宽
     if name_col_width < 12: name_col_width = 12
 
-    # 列索引
     left_col_idx  = 1
     gap_col_idx   = 1 + boxes_count + 1
     right_col_idx = gap_col_idx + 1
 
-    # 应用列宽
     ws.column_dimensions[get_column_letter(left_col_idx)].width = name_col_width
     for b in range(1, boxes_count + 1):
         ws.column_dimensions[get_column_letter(left_col_idx + b)].width = box_width
@@ -12533,7 +12558,6 @@ def export_group_report(request, pk):
     for b in range(1, boxes_count + 1):
         ws.column_dimensions[get_column_letter(right_col_idx + b)].width = box_width
 
-    # 渲染内容
     def _write_entry(ws, row, start_col, entry):
         kind = entry['type']
         
@@ -12562,22 +12586,18 @@ def export_group_report(request, pk):
     for i in range(max_rows):
         r = start_row + i
         
-        # 写入内容
         l_entry = left_entries[i] if i < len(left_entries) else None
         r_entry = right_entries[i] if i < len(right_entries) else None
         
         if l_entry: _write_entry(ws, r, left_col_idx, l_entry)
         if r_entry: _write_entry(ws, r, right_col_idx, r_entry)
             
-        # 动态行高
         h_pts = row_weights[i] * unit_h
         ws.row_dimensions[r].height = h_pts
             
-    # 打印区域
     last_col_letter = get_column_letter(right_col_idx + boxes_count)
     ws.print_area = f"A1:{last_col_letter}{start_row + max_rows - 1}"
 
-    # 页面设置
     ws.page_setup.orientation = ws.ORIENTATION_PORTRAIT
     ws.page_setup.paperSize = ws.PAPERSIZE_A4
     ws.page_setup.margins = PageMargins(
@@ -12587,7 +12607,6 @@ def export_group_report(request, pk):
     )
     ws.print_options.horizontalCentered = True
     
-    # 强制一页
     ws.page_setup.fitToPage = True
     ws.page_setup.fitToWidth = 1
     ws.page_setup.fitToHeight = 1
@@ -13408,7 +13427,6 @@ def apply_suggestion(request, pk):
             if seat1.classroom_id != classroom.pk or seat2.classroom_id != classroom.pk:
                 return JsonResponse({'status': 'error', 'message': '座位不属于当前班级'}, status=400)
             
-            # 交换座位，违规则回滚
             before_state = _capture_history_state(classroom)
             with transaction.atomic():
                 _swap_seats(seat1, seat2)
@@ -13457,7 +13475,6 @@ def set_group_leader(request, pk):
         group = seat.group
         before_state = _capture_history_state(classroom)
         
-        # 已是组长则取消
         if group.leader == student:
             group.leader = None
         else:
@@ -13583,7 +13600,7 @@ def toggle_fixed_seat(request, pk):
                 constraint.col = cleaned['col']
                 constraint.distance = cleaned['distance']
                 constraint.enabled = cleaned['enabled']
-                constraint.note = cleaned['note']
+                constraint.note = FIXED_SEAT_NOTE_MARKER
                 constraint.save()
             else:
                 constraint = SeatConstraint.objects.create(
@@ -13595,7 +13612,7 @@ def toggle_fixed_seat(request, pk):
                     col=cleaned['col'],
                     distance=cleaned['distance'],
                     enabled=cleaned['enabled'],
-                    note=cleaned['note'],
+                    note=FIXED_SEAT_NOTE_MARKER,
                 )
         elif constraint:
             constraint.delete()
@@ -14691,7 +14708,6 @@ def desktop_update_status(request):
 
 @require_POST
 def mark_onboarding_seen(request):
-    """前端完成/跳过新手引导后调用，落库标记当前会话已看过引导。"""
     sk = request.session.session_key
     if not sk:
         request.session['ob_init'] = True
@@ -14717,9 +14733,6 @@ def mark_onboarding_seen(request):
         key=ONBOARDING_SEEN_STORE_KEY,
         defaults={'value': ONBOARDING_SEEN_STORE_VALUE},
     )
-    # 示例班级的清理推迟到「跳回主页」之后执行：这里只在完成引导时挂一个
-    # 待清理标记，由首页 index 视图消费。跳回主页前示例班级仍保留，避免在
-    # 班级详情页就消失造成跳转突兀。
     stage = str((body or {}).get('completed_steps') or '').strip()
     if stage in {'detail_done', 'tour_done'}:
         request.session[_CLEANUP_PENDING_KEY] = True
@@ -14777,3 +14790,46 @@ def frontend_improve_logs(request):
         )
         accepted += 1
     return JsonResponse({'ok': True, 'status': 'success', 'accepted': accepted})
+
+
+@csrf_exempt
+@require_http_methods(['GET'])
+def ai_session_status(request):
+    from seats.open_api import ai_session, realtime
+    payload = ai_session.status()
+    return JsonResponse({
+        'status': 'success',
+        'session': payload,
+        'realtime': realtime.snapshot(),
+    })
+
+
+@csrf_exempt
+@require_POST
+def ai_session_end(request):
+    from seats.open_api import ai_session
+    ai_session.end()
+    return JsonResponse({'status': 'success', 'session': ai_session.status()})
+
+
+@require_http_methods(['GET'])
+def ai_session_stream(request):
+    from seats.open_api import ai_session, realtime
+
+    def event_stream():
+        last_global_seq = None
+        while True:
+            rt = realtime.wait_for_change(last_global_seq, timeout=25.0)
+            last_global_seq = rt['global_seq']
+            payload = json.dumps({
+                'status': 'success',
+                'session': ai_session.status(),
+                'realtime': rt,
+            }, ensure_ascii=False)
+            yield 'event: session\ndata: ' + payload + '\n\n'
+            yield ': ping\n\n'
+
+    response = StreamingHttpResponse(event_stream(), content_type='text/event-stream; charset=utf-8')
+    response['Cache-Control'] = 'no-cache'
+    response['X-Accel-Buffering'] = 'no'
+    return response

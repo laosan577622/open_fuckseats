@@ -79,6 +79,7 @@
 - 学生列表工具支持排序、分页、筛选
 - 兼容 OpenAI Compatible API（非官方地址自动切换 Chat Completions）
 - 工具调用前需用户授权确认
+- 外部 Agent 通过 Open API 操作时，前端显示「AI 操作中」全屏提示，由 Agent 调用 `ai_operation_begin` / `ai_operation_end` 工具控制开关
 
 ### 云同步
 - 班级数据推送/拉取，冲突检测与解决
@@ -249,6 +250,22 @@ python run_app.py
 python run_app.py -dev
 ```
 保留浏览器访问（http://127.0.0.1:23948），不打开桌面壳，便于调试前端与网络请求。
+
+### Agent Skill 安装
+
+项目随仓库和正式安装包分发 `fuckseats-agent-operator` skill，用于指导 Codex/Agents 启动项目、接入 `/open_api`、配置 MCP、处理 Windows 闭源安装版和打包发布坑点。
+
+源码用户：
+```bash
+python skill/install_fuckseats_skill.py
+```
+
+Windows 直接安装版用户：
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File "C:\LaosanApps\fuckseats\skill\install_fuckseats_skill.ps1"
+```
+
+安装脚本会写入 `~/.codex/skills/fuckseats-agent-operator` 和 `~/.agents/skills/fuckseats-agent-operator`，安装后重启对应 agent 应用。
 
 ### 环境变量
 

@@ -1,11 +1,8 @@
-/* ===== Dynamic Island - 灵动岛视效系统 ===== */
 
-/* --- Header room for island --- */
 .header-titlebar {
     padding-right: 60px !important;
 }
 
-/* --- Base --- */
 .dynamic-island {
     position: fixed;
     top: 8px;
@@ -26,8 +23,7 @@
     -webkit-user-select: none;
     display: flex;
     flex-direction: column;
-    /* Only transition layout properties; widths/heights set deterministically via JS inline styles */
-    transition: 
+    transition:
         width 0.4s cubic-bezier(0.3, 0.8, 0.2, 1),
         height 0.4s cubic-bezier(0.3, 0.8, 0.2, 1),
         border-radius 0.4s cubic-bezier(0.3, 0.8, 0.2, 1),
@@ -42,7 +38,6 @@
     box-shadow: 0 8px 30px rgba(0, 0, 0, 0.12);
 }
 
-/* --- Highlight follow (::after) --- */
 .dynamic-island::after {
     content: "";
     position: absolute;
@@ -62,17 +57,15 @@
     opacity: 1;
 }
 
-/* --- Inner layout --- */
 .island-inner {
     position: relative;
     z-index: 1;
     display: flex;
     flex-direction: column;
     width: 100%;
-    height: 100%; /* Important: bind to parent's explicitly set height */
+    height: 100%;
 }
 
-/* --- Idle content --- */
 .island-idle-icon {
     display: flex;
     align-items: center;
@@ -94,7 +87,6 @@
     display: none;
 }
 
-/* --- Compact content (marquee) --- */
 .island-compact-row {
     display: none;
     align-items: center;
@@ -160,7 +152,6 @@
     100% { transform: translateX(-100%); }
 }
 
-/* --- Expanded / Fullscreen Layout Visibility --- */
 @keyframes islandFadeIn {
     from { opacity: 0; }
     to { opacity: 1; }
@@ -191,7 +182,6 @@
     animation: islandFadeIn 0.4s ease forwards;
 }
 
-/* --- Content Styling --- */
 .island-response-text {
     font-size: 14px;
     line-height: 1.5;
@@ -200,7 +190,6 @@
     padding: 4px 0 8px;
 }
 
-/* --- Approval card --- */
 .island-approval {
     display: flex;
     flex-direction: column;
@@ -234,7 +223,6 @@
     padding: 6px 16px;
 }
 
-/* --- Permission list --- */
 .island-permissions {
     display: flex;
     flex-direction: column;
@@ -285,7 +273,6 @@
     font-weight: 500;
 }
 
-/* --- Input bar --- */
 .island-input-bar {
     display: none;
     align-items: center;
@@ -359,7 +346,6 @@
     height: 16px;
 }
 
-/* --- Fullscreen close --- */
 .island-fullscreen-close {
     position: absolute;
     top: 16px;
@@ -382,7 +368,6 @@
     animation: islandFadeIn 0.4s ease forwards;
 }
 
-/* --- Main content squeeze --- */
 .classroom-layout.ai-active {
     transform: scale(0.94);
     transform-origin: top center;
@@ -393,7 +378,6 @@
     filter: brightness(0.92);
 }
 
-/* --- Water ripple --- */
 .water-ripple-svg {
     position: fixed;
     left: 0;
@@ -404,7 +388,6 @@
     z-index: 7000;
 }
 
-/* --- Metaball layer --- */
 .metaball-layer {
     position: fixed;
     inset: 0;
@@ -424,7 +407,6 @@
                 opacity 0.3s ease;
 }
 
-/* --- Accessibility --- */
 @media (prefers-reduced-motion: reduce) {
     .dynamic-island,
     .metaball-blob,

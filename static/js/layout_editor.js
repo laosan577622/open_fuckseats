@@ -10,7 +10,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     let activeTool = 'seat';
     let contextSeat = null;
-    let contextRowCol = null;  // {row, col} for empty-space right-click
+    let contextRowCol = null;
     let contextMenuJustOpenedAt = 0;
     let suppressNextTouchClick = false;
 
@@ -70,7 +70,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 window.localStorage.setItem(key, value);
             }
         } catch (error) {
-            // Ignore storage failures in private browsing or restricted environments.
         }
     };
     let currentScale = clampZoom(parseFloat(readStorage(ZOOM_STORAGE_KEY) || '1') || 1);
@@ -134,7 +133,6 @@ document.addEventListener('DOMContentLoaded', () => {
     selectionBox.style.display = 'none';
     document.body.appendChild(selectionBox);
 
-    // Crosshair overlays for row/col targeting
     const crosshairRow = document.createElement('div');
     crosshairRow.className = 'rc-crosshair-row';
     crosshairRow.style.display = 'none';
@@ -158,7 +156,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const rows = seatGrid.querySelectorAll('.seat-row');
         const gridRect = seatGrid.getBoundingClientRect();
 
-        // Find the row element
         if (targetRow >= 1 && targetRow <= rows.length) {
             const rowEl = rows[targetRow - 1];
             const rowRect = rowEl.getBoundingClientRect();
@@ -169,7 +166,6 @@ document.addEventListener('DOMContentLoaded', () => {
             crosshairRow.style.display = 'none';
         }
 
-        // Find a seat in the target column to get its horizontal position
         const colSeat = seatGrid.querySelector(`.seat[data-col="${targetCol}"]`);
         if (colSeat) {
             const colRect = colSeat.getBoundingClientRect();
@@ -181,7 +177,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
-    // Find nearest row/col from a click position within the grid
     const findNearestRowCol = (clientX, clientY) => {
         if (!seatGrid) return null;
         const rows = seatGrid.querySelectorAll('.seat-row');
@@ -322,7 +317,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     const setContextMenuMode = (mode) => {
-        // mode: 'seat' (right-click on seat) or 'empty' (right-click on empty space)
         if (!contextMenu) return;
         contextMenu.querySelectorAll('button[data-tool]').forEach(btn => {
             btn.style.display = mode === 'seat' ? '' : 'none';
@@ -564,9 +558,7 @@ document.addEventListener('DOMContentLoaded', () => {
             event.preventDefault();
             return;
         }
-        // Try seat first
         if (openSeatContextMenuFromTarget(event, event.target)) return;
-        // Then try empty space in seat-stage
         if (event.target.closest('.seat-stage') || event.target.closest('.seat-grid')) {
             openEmptyContextMenu(event);
         }

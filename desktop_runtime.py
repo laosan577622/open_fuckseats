@@ -305,7 +305,6 @@ def prepare_windows_update_installer(download_url, version, progress_callback=No
     installer_path = cache_dir / f"FuckSeatsSetup-{safe_version}.exe"
     url_marker = cache_dir / ".download_url"
 
-    # 如果缓存的安装包对应的下载链接已变更，清除旧缓存
     if installer_path.exists() and installer_path.stat().st_size > 0:
         cached_url = ""
         if url_marker.exists():
@@ -315,11 +314,9 @@ def prepare_windows_update_installer(download_url, version, progress_callback=No
                 cached_size = installer_path.stat().st_size
                 progress_callback(cached_size, cached_size)
             return installer_path
-        # URL 变更，删除旧缓存
         installer_path.unlink(missing_ok=True)
 
     result = download_file(download_url, installer_path, progress_callback=progress_callback)
-    # 记录本次下载的 URL
     cache_dir.mkdir(parents=True, exist_ok=True)
     url_marker.write_text(download_url, encoding="utf-8")
     return result

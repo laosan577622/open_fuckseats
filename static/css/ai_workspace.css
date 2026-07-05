@@ -9,7 +9,6 @@
     --theme-color-strong: color-mix(in srgb, var(--primary-color, #0a59f7), #000 20%);
     --theme-on-color: #ffffff;
     --theme-glow: rgba(var(--primary-color-rgb, 10, 89, 247), 0.55);
-    /* 打字律动变量，由 JS 实时控制 */
     --pulse-scale: 1;
     --pulse-brightness: 1;
 }
@@ -22,7 +21,6 @@
     -webkit-font-smoothing: antialiased;
 }
 
-/* 按钮通用胶囊样式 */
 .btn-capsule {
     background: var(--theme-color);
     color: var(--theme-on-color);
@@ -43,7 +41,6 @@
     transform: scale(0.95);
 }
 
-/* 最底层：纯黑背景，作为挤压后的外边框 */
 body {
     background-color: var(--bg-color);
     color: var(--text-color);
@@ -72,7 +69,6 @@ body {
     }
 }
 
-/* 流体着色器层 */
 .fluid-glow-container {
     position: absolute;
     inset: -20px;
@@ -97,7 +93,6 @@ body {
             #8b5cf6 80%, var(--primary-color, #0a59f7) 100%);
     filter: url(#fluid-noise) blur(35px);
     animation: rotate-fluid 8s linear infinite;
-    /* 默认暂停，不跑马灯 */
     animation-play-state: paused;
 }
 
@@ -108,11 +103,9 @@ body {
     background: radial-gradient(circle at 50% 50%, transparent 30%, color-mix(in srgb, var(--primary-color, #0a59f7), #93c5fd 50%) 70%, var(--primary-color, #0a59f7) 100%);
     mix-blend-mode: overlay;
     animation: rotate-fluid-reverse 12s linear infinite;
-    /* 默认暂停，不跑马灯 */
     animation-play-state: paused;
 }
 
-/* 只有在 AI 回复状态下，才开启跑马灯动画 */
 .fluid-glow-container.animating .fluid-glow,
 .fluid-glow-container.animating .fluid-glow::after {
     animation-play-state: running;
@@ -154,7 +147,6 @@ body {
     animation: app-startup 1.2s cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
-/* 挤压状态 */
 .app-screen.squeezed {
     transform: scale(0.94);
     border-radius: 48px;
@@ -162,7 +154,6 @@ body {
         0 20px 60px rgba(0, 0, 0, 0.8);
 }
 
-/* 顶栏模糊白色 */
 .topbar {
     position: absolute;
     top: 0;
@@ -199,16 +190,13 @@ body {
     color: var(--primary-color, #0a59f7);
 }
 
-/* 新增：主布局 */
 .main-layout {
     display: flex;
     flex: 1;
     overflow: hidden;
     padding-top: 60px;
-    /* offset for topbar */
 }
 
-/* 聊天区域容器 */
 .chat-section {
     flex: 1;
     position: relative;
@@ -428,7 +416,6 @@ body {
     transform: scale(0.95);
 }
 
-/* 工作区 (Right Sidebar) */
 .workspace-section {
     width: 380px;
     background: #E8EDF5;
@@ -506,7 +493,6 @@ body {
     color: #FFFFFF;
 }
 
-/* 配置模态框 */
 .config-modal {
     position: absolute;
     inset: 0;
@@ -572,7 +558,6 @@ body {
     flex: 1;
 }
 
-/* 聊天中的内嵌授权卡片 */
 .message.approval-wrapper {
     align-self: center;
     background: transparent;
@@ -755,7 +740,6 @@ body {
     }
 }
 
-/* 水波纹动画（启动 + 发送消息共用） */
 .startup-ripple,
 .message-ripple {
     position: absolute;

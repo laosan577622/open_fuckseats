@@ -1,4 +1,3 @@
-# Django 自动生成
 
 import django.db.models.deletion
 import django.utils.timezone

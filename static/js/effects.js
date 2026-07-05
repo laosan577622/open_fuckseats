@@ -1,7 +1,6 @@
 (function () {
     'use strict';
 
-    // -- Ripple Effect --
     function createRipple(event, element) {
         const rect = element.getBoundingClientRect();
         const size = Math.max(rect.width, rect.height) * 2;
@@ -23,7 +22,6 @@
         });
     }
 
-    // -- Mouse Tracking Highlight --
     function initMouseTracking(selector) {
         const target = selector || '.seat';
         document.addEventListener('mousemove', (e) => {
@@ -37,7 +35,6 @@
         });
     }
 
-    // -- Spring Animation Utility --
     var SPRING_CURVES = {
         default: 'linear(0, 0.006, 0.025 2.8%, 0.101 6.1%, 0.539 18.9%, 0.721 25.3%, 0.849 31.5%, 0.937 38.1%, 0.968 41.8%, 0.991 45.7%, 1.006 50.1%, 1.015 55%, 1.017 63.9%, 1.001 85.8%, 1)',
         fast: 'linear(0, 0.11 11.4%, 0.635 29.1%, 0.908 43.5%, 0.979 53%, 1.005 62.1%, 1.007 85.4%, 1)',
@@ -55,7 +52,6 @@
         return element.animate(keyframes, opts);
     }
 
-    // -- Init --
     function init() {
         if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
         initRipple();

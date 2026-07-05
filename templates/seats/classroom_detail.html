@@ -179,6 +179,10 @@
                                         data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
                                         data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                                         data-accept-ext=".xlsx">导出小组登记表</a>
+                                    <a href="{% url 'export_students_csis' classroom.pk %}" class="menu-item-link"
+                                        id="btn-export-csis" role="menuitem" data-system-save="1"
+                                        data-default-filename="{{ classroom.name }}_CSIS.csls"
+                                        data-accept-mime="application/json" data-accept-ext=".csls,.json">导出 CSIS（CSLS）</a>
                                 </div>
                             </div>
                         </div>
@@ -720,6 +724,10 @@
                         data-system-save="1" data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
                         data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         data-accept-ext=".xlsx">导出小组登记表</a>
+                    <a href="{% url 'export_students_csis' classroom.pk %}" class="btn btn-primary"
+                        style="width: 100%; margin-top: 8px;" data-system-save="1"
+                        data-default-filename="{{ classroom.name }}_CSIS.csls"
+                        data-accept-mime="application/json" data-accept-ext=".csls,.json">导出 CSIS（CSLS）</a>
 
                     <div class="panel-header" style="margin-top: 8px;">
                         <h3>导出（系统操作）</h3>
@@ -773,7 +781,6 @@
         </div>
     </div>
 
-    <!-- Generic Prompt / Confirm Modal -->
     <div id="generic-dialog-modal" class="modal">
         <div class="modal-content" style="max-width: 400px;">
             <h3 id="genericDialogTitle" style="margin: 0 0 12px; font-size: 16px; font-weight: 600;"></h3>
@@ -1034,7 +1041,6 @@
         <input type="file" id="seats-import-input" name="seats_file" accept=".seats,application/json">
     </form>
 
-    <!-- Context Menu -->
     <div id="seat-context-menu" class="context-menu">
         <div class="context-menu-section" data-ctx-section="occupied">
             <div class="context-menu-label" id="ctx-student-name"></div>
@@ -1095,7 +1101,6 @@
     </div>
 </div>
 
-<!-- Spotlight Command Panel -->
 <div id="spotlight-overlay" class="spotlight-overlay">
     <div class="spotlight-panel">
         <div class="spotlight-input-row">
@@ -1161,7 +1166,6 @@
         updateZoom();
     }
 
-    // Mouse wheel zoom
     const stage = document.querySelector('.seat-stage');
     if (stage) {
         stage.addEventListener('wheel', function (e) {
@@ -1195,10 +1199,10 @@
     if (!headerArea) return;
     headerArea.dataset.cloudHeaderManaged = 'classroom';
 
-    var classroomId = {{ classroom.pk }};
-    var classroomName = '{{ classroom.name|escapejs }}';
-    var syncMeta = readInitialSyncMeta();
     var classroomRoot = document.getElementById('classroom-root');
+    var classroomId = Number(classroomRoot && classroomRoot.dataset.classroomId ? classroomRoot.dataset.classroomId : 0);
+    var classroomName = classroomRoot ? (classroomRoot.dataset.classroomName || '') : '';
+    var syncMeta = readInitialSyncMeta();
     var cloudEntryScreen = document.getElementById('cloud-entry-sync-screen');
     var isCloudBackedUp = classroomRoot && classroomRoot.dataset.cloudBackedUp === '1';
     var currentUser = null;

@@ -112,7 +112,6 @@ UNWANTED_PROJECT_BACKEND_PATHS = (
 
 
 def _ensure_utf8_stdio():
-    """在部分 Windows CI 环境中，默认输出编码可能是 cp1252，中文打印会报错。"""
     for stream_name in ('stdout', 'stderr'):
         stream = getattr(sys, stream_name, None)
         if stream and hasattr(stream, 'reconfigure'):
@@ -218,8 +217,7 @@ def main():
     BUILD_DIR = os.path.join(BASE_DIR, 'build')
     SPEC_FILE = os.path.join(BASE_DIR, 'FuckSeats.spec')
     STAGE_DIR = os.path.join(BASE_DIR, '_data_stage')
-    # 仅打包桌面运行所需目录
-    DATA_DIRS = ['templates', 'static', 'seats', 'runtime', 'config']
+    DATA_DIRS = ['templates', 'static', 'seats', 'runtime', 'config', 'skill']
     DB_EXCLUDE_PATTERNS = ['*.sqlite3', '*.sqlite', '*.db']
     
     print("正在清理旧构建文件...", flush=True)
@@ -243,7 +241,6 @@ def main():
 
     print("开始打包程序...", flush=True)
     
-    # 先暂存数据目录，排除数据库文件
     print("Preparing data files (excluding database files)...", flush=True)
     if os.path.exists(STAGE_DIR):
         try:

@@ -8,6 +8,7 @@
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
     <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=3.5">
+    <link rel="stylesheet" href="{% static 'css/ai_session.css' %}?v=1.1">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css" />
     {% block extra_head %}{% endblock %}
     <meta name="csrf-token" content="{{ csrf_token }}">
@@ -56,7 +57,23 @@
 
     <div id="toast-container"></div>
 
-    <!-- 更新通知弹窗 -->
+    <div id="ai-session-overlay" aria-live="polite" aria-hidden="true">
+        <div class="ai-session-backdrop"></div>
+        <div class="ai-session-card">
+            <div class="ai-session-spinner" aria-hidden="true">
+                <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
+                    <circle class="ai-session-spinner-track" cx="28" cy="28" r="24"/>
+                    <path class="ai-session-spinner-arc" d="M52 28a24 24 0 0 0-24-24"/>
+                </svg>
+            </div>
+            <h3 class="ai-session-title">AI 操作中</h3>
+            <p class="ai-session-message">AI 正在操作中，请稍候</p>
+            <div class="ai-session-progress"><span class="ai-session-progress-bar"></span></div>
+            <button type="button" class="ai-session-cancel" id="ai-session-cancel">取消 AI 操作</button>
+            <p class="ai-session-footer">由 AI 通过 Open API 控制，任务完成后自动关闭</p>
+        </div>
+    </div>
+
     <div id="update-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content update-modal">
             <div class="modal-header">
@@ -112,8 +129,8 @@
     <script src="{% static 'js/effects.js' %}?v=2.0"></script>
     <script src="{% static 'js/desktop_bridge.js' %}?v=20260430"></script>
     <script src="{% static 'js/main.js' %}?v=1.1"></script>
+    <script src="{% static 'js/ai_session.js' %}?v=1.3"></script>
 
-    <!-- Welcome Finale Overlay（新手引导收官动画） -->
     <div id="welcome-finale-overlay" style="display:none" aria-hidden="true">
         <div class="wf-backdrop"></div>
         <div class="wf-scene">
@@ -282,7 +299,6 @@
     }
     </style>
 
-    <!-- Data Sharing Prompt -->
     <div id="data-sharing-prompt-overlay" style="display:none">
         <div class="ds-prompt-backdrop"></div>
         <div class="ds-prompt-card">
@@ -494,7 +510,6 @@
             document.getElementById('ds-prompt-enable').addEventListener('click', function() { dismiss(true); });
             overlay.querySelector('.ds-prompt-backdrop').addEventListener('click', function() { dismiss(false); });
 
-            // 通过弹窗队列保证同一时刻只有一个弹窗显示
             if (window.PopupManager) {
                 PopupManager.request('data_sharing', doShow);
             } else {
@@ -514,8 +529,6 @@
                 .catch(function() {});
         }
 
-        // 新手引导收官动画：在数据共享弹窗之前播放，整体动效不少于 10 秒，
-        // 只能点击「跳过」按钮结束，点击空白区域不会关闭。
         function showWelcomeFinale(onDone) {
             var overlay = document.getElementById('welcome-finale-overlay');
             if (!overlay) { if (typeof onDone === 'function') onDone(); return; }
@@ -700,7 +713,6 @@
         }
     })();
     </script>
-    <!-- QQ 群弹窗 -->
     <div id="qq-group-overlay" style="display:none">
         <div class="qq-group-backdrop"></div>
         <div class="qq-group-card">
@@ -842,7 +854,6 @@
             document.getElementById('qq-group-confirm').addEventListener('click', dismiss);
             overlay.querySelector('.qq-group-backdrop').addEventListener('click', dismiss);
 
-            // 通过弹窗队列保证同一时刻只有一个弹窗显示
             if (window.PopupManager) {
                 PopupManager.request('qq_group', doShow);
             } else {

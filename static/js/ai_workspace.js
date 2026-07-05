@@ -159,7 +159,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             localStorage.setItem(readPermissionStorageKey, '1');
         } catch (_) {
-            // ignore storage failures
         }
     };
 
@@ -453,7 +452,6 @@ document.addEventListener('DOMContentLoaded', () => {
             saveClientConfigToLocal(serverConfig);
             addMessage('已加载数据库中的连接设置。', 'ai', true);
         } catch (_) {
-            // ignore
         }
     };
 

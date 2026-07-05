@@ -1,29 +1,11 @@
-/**
- * 新手引导 · 真实界面气泡式逐步引导
- *
- * 直接在真实界面上用 driver.js 气泡高亮真实按钮，一步步带用户点进功能，
- * 并为新用户自动准备「示例班级 + 示例名单」。
- *
- * 覆盖三个场景：
- *   - 首页（index）：高亮示例班级卡片，引导用户点进。
- *   - 班级详情（classroom_detail）：进入示例班级时自动开启完整功能引导。
- *   - 布局编辑器（layout_editor）：从详情引导点「布局编辑」进入后，自动开启布局编辑引导
- *     （设置讲台/走廊、右键菜单插入删除行列、调整网格、预览、返回排座）。
- *
- * 体验要点：
- *   - 高亮按钮可直接点击真实执行，点完自动进下一步（disableActiveInteraction:false + 点击推进）。
- *   - 当前步索引存 sessionStorage，刷新或跨页返回时从上一步续看，不会从头来。
- *   - 完成/跳过后 POST /onboarding/seen 落库，不再自动弹出。
- *   - 「帮助」标签页的「新手引导」按钮可随时手动重看（force）。
- */
 (function () {
     if (window.startOnboarding) return;
 
     var SEEN_URL = '/onboarding/seen';
     var SEEN_KEY = 'fuckseats_onboarding_seen';
-    var STEP_KEY = 'onboarding_detail_step';        // 班级详情引导当前步
-    var LAYOUT_STEP_KEY = 'onboarding_layout_step'; // 布局编辑引导当前步
-    var LAYOUT_DONE_KEY = 'onboarding_layout_done'; // 布局引导已看过（本次引导内不重弹）
+    var STEP_KEY = 'onboarding_detail_step';
+    var LAYOUT_STEP_KEY = 'onboarding_layout_step';
+    var LAYOUT_DONE_KEY = 'onboarding_layout_done';
     var DATA_SHARING_AFTER_ONBOARDING_KEY = 'fuckseats_show_data_sharing_after_onboarding';
 
     function driverLib() {
@@ -79,9 +61,6 @@
             }).then(function (res) {
                 return res && res.ok ? res.json() : null;
             }).then(function (data) {
-                // 完成引导后：先返回主页，欢迎收官动画在主页上播放，
-                // 不在班级详情页直接弹出。欢迎动画由主页 base.html 的
-                // checkDataSharingPrompt 消费 sessionStorage 标记后触发。
                 if (isCompletionStage(stage)) {
                     var homeUrl = (data && data.redirect_url) ? data.redirect_url : '';
                     if (!homeUrl) {
@@ -164,7 +143,6 @@
         return target;
     }
 
-    /* ---------------- 通用引导运行器 ---------------- */
     function runTour(opts) {
         var lib = driverLib();
         if (!lib) return;
@@ -235,7 +213,7 @@
             showProgress: true,
             animate: true,
             allowClose: true,
-            disableActiveInteraction: false, // 允许点击高亮元素，真正"手把手"操作
+            disableActiveInteraction: false,
             doneBtnText: opts.doneBtnText || '完成引导',
             nextBtnText: '下一步',
             prevBtnText: '上一步',
@@ -263,7 +241,7 @@
                 if (exitByClose) {
                     exitByClose = false;
                     d.destroy();
-                    return; // 中途关闭：保留进度，下次续看
+                    return;
                 }
                 d.destroy();
                 try { sessionStorage.removeItem(stepKey); } catch (e) {}
@@ -276,7 +254,6 @@
         return d;
     }
 
-    /* ---------------- 首页引导：点进示例班级 ---------------- */
     function startIndexTour(force) {
         var lib = driverLib();
         if (!lib) return;
@@ -301,14 +278,12 @@
             ],
             onDestroyStarted: function () {
                 d.destroy();
-                // 仅在用户主动关闭时触发（点击卡片导航不会触发 destroy）→ 落库跳过
                 markSeenOnServer('index_skip');
             }
         });
         d.drive();
     }
 
-    /* ---------------- 班级详情引导步骤 ---------------- */
     var DETAIL_STEPS = [
         {
             element: '.header-content',
@@ -531,7 +506,6 @@
         });
     }
 
-    /* ---------------- 布局编辑器引导步骤 ---------------- */
     var LAYOUT_STEPS = [
         {
             element: '.seat-stage',
@@ -648,13 +622,11 @@
             stepKey: LAYOUT_STEP_KEY,
             doneBtnText: '完成布局引导',
             onComplete: function () {
-                // 布局引导只是详情引导的补充，不落库 seen；标记本次已看过即可
                 try { sessionStorage.setItem(LAYOUT_DONE_KEY, '1'); } catch (e) {}
             }
         });
     }
 
-    /* ---------------- 入口 ---------------- */
     function startOnboarding(force) {
         if (force !== true && hasSeenLocally()) return;
         if (isIndexPage()) { startIndexTour(force); return; }

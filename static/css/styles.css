@@ -48,7 +48,6 @@ select {
     -webkit-user-select: text;
 }
 
-/* Header / Ribbon */
 .app-header {
     position: fixed;
     top: 0;
@@ -340,7 +339,6 @@ select {
     line-height: 1.35;
 }
 
-/* Buttons (Unified Capsule System) */
 .btn {
     display: inline-flex;
     align-items: center;
@@ -412,13 +410,10 @@ select {
     }
 }
 
-/* Main Content */
 main {
     width: 100%;
-    /* Full width */
     max-width: 100%;
     padding: 0;
-    /* Remove padding to let layout control it */
 }
 
 .form-page {
@@ -431,7 +426,6 @@ main {
     margin: 0 auto;
 }
 
-/* Cards */
 .card {
     background: var(--card-bg);
     border-radius: 18px;
@@ -445,7 +439,6 @@ main {
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
 }
 
-/* Forms */
 .form-group {
     margin-bottom: 20px;
 }
@@ -475,7 +468,6 @@ input:focus {
     border-color: var(--primary-color);
 }
 
-/* Scrollbar Customization */
 ::-webkit-scrollbar {
     width: 10px;
     height: 10px;
@@ -498,7 +490,6 @@ input:focus {
     background-clip: content-box;
 }
 
-/* Utilities */
 .text-center {
     text-align: center;
 }
@@ -520,7 +511,6 @@ input:focus {
     align-items: center;
 }
 
-/* Animation */
 @keyframes fadeIn {
     from {
         opacity: 0;
@@ -591,7 +581,6 @@ input:focus {
     animation: fadeIn 0.45s var(--spring-gentle) forwards;
 }
 
-/* Classroom detail page staggered entrance */
 .classroom-layout.animate-fade-in {
     animation: none;
 }
@@ -611,20 +600,17 @@ input:focus {
     animation: scaleIn 0.4s var(--spring-default) 0.25s forwards;
 }
 
-/* Index page classroom card stagger */
 .classrooms-grid .classroom-card-link {
     opacity: 0;
     animation: cardStaggerIn 0.45s var(--spring-default) forwards;
     animation-delay: calc(var(--card-index, 0) * 0.06s + 0.1s);
 }
 
-/* Ribbon panels entrance */
 .ribbon-panels {
     opacity: 0;
     animation: fadeIn 0.4s var(--spring-gentle) 0.08s forwards;
 }
 
-/* Classroom Layout */
 .classroom-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 300px;
@@ -1850,7 +1836,6 @@ input:focus {
     }
 }
 
-/* Tabs */
 .panel-tabs {
     gap: 16px;
 }
@@ -1900,7 +1885,6 @@ input:focus {
     color: var(--text-secondary);
 }
 
-/* File Menu Dropdown */
 .file-ribbon-group {
     overflow: visible;
 }
@@ -2037,7 +2021,6 @@ input:focus {
     color: var(--primary-color);
 }
 
-/* Context Menu */
 .context-menu {
     position: fixed;
     display: none;
@@ -2320,7 +2303,6 @@ input:focus {
     font-size: 14px;
 }
 
-/* Create Wizard */
 .create-wizard {
     width: 100%;
     min-height: calc(100vh - var(--header-height));
@@ -2727,7 +2709,6 @@ input:focus {
     }
 }
 
-/* Toast Notifications — 基础样式在 base.html 中定义，此处仅扩展 actions 部分 */
 
 .toast-actions {
     display: flex;
@@ -2763,7 +2744,6 @@ input:focus {
     background: rgba(0, 0, 0, 0.1);
 }
 
-/* ===== Modal Base System ===== */
 .modal-overlay {
     position: fixed;
     inset: 0;
@@ -3296,7 +3276,6 @@ body.cloud-login-locked {
     }
 }
 
-/* Plugin Hub: teacher / dev mode */
 .plugin-hub-grid:not(.dev-mode) .plugin-hub-dev-only {
     display: none;
 }
@@ -3566,7 +3545,6 @@ body.cloud-login-locked {
     background: rgba(32, 201, 151, 0.12);
 }
 
-/* ===== Spotlight Command Panel ===== */
 .spotlight-overlay {
     position: fixed;
     inset: 0;
@@ -3744,7 +3722,6 @@ body.cloud-login-locked {
     font-family: inherit;
 }
 
-/* ===== Update Modal ===== */
 #update-modal .modal-content.update-modal {
     max-width: 100vw;
     width: 100vw;
@@ -3875,7 +3852,6 @@ body.cloud-login-locked {
     color: #333;
 }
 
-/* ===== Toast Notifications ===== */
 #toast-container {
     position: fixed;
     bottom: 24px;
@@ -3988,7 +3964,6 @@ body.cloud-login-locked {
     }
 }
 
-/* ===== Touch Input ===== */
 html.has-touch-ui body {
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: contain;
@@ -4364,7 +4339,6 @@ html.has-touch-ui body.touch-dragging .unseated-item {
     }
 }
 
-/* ===== Reduced Motion ===== */
 @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
         animation-duration: 0.01ms !important;
@@ -4417,7 +4391,6 @@ html.has-touch-ui body.touch-dragging .unseated-item {
     margin-left: 12px;
 }
 
-/* ---- Cloud Header ---- */
 .cloud-header-area {
     display: flex;
     align-items: center;
@@ -4560,7 +4533,6 @@ html.has-touch-ui body.touch-dragging .unseated-item {
     opacity: 0.85;
 }
 
-/* ---- Cloud Header Dropdown (classroom detail) ---- */
 .cloud-header-dropdown-wrap {
     position: relative;
 }
@@ -4648,7 +4620,6 @@ html.has-touch-ui body.touch-dragging .unseated-item {
     margin: 4px 8px;
 }
 
-/* ---- Cloud Settings Panel ---- */
 .cloud-account-row {
     display: flex;
     align-items: center;

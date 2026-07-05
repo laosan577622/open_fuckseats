@@ -3234,6 +3234,43 @@ class ClassroomFeatureTests(TestCase):
         self.assertEqual(ws.cell(row=2, column=1).value, "D")
         self.assertEqual(ws.cell(row=3, column=2).value, "A")
 
+    def test_export_students_csis_csls_includes_unknowns_and_seat_extra(self):
+        classroom = Classroom.objects.create(name="CSIS班", rows=2, cols=2)
+        group = classroom.groups.create(name="第一组", order=1)
+        alice = classroom.students.create(name="Alice", student_id="12", gender="M", score=95)
+        bob = classroom.students.create(name="Bob")
+        seat = classroom.seats.get(row=1, col=2)
+        seat.student = alice
+        seat.group = group
+        seat.save(update_fields=["student", "group"])
+
+        url = reverse("export_students_csis", args=[classroom.pk])
+        response = self.client.get(url)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("application/json", response.get("Content-Type", ""))
+        self.assertIn(".csls", response.get("Content-Disposition", ""))
+        payload = json.loads(response.content.decode("utf-8"))
+        self.assertEqual(payload["version"], 1)
+        csis_class = payload["classes"][0]
+        self.assertEqual(csis_class["name"], "CSIS班")
+        self.assertEqual({group["name"] for group in csis_class["groups"]}, {"第一组", "unknown"})
+
+        students = {student["name"]: student for student in csis_class["students"]}
+        self.assertEqual(students["Alice"]["group"], "第一组")
+        self.assertEqual(students["Alice"]["gender"], "male")
+        self.assertEqual(students["Alice"]["number"], 12)
+        self.assertEqual(students["Alice"]["extra"]["seat"]["row"], 1)
+        self.assertEqual(students["Alice"]["extra"]["seat"]["col"], 2)
+        self.assertEqual(students["Alice"]["extra"]["seat"]["position"], [1, 0])
+        self.assertEqual(students["Alice"]["extra"]["seat"]["coordinate"], "1-2")
+        self.assertEqual(students["Bob"]["group"], "unknown")
+        self.assertEqual(students["Bob"]["gender"], "unknown")
+        self.assertFalse(students["Bob"]["extra"]["seat"]["assigned"])
+
+        detail_response = self.client.get(reverse("classroom_detail", args=[classroom.pk]))
+        self.assertContains(detail_response, "导出 CSIS（CSLS）")
+
     def test_export_students_svg_returns_svg_content(self):
         classroom = Classroom.objects.create(name="SVG班", rows=1, cols=2)
         student = classroom.students.create(name="Alice", score=95)
@@ -3663,7 +3700,6 @@ class FrontendStoreTests(TestCase):
         session["onboarding_sample_pk"] = sample.pk
         session.save()
 
-        # 完成引导：只挂「待清理」标记，不立即删，跳回主页前示例班级仍在
         response = self.client.post(
             reverse("mark_onboarding_seen"),
             data=json.dumps({
@@ -3680,7 +3716,6 @@ class FrontendStoreTests(TestCase):
         self.assertNotIn("redirect_url", payload)
         self.assertTrue(Classroom.objects.filter(pk=sample.pk).exists())
 
-        # 跳回主页：此时才清理示例班级
         response = self.client.get(reverse("index"))
         self.assertEqual(response.status_code, 200)
         self.assertFalse(Classroom.objects.filter(pk=sample.pk).exists())
@@ -4547,14 +4582,6 @@ class SettingsPageVersionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'update-details-content')
         self.assertContains(response, '/update.txt')
-
-    @patch('seats.context_processors.desktop_runtime.get_current_version', return_value='7.8.9')
-    def test_settings_page_contains_liquid_glass_toggle(self, _mock_get_current_version):
-        response = self.client.get(reverse('settings'))
-        self.assertEqual(response.status_code, 200)
-        self.assertContains(response, '灵动液态效果（液态玻璃）')
-        self.assertContains(response, 'id="liquid-glass-toggle"', html=False)
-
 
 class StudentTagSystemTests(TestCase):
     def setUp(self):

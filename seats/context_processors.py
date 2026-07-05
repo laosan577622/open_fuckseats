@@ -15,10 +15,8 @@ def app_runtime(request):
 
 
 def _ensure_session_key(request):
-    """确保当前会话有 session_key（必要时创建并落 cookie），用于落库标识访客。"""
     sk = request.session.session_key
     if not sk:
-        # 写入一个占位值，强制 SessionMiddleware 保存会话并下发 cookie
         request.session['ob_init'] = True
         request.session.save()
         sk = request.session.session_key
@@ -26,12 +24,9 @@ def _ensure_session_key(request):
 
 
 def _onboarding_should_show(request):
-    """检测当前访客是否需要展示新手引导：落库 OnboardingState.seen 判定。"""
-    # 仅对页面请求生效，跳过静态资源、API、admin
     path = getattr(request, 'path', '') or ''
     if path.startswith('/admin') or path.startswith('/static') or path.startswith('/media'):
         return False
-    # 仅 GET 页面；POST/API 不弹
     if getattr(request, 'method', 'GET') != 'GET':
         return False
     try:
@@ -70,5 +65,4 @@ def _onboarding_should_show(request):
         state = OnboardingState.objects.filter(session_key=sk).first()
     except Exception:
         return False
-    # 无记录 = 新访客；有记录但 seen=False 也显示
     return state is None or not state.seen

@@ -48,6 +48,7 @@
                     </div>
                     <div class="theme-picker" id="theme-picker"></div>
                 </div>
+
             </div>
         </div>
 
@@ -1075,7 +1076,6 @@
 
 <script>
 document.addEventListener('DOMContentLoaded', () => {
-    // --- Theme Picker ---
     const themePicker = document.getElementById('theme-picker');
     const themeStatus = document.getElementById('theme-status');
 
@@ -1111,7 +1111,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (themeStatus) themeStatus.textContent = themes[currentId].name;
     }
 
-    // --- Existing settings ---
     const SHIFT_USE_LARGE_GROUPS_KEY = 'seats_shift_use_large_groups';
     const GROUP_MOVE_MODE_KEY = 'seats_group_move_mode';
     const checkBtn = document.getElementById('manual-check-update-btn');
@@ -1202,7 +1201,6 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    // --- Cloud Settings ---
     (function initCloudSettings() {
         if (!window.CloudManager) {
             setTimeout(initCloudSettings, 80);
@@ -1433,7 +1431,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     })();
 
-    // --- Subscription Plans ---
     (function initSubscriptionPlans() {
         var wrap = document.getElementById('subscription-plans-wrap');
         if (!wrap) return;
@@ -1588,7 +1585,6 @@ document.addEventListener('DOMContentLoaded', () => {
         loadPlans();
     })();
 
-    // --- Data Sharing Settings ---
     (function initDataSharingSettings() {
         var toggle = document.getElementById('data-sharing-toggle');
         var statusEl = document.getElementById('data-sharing-status');

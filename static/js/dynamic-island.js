@@ -24,7 +24,6 @@
         this._metaball = null;
         this._abortCtrl = null;
         
-        // Initial sizing fallback (handled explicitly to guarantee stability)
         this.targetW = 44;
         this.targetH = 28;
         this.targetR = 14;
@@ -42,7 +41,6 @@
         this._build();
         this._bind();
         
-        // Apply initial explicit size
         this._updateSize();
     };
 
@@ -91,7 +89,6 @@
         var self = this;
         var el = this.el;
 
-        // Auto resize logic on window resize (especially for fullscreen)
         window.addEventListener('resize', function() {
             if (self.state === STATES.FULLSCREEN) {
                 self._updateSize();
@@ -99,13 +96,11 @@
         });
 
         el.addEventListener('click', function (e) {
-            // Ignore clicks on actionable items
             if (e.target.closest('.island-input-bar') ||
                 e.target.closest('.island-approval-actions') ||
                 e.target.closest('.island-perm-toggle') ||
                 e.target.closest('.island-fullscreen-close')) return;
 
-            // Expand logic
             if (self.state === STATES.IDLE) self.setState(STATES.EXPANDED);
             else if (self.state === STATES.COMPACT) self.setState(STATES.EXPANDED);
             else if (self.state === STATES.EXPANDED) self.setState(STATES.FULLSCREEN);
@@ -125,8 +120,7 @@
 
         document.addEventListener('click', function (e) {
             if (self.state !== STATES.EXPANDED) return;
-            if (el.contains(e.target)) return; // clicked inside
-            // Clicked outside, collapse
+            if (el.contains(e.target)) return;
             self.setState(self._hasActivity() ? STATES.COMPACT : STATES.IDLE);
         });
 
@@ -172,7 +166,6 @@
             return;
         }
 
-        // Base positioned
         this.el.style.top = '8px';
         this.el.style.right = '16px';
         
@@ -198,7 +191,7 @@
             
             this.el.style.width = startW + 'px';
             this.el.style.height = startH + 'px';
-            this.el.offsetHeight; // Force reflow
+            this.el.offsetHeight;
             
             this.el.style.transition = prevTrans;
         }
@@ -217,7 +210,6 @@
 
         this._updateSize();
 
-        // Optional class toggle for layout squish
         var layout = document.querySelector('.classroom-layout');
         if (layout) {
             if (newState === STATES.FULLSCREEN) layout.classList.add('ai-active');
@@ -227,7 +219,6 @@
         if (newState === STATES.EXPANDED || newState === STATES.FULLSCREEN) {
             var input = this.el.querySelector('.island-input');
             if (input) {
-                // Delay focus slightly to let expansion start
                 setTimeout(function () { input.focus(); }, 300);
             }
         }
@@ -285,7 +276,6 @@
         var approval = body.querySelector('.island-approval');
         if (approval) approval.remove();
 
-        // Content changed, trigger resize
         this._updateSize();
     };
 
@@ -492,7 +482,6 @@
         card.innerHTML = html;
         body.appendChild(card);
 
-        // Content changed, recalculate size
         this._updateSize();
 
         var permToggle = card.querySelector('.island-perm-toggle');
@@ -504,7 +493,6 @@
                     list.classList.toggle('open');
                 }
                 permToggle.textContent = list && list.classList.contains('open') ? '收起' : '查看详情';
-                // Need to resize again because list expanded/collapsed
                 self._updateSize();
             });
         }

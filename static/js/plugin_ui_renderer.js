@@ -15,7 +15,6 @@
         return;
     }
 
-    /* ── Span rules: auto-decide grid column span based on block type ── */
     var DEFAULT_SPANS = {
         metric:   3,
         text:     6,
@@ -35,7 +34,6 @@
         return DEFAULT_SPANS[t] || 6;
     }
 
-    /* ── Utilities ── */
     function getCsrfToken() {
         var rows = (document.cookie || '').split(';');
         for (var i = 0; i < rows.length; i++) {
@@ -89,7 +87,6 @@
         return node;
     }
 
-    /* ── Loading skeleton ── */
     function renderSkeleton() {
         root.innerHTML = '';
         var wrap = el('div', 'plugin-ui-loading');
@@ -97,7 +94,6 @@
         root.appendChild(wrap);
     }
 
-    /* ── Load UI data ── */
     async function loadUi() {
         hideFeedback();
         renderSkeleton();
@@ -124,7 +120,6 @@
         renderUi(payload.ui);
     }
 
-    /* ── Card factory ── */
     function createCard(title, spanCols) {
         var card = el('article', 'plugin-ui-card');
         if (spanCols && spanCols !== 3) {
@@ -138,7 +133,6 @@
         return card;
     }
 
-    /* ── Metric ── */
     function renderMetric(block) {
         var card = createCard('', resolveSpan(block));
         var label = el('div', 'plugin-ui-metric-label');
@@ -155,7 +149,6 @@
         return card;
     }
 
-    /* ── Text ── */
     function renderText(block) {
         var card = createCard(block.title || '说明', resolveSpan(block));
         var body = el('div', 'plugin-ui-text-body');
@@ -164,7 +157,6 @@
         return card;
     }
 
-    /* ── List ── */
     function renderList(block) {
         var card = createCard(block.title || '列表', resolveSpan(block));
         var list = el('ul', 'plugin-ui-list');
@@ -179,7 +171,6 @@
         return card;
     }
 
-    /* ── Table ── */
     function renderTable(block) {
         var card = createCard(block.title || '表格', resolveSpan(block));
         var columns = Array.isArray(block.columns) ? block.columns : [];
@@ -234,7 +225,6 @@
         return card;
     }
 
-    /* ── Actions ── */
     async function invokeAction(item, buttonRef) {
         var classroomId = getClassroomIdFromQuery();
         var method = String(item.method || 'POST').toUpperCase();
@@ -309,7 +299,6 @@
         return card;
     }
 
-    /* ── Progress ── */
     function renderProgress(block) {
         var card = createCard(block.title || '进度', resolveSpan(block));
         var wrap = el('div', 'plugin-ui-progress-wrap');
@@ -331,12 +320,10 @@
         return card;
     }
 
-    /* ── Divider ── */
     function renderDivider() {
         return el('hr', 'plugin-ui-divider');
     }
 
-    /* ── Section header ── */
     function renderSection(block) {
         var wrap = el('div', 'plugin-ui-section-header');
         var title = el('span', 'plugin-ui-section-title');
@@ -350,7 +337,6 @@
         return wrap;
     }
 
-    /* ── Badge ── */
     function renderBadge(block) {
         var card = createCard('', resolveSpan(block));
         var badge = el('span', 'plugin-ui-badge');
@@ -361,7 +347,6 @@
         return card;
     }
 
-    /* ── JSON fallback ── */
     function renderJson(block) {
         var card = createCard(block.title || '数据', resolveSpan(block));
         var pre = el('pre', 'plugin-ui-json');
@@ -370,7 +355,6 @@
         return card;
     }
 
-    /* ── Block dispatcher ── */
     function renderBlock(block) {
         var safeBlock = (block && typeof block === 'object') ? block : { type: 'json', value: block };
         var t = String(safeBlock.type || 'json').toLowerCase();
@@ -389,7 +373,6 @@
         }
     }
 
-    /* ── Main render ── */
     function renderUi(uiPayload) {
         if (uiPayload == null) {
             root.innerHTML = '<div class="plugin-ui-empty">插件未返回 UI 数据</div>';

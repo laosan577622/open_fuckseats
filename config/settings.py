@@ -13,7 +13,6 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
-# 项目根目录
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-1bux7tnh9ubww-d(pohhj#nw=n5ndw-&8tvns(!yx-pb*sn3xz'
 DEBUG = True
@@ -107,10 +106,8 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
 
-# 插件目录
 PLUGIN_DIRS = [str(BASE_DIR / 'plugins')]
 
-# Future Mode 默认配置
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
 OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', '').strip()
 OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4.1-mini').strip() or 'gpt-4.1-mini'

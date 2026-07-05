@@ -102,7 +102,6 @@
             window.setTimeout(showUpdateModal, 1000);
             return;
         }
-        // 通过弹窗队列保证同一时刻只有一个弹窗显示
         if (window.PopupManager) {
             PopupManager.request('update', doShowUpdateModal);
         } else {
@@ -137,7 +136,6 @@
             clearInterval(pollingInterval);
             pollingInterval = null;
         }
-        // 通知队列：本弹窗已关闭，可显示下一个
         if (window.PopupManager) PopupManager.notifyDismissed('update');
     }
 

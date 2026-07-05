@@ -857,7 +857,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
-    // Generic dialog helpers (replace native confirm/prompt)
     const _dialogModal = document.getElementById('generic-dialog-modal');
     const _dialogTitle = document.getElementById('genericDialogTitle');
     const _dialogMessage = document.getElementById('genericDialogMessage');
@@ -869,7 +868,6 @@ document.addEventListener('DOMContentLoaded', () => {
     const _cleanupDialog = () => {
         _dialogOk.replaceWith(_dialogOk.cloneNode(true));
         _dialogCancel.replaceWith(_dialogCancel.cloneNode(true));
-        // Re-grab after clone
         const ok = document.getElementById('genericDialogOk');
         const cancel = document.getElementById('genericDialogCancel');
         return { ok, cancel };
@@ -969,7 +967,6 @@ document.addEventListener('DOMContentLoaded', () => {
         showInlineToast(message);
     };
 
-    // ─── Tag System ───
     let tagLibraryCache = [];
     let tagRulesCache = [];
     let editingTagRuleId = null;
@@ -1268,7 +1265,6 @@ document.addEventListener('DOMContentLoaded', () => {
         return Array.from(container.querySelectorAll('.tag-picker-chip.selected')).map(el => parseInt(el.dataset.tagId));
     }
 
-    // collapsible toggle for tag sections
     document.querySelectorAll('#tagAssignToggle, #tagRuleToggle').forEach(toggle => {
         if (!toggle) return;
         toggle.addEventListener('click', () => {
@@ -1277,7 +1273,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    // ─── End Tag System ───
 
     const classroomId = root.dataset.classroomId || '';
     const extensionsListUrl = root.dataset.extensionsListUrl || '/extensions/';
@@ -1328,7 +1323,6 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             localStorage.setItem(DEFAULT_EXTENSION_STORAGE_KEY, extensionId);
         } catch (_) {
-            // ignore storage errors
         }
     };
 
@@ -1503,7 +1497,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 try {
                     cleanup();
                 } catch (_) {
-                    // ignore cleanup failures
                 }
             }
             workspaceScriptCleanup.delete(key);
@@ -1884,7 +1877,6 @@ document.addEventListener('DOMContentLoaded', () => {
                         silent: true,
                     });
                 } catch (_) {
-                    // keep auto-run silent
                 }
             }
         }
@@ -3205,7 +3197,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 ghost.appendChild(badge);
             }
             document.body.appendChild(ghost);
-            // Center the drag image to the pointer
             e.dataTransfer.setDragImage(ghost, sourceEl.offsetWidth / 2, sourceEl.offsetHeight / 2);
         } else {
             ghost.classList.add('drag-ghost-text');
@@ -3590,7 +3581,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (data.suggestions) {
                     const toastContainer = document.getElementById('toast-container') || createToastContainer();
-                    // 只移除 suggestion 类型的 toast，保留其他通知（如布局变换提示）
                     toastContainer.querySelectorAll('.toast-suggestion').forEach(el => el.remove());
 
                     const listItems = [];
@@ -3603,7 +3593,6 @@ document.addEventListener('DOMContentLoaded', () => {
                                 }
                                 return;
                             }
-                            // 渲染为弹窗
                             const toast = document.createElement('div');
                             toast.className = 'toast-notification toast-suggestion';
                             toast.innerHTML = `
@@ -3619,12 +3608,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             `;
                             toastContainer.appendChild(toast);
                         } else {
-                            // 渲染为列表项
                             listItems.push(`<div class="suggestion-item">${item}</div>`);
                         }
                     });
 
-                    // 绑定弹窗事件
                     toastContainer.querySelectorAll('.toast-action-btn').forEach(btn => {
                         btn.addEventListener('click', () => {
                             const url = btn.dataset.url;
@@ -4433,12 +4420,10 @@ document.addEventListener('DOMContentLoaded', () => {
             btn.classList.add('active');
             const panel = document.querySelector(`[data-tab-panel="${tab}"]`);
             if (panel) panel.classList.add('active');
-            // 保存当前激活的标签页到 localStorage
             localStorage.setItem('classroom_active_tab', tab);
         });
     });
 
-    // 从 localStorage 恢复激活的标签页
     const savedTab = localStorage.getItem('classroom_active_tab');
     if (savedTab) {
         openSideTab(savedTab);
@@ -4455,7 +4440,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const modal = document.getElementById(modalId);
         if (!modal) return;
         modal.style.display = 'flex';
-        // Double rAF ensures display:flex is painted before transition starts
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 modal.classList.add('modal-visible');
@@ -4469,7 +4453,6 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!modal) return;
         modal.classList.remove('modal-visible');
         const onEnd = (e) => {
-            // Only react to the modal-content transition, not child elements
             if (e.target !== modal.querySelector('.modal-content')) return;
             modal.style.display = 'none';
             modal.removeEventListener('transitionend', onEnd);
@@ -4511,7 +4494,6 @@ document.addEventListener('DOMContentLoaded', () => {
     initPluginHub();
     initShiftUseLargeGroupsPreference();
 
-    // Shift options modal form
     const shiftOptionsForm = document.getElementById('shiftOptionsForm');
     if (shiftOptionsForm && urls.shiftLayout) {
         shiftOptionsForm.addEventListener('submit', (e) => {
@@ -4598,7 +4580,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.addEventListener('keydown', (e) => {
         if (isEditableTarget()) return;
-        // e.key 在某些合成事件 / IME 组合输入下可能为 undefined，做空值保护避免 toLowerCase 报错
         const key = (e.key || '').toLowerCase();
         if (key === 'escape') {
             e.preventDefault();
@@ -4684,9 +4665,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     setDragEnabled(true);
 
-    // 导入流程已迁移到独立配置页面脚本
 
-    // Context Menu Logic
     const contextMenu = document.getElementById('seat-context-menu');
     if (contextMenu && contextMenu.parentNode !== document.body) {
         document.body.appendChild(contextMenu);
@@ -5081,7 +5060,6 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // ===== Spotlight Command Panel =====
     (function initSpotlight() {
         const overlay = document.getElementById('spotlight-overlay');
         const input = document.getElementById('spotlightInput');
@@ -5097,7 +5075,6 @@ document.addEventListener('DOMContentLoaded', () => {
         let filteredCommands = [];
         let isOpen = false;
 
-        // Fetch command manifest
         fetch(commandUrl, { headers: { 'Accept': 'application/json' } })
             .then(r => r.json())
             .then(data => {
@@ -5105,7 +5082,6 @@ document.addEventListener('DOMContentLoaded', () => {
             })
             .catch(() => {});
 
-        // Double-Shift detection
         let lastShiftTime = 0;
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Shift' && !e.repeat) {
@@ -5159,7 +5135,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (e.target === overlay) closeSpotlight();
         });
 
-        // Input handling
         input.addEventListener('input', () => {
             resultEl.innerHTML = '';
             updateSuggestions();

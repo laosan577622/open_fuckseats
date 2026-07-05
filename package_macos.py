@@ -90,6 +90,10 @@ def main():
     os.makedirs(artifacts_dir, exist_ok=True)
     shutil.copytree(app_bundle_path, staged_app_path, symlinks=True)
 
+    skill_source_dir = os.path.join(base_dir, 'skill')
+    if os.path.isdir(skill_source_dir):
+        shutil.copytree(skill_source_dir, os.path.join(stage_dir, 'skill'))
+
     applications_link = os.path.join(stage_dir, 'Applications')
     try:
         os.symlink('/Applications', applications_link)

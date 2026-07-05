@@ -75,7 +75,7 @@ def _wait_for_server_ready(url, timeout=20):
 
 
 def _start_waitress(application):
-    serve(application, host=HOST, port=PORT)
+    serve(application, host=HOST, port=PORT, threads=32)
 
 
 def _open_browser(url):
