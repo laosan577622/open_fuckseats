@@ -9003,156 +9003,291 @@ def import_layout_excel_options_page(request, pk):
     })
 
 
+STUDENT_IMPORT_SUFFIXES = {'.xlsx', '.xls', '.xlsm'}
+STUDENT_IMPORT_PREVIEW_ROW_LIMIT = 200
+STUDENT_IMPORT_PREVIEW_COL_LIMIT = 80
+
+
+def _student_import_temp_path(file_id):
+    try:
+        normalized_file_id = str(uuid.UUID(str(file_id or '').strip()))
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+    for suffix in STUDENT_IMPORT_SUFFIXES:
+        candidate = os.path.join(_ensure_temp_import_dir(), f'{normalized_file_id}{suffix}')
+        if os.path.exists(candidate):
+            return candidate
+    return None
+
+
+def _serialize_student_import_cell(value):
+    if _is_missing_import_value(value):
+        return ''
+    if hasattr(value, 'item'):
+        try:
+            value = value.item()
+        except (ValueError, TypeError):
+            pass
+    if hasattr(value, 'isoformat'):
+        try:
+            return value.isoformat(sep=' ')
+        except TypeError:
+            return value.isoformat()
+    if isinstance(value, (str, int, float, bool)):
+        return value
+    return str(value)
+
+
+def _normalize_student_import_header(value):
+    text = _normalize_import_text(value).lower()
+    return re.sub(r'[\s_\-（）()]+', '', text)
+
+
+def _detect_student_import_defaults(df):
+    aliases = {
+        'name_col_index': {'姓名', '学生姓名', '名字', 'name', 'studentname'},
+        'student_id_col_index': {'学号', '学生号', '编号', 'id', 'studentid'},
+        'gender_col_index': {'性别', '男女', 'gender', 'sex'},
+        'score_col_index': {'总分', '学生总分', '成绩', '分数', 'score', 'totalscore'},
+    }
+    weights = {
+        'name_col_index': 8,
+        'student_id_col_index': 3,
+        'gender_col_index': 2,
+        'score_col_index': 4,
+    }
+    best = None
+
+    for row_index in range(min(len(df.index), 50)):
+        mapping = {key: None for key in aliases}
+        score = 0
+        row = df.iloc[row_index]
+        for col_index, value in enumerate(row.tolist()):
+            normalized = _normalize_student_import_header(value)
+            if not normalized:
+                continue
+            for field, candidates in aliases.items():
+                if mapping[field] is None and normalized in candidates:
+                    mapping[field] = col_index
+                    score += weights[field]
+                    break
+        if mapping['name_col_index'] is not None:
+            candidate = (score, -row_index, row_index, mapping)
+            if best is None or candidate[:2] > best[:2]:
+                best = candidate
+
+    if best is not None:
+        _, _, header_row_index, mapping = best
+        return {
+            'header_row': header_row_index + 1,
+            'start_row': min(header_row_index + 2, max(len(df.index), 1)),
+            **mapping,
+        }
+
+    first_nonempty_row = 0
+    for row_index in range(len(df.index)):
+        if any(not _is_missing_import_value(value) for value in df.iloc[row_index].tolist()):
+            first_nonempty_row = row_index
+            break
+    return {
+        'header_row': None,
+        'start_row': first_nonempty_row + 1,
+        'name_col_index': None,
+        'student_id_col_index': None,
+        'gender_col_index': None,
+        'score_col_index': None,
+    }
+
+
+def _read_student_import_sheet(pd_module, temp_path, requested_sheet=None):
+    workbook = pd_module.ExcelFile(temp_path)
+    try:
+        sheet_names = [str(name) for name in workbook.sheet_names]
+        if not sheet_names:
+            raise ValueError('Excel 文件中没有可用工作表')
+        sheet_name = str(requested_sheet or sheet_names[0])
+        if sheet_name not in sheet_names:
+            raise ValueError('所选工作表不存在')
+        df = pd_module.read_excel(workbook, sheet_name=sheet_name, header=None)
+    finally:
+        workbook.close()
+    return sheet_names, sheet_name, df
+
+
+def _build_student_import_preview(pd_module, temp_path, requested_sheet=None):
+    sheet_names, sheet_name, df = _read_student_import_sheet(
+        pd_module,
+        temp_path,
+        requested_sheet=requested_sheet,
+    )
+    row_count, col_count = df.shape
+    preview_df = df.iloc[
+        :STUDENT_IMPORT_PREVIEW_ROW_LIMIT,
+        :STUDENT_IMPORT_PREVIEW_COL_LIMIT,
+    ]
+    preview_data = [
+        [_serialize_student_import_cell(value) for value in row]
+        for row in preview_df.values.tolist()
+    ]
+    return {
+        'status': 'ready',
+        'sheet_names': sheet_names,
+        'sheet_name': sheet_name,
+        'preview_data': preview_data,
+        'preview_rows': len(preview_data),
+        'preview_cols': min(col_count, STUDENT_IMPORT_PREVIEW_COL_LIMIT),
+        'total_rows': row_count,
+        'total_cols': col_count,
+        'suggested': _detect_student_import_defaults(df),
+    }
+
+
+def _parse_student_import_column(request, key, col_count, required=False):
+    raw_value = str(request.POST.get(key, '')).strip()
+    if not raw_value:
+        if required:
+            raise ValueError('请选择姓名列')
+        return None
+    try:
+        value = int(raw_value)
+    except ValueError as exc:
+        raise ValueError('列选择无效') from exc
+    if value < 0 or value >= col_count:
+        raise ValueError('所选列超出工作表范围')
+    return value
+
+
 def import_students(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
-    
-    if request.method == 'POST':
-        action = request.POST.get('action', 'upload')
-        pd_module = None
-        if action in {'upload', 'confirm'}:
-            try:
-                pd_module = _require_pandas()
-            except RuntimeError as e:
-                return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-        
-        if action == 'upload' and request.FILES.get('excel_file'):
-            excel_file = request.FILES['excel_file']
-            clear_existing = request.POST.get('clear_existing') == '1'
-            import_mode = _resolve_student_import_mode(request.POST.get('import_mode'), clear_existing)
-            
-            try:
-                df = pd_module.read_excel(excel_file)
-                columns = list(df.columns)
+    if request.method != 'POST':
+        return redirect('classroom_detail', pk=pk)
 
-                def find_column(keys):
-                    for key in keys:
-                        for col in columns:
-                            if key in str(col):
-                                return col
-                    return None
+    action = request.POST.get('action', 'upload')
+    if action not in {'upload', 'preview', 'confirm', 'discard'}:
+        return JsonResponse({'status': 'error', 'message': '未知操作'}, status=400)
 
-                def find_exact_column(candidates):
-                    normalized_candidates = {str(item).strip().lower() for item in candidates}
-                    for col in columns:
-                        normalized_col = str(col).strip().lower()
-                        if normalized_col in normalized_candidates:
-                            return col
-                    return None
+    if action == 'discard':
+        temp_path = _student_import_temp_path(request.POST.get('file_id'))
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+        return JsonResponse({'status': 'success'})
 
-                name_col = find_column(['姓名', '名字', '学生姓名', '学生'])
-                score_col = find_exact_column(['总分', '学生总分'])
-                
-                if name_col and score_col:
-                    student_id_col = find_column(['学号', '学生号', '编号', 'ID'])
-                    gender_col = find_column(['性别', '男女性别'])
-                    before_state = _capture_history_state(classroom)
+    try:
+        pd_module = _require_pandas()
+    except RuntimeError as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
 
-                    result = _process_import(
-                        classroom,
-                        df,
-                        name_col,
-                        student_id_col,
-                        gender_col,
-                        score_col,
-                        import_mode
-                    )
-                    _emit_plugin_hook(
-                        'students_imported',
-                        request=request,
-                        classroom=classroom,
-                        payload={'import_mode': import_mode, 'result': result},
-                    )
-                    _push_snapshot_action(
-                        request,
-                        classroom,
-                        before_state,
-                        'import_students',
-                        extra={'import_mode': import_mode, 'result': result},
-                    )
-                    return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
-                
-                import os
-                import uuid
-                from django.conf import settings
-                
-                file_id = str(uuid.uuid4())
-                temp_dir = os.path.join(settings.BASE_DIR, 'temp_imports')
-                os.makedirs(temp_dir, exist_ok=True)
-                temp_path = os.path.join(temp_dir, f'{file_id}.xlsx')
-                
-                with open(temp_path, 'wb+') as destination:
-                    for chunk in excel_file.chunks():
-                        destination.write(chunk)
-                
-                df_preview = pd_module.read_excel(temp_path, header=None)
-                preview_data = df_preview.head(20).fillna('').values.tolist()
-                
-                return JsonResponse({
-                    'status': 'ambiguous',
-                    'file_id': file_id,
-                    'preview_data': preview_data,
-                    'message': '仅当列名精确为“总分”或“学生总分”时才会自动导入，请手动匹配列'
-                })
+    if action == 'upload':
+        excel_file = request.FILES.get('excel_file')
+        if not excel_file:
+            return JsonResponse({'status': 'error', 'message': '请先选择 Excel 文件'}, status=400)
+        suffix = os.path.splitext(excel_file.name)[1].lower()
+        if suffix not in STUDENT_IMPORT_SUFFIXES:
+            return JsonResponse({'status': 'error', 'message': '仅支持 .xlsx、.xls、.xlsm 文件'}, status=400)
 
-            except Exception as e:
-                return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
-
-        elif action == 'confirm':
-            file_id = request.POST.get('file_id')
-            start_row = int(request.POST.get('start_row', 0))
-            name_col_idx = int(request.POST.get('name_col_index'))
-            score_col_idx = request.POST.get('score_col_index')
-            clear_existing = request.POST.get('clear_existing') == 'true'
-            import_mode = _resolve_student_import_mode(request.POST.get('import_mode'), clear_existing)
-            
-            import os
-            from django.conf import settings
-            temp_path = os.path.join(settings.BASE_DIR, 'temp_imports', f'{file_id}.xlsx')
-            
-            if not os.path.exists(temp_path):
-                return JsonResponse({'status': 'error', 'message': '临时文件已过期，请重新上传'}, status=400)
-                
-            try:
-                before_state = _capture_history_state(classroom)
-                df = pd_module.read_excel(temp_path, header=None)
-                
-                df_data = df.iloc[start_row + 1:].copy()
-                
-                df_data.columns = [i for i in range(df_data.shape[1])]
-                
-                name_col = name_col_idx
-                score_col = int(score_col_idx) if score_col_idx and score_col_idx != '' else None
-                
-                result = _process_import(
-                    classroom,
-                    df_data,
-                    name_col,
-                    None,
-                    None,
-                    score_col,
-                    import_mode
-                )
-                
+        file_id, temp_path = _save_uploaded_temp_file(excel_file, suffix)
+        try:
+            preview = _build_student_import_preview(pd_module, temp_path)
+            return JsonResponse({
+                **preview,
+                'file_id': file_id,
+                'file_name': os.path.basename(excel_file.name),
+            })
+        except Exception as e:
+            if os.path.exists(temp_path):
                 os.remove(temp_path)
+            return JsonResponse({'status': 'error', 'message': f'解析失败：{e}'}, status=400)
 
-                _emit_plugin_hook(
-                    'students_imported',
-                    request=request,
-                    classroom=classroom,
-                    payload={'import_mode': import_mode, 'result': result},
-                )
-                _push_snapshot_action(
-                    request,
-                    classroom,
-                    before_state,
-                    'import_students',
-                    extra={'import_mode': import_mode, 'result': result},
-                )
-                return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
-            except Exception as e:
-                return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
+    file_id = request.POST.get('file_id')
+    temp_path = _student_import_temp_path(file_id)
+    if not temp_path:
+        return JsonResponse({'status': 'error', 'message': '临时文件已过期，请重新上传'}, status=400)
 
-    return redirect('classroom_detail', pk=pk)
+    sheet_name = str(request.POST.get('sheet_name', '')).strip() or None
+    if action == 'preview':
+        try:
+            preview = _build_student_import_preview(
+                pd_module,
+                temp_path,
+                requested_sheet=sheet_name,
+            )
+            return JsonResponse({**preview, 'file_id': str(file_id)})
+        except Exception as e:
+            return JsonResponse({'status': 'error', 'message': f'解析失败：{e}'}, status=400)
+
+    clear_existing = request.POST.get('clear_existing') == 'true'
+    import_mode = _resolve_student_import_mode(request.POST.get('import_mode'), clear_existing)
+    try:
+        _, selected_sheet, df = _read_student_import_sheet(
+            pd_module,
+            temp_path,
+            requested_sheet=sheet_name,
+        )
+        row_count, col_count = df.shape
+        if row_count == 0 or col_count == 0:
+            raise ValueError('所选工作表没有可导入的数据')
+
+        try:
+            start_row = int(request.POST.get('start_row', '1'))
+        except ValueError as exc:
+            raise ValueError('数据开始行无效') from exc
+        if start_row < 1 or start_row > row_count:
+            raise ValueError('数据开始行超出工作表范围')
+
+        name_col = _parse_student_import_column(
+            request,
+            'name_col_index',
+            col_count,
+            required=True,
+        )
+        student_id_col = _parse_student_import_column(request, 'student_id_col_index', col_count)
+        gender_col = _parse_student_import_column(request, 'gender_col_index', col_count)
+        score_col = _parse_student_import_column(request, 'score_col_index', col_count)
+        selected_columns = [
+            value
+            for value in (name_col, student_id_col, gender_col, score_col)
+            if value is not None
+        ]
+        if len(selected_columns) != len(set(selected_columns)):
+            raise ValueError('同一列不能绑定多个字段')
+
+        df_data = df.iloc[start_row - 1:].copy()
+        df_data.columns = list(range(col_count))
+        before_state = _capture_history_state(classroom)
+        result = _process_import(
+            classroom,
+            df_data,
+            name_col,
+            student_id_col,
+            gender_col,
+            score_col,
+            import_mode,
+        )
+
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        _emit_plugin_hook(
+            'students_imported',
+            request=request,
+            classroom=classroom,
+            payload={'import_mode': import_mode, 'result': result},
+        )
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_state,
+            'import_students',
+            extra={
+                'import_mode': import_mode,
+                'result': result,
+                'sheet_name': selected_sheet,
+                'start_row': start_row,
+            },
+        )
+        return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
+    except Exception as e:
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
 
 def import_students_options_page(request, pk):

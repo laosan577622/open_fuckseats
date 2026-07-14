@@ -3086,6 +3086,142 @@ class LayoutShiftTests(TestCase):
 
 
 class StudentImportTests(TestCase):
+    @staticmethod
+    def _build_excel_file(filename="students.xlsx"):
+        workbook = openpyxl.Workbook()
+        workbook.active.title = "说明"
+        workbook.active.append(["导入说明"])
+        score_sheet = workbook.create_sheet("成绩表")
+        score_sheet.append(["2026 学年"])
+        score_sheet.append([])
+        score_sheet.append(["学生编号", "学生姓名", "男女", "期末成绩"])
+        score_sheet.append(["S001", "张三", "男", 95])
+        score_sheet.append(["S002", "李四", "女", 88])
+        output = BytesIO()
+        workbook.save(output)
+        workbook.close()
+        return SimpleUploadedFile(
+            filename,
+            output.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+    def test_excel_upload_always_waits_for_visual_confirmation(self):
+        classroom = Classroom.objects.create(name="可视化导入", rows=2, cols=2)
+        classroom.students.create(name="原学生", score=60)
+        workbook = openpyxl.Workbook()
+        worksheet = workbook.active
+        worksheet.append(["姓名", "总分"])
+        worksheet.append(["新学生", 99])
+        output = BytesIO()
+        workbook.save(output)
+        workbook.close()
+        upload = SimpleUploadedFile(
+            "standard.xlsx",
+            output.getvalue(),
+            content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir, override_settings(BASE_DIR=temp_dir):
+            response = self.client.post(
+                reverse("import_students", args=[classroom.pk]),
+                {"action": "upload", "excel_file": upload, "import_mode": "replace"},
+            )
+
+            self.assertEqual(response.status_code, 200)
+            payload = response.json()
+            self.assertEqual(payload["status"], "ready")
+            self.assertEqual(payload["preview_data"][0], ["姓名", "总分"])
+            self.assertEqual(payload["suggested"]["start_row"], 2)
+            self.assertEqual(payload["suggested"]["name_col_index"], 0)
+            self.assertEqual(payload["suggested"]["score_col_index"], 1)
+            self.assertEqual(classroom.students.count(), 1)
+            self.assertTrue(classroom.students.filter(name="原学生").exists())
+            self.assertTrue((Path(temp_dir) / "temp_imports" / f'{payload["file_id"]}.xlsx').exists())
+
+    def test_excel_import_supports_sheet_row_and_all_column_mappings(self):
+        classroom = Classroom.objects.create(name="多工作表导入", rows=2, cols=2)
+        upload = self._build_excel_file()
+
+        with tempfile.TemporaryDirectory() as temp_dir, override_settings(BASE_DIR=temp_dir):
+            url = reverse("import_students", args=[classroom.pk])
+            upload_response = self.client.post(url, {"action": "upload", "excel_file": upload})
+            self.assertEqual(upload_response.status_code, 200)
+            file_id = upload_response.json()["file_id"]
+
+            preview_response = self.client.post(
+                url,
+                {"action": "preview", "file_id": file_id, "sheet_name": "成绩表"},
+            )
+            self.assertEqual(preview_response.status_code, 200)
+            preview = preview_response.json()
+            self.assertEqual(preview["sheet_name"], "成绩表")
+            self.assertEqual(preview["total_rows"], 5)
+            self.assertEqual(preview["total_cols"], 4)
+
+            confirm_response = self.client.post(
+                url,
+                {
+                    "action": "confirm",
+                    "file_id": file_id,
+                    "sheet_name": "成绩表",
+                    "start_row": "4",
+                    "name_col_index": "1",
+                    "student_id_col_index": "0",
+                    "gender_col_index": "2",
+                    "score_col_index": "3",
+                    "import_mode": "replace",
+                },
+            )
+
+            self.assertEqual(confirm_response.status_code, 200)
+            self.assertEqual(confirm_response.json()["status"], "success")
+            self.assertEqual(classroom.students.count(), 2)
+            zhangsan = classroom.students.get(student_id="S001")
+            lisi = classroom.students.get(student_id="S002")
+            self.assertEqual((zhangsan.name, zhangsan.gender, zhangsan.score), ("张三", "M", 95))
+            self.assertEqual((lisi.name, lisi.gender, lisi.score), ("李四", "F", 88))
+            self.assertFalse((Path(temp_dir) / "temp_imports" / f"{file_id}.xlsx").exists())
+
+    def test_excel_import_rejects_duplicate_field_columns(self):
+        classroom = Classroom.objects.create(name="重复列导入", rows=1, cols=1)
+        upload = self._build_excel_file()
+
+        with tempfile.TemporaryDirectory() as temp_dir, override_settings(BASE_DIR=temp_dir):
+            url = reverse("import_students", args=[classroom.pk])
+            file_id = self.client.post(url, {"action": "upload", "excel_file": upload}).json()["file_id"]
+            response = self.client.post(
+                url,
+                {
+                    "action": "confirm",
+                    "file_id": file_id,
+                    "sheet_name": "成绩表",
+                    "start_row": "4",
+                    "name_col_index": "1",
+                    "score_col_index": "1",
+                },
+            )
+
+            self.assertEqual(response.status_code, 400)
+            self.assertIn("同一列不能绑定多个字段", response.json()["message"])
+            self.assertEqual(classroom.students.count(), 0)
+
+    def test_excel_import_discard_removes_temporary_file(self):
+        classroom = Classroom.objects.create(name="取消导入", rows=1, cols=1)
+        upload = self._build_excel_file()
+
+        with tempfile.TemporaryDirectory() as temp_dir, override_settings(BASE_DIR=temp_dir):
+            url = reverse("import_students", args=[classroom.pk])
+            file_id = self.client.post(url, {"action": "upload", "excel_file": upload}).json()["file_id"]
+            temp_file = Path(temp_dir) / "temp_imports" / f"{file_id}.xlsx"
+            self.assertTrue(temp_file.exists())
+
+            response = self.client.post(url, {"action": "discard", "file_id": file_id})
+
+            self.assertEqual(response.status_code, 200)
+            self.assertEqual(response.json()["status"], "success")
+            self.assertFalse(temp_file.exists())
+
     def test_process_import_match_updates_existing_students(self):
         classroom = Classroom.objects.create(name="导入匹配", rows=2, cols=2)
         stu_by_id = classroom.students.create(name="张三", student_id="1001", score=60)
@@ -3192,6 +3328,10 @@ class ClassroomFeatureTests(TestCase):
         self.assertEqual(layout_resp.status_code, 200)
         self.assertIn("导入 Excel 成绩表", score_resp.content.decode("utf-8"))
         self.assertIn("导入座位表（Excel）", layout_resp.content.decode("utf-8"))
+        self.assertIn('id="import-start-row"', score_resp.content.decode("utf-8"))
+        self.assertIn('data-import-field="name"', score_resp.content.decode("utf-8"))
+        self.assertIn('id="import-preview-area"', score_resp.content.decode("utf-8"))
+        self.assertIn('id="student-import-guide-modal"', score_resp.content.decode("utf-8"))
 
     def test_export_students_default_layout(self):
         classroom = Classroom.objects.create(name="导出默认", rows=2, cols=2)

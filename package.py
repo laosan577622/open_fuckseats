@@ -52,6 +52,21 @@ COMMON_HIDDEN_IMPORTS = (
     'cryptography.hazmat.bindings._rust.openssl.aead',
 )
 
+OPEN_API_HIDDEN_IMPORTS = (
+    'seats.open_api',
+    'seats.open_api.ai_session',
+    'seats.open_api.auth',
+    'seats.open_api.mcp',
+    'seats.open_api.openapi',
+    'seats.open_api.realtime',
+    'seats.open_api.registry',
+    'seats.open_api.serializers',
+    'seats.open_api.shared_state',
+    'seats.open_api.tools',
+    'seats.open_api.urls',
+    'seats.open_api.views',
+)
+
 WINDOWS_HIDDEN_IMPORTS = (
     'clr',
     'pythonnet',
@@ -148,6 +163,7 @@ def _build_pyinstaller_command(data_args):
         cmd.append('--windowed')
 
     _extend_option_pairs(cmd, '--hidden-import', COMMON_HIDDEN_IMPORTS)
+    _extend_option_pairs(cmd, '--hidden-import', OPEN_API_HIDDEN_IMPORTS)
     _extend_option_pairs(cmd, '--collect-all', COMMON_COLLECT_ALL)
     _extend_option_pairs(cmd, '--collect-data', COMMON_COLLECT_DATA)
     _extend_option_pairs(cmd, '--copy-metadata', COMMON_COPY_METADATA)

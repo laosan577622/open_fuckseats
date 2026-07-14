@@ -19,76 +19,135 @@
 {% endblock %}
 
 {% block content %}
-<section class="options-workspace">
+<section class="options-workspace student-import-workspace">
     <div class="options-shell" id="import-students-root"
         data-import-url="{% url 'import_students' classroom.pk %}"
         data-back-url="{% url 'classroom_detail' classroom.pk %}">
         <h1 class="options-title">导入 Excel 成绩表</h1>
-        <div class="options-layout">
-            <div class="options-left">
-                <div class="panel-card options-card">
+
+        <div class="options-layout student-import-layout">
+            <div class="options-left student-import-sidebar">
+                <div class="panel-card options-card student-import-upload-card">
                     <form id="excel-import-form" method="post" action="{% url 'import_students' classroom.pk %}" enctype="multipart/form-data">
                         {% csrf_token %}
-                        <div class="form-group">
-                            <label>Excel 文件</label>
-                            <input type="file" name="excel_file" accept=".xlsx,.xls" required>
+                        <div class="form-group student-import-file-group">
+                            <label for="student-import-file">Excel 文件</label>
+                            <div class="student-import-file-control">
+                                <input id="student-import-file" type="file" name="excel_file" accept=".xlsx,.xls,.xlsm" required>
+                                <label for="student-import-file" class="student-import-file-button">
+                                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3m0 0L6.5 6.5M10 3l3.5 3.5M4 12v3.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V12"/></svg>
+                                    选择文件
+                                </label>
+                                <span id="student-import-file-name">未选择文件</span>
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label>导入模式</label>
-                            <label class="checkbox-row">
-                                <input type="radio" name="import_mode" value="match" checked>
-                                匹配现有学生并更新成绩（未匹配自动新增）
-                            </label>
-                            <label class="checkbox-row">
-                                <input type="radio" name="import_mode" value="replace">
-                                清空现有学生后全量导入
-                            </label>
-                        </div>
-                        <div class="options-actions">
+                        <div class="options-actions student-import-upload-actions">
                             <button type="button" class="btn btn-secondary" id="student-import-cancel-btn">取消</button>
-                            <button type="submit" class="btn btn-primary" id="student-import-upload-btn">上传并识别</button>
+                            <button type="submit" class="btn btn-primary" id="student-import-upload-btn">打开文件</button>
                         </div>
                     </form>
-                    <div class="options-hint" id="student-import-hint"></div>
+                    <div class="options-hint" id="student-import-hint" role="status" aria-live="polite"></div>
                 </div>
 
-                <div class="panel-card options-card" id="import-mapping-panel" style="display:none;">
-                    <h3 style="margin-bottom: 6px;">匹配数据</h3>
-
-                    <div class="form-group">
-                        <label>数据起始行（标题行）</label>
-                        <input type="number" id="import-start-row" value="1" min="1" class="form-control">
-                        <small style="color: var(--text-secondary); font-size: 12px;">请输入包含列名（如“姓名”、“总分”或“学生总分”）的那一行。</small>
+                <div class="panel-card options-card student-import-config" id="import-mapping-panel" hidden>
+                    <div class="student-import-section">
+                        <div class="student-import-section-title">工作表</div>
+                        <select id="student-import-sheet" class="form-control" aria-label="工作表"></select>
                     </div>
 
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap: 12px;">
-                        <div class="form-group">
-                            <label>姓名列</label>
-                            <select id="import-name-col" class="form-control"></select>
-                        </div>
-                        <div class="form-group">
-                            <label>总分列（可选）</label>
-                            <select id="import-score-col" class="form-control">
-                                <option value="">不导入分数</option>
-                            </select>
+                    <div class="student-import-section">
+                        <div class="student-import-section-title">数据开始行</div>
+                        <div class="student-import-row-stepper">
+                            <button type="button" class="student-import-stepper-btn" id="student-import-row-minus" aria-label="上一行">
+                                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12"/></svg>
+                            </button>
+                            <input type="number" id="import-start-row" value="1" min="1" class="form-control" aria-label="数据开始行">
+                            <button type="button" class="student-import-stepper-btn" id="student-import-row-plus" aria-label="下一行">
+                                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 10h12M10 4v12"/></svg>
+                            </button>
                         </div>
                     </div>
 
-                    <div class="options-actions">
-                        <button type="button" class="btn btn-secondary" id="student-import-remap-btn">重新上传</button>
+                    <div class="student-import-section">
+                        <div class="student-import-section-title">字段列</div>
+                        <div class="student-import-field-list">
+                            <div class="student-import-field-row required">
+                                <button type="button" class="student-import-field-btn" data-import-field="name">
+                                    <span>姓名</span>
+                                    <strong id="student-import-map-name">未选择</strong>
+                                </button>
+                                <button type="button" class="student-import-field-clear" data-clear-field="name" aria-label="清除姓名列">
+                                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8m0-8-8 8"/></svg>
+                                </button>
+                            </div>
+                            <div class="student-import-field-row">
+                                <button type="button" class="student-import-field-btn" data-import-field="studentId">
+                                    <span>学号</span>
+                                    <strong id="student-import-map-studentId">未选择</strong>
+                                </button>
+                                <button type="button" class="student-import-field-clear" data-clear-field="studentId" aria-label="清除学号列">
+                                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8m0-8-8 8"/></svg>
+                                </button>
+                            </div>
+                            <div class="student-import-field-row">
+                                <button type="button" class="student-import-field-btn" data-import-field="gender">
+                                    <span>性别</span>
+                                    <strong id="student-import-map-gender">未选择</strong>
+                                </button>
+                                <button type="button" class="student-import-field-clear" data-clear-field="gender" aria-label="清除性别列">
+                                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8m0-8-8 8"/></svg>
+                                </button>
+                            </div>
+                            <div class="student-import-field-row">
+                                <button type="button" class="student-import-field-btn" data-import-field="score">
+                                    <span>分数</span>
+                                    <strong id="student-import-map-score">未选择</strong>
+                                </button>
+                                <button type="button" class="student-import-field-clear" data-clear-field="score" aria-label="清除分数列">
+                                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8m0-8-8 8"/></svg>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="student-import-section">
+                        <div class="student-import-section-title">导入模式</div>
+                        <div class="student-import-mode-switch">
+                            <label>
+                                <input type="radio" name="import_mode" value="match" form="excel-import-form" checked>
+                                <span>匹配更新</span>
+                            </label>
+                            <label>
+                                <input type="radio" name="import_mode" value="replace" form="excel-import-form">
+                                <span>全量替换</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="options-actions student-import-confirm-actions">
+                        <button type="button" class="btn btn-secondary" id="student-import-remap-btn">更换文件</button>
                         <button type="button" class="btn btn-primary" id="student-import-confirm-btn">确认导入</button>
                     </div>
                 </div>
             </div>
-            <div class="options-right">
-                <div class="panel-card options-preview-card">
-                    <div class="options-preview-title">导入预览</div>
-                    <div class="options-preview-subtitle" id="student-import-stage"></div>
-                    <div class="preview-stat-list" style="margin-bottom: 8px;">
-                        <div class="preview-stat-item">当前模式：<span id="student-import-mode-preview">匹配更新</span></div>
+
+            <div class="options-right student-import-preview-column">
+                <div class="panel-card options-preview-card student-import-preview-card">
+                    <div class="student-import-preview-header">
+                        <div>
+                            <div class="options-preview-title">工作表预览</div>
+                            <div class="options-preview-subtitle" id="student-import-stage"></div>
+                        </div>
+                        <div class="student-import-preview-meta" id="student-import-preview-meta"></div>
                     </div>
-                    <div id="import-preview-area" class="table-container">
-                        <div style="text-align: center; color: var(--text-secondary); padding: 20px;">上传并识别后，这里显示前2位学生预览。</div>
+                    <div id="import-preview-area" class="student-import-sheet-viewport">
+                        <div class="student-import-empty-state">
+                            <svg viewBox="0 0 64 64" aria-hidden="true">
+                                <path d="M17 7h22l10 10v40H17z"/>
+                                <path d="M39 7v11h10M23 30h20M23 38h20M23 46h13"/>
+                            </svg>
+                            <span>等待选择文件</span>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -96,5 +155,25 @@
     </div>
 </section>
 
-<script src="{% static 'js/import_students_options.js' %}?v=1"></script>
+<div class="student-import-guide-overlay" id="student-import-guide-modal" hidden>
+    <div class="student-import-guide-dialog" role="dialog" aria-modal="true" aria-labelledby="student-import-guide-title" aria-describedby="student-import-guide-message">
+        <div class="student-import-guide-header">
+            <div class="student-import-guide-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24">
+                    <rect x="4" y="4" width="16" height="16" rx="3"/>
+                    <path d="M4 9h16M9 4v16"/>
+                </svg>
+            </div>
+            <button type="button" class="student-import-guide-close" id="student-import-guide-close" aria-label="关闭">
+                <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8m0-8-8 8"/></svg>
+            </button>
+        </div>
+        <h2 id="student-import-guide-title"></h2>
+        <p id="student-import-guide-message"></p>
+        <div class="student-import-guide-options" id="student-import-guide-options"></div>
+        <button type="button" class="btn btn-primary student-import-guide-confirm" id="student-import-guide-confirm" hidden>知道了</button>
+    </div>
+</div>
+
+<script src="{% static 'js/import_students_options.js' %}?v=3"></script>
 {% endblock %}
