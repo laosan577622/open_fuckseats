@@ -26,6 +26,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const importUrl = root.dataset.importUrl || '';
     const backUrl = root.dataset.backUrl || '/';
+    const classroomId = root.dataset.classroomId || '';
+    const importReturnSyncKey = classroomId ? `fuckseats_cloud_import_return_${classroomId}` : '';
+    const markImportReturn = () => {
+        if (!importReturnSyncKey) return;
+        try {
+            sessionStorage.setItem(importReturnSyncKey, '1');
+        } catch (error) {
+            // 浏览器禁用存储时，显式返回 URL 仍可跳过本次入口同步。
+        }
+    };
     const fieldConfig = {
         name: { label: '姓名', requestKey: 'name_col_index' },
         studentId: { label: '学号', requestKey: 'student_id_col_index' },
@@ -411,6 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
     window.scrollTo(0, 0);
 
     cancelBtn?.addEventListener('click', async () => {
+        markImportReturn();
         await discardImportFile();
         window.location.href = backUrl;
     });
@@ -543,6 +554,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             const data = await postFormData(formData);
             setHint(data.message || '导入成功');
+            markImportReturn();
             window.setTimeout(() => {
                 window.location.href = backUrl;
             }, 220);

@@ -129,8 +129,8 @@
                             <span class="setting-description">登录后可将班级数据同步到云端，多设备共享。</span>
                         </div>
                         <button type="button" class="btn btn-primary" id="cloud-login-btn" style="align-self:flex-start;margin-top:8px">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z" fill="currentColor"/></svg>
-                            登录
+                            <span class="cloud-settings-login-icon" data-cloud-settings-login-icon aria-hidden="true"></span>
+                            <span>登录</span>
                         </button>
                     </div>
                 </div>
@@ -145,6 +145,25 @@
                         </div>
                         <div class="cloud-tier-area">
                             <span class="cloud-tier-badge" id="cloud-tier-badge"></span>
+                        </div>
+                    </div>
+
+                    <div class="setting-divider"></div>
+
+                    <div class="setting-item setting-item-stack cloud-classroom-manager">
+                        <div class="cloud-manager-heading">
+                            <div class="setting-info">
+                                <label>云班级管理</label>
+                                <span class="setting-description">查看云端班级，上传本地班级或将云端班级下载到本机。</span>
+                                <span class="setting-value" id="cloud-classroom-usage">正在读取云端班级...</span>
+                            </div>
+                            <div class="cloud-manager-toolbar">
+                                <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-classroom-refresh-btn">刷新</button>
+                                <button type="button" class="btn btn-primary cloud-small-btn" id="cloud-classroom-add-btn" disabled>添加班级</button>
+                            </div>
+                        </div>
+                        <div class="cloud-classroom-list" id="cloud-classroom-list" aria-live="polite">
+                            <div class="cloud-classroom-loading"><span class="cloud-login-spinner"></span><span>正在读取云端班级...</span></div>
                         </div>
                     </div>
 
@@ -208,6 +227,36 @@
                         <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-save-url-btn">保存</button>
                         <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-reset-url-btn" title="恢复默认">重置</button>
                     </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="cloud-classroom-add-modal" class="modal-overlay cloud-manager-modal-overlay" style="display:none" aria-hidden="true">
+            <div class="modal-content cloud-manager-modal" role="dialog" aria-modal="true" aria-labelledby="cloud-classroom-add-title">
+                <div class="modal-header">
+                    <div>
+                        <h3 id="cloud-classroom-add-title">添加云班级</h3>
+                        <p>选择尚未上云的本地班级，可一次上传多个。</p>
+                    </div>
+                    <button type="button" class="modal-close-btn" data-cloud-manager-add-close aria-label="关闭">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6.7 6.7a1 1 0 0 1 1.4 0L12 10.6l3.9-3.9a1 1 0 1 1 1.4 1.4L13.4 12l3.9 3.9a1 1 0 0 1-1.4 1.4L12 13.4l-3.9 3.9a1 1 0 0 1-1.4-1.4L10.6 12 6.7 8.1a1 1 0 0 1 0-1.4z" fill="currentColor"/></svg>
+                    </button>
+                </div>
+                <div class="cloud-manager-local-list" id="cloud-manager-local-list"></div>
+                <div class="modal-actions cloud-manager-modal-actions">
+                    <button type="button" class="btn btn-secondary" data-cloud-manager-add-close>取消</button>
+                    <button type="button" class="btn btn-primary" id="cloud-manager-add-confirm">上传所选班级</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="cloud-classroom-delete-modal" class="modal-overlay cloud-manager-modal-overlay" style="display:none" aria-hidden="true">
+            <div class="modal-content cloud-manager-modal cloud-manager-delete-modal" role="dialog" aria-modal="true" aria-labelledby="cloud-classroom-delete-title">
+                <h3 id="cloud-classroom-delete-title">删除云端副本</h3>
+                <p id="cloud-classroom-delete-message"></p>
+                <div class="modal-actions cloud-manager-modal-actions">
+                    <button type="button" class="btn btn-secondary" data-cloud-manager-delete-cancel>取消</button>
+                    <button type="button" class="btn btn-danger" id="cloud-manager-delete-confirm">删除云端副本</button>
                 </div>
             </div>
         </div>
@@ -488,6 +537,288 @@
     align-items: stretch;
 }
 
+.cloud-settings-login-icon,
+.cloud-settings-login-icon svg {
+    display: block;
+    width: 18px;
+    height: 18px;
+}
+
+.cloud-classroom-manager {
+    gap: 14px;
+}
+
+.cloud-manager-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+}
+
+.cloud-manager-toolbar,
+.cloud-classroom-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.cloud-classroom-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+.cloud-classroom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 13px 14px;
+    border: 1px solid rgba(0, 0, 0, 0.07);
+    border-radius: 13px;
+    background: rgba(248, 249, 251, 0.82);
+}
+
+.cloud-classroom-main {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 0;
+}
+
+.cloud-classroom-title-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+
+.cloud-classroom-title-line strong {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cloud-classroom-state {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.055);
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.cloud-classroom-state.is-local {
+    background: rgba(52, 199, 89, 0.11);
+    color: #248a3d;
+}
+
+.cloud-classroom-state.is-remote {
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+    color: var(--primary-color);
+}
+
+.cloud-classroom-meta {
+    overflow: hidden;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cloud-classroom-actions {
+    flex-shrink: 0;
+}
+
+.cloud-classroom-delete-btn {
+    color: #c9342f;
+}
+
+.cloud-classroom-loading,
+.cloud-classroom-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 76px;
+    padding: 16px;
+    border: 1px dashed rgba(0, 0, 0, 0.11);
+    border-radius: 13px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    text-align: center;
+}
+
+.cloud-classroom-empty {
+    flex-direction: column;
+}
+
+.cloud-classroom-empty strong {
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.cloud-classroom-error {
+    border-color: rgba(201, 52, 47, 0.22);
+    background: rgba(201, 52, 47, 0.025);
+}
+
+.cloud-manager-modal-overlay {
+    z-index: 12000;
+    padding: 20px;
+    background: rgba(18, 23, 32, 0.3);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+.cloud-manager-modal {
+    width: min(520px, 100%);
+    max-height: min(680px, calc(100vh - 40px));
+    padding: 22px;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    border-radius: 20px;
+    box-shadow: 0 26px 70px rgba(15, 23, 42, 0.22);
+    overflow: auto;
+}
+
+.cloud-manager-modal .modal-header {
+    align-items: flex-start;
+    margin-bottom: 16px;
+}
+
+.cloud-manager-modal .modal-header h3,
+.cloud-manager-delete-modal h3 {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 20px;
+    letter-spacing: -0.02em;
+}
+
+.cloud-manager-modal .modal-header p,
+.cloud-manager-delete-modal p {
+    margin: 5px 0 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.55;
+}
+
+.cloud-manager-local-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 390px;
+    overflow: auto;
+}
+
+.cloud-manager-local-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 13px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 13px;
+    background: rgba(248, 249, 251, 0.84);
+    cursor: pointer;
+}
+
+.cloud-manager-local-option:has(input:checked) {
+    border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.46);
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.055);
+}
+
+.cloud-manager-local-option input {
+    width: 18px;
+    height: 18px;
+    accent-color: var(--primary-color);
+}
+
+.cloud-manager-local-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
+}
+
+.cloud-manager-local-copy strong {
+    overflow: hidden;
+    color: var(--text-primary);
+    font-size: 14px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cloud-manager-local-copy span {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.cloud-manager-upload-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 13px;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 13px;
+    background: rgba(248, 249, 251, 0.84);
+}
+
+.cloud-manager-upload-result > span:first-child {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.cloud-manager-upload-result strong {
+    color: var(--text-primary);
+    font-size: 14px;
+}
+
+.cloud-manager-upload-result small {
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.cloud-manager-result-badge {
+    flex-shrink: 0;
+    padding: 3px 9px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.cloud-manager-upload-result.is-success .cloud-manager-result-badge {
+    background: rgba(52, 199, 89, 0.11);
+    color: #248a3d;
+}
+
+.cloud-manager-upload-result.is-error .cloud-manager-result-badge {
+    background: rgba(201, 52, 47, 0.1);
+    color: #c9342f;
+}
+
+.cloud-manager-modal-actions {
+    margin-top: 18px;
+}
+
+.cloud-manager-delete-modal {
+    width: min(420px, 100%);
+    text-align: left;
+}
+
+.cloud-manager-delete-modal p {
+    margin-top: 10px;
+}
+
 .setting-divider {
     height: 1px;
     background: rgba(0, 0, 0, 0.05);
@@ -764,6 +1095,31 @@
 
     .section-header {
         padding: 14px 16px;
+    }
+
+    .cloud-manager-heading,
+    .cloud-classroom-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .cloud-manager-toolbar,
+    .cloud-classroom-actions {
+        justify-content: flex-start;
+    }
+
+    .cloud-classroom-actions .btn {
+        flex: 1 1 auto;
+        justify-content: center;
+    }
+
+    .cloud-classroom-meta {
+        white-space: normal;
+    }
+
+    .cloud-manager-modal {
+        padding: 18px;
+        border-radius: 18px;
     }
 }
 
@@ -1217,8 +1573,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const saveUrlBtn = document.getElementById('cloud-save-url-btn');
         const resetUrlBtn = document.getElementById('cloud-reset-url-btn');
         const urlInput = document.getElementById('cloud-server-url-input');
+        const cloudClassroomList = document.getElementById('cloud-classroom-list');
+        const cloudClassroomUsage = document.getElementById('cloud-classroom-usage');
+        const cloudClassroomRefreshBtn = document.getElementById('cloud-classroom-refresh-btn');
+        const cloudClassroomAddBtn = document.getElementById('cloud-classroom-add-btn');
+        const addModal = document.getElementById('cloud-classroom-add-modal');
+        const addLocalList = document.getElementById('cloud-manager-local-list');
+        const addConfirmBtn = document.getElementById('cloud-manager-add-confirm');
+        const deleteModal = document.getElementById('cloud-classroom-delete-modal');
+        const deleteMessage = document.getElementById('cloud-classroom-delete-message');
+        const deleteConfirmBtn = document.getElementById('cloud-manager-delete-confirm');
         const DEFAULT_CLOUD_URL = 'https://fuckseatsapi.577622.xyz';
         const syncIdleHtml = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/></svg> 立即同步';
+        let currentCloudUser = null;
+        let currentCloudStatus = null;
+        let pendingDeleteClassroom = null;
+        let addShowingResults = false;
+
+        var loginIcon = document.querySelector('[data-cloud-settings-login-icon]');
+        if (loginIcon) loginIcon.innerHTML = CloudManager.getLoginIconMarkup();
 
         function formatDate(iso) {
             if (!iso) return '永久';
@@ -1226,7 +1599,204 @@ document.addEventListener('DOMContentLoaded', () => {
             return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
         }
 
+        function formatDateTime(iso) {
+            if (!iso) return '暂无同步时间';
+            var d = new Date(iso);
+            if (Number.isNaN(d.getTime())) return '暂无同步时间';
+            return d.toLocaleString('zh-CN', { hour12: false });
+        }
+
+        function showManagerModal(modal, popupId) {
+            if (!modal) return;
+            var show = function() {
+                modal.style.display = 'flex';
+                modal.setAttribute('aria-hidden', 'false');
+            };
+            if (window.PopupManager) PopupManager.request(popupId, show);
+            else show();
+        }
+
+        function hideManagerModal(modal, popupId) {
+            if (!modal) return;
+            modal.style.display = 'none';
+            modal.setAttribute('aria-hidden', 'true');
+            if (window.PopupManager) PopupManager.notifyDismissed(popupId);
+        }
+
+        function buildCloudClassroomButton(text, className, handler) {
+            var button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'btn cloud-small-btn ' + className;
+            button.textContent = text;
+            button.addEventListener('click', handler);
+            return button;
+        }
+
+        function renderCloudClassrooms(status) {
+            currentCloudStatus = status || { local: [], remote: { classrooms: [] } };
+            var localRows = Array.isArray(currentCloudStatus.local) ? currentCloudStatus.local : [];
+            var remoteRows = currentCloudStatus.remote && Array.isArray(currentCloudStatus.remote.classrooms)
+                ? currentCloudStatus.remote.classrooms : [];
+            var maxClassrooms = currentCloudUser && currentCloudUser.limits
+                ? Number(currentCloudUser.limits.max_classrooms) : 0;
+            if (cloudClassroomUsage) {
+                cloudClassroomUsage.textContent = maxClassrooms === -1
+                    ? ('云端 ' + remoteRows.length + ' 个班级 · 套餐不限数量')
+                    : ('云端 ' + remoteRows.length + ' / ' + (maxClassrooms || 0) + ' 个班级');
+            }
+            if (!cloudClassroomList) return;
+            cloudClassroomList.innerHTML = '';
+            if (!remoteRows.length) {
+                var empty = document.createElement('div');
+                empty.className = 'cloud-classroom-empty';
+                empty.innerHTML = '<strong>云端还没有班级</strong><span>点击“添加班级”选择本地班级上传。</span>';
+                cloudClassroomList.appendChild(empty);
+                return;
+            }
+
+            remoteRows.forEach(function(row) {
+                var card = document.createElement('article');
+                card.className = 'cloud-classroom-row';
+
+                var main = document.createElement('div');
+                main.className = 'cloud-classroom-main';
+                var titleLine = document.createElement('div');
+                titleLine.className = 'cloud-classroom-title-line';
+                var title = document.createElement('strong');
+                title.textContent = row.name || '未命名班级';
+                var state = document.createElement('span');
+                state.className = 'cloud-classroom-state ' + (row.local_classroom_id ? 'is-local' : 'is-remote');
+                state.textContent = row.local_classroom_id ? '已在本地' : '仅云端';
+                titleLine.appendChild(title);
+                titleLine.appendChild(state);
+                var meta = document.createElement('span');
+                meta.className = 'cloud-classroom-meta';
+                meta.textContent = (row.rows || '--') + ' × ' + (row.cols || '--') + ' 座位网格 · 版本 ' + (row.version || 0) + ' · ' + formatDateTime(row.last_operation_at || row.updated_at);
+                main.appendChild(titleLine);
+                main.appendChild(meta);
+
+                var actions = document.createElement('div');
+                actions.className = 'cloud-classroom-actions';
+                if (row.local_classroom_id) {
+                    actions.appendChild(buildCloudClassroomButton('查看本地', 'btn-secondary', function() {
+                        window.location.href = row.local_detail_url || ('/classroom/' + row.local_classroom_id + '/');
+                    }));
+                } else {
+                    actions.appendChild(buildCloudClassroomButton('下载到本地', 'btn-primary', async function(event) {
+                        var button = event.currentTarget;
+                        button.disabled = true;
+                        button.textContent = '下载中...';
+                        try {
+                            var result = await CloudManager.pullClassroom(row.uuid);
+                            showToast((result && result.name ? result.name : row.name) + ' 已下载到本地');
+                            await loadCloudClassrooms();
+                        } catch (error) {
+                            showToast('下载失败：' + ((error && error.message) || '网络错误'));
+                        } finally {
+                            button.disabled = false;
+                            button.textContent = '下载到本地';
+                        }
+                    }));
+                }
+                actions.appendChild(buildCloudClassroomButton('删除云端副本', 'btn-secondary cloud-classroom-delete-btn', function() {
+                    pendingDeleteClassroom = row;
+                    if (deleteMessage) {
+                        deleteMessage.textContent = row.local_classroom_id
+                            ? '只删除“' + row.name + '”的云端副本。本地班级会保留，并停止自动同步。'
+                            : '确定删除云端班级“' + row.name + '”？当前设备没有它的本地副本。';
+                    }
+                    showManagerModal(deleteModal, 'cloud-classroom-delete');
+                }));
+
+                card.appendChild(main);
+                card.appendChild(actions);
+                cloudClassroomList.appendChild(card);
+            });
+        }
+
+        async function loadCloudClassrooms() {
+            if (!cloudClassroomList || !currentCloudUser || !currentCloudUser.logged_in) return;
+            cloudClassroomList.innerHTML = '<div class="cloud-classroom-loading"><span class="cloud-login-spinner"></span><span>正在读取云端班级...</span></div>';
+            if (cloudClassroomRefreshBtn) cloudClassroomRefreshBtn.disabled = true;
+            if (cloudClassroomAddBtn) cloudClassroomAddBtn.disabled = true;
+            try {
+                var status = await CloudManager.getSyncStatus();
+                renderCloudClassrooms(status);
+            } catch (error) {
+                currentCloudStatus = null;
+                cloudClassroomList.innerHTML = '';
+                var failed = document.createElement('div');
+                failed.className = 'cloud-classroom-empty cloud-classroom-error';
+                var message = document.createElement('strong');
+                message.textContent = '云班级读取失败';
+                var detail = document.createElement('span');
+                detail.textContent = (error && error.message) || '请检查网络后重试';
+                var retry = buildCloudClassroomButton('重新加载', 'btn-primary', loadCloudClassrooms);
+                failed.appendChild(message);
+                failed.appendChild(detail);
+                failed.appendChild(retry);
+                cloudClassroomList.appendChild(failed);
+            } finally {
+                if (cloudClassroomRefreshBtn) cloudClassroomRefreshBtn.disabled = false;
+                if (cloudClassroomAddBtn) cloudClassroomAddBtn.disabled = !currentCloudStatus;
+            }
+        }
+
+        function openAddClassroomModal() {
+            if (!currentCloudStatus) return;
+            var remoteRows = currentCloudStatus.remote && Array.isArray(currentCloudStatus.remote.classrooms)
+                ? currentCloudStatus.remote.classrooms : [];
+            var maxClassrooms = currentCloudUser && currentCloudUser.limits
+                ? Number(currentCloudUser.limits.max_classrooms) : 0;
+            var availableSlots = maxClassrooms === -1 ? Infinity : Math.max(0, maxClassrooms - remoteRows.length);
+            var remoteUuids = new Set(remoteRows.map(function(row) { return String(row.uuid || ''); }));
+            var candidates = (currentCloudStatus.local || []).filter(function(row) {
+                return !row.backed_up && !remoteUuids.has(String(row.uuid || ''));
+            });
+            addLocalList.innerHTML = '';
+            addShowingResults = false;
+            addConfirmBtn.textContent = '上传所选班级';
+            if (availableSlots <= 0) {
+                addLocalList.innerHTML = '<div class="cloud-classroom-empty"><strong>云班级数量已达套餐上限</strong><span>请先删除不需要的云端副本，或升级套餐后再添加。</span></div>';
+                addConfirmBtn.disabled = true;
+            } else if (!candidates.length) {
+                addLocalList.innerHTML = '<div class="cloud-classroom-empty"><strong>没有可添加的本地班级</strong><span>所有本地班级都已建立云同步关系。</span></div>';
+                addConfirmBtn.disabled = true;
+            } else {
+                candidates.forEach(function(row) {
+                    var label = document.createElement('label');
+                    label.className = 'cloud-manager-local-option';
+                    label.dataset.classroomId = String(row.classroom_id);
+                    var checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.value = row.classroom_id;
+                    checkbox.addEventListener('change', function() {
+                        var selectedCount = addLocalList.querySelectorAll('input:checked').length;
+                        if (checkbox.checked && selectedCount > availableSlots) {
+                            checkbox.checked = false;
+                            showToast('当前套餐本次最多还能添加 ' + availableSlots + ' 个云班级');
+                        }
+                        addConfirmBtn.disabled = !addLocalList.querySelector('input:checked');
+                    });
+                    var copy = document.createElement('span');
+                    copy.className = 'cloud-manager-local-copy';
+                    var name = document.createElement('strong');
+                    name.textContent = row.name || '未命名班级';
+                    var meta = document.createElement('span');
+                    meta.textContent = row.rows + ' × ' + row.cols + ' 座位网格 · ' + (row.student_count || 0) + ' 名学生';
+                    copy.appendChild(name);
+                    copy.appendChild(meta);
+                    label.appendChild(checkbox);
+                    label.appendChild(copy);
+                    addLocalList.appendChild(label);
+                });
+                addConfirmBtn.disabled = true;
+            }
+            showManagerModal(addModal, 'cloud-classroom-add');
+        }
+
         function renderCloudUI(data) {
+            currentCloudUser = data || { logged_in: false };
             if (data.logged_in) {
                 notLoggedIn.style.display = 'none';
                 loggedIn.style.display = 'block';
@@ -1250,6 +1820,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } else {
                 notLoggedIn.style.display = 'block';
                 loggedIn.style.display = 'none';
+                currentCloudStatus = null;
             }
             if (data.cloud_server_url && urlInput) {
                 urlInput.value = data.cloud_server_url;
@@ -1284,20 +1855,27 @@ document.addEventListener('DOMContentLoaded', () => {
             return parts.length ? ('同步完成：' + parts.join('，')) : '没有需要同步的班级';
         }
 
-        CloudManager.getUserInfo(true).then(renderCloudUI);
+        CloudManager.getUserInfo(true).then(function(data) {
+            renderCloudUI(data);
+            if (data && data.logged_in) loadCloudClassrooms();
+        });
 
         if (loginBtn) loginBtn.addEventListener('click', async function() {
             loginBtn.disabled = true;
             try {
                 await CloudManager.openLogin();
-                renderCloudUI(await CloudManager.getUserInfo(true));
+                var user = await CloudManager.getUserInfo(true);
+                renderCloudUI(user);
+                if (user && user.logged_in) await loadCloudClassrooms();
             } finally {
                 loginBtn.disabled = false;
             }
         });
 
         window.addEventListener('cloud-login-sync-complete', async function() {
-            renderCloudUI(await CloudManager.getUserInfo(true));
+            var user = await CloudManager.getUserInfo(true);
+            renderCloudUI(user);
+            await loadCloudClassrooms();
             var lastSyncEl = document.getElementById('cloud-last-sync');
             if (lastSyncEl) {
                 lastSyncEl.textContent = '上次同步：刚刚';
@@ -1356,11 +1934,98 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (lastSyncEl && !counts.err && !counts.conflict) {
                     lastSyncEl.textContent = '上次同步：刚刚';
                 }
+                await loadCloudClassrooms();
             } catch(e) {
                 showToast('同步失败：' + (e.message || '网络错误'));
             } finally {
                 syncBtn.disabled = false;
                 syncBtn.innerHTML = syncIdleHtml;
+            }
+        });
+
+        if (cloudClassroomRefreshBtn) cloudClassroomRefreshBtn.addEventListener('click', loadCloudClassrooms);
+        if (cloudClassroomAddBtn) cloudClassroomAddBtn.addEventListener('click', openAddClassroomModal);
+        document.querySelectorAll('[data-cloud-manager-add-close]').forEach(function(button) {
+            button.addEventListener('click', function() { hideManagerModal(addModal, 'cloud-classroom-add'); });
+        });
+        if (addConfirmBtn) addConfirmBtn.addEventListener('click', async function() {
+            if (addShowingResults) {
+                hideManagerModal(addModal, 'cloud-classroom-add');
+                addShowingResults = false;
+                return;
+            }
+            var selected = Array.from(addLocalList.querySelectorAll('input:checked')).map(function(input) { return Number(input.value); });
+            if (!selected.length) return;
+            var selectedNames = {};
+            selected.forEach(function(classroomId) {
+                var option = addLocalList.querySelector('[data-classroom-id="' + classroomId + '"]');
+                var name = option && option.querySelector('strong');
+                selectedNames[classroomId] = name ? name.textContent : ('班级 ' + classroomId);
+            });
+            addConfirmBtn.disabled = true;
+            addConfirmBtn.textContent = '上传中...';
+            try {
+                var result = await CloudManager.sync(selected, { deviceId: 'cloud-manager-add' });
+                var rows = result && Array.isArray(result.results) ? result.results : [];
+                var failed = rows.filter(function(row) { return row.status !== 'ok' && row.status !== 'up_to_date'; });
+                showToast(failed.length ? ('已上传 ' + (rows.length - failed.length) + ' 个，' + failed.length + ' 个失败') : ('已添加 ' + rows.length + ' 个云班级'));
+                addLocalList.innerHTML = '';
+                selected.forEach(function(classroomId) {
+                    var row = rows.find(function(item) { return Number(item.classroom_id) === classroomId; });
+                    var resultItem = document.createElement('div');
+                    var succeeded = row && (row.status === 'ok' || row.status === 'up_to_date');
+                    resultItem.className = 'cloud-manager-upload-result ' + (succeeded ? 'is-success' : 'is-error');
+                    var copy = document.createElement('span');
+                    copy.innerHTML = '<strong></strong><small></small>';
+                    copy.querySelector('strong').textContent = selectedNames[classroomId];
+                    copy.querySelector('small').textContent = succeeded
+                        ? (row.status === 'up_to_date' ? '云端已是最新版本' : '已成功上传到云端')
+                        : ((row && row.message) || '上传失败，请稍后重试');
+                    var badge = document.createElement('span');
+                    badge.className = 'cloud-manager-result-badge';
+                    badge.textContent = succeeded ? '成功' : '失败';
+                    resultItem.appendChild(copy);
+                    resultItem.appendChild(badge);
+                    addLocalList.appendChild(resultItem);
+                });
+                addShowingResults = true;
+                addConfirmBtn.disabled = false;
+                addConfirmBtn.textContent = '完成';
+                await loadCloudClassrooms();
+            } catch (error) {
+                showToast('添加失败：' + ((error && error.message) || '网络错误'));
+            } finally {
+                if (!addShowingResults) {
+                    addConfirmBtn.disabled = false;
+                    addConfirmBtn.textContent = '上传所选班级';
+                }
+            }
+        });
+
+        document.querySelectorAll('[data-cloud-manager-delete-cancel]').forEach(function(button) {
+            button.addEventListener('click', function() {
+                pendingDeleteClassroom = null;
+                hideManagerModal(deleteModal, 'cloud-classroom-delete');
+            });
+        });
+        if (deleteConfirmBtn) deleteConfirmBtn.addEventListener('click', async function() {
+            if (!pendingDeleteClassroom) return;
+            deleteConfirmBtn.disabled = true;
+            deleteConfirmBtn.textContent = '删除中...';
+            try {
+                await CloudManager.deleteCloudClassroom(pendingDeleteClassroom.uuid, {
+                    detachLocal: true,
+                    deviceId: 'cloud-manager',
+                });
+                showToast('已删除“' + pendingDeleteClassroom.name + '”的云端副本，本地数据已保留');
+                pendingDeleteClassroom = null;
+                hideManagerModal(deleteModal, 'cloud-classroom-delete');
+                await loadCloudClassrooms();
+            } catch (error) {
+                showToast('删除失败：' + ((error && error.message) || '网络错误'));
+            } finally {
+                deleteConfirmBtn.disabled = false;
+                deleteConfirmBtn.textContent = '删除云端副本';
             }
         });
 

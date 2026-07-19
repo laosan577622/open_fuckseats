@@ -1,9 +1,12 @@
 window.CloudManager = (function () {
     let _userInfo = null;
     let _syncing = false;
-    let _syncingPromise = null;
+    let _syncQueue = Promise.resolve();
+    const _syncPromises = new Map();
     let _loginFlowPromise = null;
     let _loginOverlay = null;
+    let _connectivityOverlay = null;
+    let _offlinePromptPromise = null;
 
     async function fetchJSON(url, options) {
         const resp = await fetch(url, options);
@@ -14,15 +17,116 @@ window.CloudManager = (function () {
         return data;
     }
 
-    async function getUserInfo(force) {
+    function getTemplateIcon(id) {
+        const template = document.getElementById(id);
+        if (!template) return '';
+        const root = template.content || template;
+        const svg = root.querySelector ? root.querySelector('svg') : null;
+        return svg ? svg.outerHTML : '';
+    }
+
+    function getLoginIconMarkup() {
+        return getTemplateIcon('cloud-login-icon-template');
+    }
+
+    function getOfflineIconMarkup() {
+        return getTemplateIcon('cloud-offline-icon-template');
+    }
+
+    async function getUserInfo(force, options) {
         if (_userInfo && !force) return _userInfo;
+        const refreshSubscription = !options || options.refreshSubscription !== false;
+        const url = refreshSubscription ? '/cloud/userinfo' : '/cloud/userinfo?refresh=0';
         try {
-            const data = await fetchJSON('/cloud/userinfo');
+            const data = await fetchJSON(url);
             _userInfo = data;
             return data;
-        } catch {
-            return { logged_in: false };
+        } catch (error) {
+            if (_userInfo) {
+                return { ..._userInfo, connection_error: true, message: error && error.message };
+            }
+            return { logged_in: false, connection_error: true, message: error && error.message };
         }
+    }
+
+    async function getNetworkStatus() {
+        return fetchJSON('/api/network-status');
+    }
+
+    function getConnectivityOverlay() {
+        if (_connectivityOverlay) return _connectivityOverlay;
+        const overlay = document.createElement('div');
+        overlay.className = 'cloud-connectivity-overlay';
+        overlay.setAttribute('role', 'dialog');
+        overlay.setAttribute('aria-modal', 'true');
+        overlay.setAttribute('aria-hidden', 'true');
+        overlay.innerHTML = `
+            <div class="cloud-connectivity-backdrop"></div>
+            <div class="cloud-connectivity-dialog">
+                <div class="cloud-connectivity-icon" aria-hidden="true">${getOfflineIconMarkup()}</div>
+                <h3>您似乎未联网</h3>
+                <p>当前系统未检测到可用网络，是否仍要继续尝试云同步？</p>
+                <div class="cloud-connectivity-actions">
+                    <button type="button" class="btn btn-secondary" data-cloud-use-local>使用本地数据</button>
+                    <button type="button" class="btn btn-primary" data-cloud-try-anyway>继续尝试</button>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(overlay);
+        _connectivityOverlay = overlay;
+        return overlay;
+    }
+
+    function confirmOfflineSync() {
+        if (_offlinePromptPromise) return _offlinePromptPromise;
+        _offlinePromptPromise = new Promise((resolve) => {
+            const overlay = getConnectivityOverlay();
+            const localBtn = overlay.querySelector('[data-cloud-use-local]');
+            const retryBtn = overlay.querySelector('[data-cloud-try-anyway]');
+            const finish = (shouldTry) => {
+                overlay.classList.remove('visible');
+                overlay.setAttribute('aria-hidden', 'true');
+                document.body.classList.remove('cloud-connectivity-locked');
+                if (window.PopupManager) PopupManager.notifyDismissed('cloud-connectivity');
+                _offlinePromptPromise = null;
+                resolve(shouldTry);
+            };
+            const show = () => {
+                overlay.classList.add('visible');
+                overlay.setAttribute('aria-hidden', 'false');
+                document.body.classList.add('cloud-connectivity-locked');
+                retryBtn.focus();
+            };
+            localBtn.onclick = () => finish(false);
+            retryBtn.onclick = () => finish(true);
+            if (window.PopupManager) PopupManager.request('cloud-connectivity', show);
+            else show();
+        });
+        return _offlinePromptPromise;
+    }
+
+    async function prepareEntrySync(options) {
+        const opts = options || {};
+        const [user, network] = await Promise.all([
+            getUserInfo(true, { refreshSubscription: false }),
+            getNetworkStatus().catch(() => ({ online: null, source: 'request-error' })),
+        ]);
+        if (!user || !user.logged_in) {
+            return { shouldSync: false, reason: 'not_logged_in', user, network };
+        }
+        if (network && network.online === false) {
+            if (opts.promptOffline === false) {
+                return { shouldSync: false, reason: 'offline', user, network };
+            }
+            const shouldTry = await confirmOfflineSync();
+            return {
+                shouldSync: shouldTry,
+                reason: shouldTry ? 'offline_retry' : 'offline_local',
+                user,
+                network,
+            };
+        }
+        return { shouldSync: true, reason: 'online', user, network };
     }
 
     function getLoginOverlay() {
@@ -33,12 +137,8 @@ window.CloudManager = (function () {
         overlay.setAttribute('role', 'dialog');
         overlay.setAttribute('aria-modal', 'true');
         overlay.innerHTML = `
-            <div class="cloud-login-dialog">
-                <div class="cloud-login-icon" aria-hidden="true">
-                    <svg width="34" height="34" viewBox="0 0 24 24" fill="none">
-                        <path d="M12 3a5 5 0 0 0-5 5v2H6a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2h-1V8a5 5 0 0 0-5-5Zm-3 7V8a3 3 0 1 1 6 0v2H9Z" fill="currentColor"/>
-                    </svg>
-                </div>
+                <div class="cloud-login-dialog">
+                <div class="cloud-login-icon" aria-hidden="true">${getLoginIconMarkup()}</div>
                 <div class="cloud-login-title">云服务登录</div>
                 <div class="cloud-login-message" data-cloud-login-message></div>
                 <div class="cloud-login-progress" data-cloud-login-progress style="display:none;">
@@ -130,7 +230,7 @@ window.CloudManager = (function () {
 
     async function autoSyncAfterLogin(userInfo) {
         updateLoginStatus('登录成功，正在自动同步云端数据...');
-        const result = await sync(null, { auto: true });
+        const result = await sync(null, { auto: true, scope: 'linked', deviceId: 'login-auto-sync' });
         _userInfo = userInfo || await getUserInfo(true);
         dispatchLoginSyncComplete(result, _userInfo);
         return result;
@@ -148,7 +248,7 @@ window.CloudManager = (function () {
                     return;
                 }
                 try {
-                    const info = await getUserInfo(true);
+                    const info = await getUserInfo(true, { refreshSubscription: false });
                     if (info && info.logged_in) {
                         clearInterval(interval);
                         resolve(info);
@@ -162,7 +262,7 @@ window.CloudManager = (function () {
         if (_loginFlowPromise) return _loginFlowPromise;
 
         _loginFlowPromise = (async () => {
-            const data = await getUserInfo(true);
+            const data = await getUserInfo(true, { refreshSubscription: false });
             if (data && data.logged_in) {
                 return { status: 'already_logged_in', user: data };
             }
@@ -248,33 +348,48 @@ window.CloudManager = (function () {
     }
 
     async function sync(classroomIds, options) {
-        if (_syncingPromise) return _syncingPromise;
-        _syncing = true;
-        _syncingPromise = (async () => {
-            const body = classroomIds ? { classroom_ids: classroomIds } : {};
-            if (options && options.force) body.force = true;
-            if (options && options.auto) body.auto = true;
-            const data = await fetchJSON('/cloud/sync', {
+        const opts = options || {};
+        const normalizedIds = classroomIds
+            ? (Array.isArray(classroomIds) ? classroomIds.slice() : [classroomIds]).map(Number).sort((a, b) => a - b)
+            : null;
+        const body = normalizedIds ? { classroom_ids: normalizedIds } : {};
+        if (opts.force) body.force = true;
+        if (opts.auto) body.auto = true;
+        if (opts.scope) body.scope = opts.scope;
+        if (opts.deviceId) body.device_id = opts.deviceId;
+        const requestKey = JSON.stringify(body);
+        if (_syncPromises.has(requestKey)) return _syncPromises.get(requestKey);
+
+        const task = _syncQueue.catch(() => null).then(() => fetchJSON('/cloud/sync', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(body),
-            });
-            return data;
-        })();
-        try {
-            return await _syncingPromise;
-        } finally {
-            _syncing = false;
-            _syncingPromise = null;
-        }
+            }));
+        let tracked;
+        tracked = task.finally(() => {
+            if (_syncPromises.get(requestKey) === tracked) _syncPromises.delete(requestKey);
+            _syncing = _syncPromises.size > 0;
+        });
+        _syncPromises.set(requestKey, tracked);
+        _syncQueue = tracked.catch(() => null);
+        _syncing = true;
+        return tracked;
     }
 
     async function pullClassroom(uuid) {
         return fetchJSON('/cloud/sync/pull/' + uuid, { method: 'POST' });
     }
 
-    async function deleteCloudClassroom(uuid) {
-        return fetchJSON('/cloud/sync/delete/' + uuid, { method: 'POST' });
+    async function deleteCloudClassroom(uuid, options) {
+        const opts = options || {};
+        return fetchJSON('/cloud/sync/delete/' + uuid, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                detach_local: !!opts.detachLocal,
+                device_id: opts.deviceId || 'cloud-manager',
+            }),
+        });
     }
 
     async function getSnapshots(classroomUuid) {
@@ -346,6 +461,11 @@ window.CloudManager = (function () {
 
     return {
         getUserInfo,
+        getNetworkStatus,
+        prepareEntrySync,
+        confirmOfflineSync,
+        getLoginIconMarkup,
+        getOfflineIconMarkup,
         openLogin,
         logout,
         refreshSubscription,

@@ -114,6 +114,30 @@ class CloudSyncDeleteTests(TestCase):
         self.assertEqual(status_response.status_code, 200)
         self.assertEqual(self.decrypted_response(status_response, client_keys)["classrooms"], [])
 
+    def test_sync_status_includes_classroom_grid(self):
+        user = CloudUser.objects.create(uid="u-status-grid")
+        session, client_keys = self.create_session(user)
+        classroom = CloudClassroom.objects.create(
+            user=user,
+            uuid=uuid.uuid4(),
+            name="网格状态班",
+            rows=7,
+            cols=8,
+            data_snapshot={},
+            version=2,
+        )
+
+        response = self.client.get(
+            "/api/sync/status",
+            HTTP_AUTHORIZATION=f"Bearer {session.token}",
+        )
+
+        self.assertEqual(response.status_code, 200)
+        payload = self.decrypted_response(response, client_keys)
+        row = payload["classrooms"][0]
+        self.assertEqual(row["uuid"], str(classroom.uuid))
+        self.assertEqual((row["rows"], row["cols"]), (7, 8))
+
     def test_sync_delete_is_idempotent_for_already_deleted_classroom(self):
         user = CloudUser.objects.create(uid="u-delete-again")
         session, client_keys = self.create_session(user)
@@ -263,6 +287,69 @@ class CloudSyncStorageTests(TestCase):
         self.assertEqual(classroom.cols, 4)
         self.assertEqual(classroom.version, 1)
         self.assertEqual(classroom.data_snapshot["students"][0]["name"], "张三")
+
+    def test_push_reactivates_deleted_classroom_with_same_uuid(self):
+        user = CloudUser.objects.create(uid="u-reactivate")
+        classroom_uuid = uuid.uuid4()
+        deleted = CloudClassroom.objects.create(
+            user=user,
+            uuid=classroom_uuid,
+            name="已删云班",
+            rows=2,
+            cols=2,
+            data_snapshot={},
+            version=5,
+            is_deleted=True,
+        )
+
+        result = push_classroom_snapshot(user, {
+            "uuid": str(classroom_uuid),
+            "base_version": 5,
+            "device_id": "cloud-manager-add",
+            "data": self.fuckseats_snapshot("重新上云班", 3, 4),
+        })
+
+        deleted.refresh_from_db()
+        self.assertTrue(result["ok"])
+        self.assertFalse(deleted.is_deleted)
+        self.assertEqual(deleted.version, 6)
+        self.assertEqual(deleted.name, "重新上云班")
+        self.assertEqual(CloudClassroom.objects.filter(user=user, uuid=classroom_uuid).count(), 1)
+
+    def test_push_cannot_reactivate_deleted_classroom_above_plan_limit(self):
+        user = CloudUser.objects.create(uid="u-reactivate-limit")
+        for index in range(3):
+            CloudClassroom.objects.create(
+                user=user,
+                uuid=uuid.uuid4(),
+                name=f"已上云班{index}",
+                rows=2,
+                cols=2,
+                data_snapshot={},
+                version=1,
+            )
+        deleted = CloudClassroom.objects.create(
+            user=user,
+            uuid=uuid.uuid4(),
+            name="超额恢复班",
+            rows=2,
+            cols=2,
+            data_snapshot={},
+            version=4,
+            is_deleted=True,
+        )
+
+        with self.assertRaisesRegex(PermissionError, "最多同步 3 个班级"):
+            push_classroom_snapshot(user, {
+                "uuid": str(deleted.uuid),
+                "base_version": 4,
+                "device_id": "cloud-manager-add",
+                "data": self.fuckseats_snapshot("超额恢复班", 2, 2),
+            })
+
+        deleted.refresh_from_db()
+        self.assertTrue(deleted.is_deleted)
+        self.assertEqual(deleted.version, 4)
 
     def test_push_stores_client_operation_time(self):
         user = CloudUser.objects.create(uid="u-sync-operation-time")

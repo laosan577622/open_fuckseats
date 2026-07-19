@@ -638,8 +638,14 @@ def push_classroom_snapshot(user, payload):
         client_version_value = payload.get('local_version')
     client_version = int(client_version_value or 0)
     classroom = CloudClassroom.objects.filter(uuid=classroom_uuid, user=user).first()
-    if classroom and classroom.is_deleted:
-        classroom.is_deleted = False
+
+    activating_classroom = classroom is None or classroom.is_deleted
+    if activating_classroom:
+        max_classrooms = int(limits.get('max_classrooms', 3) or 3)
+        if max_classrooms != -1:
+            count = CloudClassroom.objects.filter(user=user, is_deleted=False).count()
+            if count >= max_classrooms:
+                raise PermissionError(f'当前订阅最多同步 {max_classrooms} 个班级')
 
     if classroom and client_version < classroom.version and not force:
         return {
@@ -650,11 +656,6 @@ def push_classroom_snapshot(user, payload):
         }
 
     if classroom is None:
-        max_classrooms = int(limits.get('max_classrooms', 3) or 3)
-        if max_classrooms != -1:
-            count = CloudClassroom.objects.filter(user=user, is_deleted=False).count()
-            if count >= max_classrooms:
-                raise PermissionError(f'当前订阅最多同步 {max_classrooms} 个班级')
         classroom = CloudClassroom(user=user, uuid=classroom_uuid)
 
     snapshot = copy.deepcopy(data)

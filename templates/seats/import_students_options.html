@@ -11,7 +11,7 @@
 <div class="ribbon-panels">
     <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="import">
         <div class="ribbon-group">
-            <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回班级</a>
+            <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=import-return" class="btn btn-secondary">返回班级</a>
             <span class="ribbon-group-label">导航</span>
         </div>
     </div>
@@ -21,8 +21,9 @@
 {% block content %}
 <section class="options-workspace student-import-workspace">
     <div class="options-shell" id="import-students-root"
+        data-classroom-id="{{ classroom.pk }}"
         data-import-url="{% url 'import_students' classroom.pk %}"
-        data-back-url="{% url 'classroom_detail' classroom.pk %}">
+        data-back-url="{% url 'classroom_detail' classroom.pk %}?cloud_sync=import-return">
         <h1 class="options-title">导入 Excel 成绩表</h1>
 
         <div class="options-layout student-import-layout">
@@ -175,5 +176,5 @@
     </div>
 </div>
 
-<script src="{% static 'js/import_students_options.js' %}?v=3"></script>
+<script src="{% static 'js/import_students_options.js' %}?v=4"></script>
 {% endblock %}

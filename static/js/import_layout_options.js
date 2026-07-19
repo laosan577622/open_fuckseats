@@ -11,6 +11,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const importUrl = root.dataset.importUrl || '';
     const backUrl = root.dataset.backUrl || '/';
+    const classroomId = root.dataset.classroomId || '';
+    const importReturnSyncKey = classroomId ? `fuckseats_cloud_import_return_${classroomId}` : '';
+    const markImportReturn = () => {
+        if (!importReturnSyncKey) return;
+        try {
+            sessionStorage.setItem(importReturnSyncKey, '1');
+        } catch (error) {
+            // 浏览器禁用存储时，显式返回 URL 仍可跳过本次入口同步。
+        }
+    };
 
     let seatLayoutFileId = null;
     let seatLayoutTransform = 'none';
@@ -29,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const exitPage = () => {
+        markImportReturn();
         window.location.href = backUrl;
     };
 

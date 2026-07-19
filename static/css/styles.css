@@ -701,6 +701,37 @@ input:focus {
     animation: cloudEntryProgress 1.1s ease-in-out infinite;
 }
 
+.cloud-entry-sync-screen[data-state="offline"] .cloud-entry-sync-mark,
+.cloud-entry-sync-screen[data-state="error"] .cloud-entry-sync-mark {
+    color: #b42318;
+    background: rgba(191, 53, 35, 0.08);
+    border-color: rgba(191, 53, 35, 0.16);
+    box-shadow: 0 14px 36px rgba(191, 53, 35, 0.1);
+}
+
+.cloud-entry-sync-screen[data-state="offline"] .cloud-entry-sync-progress,
+.cloud-entry-sync-screen[data-state="error"] .cloud-entry-sync-progress {
+    display: none;
+}
+
+.cloud-entry-sync-mark svg {
+    width: 34px;
+    height: 34px;
+    display: block;
+}
+
+.cloud-entry-sync-actions {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+}
+
+.cloud-entry-sync-screen[data-state="offline"] .cloud-entry-sync-actions,
+.cloud-entry-sync-screen[data-state="error"] .cloud-entry-sync-actions {
+    display: flex;
+}
+
 @keyframes cloudEntryProgress {
     0% {
         left: -45%;
@@ -2839,8 +2870,14 @@ body.cloud-login-locked {
     align-items: center;
     justify-content: center;
     border-radius: 50%;
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
-    color: var(--primary-color);
+    background: var(--primary-color);
+    color: #fff;
+}
+
+.cloud-login-icon svg {
+    width: 38px;
+    height: 38px;
+    display: block;
 }
 
 .cloud-login-title {
@@ -5232,6 +5269,27 @@ html.has-touch-ui body.touch-dragging .unseated-item {
     box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78), 0 6px 18px rgba(191, 53, 35, 0.08);
 }
 
+.cloud-sync-pill[data-state="offline"] {
+    background: rgba(191, 53, 35, 0.1);
+    color: #b42318;
+    border-color: rgba(191, 53, 35, 0.2);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.78), 0 6px 18px rgba(191, 53, 35, 0.06);
+}
+
+.cloud-sync-pill-icon,
+.cloud-header-login-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+}
+
+.cloud-sync-pill-icon svg {
+    width: 15px;
+    height: 15px;
+    display: block;
+}
+
 @keyframes cloudSyncPulse {
     0%, 100% {
         opacity: 0.35;
@@ -5270,10 +5328,27 @@ html.has-touch-ui body.touch-dragging .unseated-item {
     color: var(--primary-color);
 }
 
+.cloud-header-avatar-login {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: visible;
+    border: 0;
+    background: var(--primary-color);
+}
+
+.cloud-header-avatar-login svg {
+    width: 28px;
+    height: 28px;
+    display: block;
+}
+
 .cloud-header-login-btn {
     display: inline-flex;
     align-items: center;
+    gap: 7px;
     padding: 4px 14px;
+    border: 0;
     border-radius: 999px;
     background: var(--primary-color);
     color: #fff;
@@ -5282,6 +5357,82 @@ html.has-touch-ui body.touch-dragging .unseated-item {
     text-decoration: none;
     transition: opacity 0.2s;
     cursor: pointer;
+}
+
+.cloud-header-login-icon svg {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+.cloud-connectivity-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10020;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+
+.cloud-connectivity-overlay.visible {
+    display: flex;
+}
+
+.cloud-connectivity-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.3);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+
+.cloud-connectivity-dialog {
+    position: relative;
+    z-index: 1;
+    width: min(420px, calc(100vw - 32px));
+    padding: 32px;
+    border-radius: 26px;
+    text-align: center;
+    background: rgba(255, 255, 255, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    box-shadow: 0 28px 80px rgba(15, 23, 42, 0.22);
+}
+
+.cloud-connectivity-icon {
+    width: 58px;
+    height: 58px;
+    margin: 0 auto 18px;
+}
+
+.cloud-connectivity-icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.cloud-connectivity-dialog h3 {
+    margin: 0 0 9px;
+    font-size: 22px;
+    color: #1d1d1f;
+}
+
+.cloud-connectivity-dialog p {
+    margin: 0;
+    color: #6e6e73;
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+.cloud-connectivity-actions {
+    display: flex;
+    justify-content: center;
+    gap: 10px;
+    margin-top: 24px;
+}
+
+body.cloud-connectivity-locked {
+    overflow: hidden;
 }
 
 .cloud-header-login-btn:hover {

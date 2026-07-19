@@ -265,6 +265,8 @@ def sync_status(request):
         {
             'uuid': str(item.uuid),
             'name': item.name,
+            'rows': item.rows,
+            'cols': item.cols,
             'version': item.version,
             'updated_at': item.updated_at.isoformat(),
             'last_operation_at': item.last_modified_at.isoformat() if item.last_modified_at else None,

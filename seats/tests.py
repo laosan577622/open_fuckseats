@@ -1,4 +1,5 @@
 from django.test import TestCase, TransactionTestCase, override_settings, Client
+from django.template.loader import get_template
 from django.urls import reverse
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.utils import timezone
@@ -22,6 +23,7 @@ import openpyxl
 import pandas as pd
 import desktop_runtime
 from seats import cloud as cloud_module
+from seats import network_status as network_status_module
 
 from desktop_shell import (
     DesktopBridge,
@@ -1024,27 +1026,7 @@ class ConstraintArrangeTests(TestCase):
         )
         self.assertLessEqual(distance, 1)
 
-    def test_special_internal_policy_keeps_working(self):
-        classroom = Classroom.objects.create(name="T2", rows=2, cols=3)
-        jqj = classroom.students.create(name="金千竣")
-        hzh = classroom.students.create(name="胡哲豪")
-
-        seat_jqj = classroom.seats.get(row=1, col=1)
-        seat_hzh = classroom.seats.get(row=2, col=3)
-        seat_jqj.student = jqj
-        seat_jqj.save(update_fields=["student"])
-        seat_hzh.student = hzh
-        seat_hzh.save(update_fields=["student"])
-
-        changed = _apply_internal_policy(classroom)
-        self.assertTrue(changed)
-
-        jqj.refresh_from_db()
-        hzh.refresh_from_db()
-        self.assertIsNotNone(jqj.assigned_seat)
-        self.assertIsNotNone(hzh.assigned_seat)
-        self.assertEqual(jqj.assigned_seat.row, hzh.assigned_seat.row)
-        self.assertEqual(abs(jqj.assigned_seat.col - hzh.assigned_seat.col), 1)
+    pass # 此部分代码未被披露至开源版本
 
     def test_group_mode_respects_must_seat_constraint(self):
         classroom = Classroom.objects.create(name="T3", rows=1, cols=4)
@@ -1134,45 +1116,7 @@ class GroupInteractionTests(TestCase):
         self.assertNotIn("胡哲豪", text)
         self.assertNotIn("jqj_hzh", text)
 
-    def test_group_balance_does_not_suggest_internal_policy_students(self):
-        classroom = Classroom.objects.create(name="C2B", rows=1, cols=4)
-        g1 = SeatGroup.objects.create(classroom=classroom, name="G1", order=1)
-        g2 = SeatGroup.objects.create(classroom=classroom, name="G2", order=2)
-
-        seat1 = classroom.seats.get(row=1, col=1)
-        seat2 = classroom.seats.get(row=1, col=2)
-        seat3 = classroom.seats.get(row=1, col=3)
-        seat4 = classroom.seats.get(row=1, col=4)
-        seat1.group = g1
-        seat2.group = g1
-        seat3.group = g2
-        seat4.group = g2
-        seat1.save(update_fields=["group"])
-        seat2.save(update_fields=["group"])
-        seat3.save(update_fields=["group"])
-        seat4.save(update_fields=["group"])
-
-        s_internal = classroom.students.create(name="金千竣", score=100)
-        s_high = classroom.students.create(name="高分甲", score=90)
-        s_low1 = classroom.students.create(name="低分乙", score=5)
-        s_low2 = classroom.students.create(name="低分丙", score=5)
-
-        seat1.student = s_internal
-        seat2.student = s_high
-        seat3.student = s_low1
-        seat4.student = s_low2
-        seat1.save(update_fields=["student"])
-        seat2.save(update_fields=["student"])
-        seat3.save(update_fields=["student"])
-        seat4.save(update_fields=["student"])
-
-        state_url = reverse("classroom_state", args=[classroom.pk])
-        response = self.client.get(state_url, HTTP_X_REQUESTED_WITH="XMLHttpRequest")
-        self.assertEqual(response.status_code, 200)
-        suggestions = response.json().get("suggestions", [])
-
-        text = " | ".join(str(item) for item in suggestions)
-        self.assertNotIn("金千竣", text)
+    pass # 此部分代码未被披露至开源版本
 
     def test_set_podium_guards_updates_state_and_supports_partial_clear(self):
         classroom = Classroom.objects.create(name="护法班", rows=1, cols=2)
@@ -1379,34 +1323,7 @@ class GroupInteractionTests(TestCase):
         self.assertEqual(seat1.student_id, s1.pk)
         self.assertEqual(seat2.student_id, s2.pk)
 
-    def test_first_move_of_special_student_keeps_target_position(self):
-        classroom = Classroom.objects.create(name="C5S", rows=2, cols=3)
-        jqj = classroom.students.create(name="金千竣")
-        hzh = classroom.students.create(name="胡哲豪")
-
-        seat_jqj = classroom.seats.get(row=1, col=1)
-        seat_hzh = classroom.seats.get(row=1, col=2)
-        seat_jqj.student = jqj
-        seat_jqj.save(update_fields=["student"])
-        seat_hzh.student = hzh
-        seat_hzh.save(update_fields=["student"])
-
-        url = reverse("move_student", args=[classroom.pk])
-        response = self.client.post(
-            url,
-            data=json.dumps({"student_id": jqj.pk, "row": 2, "col": 3}),
-            content_type="application/json",
-        )
-        self.assertEqual(response.status_code, 200)
-        self.assertEqual(response.json().get("status"), "success")
-
-        jqj.refresh_from_db()
-        hzh.refresh_from_db()
-        self.assertEqual((jqj.assigned_seat.row, jqj.assigned_seat.col), (2, 3))
-        distance = abs(jqj.assigned_seat.row - hzh.assigned_seat.row) + abs(
-            jqj.assigned_seat.col - hzh.assigned_seat.col
-        )
-        self.assertEqual(distance, 1)
+    pass # 此部分代码未被披露至开源版本
 
     def test_move_students_batch_moves_multiple_students(self):
         classroom = Classroom.objects.create(name="C5B", rows=2, cols=3)
@@ -3332,6 +3249,37 @@ class ClassroomFeatureTests(TestCase):
         self.assertIn('data-import-field="name"', score_resp.content.decode("utf-8"))
         self.assertIn('id="import-preview-area"', score_resp.content.decode("utf-8"))
         self.assertIn('id="student-import-guide-modal"', score_resp.content.decode("utf-8"))
+        expected_back_url = reverse("classroom_detail", args=[classroom.pk]) + "?cloud_sync=import-return"
+        self.assertContains(score_resp, expected_back_url, count=2)
+        self.assertContains(layout_resp, expected_back_url, count=2)
+        self.assertContains(score_resp, f'data-classroom-id="{classroom.pk}"')
+        self.assertContains(layout_resp, f'data-classroom-id="{classroom.pk}"')
+
+    def test_classroom_detail_supports_one_time_import_return_sync_skip(self):
+        classroom = Classroom.objects.create(name="导入返回班", rows=2, cols=2)
+
+        response = self.client.get(reverse("classroom_detail", args=[classroom.pk]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "cloudSyncReason === 'import-return'")
+        self.assertContains(response, "fuckseats_cloud_import_return_")
+        self.assertContains(response, "sessionStorage.removeItem(importReturnSyncKey)")
+        self.assertContains(response, "new URL(document.referrer)")
+        self.assertContains(response, "classroomPath + 'import/options/'")
+        self.assertContains(response, "classroomPath + 'layout/import/excel/options/'")
+        self.assertContains(response, "Boolean(isCloudBackedUp && !skipAutoSyncOnce)")
+
+    def test_import_options_scripts_only_mark_explicit_import_returns(self):
+        project_root = Path(__file__).resolve().parent.parent
+        student_script = (project_root / "static/js/import_students_options.js").read_text(encoding="utf-8")
+        layout_script = (project_root / "static/js/import_layout_options.js").read_text(encoding="utf-8")
+
+        for script in (student_script, layout_script):
+            self.assertIn("fuckseats_cloud_import_return_${classroomId}", script)
+            self.assertIn("sessionStorage.setItem(importReturnSyncKey, '1')", script)
+            self.assertNotIn("window.addEventListener('pagehide', markImportReturn)", script)
+        self.assertEqual(student_script.count("markImportReturn();"), 2)
+        self.assertEqual(layout_script.count("markImportReturn();"), 1)
 
     def test_export_students_default_layout(self):
         classroom = Classroom.objects.create(name="导出默认", rows=2, cols=2)
@@ -3929,6 +3877,72 @@ class FrontendStoreTests(TestCase):
         self.assertEqual(classroom.name, "原班级2")
 
 
+class SystemNetworkStatusTests(TestCase):
+    def test_windows_reports_online_and_offline(self):
+        with patch("seats.network_status.platform.system", return_value="Windows"):
+            with patch("seats.network_status._windows_network_status", return_value=(True, "wininet", 1)):
+                online = network_status_module.get_system_network_status("https://cloud.example.test/api")
+            with patch("seats.network_status._windows_network_status", return_value=(False, "wininet", 0)):
+                offline = network_status_module.get_system_network_status("https://cloud.example.test/api")
+
+        self.assertIs(online["online"], True)
+        self.assertIs(offline["online"], False)
+        self.assertEqual(online["platform"], "windows")
+        self.assertEqual(online["source"], "wininet")
+        self.assertEqual(online["checked_host"], "cloud.example.test")
+
+    def test_windows_api_error_returns_unknown(self):
+        with patch("seats.network_status.platform.system", return_value="Windows"):
+            with patch("seats.network_status._windows_network_status", side_effect=OSError("WinINet unavailable")):
+                result = network_status_module.get_system_network_status("https://cloud.example.test")
+
+        self.assertIsNone(result["online"])
+        self.assertEqual(result["source"], "system-api-error")
+        self.assertIn("WinINet unavailable", result["error"])
+
+    def test_macos_reachability_flags_cover_reachable_and_connection_required(self):
+        self.assertTrue(network_status_module._macos_flags_online(network_status_module.MAC_REACHABLE))
+        self.assertFalse(network_status_module._macos_flags_online(
+            network_status_module.MAC_REACHABLE | network_status_module.MAC_CONNECTION_REQUIRED
+        ))
+        self.assertTrue(network_status_module._macos_flags_online(
+            network_status_module.MAC_REACHABLE
+            | network_status_module.MAC_CONNECTION_REQUIRED
+            | network_status_module.MAC_CONNECTION_ON_DEMAND
+        ))
+
+    def test_macos_api_error_returns_unknown(self):
+        with patch("seats.network_status.platform.system", return_value="Darwin"):
+            with patch("seats.network_status._macos_network_status", side_effect=RuntimeError("reachability failed")):
+                result = network_status_module.get_system_network_status("https://cloud.example.test")
+
+        self.assertIsNone(result["online"])
+        self.assertEqual(result["platform"], "macos")
+        self.assertEqual(result["source"], "system-api-error")
+
+    def test_unknown_platform_degrades_to_unknown(self):
+        with patch("seats.network_status.platform.system", return_value="FreeBSD"):
+            result = network_status_module.get_system_network_status("https://cloud.example.test")
+
+        self.assertIsNone(result["online"])
+        self.assertEqual(result["platform"], "freebsd")
+        self.assertEqual(result["source"], "unsupported")
+
+    def test_network_status_endpoint_exposes_system_result(self):
+        expected = {
+            "online": False,
+            "platform": "windows",
+            "source": "wininet",
+            "checked_host": "cloud.example.test",
+            "error": "",
+        }
+        with patch("seats.views.get_system_network_status", return_value=expected):
+            response = self.client.get(reverse("network_status"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json(), {"status": "success", **expected})
+
+
 class CloudSyncHeaderTests(TestCase):
     class _FakeJsonResponse:
         status = 200
@@ -4010,6 +4024,23 @@ class CloudSyncHeaderTests(TestCase):
         self.assertContains(response, "FuckSeatsCloudSync")
         self.assertContains(response, "点击上云")
 
+    def test_cloud_templates_expose_exact_login_and_offline_svg_resources(self):
+        classroom = Classroom.objects.create(name="图标检查班", rows=2, cols=2)
+        index_response = self.client.get(reverse("index"))
+        classroom_response = self.client.get(reverse("classroom_detail", args=[classroom.pk]))
+        settings_response = self.client.get(reverse("settings"))
+        login_svg = get_template("login.svg").render().strip()
+        offline_svg = get_template("wifi.exclamationmark.circle.fill.svg").render().strip()
+
+        self.assertIn(login_svg, index_response.content.decode())
+        self.assertIn(offline_svg, index_response.content.decode())
+        self.assertContains(index_response, 'id="cloud-login-icon-template"')
+        self.assertContains(index_response, 'id="cloud-offline-icon-template"')
+        self.assertContains(classroom_response, "CloudManager.getLoginIconMarkup()")
+        self.assertContains(classroom_response, "CloudManager.getOfflineIconMarkup()")
+        self.assertContains(classroom_response, "cloud-header-avatar-placeholder")
+        self.assertContains(settings_response, "data-cloud-settings-login-icon")
+
     def test_classroom_state_includes_sync_meta(self):
         classroom = Classroom.objects.create(name="状态班", rows=2, cols=2)
         meta = SyncMeta.objects.get(classroom=classroom)
@@ -4046,6 +4077,81 @@ class CloudSyncHeaderTests(TestCase):
         self.assertEqual(payload["tier_display"], "专业版")
         self.assertEqual(payload["limits"]["max_classrooms"], 8)
         refresh_subscription.assert_called_once()
+
+    def test_cloud_userinfo_refresh_zero_reads_local_session_only(self):
+        session = self.create_cloud_session()
+        session.subscription_tier = "plus"
+        session.subscription_display_name = "进阶版"
+        session.limits = {"max_classrooms": 5}
+        session.save(update_fields=["subscription_tier", "subscription_display_name", "limits", "updated_at"])
+
+        with patch("seats.views.refresh_cloud_subscription") as refresh_subscription:
+            response = self.client.get(reverse("cloud_userinfo") + "?refresh=0")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["logged_in"])
+        self.assertEqual(response.json()["tier"], "plus")
+        refresh_subscription.assert_not_called()
+
+    def test_cloud_sync_status_enriches_local_and_remote_classrooms(self):
+        classroom = Classroom.objects.create(name="状态详情班", rows=4, cols=5)
+        Student.objects.create(classroom=classroom, name="学生甲")
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 2
+        meta.local_version = 2
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        remote_payload = {
+            "classrooms": [{
+                "uuid": str(meta.uuid),
+                "name": classroom.name,
+                "rows": 4,
+                "cols": 5,
+                "version": 2,
+            }],
+            "versions": {str(meta.uuid): 2},
+        }
+        with patch("seats.views.cloud_api_request", return_value=remote_payload):
+            response = self.client.get(reverse("cloud_sync_status"))
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        local = payload["local"][0]
+        remote = payload["remote"]["classrooms"][0]
+        self.assertEqual((local["rows"], local["cols"], local["student_count"]), (4, 5, 1))
+        self.assertEqual(local["detail_url"], reverse("classroom_detail", args=[classroom.pk]))
+        self.assertEqual(remote["local_classroom_id"], classroom.pk)
+        self.assertEqual(remote["local_state"], "linked")
+        self.assertEqual((remote["rows"], remote["cols"]), (4, 5))
+
+    def test_cloud_sync_status_keeps_detached_uuid_remote_only(self):
+        classroom = Classroom.objects.create(name="已解除关联班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        meta.cloud_version = 5
+        meta.local_version = 5
+        meta.last_sync_at = None
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        remote_payload = {
+            "classrooms": [{
+                "uuid": str(meta.uuid),
+                "name": classroom.name,
+                "rows": 2,
+                "cols": 2,
+                "version": 5,
+            }],
+            "versions": {str(meta.uuid): 5},
+        }
+        with patch("seats.views.cloud_api_request", return_value=remote_payload):
+            response = self.client.get(reverse("cloud_sync_status"))
+
+        remote = response.json()["remote"]["classrooms"][0]
+        self.assertIsNone(remote["local_classroom_id"])
+        self.assertEqual(remote["local_state"], "remote_only")
+        self.assertFalse(response.json()["local"][0]["backed_up"])
 
     def test_cloud_sync_skips_up_to_date_classroom(self):
         classroom = Classroom.objects.create(name="云端最新班", rows=2, cols=2)
@@ -4169,6 +4275,77 @@ class CloudSyncHeaderTests(TestCase):
         self.assertEqual(row["cloud_version"], 5)
         cloud_request.assert_called_once()
 
+    def test_cloud_auto_sync_pulls_when_remote_operation_is_newer(self):
+        classroom = Classroom.objects.create(name="云端操作较新班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        local_operation_at = timezone.now() - timedelta(hours=2)
+        remote_operation_at = timezone.now() - timedelta(hours=1)
+        meta.cloud_version = 4
+        meta.local_version = 6
+        meta.last_operation_at = local_operation_at
+        meta.last_sync_at = timezone.now() - timedelta(hours=3)
+        meta.save(update_fields=["cloud_version", "local_version", "last_operation_at", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.side_effect = [
+                {
+                    "versions": {str(meta.uuid): 5},
+                    "operation_times": {str(meta.uuid): remote_operation_at.isoformat()},
+                    "classrooms": [{"uuid": str(meta.uuid), "name": classroom.name, "version": 5}],
+                },
+                {
+                    "ok": True,
+                    "uuid": str(meta.uuid),
+                    "version": 5,
+                    "last_operation_at": remote_operation_at.isoformat(),
+                    "data": self.cloud_classroom_payload("云端操作较新班", 3, 3),
+                },
+            ]
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({"classroom_ids": [classroom.pk], "auto": True}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"][0]["status"], "pulled")
+        classroom.refresh_from_db()
+        self.assertEqual((classroom.rows, classroom.cols), (3, 3))
+
+    def test_cloud_auto_sync_force_pushes_when_local_operation_is_newer(self):
+        classroom = Classroom.objects.create(name="本地操作较新班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        local_operation_at = timezone.now()
+        remote_operation_at = timezone.now() - timedelta(hours=1)
+        meta.cloud_version = 4
+        meta.local_version = 6
+        meta.last_operation_at = local_operation_at
+        meta.last_sync_at = timezone.now() - timedelta(hours=2)
+        meta.save(update_fields=["cloud_version", "local_version", "last_operation_at", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request") as cloud_request:
+            cloud_request.side_effect = [
+                {
+                    "versions": {str(meta.uuid): 5},
+                    "operation_times": {str(meta.uuid): remote_operation_at.isoformat()},
+                    "classrooms": [{"uuid": str(meta.uuid), "name": classroom.name, "version": 5}],
+                },
+                {"ok": True, "uuid": str(meta.uuid), "version": 6},
+            ]
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({"classroom_ids": [classroom.pk], "auto": True}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["results"][0]["status"], "ok")
+        push_body = cloud_request.call_args_list[1].args[3]
+        self.assertTrue(push_body["force"])
+        self.assertEqual(push_body["device_id"], "local-desktop")
+
     def test_cloud_sync_pulls_when_remote_is_newer_without_local_changes(self):
         classroom = Classroom.objects.create(name="本地旧班", rows=2, cols=2)
         meta = SyncMeta.objects.get(classroom=classroom)
@@ -4229,6 +4406,106 @@ class CloudSyncHeaderTests(TestCase):
         self.assertEqual(classroom.rows, 4)
         self.assertEqual(classroom.cols, 5)
 
+    def test_cloud_sync_linked_scope_ignores_local_only_and_remote_only_classrooms(self):
+        linked = Classroom.objects.create(name="已关联班", rows=2, cols=2)
+        local_only = Classroom.objects.create(name="纯本地班", rows=2, cols=2)
+        linked_meta = SyncMeta.objects.get(classroom=linked)
+        linked_meta.cloud_version = 3
+        linked_meta.local_version = 3
+        linked_meta.last_sync_at = timezone.now()
+        linked_meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        local_only_meta = SyncMeta.objects.get(classroom=local_only)
+        remote_uuid = uuid.uuid4()
+        self.create_cloud_session()
+
+        remote_payload = {
+            "versions": {str(linked_meta.uuid): 3, str(remote_uuid): 1},
+            "classrooms": [
+                {"uuid": str(linked_meta.uuid), "name": linked.name, "version": 3},
+                {"uuid": str(remote_uuid), "name": "仅云端班", "version": 1},
+            ],
+        }
+        with patch("seats.views.cloud_api_request", return_value=remote_payload) as cloud_request:
+            response = self.client.post(
+                reverse("cloud_sync"),
+                data=json.dumps({"auto": True, "scope": "linked", "device_id": "app-entry"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        rows = response.json()["results"]
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["classroom_id"], linked.pk)
+        self.assertEqual(rows[0]["status"], "up_to_date")
+        self.assertFalse(Classroom.objects.filter(sync_meta__uuid=remote_uuid).exists())
+        local_only_meta.refresh_from_db()
+        self.assertIsNone(local_only_meta.last_sync_at)
+        cloud_request.assert_called_once()
+
+    def test_cloud_sync_plan_limit_counts_remote_slots_not_local_order(self):
+        local_only = Classroom.objects.create(name="先创建的纯本地班", rows=2, cols=2)
+        linked = Classroom.objects.create(name="后创建的已关联班", rows=2, cols=2)
+        linked_meta = SyncMeta.objects.get(classroom=linked)
+        linked_meta.cloud_version = 3
+        linked_meta.local_version = 3
+        linked_meta.last_sync_at = timezone.now()
+        linked_meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        session = self.create_cloud_session()
+        session.limits = {"max_classrooms": 1}
+        session.save(update_fields=["limits", "updated_at"])
+
+        remote_payload = {
+            "versions": {str(linked_meta.uuid): 3},
+            "classrooms": [{"uuid": str(linked_meta.uuid), "name": linked.name, "version": 3}],
+        }
+        with patch("seats.views.refresh_cloud_subscription", return_value=session):
+            with patch("seats.views.cloud_api_request", return_value=remote_payload) as cloud_request:
+                response = self.client.post(
+                    reverse("cloud_sync"),
+                    data=json.dumps({}),
+                    content_type="application/json",
+                )
+
+        self.assertEqual(response.status_code, 200)
+        rows = response.json()["results"]
+        self.assertEqual(rows[0]["classroom_id"], local_only.pk)
+        self.assertEqual(rows[0]["status"], "skipped")
+        self.assertEqual(rows[1]["classroom_id"], linked.pk)
+        self.assertEqual(rows[1]["status"], "up_to_date")
+        cloud_request.assert_called_once()
+
+    def test_cloud_sync_delete_detaches_local_without_deleting_classroom(self):
+        classroom = Classroom.objects.create(name="保留本地班", rows=2, cols=2)
+        meta = SyncMeta.objects.get(classroom=classroom)
+        original_uuid = meta.uuid
+        meta.cloud_version = 4
+        meta.local_version = 4
+        meta.last_sync_at = timezone.now()
+        meta.save(update_fields=["cloud_version", "local_version", "last_sync_at", "updated_at"])
+        self.create_cloud_session()
+
+        with patch("seats.views.cloud_api_request", return_value={"ok": True, "version": 5}) as cloud_request:
+            response = self.client.post(
+                reverse("cloud_sync_delete", args=[original_uuid]),
+                data=json.dumps({"detach_local": True, "device_id": "cloud-manager"}),
+                content_type="application/json",
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["local_detached"])
+        self.assertEqual(response.json()["local_classroom_id"], classroom.pk)
+        self.assertTrue(Classroom.objects.filter(pk=classroom.pk).exists())
+        meta.refresh_from_db()
+        self.assertEqual(meta.uuid, original_uuid)
+        self.assertEqual(meta.cloud_version, 5)
+        self.assertEqual(meta.local_version, 5)
+        self.assertIsNone(meta.last_sync_at)
+        self.assertEqual(cloud_request.call_args.args[1:4], (
+            "DELETE",
+            f"/api/sync/{original_uuid}",
+            {"device_id": "cloud-manager"},
+        ))
+
     def test_cloud_sync_force_pushes_when_remote_version_is_newer(self):
         classroom = Classroom.objects.create(name="强制更新班", rows=2, cols=2)
         meta = SyncMeta.objects.get(classroom=classroom)
@@ -4258,9 +4535,7 @@ class CloudSyncHeaderTests(TestCase):
         self.assertIs(push_body["force"], True)
         self.assertEqual(push_body["base_version"], 4)
 
-    def test_cloud_callback_runs_auto_sync_after_login(self):
-        classroom = Classroom.objects.create(name="登录同步班", rows=2, cols=2)
-        meta = SyncMeta.objects.get(classroom=classroom)
+    def test_cloud_callback_only_saves_session_and_returns_immediately(self):
         token_expires_at = timezone.now() + timedelta(days=1)
 
         with patch("seats.views.cloud_exchange_session_code") as exchange_code:
@@ -4277,22 +4552,13 @@ class CloudSyncHeaderTests(TestCase):
                         "limits": {"max_classrooms": 3},
                     },
                 }
-                cloud_request.side_effect = [
-                    {"ok": True, "status": "success", "versions": {}, "classrooms": []},
-                    {"ok": True, "status": "success", "uuid": str(meta.uuid), "version": 1},
-                ]
-
                 response = self.client.get(reverse("cloud_callback") + "?code=login-code")
 
         self.assertEqual(response.status_code, 302)
         self.assertEqual(response["Location"], "/?cloud_login=success")
-        self.assertEqual(cloud_request.call_count, 2)
-        push_body = cloud_request.call_args_list[1].args[3]
-        self.assertEqual(push_body["uuid"], str(meta.uuid))
-        self.assertEqual(push_body["device_id"], "login-auto-sync")
-        meta.refresh_from_db()
-        self.assertEqual(meta.cloud_version, 1)
-        self.assertEqual(meta.local_version, 1)
+        cloud_request.assert_not_called()
+        session = CloudSession.objects.get(uid="u-login")
+        self.assertEqual(session.session_token, "session-token")
 
 
 class PluginSystemTests(TestCase):

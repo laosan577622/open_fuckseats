@@ -106,6 +106,7 @@ from .data_sharing import (
     share_log,
     share_usage_event,
 )
+from .network_status import get_system_network_status
 
 APP_MANIFEST_REDIRECT_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/api.json'
 UPDATE_DETAILS_REDIRECT_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/update.txt'
@@ -125,6 +126,14 @@ def app_manifest_redirect(request):
 
 def update_details_redirect(request):
     return _redirect_preserving_query(request, UPDATE_DETAILS_REDIRECT_URL)
+
+
+@require_http_methods(['GET'])
+def network_status(request):
+    return JsonResponse({
+        'status': 'success',
+        **get_system_network_status(get_cloud_server_url()),
+    })
 
 
 try:
@@ -13822,8 +13831,13 @@ def _cloud_remote_versions(session):
     return _cloud_versions_from_status(payload)
 
 
-def _cloud_remote_status(session):
-    payload = cloud_api_request(session, 'GET', '/api/sync/status')
+def _cloud_remote_status(session, *, refresh_subscription=True):
+    payload = cloud_api_request(
+        session,
+        'GET',
+        '/api/sync/status',
+        refresh_subscription=refresh_subscription,
+    )
     return payload if isinstance(payload, dict) else {}
 
 
@@ -13859,7 +13873,7 @@ def _parse_cloud_operation_time(value):
 def _sync_meta_operation_time(meta, classroom=None):
     if meta is None:
         return None
-    return meta.last_operation_at or meta.updated_at or getattr(classroom, 'created_at', None)
+    return meta.last_operation_at or getattr(classroom, 'created_at', None)
 
 
 def _operation_time_newer(left, right):
@@ -13991,8 +14005,21 @@ def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None, o
     return classroom, meta
 
 
-def _cloud_pull_and_restore_classroom(request, session, classroom_uuid, fallback_version=None, fallback_operation_time=None):
-    payload = cloud_api_request(session, 'GET', f'/api/sync/pull/{classroom_uuid}')
+def _cloud_pull_and_restore_classroom(
+    request,
+    session,
+    classroom_uuid,
+    fallback_version=None,
+    fallback_operation_time=None,
+    *,
+    refresh_subscription=True,
+):
+    payload = cloud_api_request(
+        session,
+        'GET',
+        f'/api/sync/pull/{classroom_uuid}',
+        refresh_subscription=refresh_subscription,
+    )
     data = payload.get('data') or payload.get('data_snapshot')
     version = payload.get('version') if payload.get('version') is not None else fallback_version
     operation_time = payload.get('last_operation_at') or payload.get('last_modified_at') or fallback_operation_time
@@ -14132,14 +14159,7 @@ def cloud_callback(request):
 
     try:
         payload = cloud_exchange_session_code(code)
-        session = save_cloud_session_from_payload(payload)
-        try:
-            _cloud_sync_classrooms(request, session, {
-                'auto': True,
-                'device_id': 'login-auto-sync',
-            })
-        except Exception:
-            pass
+        save_cloud_session_from_payload(payload)
         if is_desktop:
             return _cloud_callback_done_page(True)
         return redirect('/?cloud_login=success')
@@ -14163,7 +14183,9 @@ def cloud_userinfo(request):
             'callback_url': callback_url,
             'login_url': build_cloud_login_url(callback_url),
         })
-    _refresh_cloud_subscription_if_logged_in(session)
+    refresh_requested = str(request.GET.get('refresh', '1')).strip().lower() not in {'0', 'false', 'no', 'off'}
+    if refresh_requested:
+        _refresh_cloud_subscription_if_logged_in(session)
     return JsonResponse(_cloud_session_payload(session, request=request))
 
 
@@ -14206,8 +14228,28 @@ def cloud_sync_status(request):
             local.append({
                 'classroom_id': classroom.pk,
                 'name': classroom.name,
+                'rows': classroom.rows,
+                'cols': classroom.cols,
+                'student_count': classroom.students.count(),
+                'detail_url': reverse('classroom_detail', args=[classroom.pk]),
                 **_serialize_classroom_sync_meta(classroom, meta),
             })
+        local_by_uuid = {
+            str(item.get('uuid')): item
+            for item in local
+            if item.get('uuid') and item.get('backed_up')
+        }
+        remote_rows = remote.get('classrooms') if isinstance(remote, dict) else None
+        if isinstance(remote_rows, list):
+            enriched_rows = []
+            for raw_row in remote_rows:
+                row = dict(raw_row) if isinstance(raw_row, dict) else {}
+                linked = local_by_uuid.get(str(row.get('uuid') or ''))
+                row['local_classroom_id'] = linked.get('classroom_id') if linked else None
+                row['local_detail_url'] = linked.get('detail_url') if linked else None
+                row['local_state'] = 'linked' if linked else 'remote_only'
+                enriched_rows.append(row)
+            remote = {**remote, 'classrooms': enriched_rows}
         return JsonResponse({
             'status': 'success',
             'local': local,
@@ -14222,6 +14264,9 @@ def _cloud_sync_classrooms(request, session, data=None):
     _refresh_cloud_subscription_if_logged_in(session)
     classroom_ids = data.get('classroom_ids')
     sync_all_classrooms = not classroom_ids
+    sync_scope = str(data.get('scope') or 'all').strip().lower()
+    if sync_scope not in {'all', 'linked'}:
+        sync_scope = 'all'
     force = bool(data.get('force'))
     auto_sync = bool(data.get('auto'))
     queryset = Classroom.objects.all().order_by('pk')
@@ -14229,25 +14274,37 @@ def _cloud_sync_classrooms(request, session, data=None):
         if not isinstance(classroom_ids, list):
             classroom_ids = [classroom_ids]
         queryset = queryset.filter(pk__in=classroom_ids)
+    elif sync_scope == 'linked':
+        queryset = queryset.filter(
+            sync_meta__last_sync_at__isnull=False,
+            sync_meta__cloud_version__gt=0,
+        )
 
     limits = session.limits if isinstance(session.limits, dict) else {}
     max_classrooms = int(limits.get('max_classrooms', 3) or 3)
-    remote_status = _cloud_remote_status(session)
+    remote_status = _cloud_remote_status(session, refresh_subscription=False)
     remote_versions = _cloud_versions_from_status(remote_status)
     remote_operation_times = _cloud_operation_times_from_status(remote_status)
     remote_classrooms = _cloud_classrooms_from_status(remote_status)
+    remote_classroom_count = len(remote_classrooms)
+    activated_classroom_count = 0
     results = []
 
-    for index, classroom in enumerate(queryset):
+    for classroom in queryset:
         meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
         sync_payload = _serialize_classroom_sync_meta(classroom, meta)
         remote_version = _cloud_remote_version_for(remote_versions, meta.uuid)
         remote_operation_at = _cloud_remote_operation_time_for(remote_operation_times, meta.uuid)
         local_operation_at = _sync_meta_operation_time(meta, classroom)
         cloud_operation_newer = bool(auto_sync and _operation_time_newer(remote_operation_at, local_operation_at))
-        upload_by_operation_time = bool(auto_sync and remote_operation_at and not cloud_operation_newer)
+        local_operation_newer = bool(auto_sync and _operation_time_newer(local_operation_at, remote_operation_at))
+        upload_by_operation_time = bool(auto_sync and remote_operation_at and local_operation_newer)
         local_has_changes = int(sync_payload['local_version'] or 0) > int(sync_payload['cloud_version'] or 0)
-        if max_classrooms != -1 and index >= max_classrooms:
+        if (
+            max_classrooms != -1
+            and remote_version is None
+            and remote_classroom_count + activated_classroom_count >= max_classrooms
+        ):
             results.append({
                 'classroom_id': classroom.pk,
                 'name': classroom.name,
@@ -14265,6 +14322,7 @@ def _cloud_sync_classrooms(request, session, data=None):
                     str(meta.uuid),
                     fallback_version=remote_version,
                     fallback_operation_time=remote_operation_at,
+                    refresh_subscription=False,
                 )
             except Exception as exc:
                 meta.last_error = str(exc)
@@ -14301,6 +14359,7 @@ def _cloud_sync_classrooms(request, session, data=None):
                         str(meta.uuid),
                         fallback_version=remote_version,
                         fallback_operation_time=remote_operation_at,
+                        refresh_subscription=False,
                     )
                 except Exception as exc:
                     meta.last_error = str(exc)
@@ -14372,7 +14431,13 @@ def _cloud_sync_classrooms(request, session, data=None):
         }
 
         try:
-            payload = cloud_api_request(session, 'POST', '/api/sync/push', body)
+            payload = cloud_api_request(
+                session,
+                'POST',
+                '/api/sync/push',
+                body,
+                refresh_subscription=False,
+            )
         except CloudAPIError as exc:
             payload = exc.payload or {}
             if payload.get('conflict'):
@@ -14400,6 +14465,8 @@ def _cloud_sync_classrooms(request, session, data=None):
 
         if payload.get('ok') or payload.get('status') == 'success':
             version = int(payload.get('version') or meta.cloud_version or 0)
+            if remote_version is None:
+                activated_classroom_count += 1
             operation_at = (
                 _parse_cloud_operation_time(payload.get('last_operation_at') or payload.get('last_modified_at'))
                 or local_operation_at
@@ -14427,7 +14494,7 @@ def _cloud_sync_classrooms(request, session, data=None):
                 'message': payload.get('message') or payload.get('error') or '云端未接受同步',
             })
 
-    if sync_all_classrooms:
+    if sync_all_classrooms and sync_scope == 'all':
         local_uuids = {
             str(value)
             for value in SyncMeta.objects.values_list('uuid', flat=True)
@@ -14451,6 +14518,7 @@ def _cloud_sync_classrooms(request, session, data=None):
                     remote_uuid,
                     fallback_version=remote_version,
                     fallback_operation_time=remote_operation_at,
+                    refresh_subscription=False,
                 )
             except Exception as exc:
                 results.append({
@@ -14520,8 +14588,30 @@ def cloud_sync_pull(request, classroom_uuid):
 def cloud_sync_delete(request, classroom_uuid):
     try:
         session = _cloud_local_session_or_401()
-        payload = cloud_api_request(session, 'DELETE', f'/api/sync/{classroom_uuid}')
-        return JsonResponse({'status': 'success', **payload})
+        try:
+            data = _cloud_json_body(request)
+        except ValueError:
+            data = {}
+        device_id = str(data.get('device_id') or 'local-desktop')[:64]
+        payload = cloud_api_request(
+            session,
+            'DELETE',
+            f'/api/sync/{classroom_uuid}',
+            {'device_id': device_id},
+        )
+        response = {'status': 'success', **payload, 'local_detached': False, 'local_classroom_id': None}
+        if bool(data.get('detach_local')):
+            meta = SyncMeta.objects.select_related('classroom').filter(uuid=classroom_uuid).first()
+            if meta:
+                deleted_version = int(payload.get('version') or meta.cloud_version or 0)
+                meta.cloud_version = deleted_version
+                meta.local_version = max(int(meta.local_version or 0), deleted_version)
+                meta.last_sync_at = None
+                meta.last_error = ''
+                meta.save(update_fields=['cloud_version', 'local_version', 'last_sync_at', 'last_error', 'updated_at'])
+                response['local_detached'] = True
+                response['local_classroom_id'] = meta.classroom_id
+        return JsonResponse(response)
     except Exception as exc:
         return _cloud_error_response(exc)
 

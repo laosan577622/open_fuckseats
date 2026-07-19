@@ -212,7 +212,7 @@
         var d = lib.driver({
             showProgress: true,
             animate: true,
-            allowClose: true,
+            allowClose: false,
             disableActiveInteraction: false,
             doneBtnText: opts.doneBtnText || '完成引导',
             nextBtnText: '下一步',
@@ -264,7 +264,7 @@
         var d = lib.driver({
             animate: true,
             showProgress: false,
-            allowClose: true,
+            allowClose: false,
             disableActiveInteraction: false,
             steps: [
                 {

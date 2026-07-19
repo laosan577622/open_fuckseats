@@ -2630,6 +2630,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const groupTour = driverJs.driver({
             showProgress: true,
             animate: true,
+            allowClose: false,
             doneBtnText: '开始使用',
             nextBtnText: '下一步',
             prevBtnText: '上一步',
