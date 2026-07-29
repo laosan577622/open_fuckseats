@@ -1,267 +1,319 @@
 {% extends 'base.html' %}
 
-{% block title %}新建班级{% endblock %}
+{% block title %}创建班级 - 不想排座位{% endblock %}
+{% block body_class %}home-dashboard-body create-classroom-body{% endblock %}
 
-{% block actions %}
-<div class="header-action-row office-ribbon-row">
-    <div class="ribbon-group">
-        <a href="{% url 'index' %}" class="btn btn-secondary">返回首页</a>
-        <span class="ribbon-group-label">导航</span>
-    </div>
-</div>
+{% block ribbon_tabs %}{% endblock %}
+{% block actions %}{% endblock %}
+
+{% block titlebar_actions %}
+<a href="{% url 'index' %}" class="create-titlebar-back">
+    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+        <path d="m12 5-5 5 5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    返回首页
+</a>
 {% endblock %}
 
 {% block content %}
-<div class="create-wizard animate-fade-in">
-    <div class="wizard-step" id="step-choose">
-        <div class="wizard-header">
-            <h1 class="wizard-title">创建新班级</h1>
-            <p class="wizard-subtitle">选择一种方式开始</p>
+<main class="create-classroom-page">
+    <header class="create-classroom-hero">
+        <div>
+            <p class="create-classroom-eyebrow">新建班级</p>
+            <h1>创建一个班级</h1>
         </div>
-        <div class="wizard-choices">
-            <button type="button" class="wizard-choice-card" onclick="showStep('import')">
-                <div class="wizard-choice-icon">
-                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="4" y="6" width="40" height="36" rx="4" stroke="var(--primary-color)" stroke-width="2.5" fill="none"/>
-                        <line x1="4" y1="16" x2="44" y2="16" stroke="var(--primary-color)" stroke-width="2" stroke-opacity="0.5"/>
-                        <line x1="4" y1="26" x2="44" y2="26" stroke="var(--primary-color)" stroke-width="2" stroke-opacity="0.3"/>
-                        <line x1="4" y1="36" x2="44" y2="36" stroke="var(--primary-color)" stroke-width="2" stroke-opacity="0.3"/>
-                        <line x1="18" y1="6" x2="18" y2="42" stroke="var(--primary-color)" stroke-width="2" stroke-opacity="0.3"/>
-                        <line x1="32" y1="6" x2="32" y2="42" stroke="var(--primary-color)" stroke-width="2" stroke-opacity="0.3"/>
-                        <circle cx="36" cy="36" r="10" fill="var(--primary-color)"/>
-                        <path d="M32 36h8M36 32v8" stroke="white" stroke-width="2" stroke-linecap="round"/>
-                    </svg>
-                </div>
-                <div class="wizard-choice-text">
-                    <h3>从第三方导入</h3>
-                    <p>从 Excel 成绩表、Excel 座位表或 BSCE 导入，自动生成班级</p>
-                </div>
-                <div class="wizard-choice-arrow">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </div>
-            </button>
-            <button type="button" class="wizard-choice-card" onclick="showStep('blank')">
-                <div class="wizard-choice-icon">
-                    <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <rect x="8" y="12" width="8" height="8" rx="2" fill="var(--primary-color)" fill-opacity="0.18"/>
-                        <rect x="20" y="12" width="8" height="8" rx="2" fill="var(--primary-color)" fill-opacity="0.18"/>
-                        <rect x="32" y="12" width="8" height="8" rx="2" fill="var(--primary-color)" fill-opacity="0.18"/>
-                        <rect x="8" y="24" width="8" height="8" rx="2" fill="var(--primary-color)" fill-opacity="0.18"/>
-                        <rect x="20" y="24" width="8" height="8" rx="2" fill="var(--primary-color)" fill-opacity="0.18"/>
-                        <rect x="32" y="24" width="8" height="8" rx="2" fill="var(--primary-color)" fill-opacity="0.18"/>
-                        <rect x="8" y="36" width="8" height="8" rx="2" fill="var(--primary-color)" fill-opacity="0.12"/>
-                        <rect x="20" y="36" width="8" height="8" rx="2" fill="var(--primary-color)" fill-opacity="0.12"/>
-                        <rect x="32" y="36" width="8" height="8" rx="2" fill="var(--primary-color)" fill-opacity="0.12"/>
-                    </svg>
-                </div>
-                <div class="wizard-choice-text">
-                    <h3>空白班级</h3>
-                    <p>设置行列数，手动添加学生或稍后再导入</p>
-                </div>
-                <div class="wizard-choice-arrow">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M9 6l6 6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </div>
-            </button>
-        </div>
-    </div>
+    </header>
 
-    <div class="wizard-step wizard-step-hidden" id="step-import">
-        <div class="wizard-header">
-            <button type="button" class="wizard-back-btn" onclick="showStep('choose')">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                返回
-            </button>
-            <h1 class="wizard-title">从第三方导入</h1>
-            <p class="wizard-subtitle">输入班级名称，然后选择导入方式</p>
-        </div>
-        <div class="wizard-form-container">
-            <form method="post" id="import-form">
-                {% csrf_token %}
-                <input type="hidden" name="mode" value="" id="import-mode-value">
-                <input type="hidden" name="rows" value="6" id="import-rows-hidden">
-                <input type="hidden" name="cols" value="8" id="import-cols-hidden">
-                <div class="form-group">
-                    <label for="import-name">班级名称</label>
-                    <input type="text" id="import-name" name="name" required placeholder="例如：高二（3）班">
-                </div>
-            </form>
-            <div class="wizard-import-label">选择导入方式</div>
-            <div class="wizard-import-types">
-                <button type="button" class="wizard-import-card" id="card-excel-students" onclick="handleImportChoice('excel_students')">
-                    <div class="wizard-import-card-icon">
-                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="4" y="2" width="24" height="28" rx="3" stroke="#34a853" stroke-width="2" fill="none"/>
-                            <path d="M10 10h12M10 16h12M10 22h8" stroke="#34a853" stroke-width="2" stroke-linecap="round" stroke-opacity="0.6"/>
-                            <path d="M9 13.5l3 3 5-5" stroke="#34a853" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </div>
-                    <div class="wizard-import-card-text">
-                        <h4>Excel 成绩表</h4>
-                        <p>导入姓名、成绩等学生信息</p>
-                    </div>
-                </button>
-                <div class="wizard-excel-grid-config" id="excel-grid-config">
-                    <div class="form-grid-two">
-                        <div class="form-group">
-                            <label for="import-rows">座位行数</label>
-                            <input type="number" id="import-rows" value="6" min="1" max="20">
-                        </div>
-                        <div class="form-group">
-                            <label for="import-cols">座位列数</label>
-                            <input type="number" id="import-cols" value="8" min="1" max="20">
-                        </div>
-                    </div>
-                    <div class="layout-preset">
-                        <button type="button" class="btn btn-secondary preset-btn" data-rows="6" data-cols="8">常规教室 6x8</button>
-                        <button type="button" class="btn btn-secondary preset-btn" data-rows="7" data-cols="8">人数较多 7x8</button>
-                        <button type="button" class="btn btn-secondary preset-btn" data-rows="5" data-cols="6">小班 5x6</button>
-                    </div>
-                    <button type="button" class="btn btn-primary create-submit-btn" onclick="submitImport('excel_students')">创建并前往导入成绩表</button>
-                </div>
+    {% if error_message %}
+    <div class="create-classroom-error" role="alert">{{ error_message }}</div>
+    {% endif %}
 
-                <button type="button" class="wizard-import-card" onclick="handleImportChoice('excel_layout')">
-                    <div class="wizard-import-card-icon">
-                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="4" y="2" width="24" height="28" rx="3" stroke="#34a853" stroke-width="2" fill="none"/>
-                            <rect x="8" y="8" width="6" height="5" rx="1" fill="#34a853" fill-opacity="0.3"/>
-                            <rect x="18" y="8" width="6" height="5" rx="1" fill="#34a853" fill-opacity="0.3"/>
-                            <rect x="8" y="16" width="6" height="5" rx="1" fill="#34a853" fill-opacity="0.3"/>
-                            <rect x="18" y="16" width="6" height="5" rx="1" fill="#34a853" fill-opacity="0.3"/>
-                            <rect x="10" y="24" width="12" height="3" rx="1" fill="#34a853" fill-opacity="0.2"/>
-                        </svg>
-                    </div>
-                    <div class="wizard-import-card-text">
-                        <h4>Excel 座位表</h4>
-                        <p>从现有座位布局表格导入，自动识别行列</p>
-                    </div>
-                </button>
-                <button type="button" class="wizard-import-card" onclick="handleImportChoice('bsce')">
-                    <div class="wizard-import-card-icon">
-                        <svg width="32" height="32" viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <rect x="4" y="2" width="24" height="28" rx="3" stroke="var(--primary-color)" stroke-width="2" fill="none"/>
-                            <path d="M10 10h4v4h-4zM18 10h4v4h-4zM10 18h4v4h-4zM18 18h4v4h-4z" fill="var(--primary-color)" fill-opacity="0.25"/>
-                            <path d="M12 26h8" stroke="var(--primary-color)" stroke-width="2" stroke-linecap="round" stroke-opacity="0.4"/>
-                        </svg>
-                    </div>
-                    <div class="wizard-import-card-text">
-                        <h4>BSCE 导入</h4>
-                        <p>从BSCE导入数据</p>
-                    </div>
-                </button>
+    <nav class="create-flow-progress" aria-label="创建进度">
+        <span class="is-active" data-progress-step="1"><b>1</b>选择大类</span>
+        <i></i>
+        <span data-progress-step="2"><b>2</b>选择方式</span>
+        <i></i>
+        <span data-progress-step="3"><b>3</b>填写信息</span>
+    </nav>
+
+    <section class="create-flow-stage" data-create-step="1">
+        <header class="create-flow-stage-heading">
+            <span>第一步</span>
+            <h2>选择新建方式的大类</h2>
+        </header>
+        <div class="create-choice-grid create-category-grid">
+            <button type="button" class="create-choice" data-create-category="import">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><rect x="4" y="3" width="20" height="22" rx="4"/><path d="M4 10h20M11 10v15M17 10v15M4 17h20"/></svg>
+                </span>
+                <span class="create-choice-copy">
+                    <span class="create-choice-title-row">
+                        <strong>原有座位表（支持Excel）导入</strong>
+                        <small>推荐</small>
+                    </span>
+                </span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+
+            <button type="button" class="create-choice" data-create-category="software">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><rect x="3" y="5" width="8" height="7" rx="2"/><rect x="17" y="5" width="8" height="7" rx="2"/><rect x="3" y="16" width="8" height="7" rx="2"/><rect x="17" y="16" width="8" height="7" rx="2"/><path d="M14 4v20"/></svg>
+                </span>
+                <span class="create-choice-copy">
+                    <strong>在本软件中开始</strong>
+                </span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+        </div>
+    </section>
+
+    <section class="create-flow-stage" data-create-step="2" hidden>
+        <button type="button" class="create-flow-back" data-create-back="1">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m12 5-5 5 5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            返回选择大类
+        </button>
+        <header class="create-flow-stage-heading">
+            <span>第二步</span>
+            <h2 data-method-step-title>选择具体新建方式</h2>
+        </header>
+
+        <div class="create-choice-grid create-method-choice-grid">
+            <button type="button" class="create-choice" data-create-method="excel_layout" data-method-category="import">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><rect x="4" y="3" width="20" height="22" rx="4"/><path d="M4 10h20M11 10v15M17 10v15M4 17h20"/></svg>
+                </span>
+                <span class="create-choice-copy">
+                    <span class="create-choice-title-row"><strong>导入 Excel 座位表</strong><small>推荐</small></span>
+                </span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+
+            <button type="button" class="create-choice" data-create-method="bsce" data-method-category="import">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><path d="M7 3h10l5 5v17H7z"/><path d="M17 3v6h5M10 14h9M10 18h9"/></svg>
+                </span>
+                <span class="create-choice-copy">
+                    <strong>导入 BSCE 座位表</strong>
+                </span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+
+            <button type="button" class="create-choice" data-create-method="quick_groups" data-method-category="software">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><rect x="3" y="5" width="8" height="7" rx="2"/><rect x="17" y="5" width="8" height="7" rx="2"/><rect x="3" y="16" width="8" height="7" rx="2"/><rect x="17" y="16" width="8" height="7" rx="2"/><path d="M14 4v20"/></svg>
+                </span>
+                <span class="create-choice-copy">
+                    <span class="create-choice-title-row"><strong>快速创建大组</strong><small>快捷</small></span>
+                </span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+
+            <button type="button" class="create-choice" data-create-method="copy_layout" data-method-category="software">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><rect x="8" y="7" width="16" height="17" rx="4"/><path d="M19 7V6a3 3 0 0 0-3-3H7a3 3 0 0 0-3 3v11a3 3 0 0 0 3 3h1M12 12h8M12 17h8"/></svg>
+                </span>
+                <span class="create-choice-copy">
+                    <strong>复制现有布局</strong>
+                </span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+
+            <button type="button" class="create-choice" data-create-method="custom" data-method-category="software">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><path d="M4 7h20M4 14h20M4 21h20M9 4v20M16 4v20M23 4v20"/></svg>
+                </span>
+                <span class="create-choice-copy">
+                    <strong>完全自定义</strong>
+                </span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+
+            <button type="button" class="create-choice" data-create-method="excel_students" data-method-category="software">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><path d="M5 4h18v20H5zM5 10h18M11 10v14"/><circle cx="17" cy="15" r="2"/><path d="M14 21c.7-2 5.3-2 6 0"/></svg>
+                </span>
+                <span class="create-choice-copy">
+                    <strong>空白布局并导入学生</strong>
+                </span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+        </div>
+    </section>
+
+    <section class="create-flow-stage" data-create-step="3" hidden>
+        <button type="button" class="create-flow-back" data-create-back="2">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m12 5-5 5 5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            返回选择具体方式
+        </button>
+        <header class="create-flow-stage-heading">
+            <span>第三步</span>
+            <h2 data-final-step-title>填写班级信息</h2>
+        </header>
+
+        <form method="post" class="create-final-form" data-method-form="excel_layout" hidden>
+            {% csrf_token %}
+            <input type="hidden" name="mode" value="excel_layout">
+            <input type="hidden" name="rows" value="6">
+            <input type="hidden" name="cols" value="8">
+            <label>新班级名称
+                <input type="text" name="name" required maxlength="100" placeholder="例如：高一（3）班">
+            </label>
+            <button class="btn btn-primary" type="submit">创建并导入 Excel</button>
+        </form>
+
+        <form method="post" class="create-final-form" data-method-form="bsce" hidden>
+            {% csrf_token %}
+            <input type="hidden" name="mode" value="bsce">
+            <input type="hidden" name="rows" value="6">
+            <input type="hidden" name="cols" value="8">
+            <label>新班级名称
+                <input type="text" name="name" required maxlength="100" placeholder="例如：九年级一班">
+            </label>
+            <button class="btn btn-primary" type="submit">创建并导入 BSCE</button>
+        </form>
+
+        <form method="post" class="create-final-form" data-method-form="quick_groups" hidden>
+            {% csrf_token %}
+            <input type="hidden" name="mode" value="quick_groups">
+            <label>班级名称
+                <input type="text" name="name" required maxlength="100" placeholder="例如：六年级二班">
+            </label>
+            <div class="create-final-fields create-final-fields-three">
+                <label>座位行数
+                    <input type="number" name="seat_rows" value="6" min="1" max="29" required>
+                </label>
+                <label>大组数量
+                    <input type="number" name="large_group_count" value="2" min="1" max="10" required>
+                </label>
+                <label>单大组列数
+                    <input type="number" name="group_cols" value="4" min="1" max="12" required>
+                </label>
             </div>
-        </div>
-    </div>
+            <button class="btn btn-primary" type="submit">生成大组班级</button>
+        </form>
 
-    <div class="wizard-step wizard-step-hidden" id="step-blank">
-        <div class="wizard-header">
-            <button type="button" class="wizard-back-btn" onclick="showStep('choose')">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M15 6l-6 6 6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                返回
-            </button>
-            <h1 class="wizard-title">空白班级</h1>
-            <p class="wizard-subtitle">建议先使用默认行列，后续可在"布局编辑"继续精调</p>
-        </div>
-        <div class="wizard-form-container">
-            <form method="post" id="blank-form">
-                {% csrf_token %}
-                <input type="hidden" name="mode" value="blank">
-                <div class="form-group">
-                    <label for="blank-name">班级名称</label>
-                    <input type="text" id="blank-name" name="name" required placeholder="例如：高二（3）班">
-                </div>
-                <div class="form-grid-two">
-                    <div class="form-group">
-                        <label for="blank-rows">座位行数</label>
-                        <input type="number" id="blank-rows" name="rows" value="6" required min="1" max="20">
-                    </div>
-                    <div class="form-group">
-                        <label for="blank-cols">座位列数</label>
-                        <input type="number" id="blank-cols" name="cols" value="8" required min="1" max="20">
-                    </div>
-                </div>
-                <div class="layout-preset">
-                    <button type="button" class="btn btn-secondary preset-btn" data-rows="6" data-cols="8" data-target="blank">常规教室 6x8</button>
-                    <button type="button" class="btn btn-secondary preset-btn" data-rows="7" data-cols="8" data-target="blank">人数较多 7x8</button>
-                    <button type="button" class="btn btn-secondary preset-btn" data-rows="5" data-cols="6" data-target="blank">小班 5x6</button>
-                </div>
-                <button type="submit" class="btn btn-primary create-submit-btn">创建班级</button>
-            </form>
-        </div>
-    </div>
-</div>
+        <form method="post" class="create-final-form" data-method-form="copy_layout" hidden>
+            {% csrf_token %}
+            <input type="hidden" name="mode" value="copy_layout">
+            <label>新班级名称
+                <input type="text" name="name" required maxlength="100" placeholder="例如：高二（1）班">
+            </label>
+            <label>布局来源
+                <select name="source_classroom_id" required>
+                    <option value="">请选择现有班级</option>
+                    {% for item in classrooms %}
+                    <option value="{{ item.pk }}">{{ item.classroom_group.name|default:"未分组" }} · {{ item.name }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <button class="btn btn-primary" type="submit">复制布局并创建</button>
+        </form>
 
+        <form method="post" class="create-final-form" data-method-form="custom" hidden>
+            {% csrf_token %}
+            <input type="hidden" name="mode" value="custom">
+            <label>班级名称
+                <input type="text" name="name" required maxlength="100" placeholder="例如：自定义教室">
+            </label>
+            <div class="create-final-fields">
+                <label>总行数
+                    <input type="number" name="rows" value="6" min="1" max="30" required>
+                </label>
+                <label>总列数
+                    <input type="number" name="cols" value="8" min="1" max="30" required>
+                </label>
+            </div>
+            <button class="btn btn-primary" type="submit">创建空白自定义班级</button>
+        </form>
+
+        <form method="post" class="create-final-form" data-method-form="excel_students" hidden>
+            {% csrf_token %}
+            <input type="hidden" name="mode" value="excel_students">
+            <label>班级名称
+                <input type="text" name="name" required maxlength="100" placeholder="例如：七年级三班">
+            </label>
+            <div class="create-final-fields">
+                <label>总行数
+                    <input type="number" name="rows" value="6" min="1" max="30" required>
+                </label>
+                <label>总列数
+                    <input type="number" name="cols" value="8" min="1" max="30" required>
+                </label>
+            </div>
+            <button class="btn btn-primary" type="submit">创建并导入学生</button>
+        </form>
+    </section>
+</main>
+{% endblock %}
+
+{% block extra_scripts %}
 <script>
-document.addEventListener('DOMContentLoaded', () => {
-    document.querySelectorAll('.preset-btn').forEach(btn => {
-        btn.addEventListener('click', () => {
-            const target = btn.dataset.target;
-            if (target === 'blank') {
-                document.getElementById('blank-rows').value = btn.dataset.rows;
-                document.getElementById('blank-cols').value = btn.dataset.cols;
-            } else {
-                document.getElementById('import-rows').value = btn.dataset.rows;
-                document.getElementById('import-cols').value = btn.dataset.cols;
+document.addEventListener('DOMContentLoaded', function () {
+    var stages = Array.from(document.querySelectorAll('[data-create-step]'));
+    var progressSteps = Array.from(document.querySelectorAll('[data-progress-step]'));
+    var methodChoices = Array.from(document.querySelectorAll('[data-create-method]'));
+    var methodForms = Array.from(document.querySelectorAll('[data-method-form]'));
+    var methodStepTitle = document.querySelector('[data-method-step-title]');
+    var finalStepTitle = document.querySelector('[data-final-step-title]');
+    var selectedCategory = '';
+    var methodMeta = {
+        excel_layout: '导入 Excel 座位表',
+        bsce: '导入 BSCE 座位表',
+        quick_groups: '快速创建大组',
+        copy_layout: '复制现有布局',
+        custom: '完全自定义',
+        excel_students: '空白布局并导入学生'
+    };
+
+    function showStep(step) {
+        stages.forEach(function (stage) {
+            stage.hidden = Number(stage.dataset.createStep) !== step;
+        });
+        progressSteps.forEach(function (item) {
+            var itemStep = Number(item.dataset.progressStep);
+            item.classList.toggle('is-active', itemStep === step);
+            item.classList.toggle('is-complete', itemStep < step);
+            if (itemStep === step) item.setAttribute('aria-current', 'step');
+            else item.removeAttribute('aria-current');
+        });
+    }
+
+    document.querySelectorAll('[data-create-category]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            selectedCategory = button.dataset.createCategory;
+            methodChoices.forEach(function (choice) {
+                choice.hidden = choice.dataset.methodCategory !== selectedCategory;
+            });
+            if (methodStepTitle) {
+                methodStepTitle.textContent = selectedCategory === 'import'
+                    ? '选择导入方式'
+                    : '选择在本软件中的创建方式';
             }
+            showStep(2);
         });
     });
-});
 
-function showStep(step) {
-    document.querySelectorAll('.wizard-step').forEach(el => {
-        el.classList.add('wizard-step-hidden');
+    methodChoices.forEach(function (button) {
+        button.addEventListener('click', function () {
+            var method = button.dataset.createMethod;
+            methodForms.forEach(function (form) {
+                form.hidden = form.dataset.methodForm !== method;
+            });
+            if (finalStepTitle) finalStepTitle.textContent = methodMeta[method] || '填写班级信息';
+            showStep(3);
+            var activeForm = document.querySelector('[data-method-form="' + method + '"]');
+            var firstInput = activeForm ? activeForm.querySelector('input:not([type="hidden"]), select') : null;
+            if (firstInput) firstInput.focus();
+        });
     });
-    const target = document.getElementById('step-' + step);
-    if (target) {
-        target.classList.remove('wizard-step-hidden');
-        target.style.animation = 'none';
-        target.offsetHeight;
-        target.style.animation = '';
-    }
-    if (step === 'choose' || step === 'import') {
-        document.getElementById('excel-grid-config').style.display = 'none';
-        document.getElementById('card-excel-students').classList.remove('wizard-import-card-active');
-    }
-}
 
-function handleImportChoice(type) {
-    const nameInput = document.getElementById('import-name');
-    if (!nameInput.value.trim()) {
-        nameInput.focus();
-        nameInput.reportValidity();
-        return;
-    }
-    if (type === 'excel_students') {
-        const config = document.getElementById('excel-grid-config');
-        const card = document.getElementById('card-excel-students');
-        const isOpen = config.style.display !== 'none';
-        if (isOpen) {
-            config.style.display = 'none';
-            card.classList.remove('wizard-import-card-active');
-        } else {
-            config.style.display = 'block';
-            config.style.animation = 'none';
-            config.offsetHeight;
-            config.style.animation = '';
-            card.classList.add('wizard-import-card-active');
-        }
-        return;
-    }
-    submitImport(type);
-}
+    document.querySelectorAll('[data-create-back]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            showStep(Number(button.dataset.createBack));
+        });
+    });
 
-function submitImport(type) {
-    const nameInput = document.getElementById('import-name');
-    if (!nameInput.value.trim()) {
-        nameInput.focus();
-        nameInput.reportValidity();
-        return;
-    }
-    document.getElementById('import-mode-value').value = type;
-    if (type === 'excel_students') {
-        document.getElementById('import-rows-hidden').value = document.getElementById('import-rows').value;
-        document.getElementById('import-cols-hidden').value = document.getElementById('import-cols').value;
-    }
-    document.getElementById('import-form').submit();
-}
+    showStep(1);
+});
 </script>
 {% endblock %}

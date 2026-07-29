@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ classroom_group.name }} - 班级组设置{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="group-settings">班级组设置</button>
+{% endblock %}
+
+{% block actions %}
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="group-settings">
+        <div class="ribbon-group">
+            <a href="{% url 'classroom_group_detail' classroom_group.pk %}" class="btn btn-secondary">返回班级管理</a>
+            <span class="ribbon-group-label">导航</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="classroom-group-settings-page">
+    <header class="classroom-group-settings-hero">
+        <span class="classroom-group-kicker">班级组设置</span>
+        <h1>{{ classroom_group.name }}</h1>
+    </header>
+
+    <section class="group-settings-section">
+        <header>
+            <h2>名称</h2>
+        </header>
+        <form method="post" action="{% url 'classroom_group_action' classroom_group.pk %}" class="group-settings-form">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="rename">
+            <input type="hidden" name="next" value="settings">
+            <label>班级组名称
+                <input type="text" name="name" value="{{ classroom_group.name }}" maxlength="100" required>
+            </label>
+            <button class="btn btn-primary" type="submit">保存名称</button>
+        </form>
+    </section>
+
+    <section class="group-settings-section">
+        <header>
+            <h2>云备份</h2>
+            <p>{{ classrooms|length }} 个班级</p>
+        </header>
+        <div class="group-settings-actions">
+            <button
+                class="btn btn-primary"
+                type="button"
+                id="classroom-group-cloud-backup"
+                data-url="{% url 'cloud_sync_group' classroom_group.pk %}"
+                {% if not classrooms %}disabled{% endif %}
+            >备份整个班级组</button>
+            <a
+                href="{% url 'settings' %}#cloud-settings-section"
+                class="btn btn-secondary"
+                id="classroom-group-upgrade-link"
+                hidden
+            >获取更高级订阅</a>
+        </div>
+    </section>
+
+    <section class="group-settings-section group-settings-danger">
+        <header>
+            <h2>删除班级组</h2>
+            <p>可保留班级，也可同时清空组内班级及其配置。</p>
+        </header>
+        <div class="group-settings-actions group-settings-danger-actions">
+            <form
+                method="post"
+                action="{% url 'classroom_group_action' classroom_group.pk %}"
+                data-confirm-message="确定删除班级组并保留其中班级吗？"
+                data-confirm-button="删除班级组"
+            >
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete">
+                <button type="submit" class="btn btn-secondary">删除班级组并保留其中班级</button>
+            </form>
+            <form
+                method="post"
+                action="{% url 'classroom_group_action' classroom_group.pk %}"
+                data-confirm-message="确定删除班级组，并清空组内全部班级、学生和座位配置吗？此操作不可撤销。"
+                data-confirm-button="删除并清空"
+            >
+                {% csrf_token %}
+                <input type="hidden" name="action" value="delete_with_classrooms">
+                <button type="submit" class="btn btn-danger">删除班级组并清空班级配置</button>
+            </form>
+        </div>
+    </section>
+</section>
+
+<div
+    class="modal group-delete-modal"
+    id="group-delete-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-labelledby="group-delete-modal-title"
+>
+    <div class="modal-content group-delete-dialog">
+        <span class="group-delete-dialog-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+                <path d="M8.5 8.5v8m3.5-8v8m3.5-8v8M5 6h14M9 6V3.8h6V6m2.5 0-.7 15H7.2L6.5 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </span>
+        <h3 id="group-delete-modal-title">删除班级组</h3>
+        <p data-group-delete-message></p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" data-group-delete-cancel>取消</button>
+            <button type="button" class="btn btn-danger" data-group-delete-confirm>删除</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var backupButton = document.getElementById('classroom-group-cloud-backup');
+    var upgradeLink = document.getElementById('classroom-group-upgrade-link');
+    var deleteModal = document.getElementById('group-delete-modal');
+    var deleteMessage = deleteModal ? deleteModal.querySelector('[data-group-delete-message]') : null;
+    var deleteConfirm = deleteModal ? deleteModal.querySelector('[data-group-delete-confirm]') : null;
+    var deleteCancel = deleteModal ? deleteModal.querySelector('[data-group-delete-cancel]') : null;
+    var pendingDeleteForm = null;
+
+    function closeDeleteModal() {
+        if (!deleteModal) return;
+        deleteModal.classList.remove('modal-visible');
+        window.setTimeout(function () {
+            deleteModal.style.display = 'none';
+        }, 220);
+        pendingDeleteForm = null;
+    }
+
+    function openDeleteModal(form) {
+        if (!deleteModal || !deleteMessage || !deleteConfirm) return;
+        pendingDeleteForm = form;
+        deleteMessage.textContent = form.dataset.confirmMessage || '';
+        deleteConfirm.textContent = form.dataset.confirmButton || '删除';
+        deleteModal.style.display = 'flex';
+        window.requestAnimationFrame(function () {
+            deleteModal.classList.add('modal-visible');
+            deleteCancel.focus();
+        });
+    }
+
+    document.querySelectorAll('[data-confirm-message]').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            openDeleteModal(form);
+        });
+    });
+    if (deleteCancel) deleteCancel.addEventListener('click', closeDeleteModal);
+    if (deleteConfirm) {
+        deleteConfirm.addEventListener('click', function () {
+            if (!pendingDeleteForm) return;
+            var form = pendingDeleteForm;
+            pendingDeleteForm = null;
+            deleteConfirm.disabled = true;
+            form.submit();
+        });
+    }
+    if (deleteModal) {
+        deleteModal.addEventListener('click', function (event) {
+            if (event.target === deleteModal) closeDeleteModal();
+        });
+    }
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && deleteModal && deleteModal.classList.contains('modal-visible')) {
+            closeDeleteModal();
+        }
+    });
+    if (!backupButton) return;
+
+    backupButton.addEventListener('click', async function () {
+        var originalText = backupButton.textContent;
+        backupButton.disabled = true;
+        backupButton.textContent = '正在备份...';
+        if (upgradeLink) upgradeLink.hidden = true;
+        try {
+            var response = await fetch(backupButton.dataset.url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ force: false })
+            });
+            var data = await response.json();
+            if (!response.ok || data.status !== 'success') {
+                if (data.code === 'CLASSROOM_LIMIT_EXCEEDED' && upgradeLink) {
+                    upgradeLink.href = data.upgrade_url || upgradeLink.href;
+                    upgradeLink.hidden = false;
+                }
+                throw new Error(data.message || '班级组备份失败');
+            }
+            if (window.showToast) window.showToast(data.message || '班级组备份完成');
+        } catch (error) {
+            if (window.showToast) window.showToast(error.message || '班级组备份失败');
+        } finally {
+            backupButton.disabled = false;
+            backupButton.textContent = originalText;
+        }
+    });
+});
+</script>
+{% endblock %}

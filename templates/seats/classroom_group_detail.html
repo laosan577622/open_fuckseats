@@ -1,0 +1,176 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ classroom_group.name }} - 班级管理{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="group">班级管理</button>
+{% endblock %}
+
+{% block actions %}
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="group">
+        <div class="ribbon-group">
+            <a href="{% url 'index' %}" class="btn btn-secondary">返回首页</a>
+            <a href="{% url 'classroom_group_settings' classroom_group.pk %}" class="btn btn-secondary">班级组设置</a>
+            <span class="ribbon-group-label">班级组</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="classroom-group-detail-page">
+    <header class="classroom-group-detail-hero">
+        <div>
+            <span class="classroom-group-kicker">班级管理</span>
+            <h1>{{ classroom_group.name }}</h1>
+            <p>{{ classrooms|length }} 个班级</p>
+        </div>
+        <nav class="classroom-group-page-actions" aria-label="班级组操作">
+            <a href="{% url 'classroom_group_classrooms_add' classroom_group.pk %}" class="btn btn-primary">添加班级</a>
+            <a href="{% url 'classroom_group_students' classroom_group.pk %}" class="btn btn-secondary">学生管理</a>
+            <a href="{% url 'classroom_group_auto_sort' classroom_group.pk %}" class="btn btn-secondary">自动排序模式</a>
+        </nav>
+    </header>
+
+    <section class="classroom-group-members">
+        <header>
+            <div>
+                <span class="classroom-group-kicker">组内班级</span>
+                <h2>班级列表</h2>
+            </div>
+            {% if classrooms %}
+            <form
+                method="post"
+                action="{% url 'classroom_group_action' classroom_group.pk %}"
+                id="group-batch-delete-form"
+                class="group-batch-toolbar"
+                data-group-batch-form
+            >
+                {% csrf_token %}
+                <input type="hidden" name="action" value="batch_delete">
+                <label class="group-batch-select-all">
+                    <input type="checkbox" data-group-select-all>
+                    <span>全选</span>
+                </label>
+                <button type="submit" class="btn btn-danger" data-group-batch-delete disabled>
+                    删除选中班级
+                </button>
+            </form>
+            {% endif %}
+        </header>
+        <div class="home-classroom-grid classroom-group-grid">
+            {% for classroom in classrooms %}
+            <article class="home-classroom-card group-member-card">
+                <div class="home-classroom-card-head">
+                    <div class="home-card-leading">
+                        <label class="group-member-selector" aria-label="选择 {{ classroom.name }}">
+                            <input
+                                type="checkbox"
+                                name="classroom_ids"
+                                value="{{ classroom.pk }}"
+                                form="group-batch-delete-form"
+                                data-group-classroom-checkbox
+                            >
+                            <span aria-hidden="true">
+                                <svg viewBox="0 0 16 16" fill="none"><path d="m4 8 2.5 2.5L12 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                            </span>
+                        </label>
+                        <span class="home-card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5h16v12H4v-12Zm3-3h10v3H7v-3ZM8 19.5v2m8-2v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </span>
+                        <h3>{{ classroom.name }}</h3>
+                    </div>
+                    <details class="group-member-menu">
+                        <summary aria-label="更多操作">
+                            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="4" cy="10" r="1.25" fill="currentColor"/><circle cx="10" cy="10" r="1.25" fill="currentColor"/><circle cx="16" cy="10" r="1.25" fill="currentColor"/></svg>
+                        </summary>
+                        <div>
+                            <form method="post" action="{% url 'classroom_group_action' classroom_group.pk %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="remove">
+                                <input type="hidden" name="classroom_id" value="{{ classroom.pk }}">
+                                <button type="submit">移出班级组</button>
+                            </form>
+                        </div>
+                    </details>
+                </div>
+                <div class="home-classroom-metrics">
+                    <span>
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 3h3v3H3V3Zm5.5 0h3v3h-3V3ZM14 3h3v3h-3V3ZM3 8.5h3v3H3v-3Zm5.5 0h3v3h-3v-3Zm5.5 0h3v3h-3v-3ZM3 14h3v3H3v-3Zm5.5 0h3v3h-3v-3Zm5.5 0h3v3h-3v-3Z" stroke="currentColor" stroke-width="1.25"/></svg>
+                        {{ classroom.rows }} × {{ classroom.cols }} 布局
+                    </span>
+                    <i></i>
+                    <span>
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6.2" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 17v-1.2A4.8 4.8 0 0 1 9.3 11h1.4a4.8 4.8 0 0 1 4.8 4.8V17" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                        {{ classroom.students.count }} 名学生
+                    </span>
+                    <i></i>
+                    <span>
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 9.5h12v6H4v-6Zm1.5-5h9v5h-9v-5ZM5.5 15.5v2m9-2v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        {{ classroom.seats.count }} 个座位
+                    </span>
+                </div>
+                <a href="{% url 'classroom_detail' classroom.pk %}" class="home-enter-classroom">
+                    进入班级
+                    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </a>
+            </article>
+            {% empty %}
+            <div class="empty-hero">暂无班级</div>
+            {% endfor %}
+        </div>
+    </section>
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var batchForm = document.querySelector('[data-group-batch-form]');
+    if (batchForm) {
+        var selectAll = batchForm.querySelector('[data-group-select-all]');
+        var deleteButton = batchForm.querySelector('[data-group-batch-delete]');
+        var classroomCheckboxes = Array.from(
+            document.querySelectorAll('[data-group-classroom-checkbox]')
+        );
+
+        function updateBatchState() {
+            var selectedCount = classroomCheckboxes.filter(function (input) {
+                return input.checked;
+            }).length;
+            deleteButton.disabled = selectedCount === 0;
+            deleteButton.textContent = selectedCount
+                ? '删除选中班级（' + selectedCount + '）'
+                : '删除选中班级';
+            selectAll.checked = selectedCount > 0 && selectedCount === classroomCheckboxes.length;
+            selectAll.indeterminate = selectedCount > 0 && selectedCount < classroomCheckboxes.length;
+        }
+
+        selectAll.addEventListener('change', function () {
+            classroomCheckboxes.forEach(function (input) {
+                input.checked = selectAll.checked;
+            });
+            updateBatchState();
+        });
+        classroomCheckboxes.forEach(function (input) {
+            input.addEventListener('change', updateBatchState);
+        });
+        batchForm.addEventListener('submit', function (event) {
+            var selectedCount = classroomCheckboxes.filter(function (input) {
+                return input.checked;
+            }).length;
+            if (!selectedCount || !window.confirm(
+                '确定删除选中的 ' + selectedCount + ' 个班级及其全部配置吗？此操作不可撤销。'
+            )) {
+                event.preventDefault();
+            }
+        });
+        updateBatchState();
+    }
+    {% if sort_applied %}
+    if (window.showToast) window.showToast('自动排序已完成');
+    {% endif %}
+});
+</script>
+{% endblock %}

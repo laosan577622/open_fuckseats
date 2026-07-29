@@ -148,57 +148,63 @@ def main():
     if _ensure_windows_admin(__file__, dev_mode):
         return
 
+    from database_security import application_lock, prepare_desktop_database
+
+    app_lock = application_lock().acquire()
     os.environ['FUCKSEATS_APP_SHELL'] = 'browser' if dev_mode else 'webview'
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
     logging.getLogger('waitress').setLevel(logging.ERROR)
-    
-    import django
-    django.setup()
-    
-    from config.wsgi import application
-
-    openai_model = (os.getenv('OPENAI_MODEL') or 'gpt-4.1-mini').strip() or 'gpt-4.1-mini'
-    openai_base_url = (os.getenv('OPENAI_BASE_URL') or '').strip()
-    has_openai_key = bool((os.getenv('OPENAI_API_KEY') or '').strip())
-    
     try:
-        migrate_stdout = StringIO()
-        migrate_stderr = StringIO()
-        call_command(
-            'migrate',
-            interactive=False,
-            stdout=migrate_stdout,
-            stderr=migrate_stderr,
-        )
-        stdout_text = _filter_migration_noise(migrate_stdout.getvalue())
-        stderr_text = _filter_migration_noise(migrate_stderr.getvalue())
-    except Exception as e:
-        print(f"数据库迁移出错: {e}", file=sys.stderr, flush=True)
+        prepare_desktop_database()
 
+        import django
+        django.setup()
 
-    app_url = f'http://{HOST}:{PORT}'
+        from config.wsgi import application
 
-    server_thread = threading.Thread(
-        target=_start_waitress,
-        args=(application,),
-        daemon=True,
-        name='fuckseats-waitress',
-    )
-    server_thread.start()
-    _wait_for_server_ready(app_url)
-
-    if dev_mode:
-        print(f"客户端已启动：http://{HOST}:{PORT}", flush=True)
-        _open_browser(app_url)
         try:
-            while server_thread.is_alive():
-                server_thread.join(timeout=1)
-        except KeyboardInterrupt:
-            print("\n开发模式已停止。", flush=True)
-        return
+            migrate_stdout = StringIO()
+            migrate_stderr = StringIO()
+            call_command(
+                'migrate',
+                interactive=False,
+                stdout=migrate_stdout,
+                stderr=migrate_stderr,
+            )
+            stdout_text = _filter_migration_noise(migrate_stdout.getvalue())
+            stderr_text = _filter_migration_noise(migrate_stderr.getvalue())
+            if stdout_text:
+                print(stdout_text, flush=True)
+            if stderr_text:
+                print(stderr_text, file=sys.stderr, flush=True)
+        except Exception as exc:
+            raise RuntimeError(f"数据库迁移失败，应用已停止启动：{exc}") from exc
 
-    print(f"客户端已启动：http://{HOST}:{PORT}", flush=True)
-    _start_desktop_window(app_url)
+        app_url = f'http://{HOST}:{PORT}'
+
+        server_thread = threading.Thread(
+            target=_start_waitress,
+            args=(application,),
+            daemon=True,
+            name='fuckseats-waitress',
+        )
+        server_thread.start()
+        _wait_for_server_ready(app_url)
+
+        if dev_mode:
+            print(f"客户端已启动：http://{HOST}:{PORT}", flush=True)
+            _open_browser(app_url)
+            try:
+                while server_thread.is_alive():
+                    server_thread.join(timeout=1)
+            except KeyboardInterrupt:
+                print("\n开发模式已停止。", flush=True)
+            return
+
+        print(f"客户端已启动：http://{HOST}:{PORT}", flush=True)
+        _start_desktop_window(app_url)
+    finally:
+        app_lock.release()
 
 if __name__ == '__main__':
     main()

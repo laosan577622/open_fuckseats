@@ -7,9 +7,11 @@ def app_runtime(request):
         "app_runtime": {
             "shell": getattr(settings, "APP_SHELL", "browser"),
             "version": desktop_runtime.get_current_version(),
+            "platform": desktop_runtime.get_platform_name(),
         },
         "onboarding_should_show": _onboarding_should_show(request),
         "onboarding_sample_pk": request.session.get('onboarding_sample_pk') if hasattr(request, 'session') else None,
+        "ai_feature_enabled": bool(getattr(settings, "AI_FEATURE_ENABLED", False)),
     }
     return ctx
 

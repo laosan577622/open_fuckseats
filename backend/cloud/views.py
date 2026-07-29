@@ -1,9 +1,11 @@
 import json
 import secrets
 import urllib.parse
+import uuid
 from datetime import timedelta
 
 from django.http import HttpResponseRedirect, JsonResponse
+from django.db import transaction
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
 
@@ -16,7 +18,7 @@ from .config import (
     get_tier_limits,
     subscription_payload,
 )
-from .models import CloudClassroom, CloudSnapshot, PendingLogin, RedeemCode
+from .models import CloudClassroom, CloudClassroomGroup, CloudSnapshot, PendingLogin
 from .oauth import OAuthError, exchange_code_for_token, fetch_userinfo, refresh_user_subscription, upsert_cloud_user
 from .sync import check_payload_size, payload_size_bytes, push_classroom_snapshot, validate_push_payload, validate_snapshot_for_user
 from .crypto import decrypt_payload, encrypt_payload, ensure_service_key, public_key_payload
@@ -339,6 +341,150 @@ def sync_push_batch(request):
     return _encrypted_json_response({'ok': True, 'status': 'success', 'results': results}, session=request.cloud_session)
 
 
+@require_http_methods(['POST'])
+@require_session
+def sync_push_group(request):
+    try:
+        raw_payload = _json_body(request)
+        payload = _decrypt_request_if_needed(request, raw_payload, session=request.cloud_session)
+        group_payload = payload.get('group') if isinstance(payload.get('group'), dict) else {}
+        items = payload.get('items') or payload.get('classrooms') or []
+        if not isinstance(items, list) or not items:
+            raise ValueError('班级组至少需要包含一个班级')
+        check_payload_size(items, 'max_batch_push_size_mb')
+        group_name = str(group_payload.get('name') or '').strip()
+        if not group_name:
+            raise ValueError('班级组名称不能为空')
+        try:
+            group_uuid = uuid.UUID(str(group_payload.get('uuid') or ''))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ValueError('班级组 UUID 无效') from exc
+
+        validated = []
+        seen_uuids = set()
+        limits = None
+        for item in items:
+            data, classroom_uuid, _tier, item_limits = validate_push_payload(request.cloud_user, item)
+            if classroom_uuid in seen_uuids:
+                raise ValueError(f'班级组内存在重复班级：{classroom_uuid}')
+            seen_uuids.add(classroom_uuid)
+            limits = limits or item_limits
+            validated.append((item, data, classroom_uuid))
+
+        existing = {
+            str(item.uuid): item
+            for item in CloudClassroom.objects.filter(
+                user=request.cloud_user,
+                uuid__in=[item[2] for item in validated],
+            )
+        }
+        active_count = CloudClassroom.objects.filter(user=request.cloud_user, is_deleted=False).count()
+        activating_count = sum(
+            1
+            for _, _, classroom_uuid in validated
+            if classroom_uuid not in existing or existing[classroom_uuid].is_deleted
+        )
+        max_classrooms = int((limits or {}).get('max_classrooms', 3) or 3)
+        required_total = active_count + activating_count
+        if max_classrooms != -1 and required_total > max_classrooms:
+            return _json_error(
+                f'当前订阅最多同步 {max_classrooms} 个班级，本次整组备份后需要 {required_total} 个，请获取更高级订阅',
+                status=403,
+                code='CLASSROOM_LIMIT_EXCEEDED',
+                max_classrooms=max_classrooms,
+                active_classrooms=active_count,
+                requested_new_classrooms=activating_count,
+                required_classrooms=required_total,
+            )
+
+        for item, _, classroom_uuid in validated:
+            classroom = existing.get(classroom_uuid)
+            client_version_value = item.get('base_version')
+            if client_version_value in (None, ''):
+                client_version_value = item.get('cloud_version')
+            client_version = int(client_version_value or 0)
+            if classroom and client_version < classroom.version and not bool(item.get('force')):
+                return _json_error(
+                    f'{classroom.name} 的云端版本更新，请先拉取或选择保留版本',
+                    status=409,
+                    code='GROUP_SYNC_CONFLICT',
+                    classroom_uuid=str(classroom.uuid),
+                    version=classroom.version,
+                )
+
+        results = []
+        with transaction.atomic():
+            group, _ = CloudClassroomGroup.objects.select_for_update().get_or_create(
+                user=request.cloud_user,
+                uuid=group_uuid,
+                defaults={'name': group_name},
+            )
+            for item, _, _ in validated:
+                result = push_classroom_snapshot(request.cloud_user, item)
+                if result.get('conflict'):
+                    raise ValueError(result.get('message') or '班级组备份冲突')
+                results.append({'status': 'ok', **result})
+            group.name = group_name
+            group.classroom_uuids = [str(item[2]) for item in validated]
+            group.version = int(group.version or 0) + 1
+            group.save()
+
+        return _encrypted_json_response({
+            'ok': True,
+            'status': 'success',
+            'group': {
+                'uuid': str(group.uuid),
+                'name': group.name,
+                'version': group.version,
+                'classroom_uuids': group.classroom_uuids,
+            },
+            'results': results,
+        }, session=request.cloud_session)
+    except PermissionError as exc:
+        return _json_error(exc, status=403, code='SUBSCRIPTION_LIMIT')
+    except ValueError as exc:
+        return _json_error(exc, status=400)
+
+
+@require_http_methods(['GET'])
+@require_session
+def sync_pull_group(request, group_uuid):
+    group = CloudClassroomGroup.objects.filter(
+        user=request.cloud_user,
+        uuid=group_uuid,
+    ).first()
+    if not group:
+        return _json_error('班级组不存在', status=404)
+    classrooms = CloudClassroom.objects.filter(
+        user=request.cloud_user,
+        uuid__in=group.classroom_uuids,
+        is_deleted=False,
+    )
+    by_uuid = {str(item.uuid): item for item in classrooms}
+    items = []
+    for classroom_uuid in group.classroom_uuids:
+        classroom = by_uuid.get(str(classroom_uuid))
+        if not classroom:
+            continue
+        items.append({
+            'uuid': str(classroom.uuid),
+            'name': classroom.name,
+            'version': classroom.version,
+            'data': classroom.data_snapshot,
+            'updated_at': classroom.updated_at.isoformat(),
+        })
+    return _encrypted_json_response({
+        'ok': True,
+        'status': 'success',
+        'group': {
+            'uuid': str(group.uuid),
+            'name': group.name,
+            'version': group.version,
+        },
+        'classrooms': items,
+    }, session=request.cloud_session)
+
+
 @require_http_methods(['GET'])
 @require_session
 def sync_pull(request, classroom_uuid):
@@ -507,31 +653,6 @@ def subscription_plans(request):
             'limits': get_tier_limits(name),
         })
     return JsonResponse({'ok': True, 'status': 'success', 'plans': plans})
-
-
-@require_http_methods(['POST'])
-@require_session
-def subscription_redeem(request):
-    try:
-        raw_payload = _json_body(request)
-    except ValueError as exc:
-        return _json_error(exc)
-    try:
-        payload = _decrypt_request_if_needed(request, raw_payload, session=request.cloud_session)
-    except ValueError as exc:
-        return _json_error(exc)
-
-    code = str(payload.get('code') or '').strip()
-    redeem_code = RedeemCode.objects.filter(code=code).first()
-    if not redeem_code or not redeem_code.can_use():
-        return _json_error('兑换码无效或已用完', status=400)
-
-    request.cloud_user.subscription_tier = redeem_code.tier
-    request.cloud_user.subscription_expires_at = redeem_code.expires_at
-    request.cloud_user.save(update_fields=['subscription_tier', 'subscription_expires_at', 'updated_at'])
-    redeem_code.used_count += 1
-    redeem_code.save(update_fields=['used_count'])
-    return _encrypted_json_response({'ok': True, 'status': 'success', **user_payload(request.cloud_user)}, session=request.cloud_session)
 
 
 @require_http_methods(['GET'])

@@ -1054,7 +1054,7 @@ class DesktopBridge:
             return str(result[0]) if result else ""
         return str(result)
 
-    def _show_open_dialog(self):
+    def _show_open_dialog(self, file_types=()):
         if self._window is None:
             raise RuntimeError("桌面窗口尚未准备完成")
 
@@ -1064,7 +1064,7 @@ class DesktopBridge:
             webview.FileDialog.OPEN,
             directory=self._last_import_dir,
             allow_multiple=False,
-            file_types=(),
+            file_types=file_types or (),
         )
 
         if not result:
@@ -1072,6 +1072,25 @@ class DesktopBridge:
         if isinstance(result, (list, tuple)):
             return str(result[0]) if result else ""
         return str(result)
+
+    def select_macos_update_package(self):
+        if sys.platform != "darwin":
+            raise RuntimeError("本地 PKG 更新仅支持 macOS")
+        selected_path = self._show_open_dialog(("macOS 安装包 (*.pkg)",))
+        if not selected_path:
+            return {"status": "cancelled"}
+        source_path = Path(selected_path).expanduser()
+        if source_path.is_symlink() or not source_path.is_file():
+            return {"status": "error", "message": "选择的升级包不存在或不是普通文件"}
+        if source_path.suffix.lower() != ".pkg":
+            return {"status": "error", "message": "请选择 .pkg 格式的 macOS 升级包"}
+        self._last_import_dir = str(source_path.parent)
+        return {
+            "status": "selected",
+            "filename": source_path.name,
+            "path": str(source_path.resolve()),
+            "size": source_path.stat().st_size,
+        }
 
     def save_export(self, export_url, suggested_filename="", accept_mime="", accept_extensions=None):
         with self._save_lock:

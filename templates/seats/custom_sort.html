@@ -1,0 +1,291 @@
+{% extends 'base.html' %}
+
+{% block title %}{% if classroom_group %}自动排序模式{% else %}自定义策略设置{% endif %} - {% if classroom_group %}{{ classroom_group.name }}{% else %}{{ classroom.name }}{% endif %}{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="custom-sort">{% if classroom_group %}自动排序模式{% else %}自定义策略设置{% endif %}</button>
+{% endblock %}
+
+{% block actions %}
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="custom-sort">
+        <div class="ribbon-group">
+            {% if classroom_group %}
+            <a href="{% url 'classroom_group_detail' classroom_group.pk %}" class="btn btn-secondary">返回班级组</a>
+            {% else %}
+            <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回班级</a>
+            {% endif %}
+            <span class="ribbon-group-label">导航</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="custom-sort-page">
+    <header class="custom-sort-hero">
+        <span class="classroom-group-kicker">{% if classroom_group %}自动排序模式{% else %}自定义策略设置{% endif %}</span>
+        <h1>{% if classroom_group %}{{ classroom_group.name }}{% else %}{{ classroom.name }}{% endif %}</h1>
+    </header>
+
+    {% if error_message %}
+    <div class="create-classroom-error" role="alert">{{ error_message }}</div>
+    {% endif %}
+
+    {% if classroom_group %}
+    <div class="group-sort-wizard" data-group-sort-root data-initial-kind="{{ submitted.sort_kind|default:'' }}">
+        <nav class="create-flow-progress" aria-label="排序设置进度">
+            <span class="is-active" data-group-sort-progress="1"><b>1</b>选择方式</span>
+            <i></i>
+            <span data-group-sort-progress="2"><b>2</b>配置排序</span>
+        </nav>
+
+        <section class="create-flow-stage" data-group-sort-step="1">
+            <header class="create-flow-stage-heading">
+                <span>第一步</span>
+                <h2>选择自动排序方式</h2>
+            </header>
+            <div class="create-choice-grid">
+                <button type="button" class="create-choice" data-group-sort-kind="strategy">
+                    <span class="create-choice-icon" aria-hidden="true">
+                        <svg viewBox="0 0 28 28" fill="none"><path d="M5 7h18M5 14h11M5 21h7M20 12v10m-4-4 4 4 4-4"/></svg>
+                    </span>
+                    <span class="create-choice-copy"><strong>按策略继续</strong></span>
+                    <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <button type="button" class="create-choice" data-group-sort-kind="field">
+                    <span class="create-choice-icon" aria-hidden="true">
+                        <svg viewBox="0 0 28 28" fill="none"><path d="M5 7h18M5 14h18M5 21h18M9 4v6m8 1v6m-5 1v6"/></svg>
+                    </span>
+                    <span class="create-choice-copy"><strong>按数值或名称继续</strong></span>
+                    <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+            </div>
+        </section>
+
+        <section class="create-flow-stage" data-group-sort-step="2" hidden>
+            <button type="button" class="create-flow-back" data-group-sort-back>
+                <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m12 5-5 5 5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                返回选择方式
+            </button>
+            <header class="create-flow-stage-heading">
+                <span>第二步</span>
+                <h2 data-group-sort-title>配置排序</h2>
+            </header>
+
+            <form method="post" class="custom-sort-card custom-sort-config" data-group-sort-form="strategy" hidden>
+                {% csrf_token %}
+                <input type="hidden" name="sort_kind" value="strategy">
+                <label>排序策略
+                    <select name="strategy_choice" required>
+                        <optgroup label="内置策略">
+                            <option value="builtin:random">随机排座</option>
+                            <option value="builtin:score_desc">高分优先</option>
+                            <option value="builtin:score_asc">低分优先</option>
+                            <option value="builtin:good_front">优生前排</option>
+                            <option value="builtin:good_back">优生后排</option>
+                            <option value="builtin:score_spread">成绩均衡</option>
+                            <option value="builtin:group_balanced">小组均衡</option>
+                            <option value="builtin:group_mentor">小组优带差</option>
+                        </optgroup>
+                        {% if sort_strategies %}
+                        <optgroup label="已保存策略">
+                            {% for strategy in sort_strategies %}
+                            <option value="saved:{{ strategy.pk }}">{{ strategy.name }} · {{ strategy.get_language_display }}</option>
+                            {% endfor %}
+                        </optgroup>
+                        {% endif %}
+                    </select>
+                </label>
+                <label class="custom-sort-cross-option">
+                    <input type="checkbox" name="cross_classrooms" value="1" checked data-cross-classroom-toggle>
+                    <span>
+                        <strong>允许跨班级</strong>
+                        <small>按全组座位容量重新分配学生。</small>
+                    </span>
+                </label>
+                <label class="custom-sort-cross-mode" data-cross-classroom-mode>
+                    跨班级处理
+                    <select name="cross_classroom_mode">
+                        <option value="ignore_original">不考虑原班级</option>
+                        <option value="prefer_original">原班级优先</option>
+                        <option value="avoid_original">原班级尽力排除</option>
+                    </select>
+                </label>
+                <button type="submit" class="btn btn-primary custom-sort-submit">执行自动排序</button>
+            </form>
+
+            <form method="post" class="custom-sort-card custom-sort-config" data-group-sort-form="field" hidden>
+                {% csrf_token %}
+                <input type="hidden" name="sort_kind" value="field">
+                <label>信息字段
+                    <select name="field" required>
+                        <option value="name">姓名</option>
+                        <option value="student_id">学号</option>
+                        <option value="gender">性别</option>
+                        <option value="score">成绩</option>
+                        {% for key in custom_info_keys %}
+                        <option value="custom:{{ key }}">自定义信息 · {{ key }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+                <label>识别方式
+                    <select name="transform" required>
+                        <option value="auto">自动检测（推荐）</option>
+                        <option value="natural">手动：自然数字</option>
+                        <option value="text">手动：文本</option>
+                        <option value="numeric">手动：纯数字</option>
+                        <option value="pinyin">手动：姓名拼音</option>
+                        <option value="pinyin_initial">手动：姓名首字母</option>
+                    </select>
+                </label>
+                <label>排序方向
+                    <select name="direction" required>
+                        <option value="asc">升序</option>
+                        <option value="desc">降序</option>
+                    </select>
+                </label>
+                <label class="custom-sort-cross-option">
+                    <input type="checkbox" name="cross_classrooms" value="1" checked data-cross-classroom-toggle>
+                    <span>
+                        <strong>允许跨班级</strong>
+                        <small>按全组座位容量重新分配学生。</small>
+                    </span>
+                </label>
+                <label class="custom-sort-cross-mode" data-cross-classroom-mode>
+                    跨班级处理
+                    <select name="cross_classroom_mode">
+                        <option value="ignore_original">不考虑原班级</option>
+                        <option value="prefer_original">原班级优先</option>
+                        <option value="avoid_original">原班级尽力排除</option>
+                    </select>
+                </label>
+                <button type="submit" class="btn btn-primary custom-sort-submit">执行排序</button>
+            </form>
+        </section>
+    </div>
+    {% else %}
+    <div class="custom-sort-grid">
+        <form method="post" class="panel-card custom-sort-card">
+            {% csrf_token %}
+            <input type="hidden" name="sort_kind" value="field">
+            <div>
+                <span class="classroom-group-kicker">按信息排序</span>
+                <h2>选择字段与方向</h2>
+            </div>
+            <label>信息字段
+                <select name="field" required>
+                    <option value="name">姓名</option>
+                    <option value="student_id">学号</option>
+                    <option value="gender">性别</option>
+                    <option value="score">成绩</option>
+                    {% for key in custom_info_keys %}
+                    <option value="custom:{{ key }}">自定义信息 · {{ key }}</option>
+                    {% endfor %}
+                </select>
+            </label>
+            <label>识别方式
+                <select name="transform" required>
+                    <option value="auto">自动检测（推荐）</option>
+                    <option value="natural">手动：自然数字</option>
+                    <option value="text">手动：文本</option>
+                    <option value="numeric">手动：纯数字</option>
+                    <option value="pinyin">手动：姓名拼音</option>
+                    <option value="pinyin_initial">手动：姓名首字母</option>
+                </select>
+            </label>
+            <label>排序方向
+                <select name="direction" required>
+                    <option value="asc">升序</option>
+                    <option value="desc">降序</option>
+                </select>
+            </label>
+            <button type="submit" class="btn btn-primary custom-sort-submit">执行排序</button>
+        </form>
+        <section class="panel-card custom-sort-card">
+            <div>
+                <span class="classroom-group-kicker">Agent 策略</span>
+                <h2>已保存的自定义策略</h2>
+            </div>
+            <div class="custom-sort-strategy-list">
+                {% for strategy in sort_strategies %}
+                <form method="post" class="custom-sort-strategy-item">
+                    {% csrf_token %}
+                    <input type="hidden" name="strategy_id" value="{{ strategy.pk }}">
+                    <div>
+                        <strong>{{ strategy.name }} <small class="custom-sort-language-badge">{{ strategy.get_language_display }}</small></strong>
+                        <span>{{ strategy.description|default:"自定义多字段排序策略" }}</span>
+                    </div>
+                    <button type="submit" class="btn btn-secondary">应用该策略</button>
+                </form>
+                {% empty %}
+                <div class="custom-sort-empty">暂无已保存策略</div>
+                {% endfor %}
+            </div>
+        </section>
+    </div>
+    {% endif %}
+</section>
+{% endblock %}
+
+{% block extra_scripts %}
+{% if classroom_group %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var root = document.querySelector('[data-group-sort-root]');
+    if (!root) return;
+    var steps = Array.from(root.querySelectorAll('[data-group-sort-step]'));
+    var progress = Array.from(root.querySelectorAll('[data-group-sort-progress]'));
+    var forms = Array.from(root.querySelectorAll('[data-group-sort-form]'));
+    var title = root.querySelector('[data-group-sort-title]');
+
+    function showStep(step) {
+        steps.forEach(function (item) {
+            item.hidden = Number(item.dataset.groupSortStep) !== step;
+        });
+        progress.forEach(function (item) {
+            var itemStep = Number(item.dataset.groupSortProgress);
+            item.classList.toggle('is-active', itemStep === step);
+            item.classList.toggle('is-complete', itemStep < step);
+        });
+    }
+
+    function showKind(kind) {
+        forms.forEach(function (form) {
+            form.hidden = form.dataset.groupSortForm !== kind;
+        });
+        if (title) {
+            title.textContent = kind === 'strategy' ? '选择排序策略' : '设置数值或名称排序';
+        }
+        showStep(2);
+    }
+
+    root.querySelectorAll('[data-group-sort-kind]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            showKind(button.dataset.groupSortKind);
+        });
+    });
+    var backButton = root.querySelector('[data-group-sort-back]');
+    if (backButton) backButton.addEventListener('click', function () { showStep(1); });
+
+    var initialKind = root.dataset.initialKind;
+    if (initialKind === 'strategy' || initialKind === 'automatic') showKind('strategy');
+    else if (initialKind === 'field') showKind('field');
+    else showStep(1);
+
+    root.querySelectorAll('[data-cross-classroom-toggle]').forEach(function (toggle) {
+        var form = toggle.closest('form');
+        var modeField = form ? form.querySelector('[data-cross-classroom-mode]') : null;
+        var modeSelect = modeField ? modeField.querySelector('select') : null;
+        function syncCrossClassroomMode() {
+            if (!modeField || !modeSelect) return;
+            modeField.hidden = !toggle.checked;
+            modeSelect.disabled = !toggle.checked;
+        }
+        toggle.addEventListener('change', syncCrossClassroomMode);
+        syncCrossClassroomMode();
+    });
+});
+</script>
+{% endif %}
+{% endblock %}

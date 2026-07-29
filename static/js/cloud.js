@@ -416,14 +416,6 @@ window.CloudManager = (function () {
         return fetchJSON('/cloud/subscription/plans');
     }
 
-    async function redeemCode(code) {
-        return fetchJSON('/cloud/subscription/redeem', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ code: code }),
-        });
-    }
-
     async function getPurchaseUrl(tier) {
         const q = tier ? '?tier=' + encodeURIComponent(tier) : '';
         return fetchJSON('/cloud/subscription/purchase-url' + q);
@@ -478,7 +470,6 @@ window.CloudManager = (function () {
         restoreSnapshot,
         deleteSnapshot,
         getSubscriptionPlans,
-        redeemCode,
         getPurchaseUrl,
         openExternalUrl,
         setCloudServerUrl,

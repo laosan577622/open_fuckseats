@@ -19,15 +19,28 @@ from seats.constraints import (
 )
 from seats.models import (
     Classroom,
+    ClassroomGroup,
+    ClassroomGroupStudent,
     ClassroomHistoryEntry,
     LayoutSnapshot,
     Seat,
     SeatCellType,
     SeatConstraint,
     SeatGroup,
+    SyncMeta,
     Student,
     StudentTag,
     StudentTagMembership,
+    SortStrategy,
+)
+from seats.sorting import (
+    PYTHON_SORT_EXAMPLE,
+    definition_for_field,
+    normalize_custom_data,
+    normalize_python_sort_code,
+    normalize_sort_definition,
+    sort_students,
+    sort_students_with_python,
 )
 from seats import views as legacy_views
 from .registry import ToolResult, registry
@@ -43,6 +56,7 @@ from .serializers import (
     safe_int,
     seating_analysis,
     serialize_classroom,
+    serialize_classroom_group,
     serialize_constraints_for_classroom,
     serialize_group,
     serialize_groups,
@@ -150,12 +164,14 @@ def _invoke_export_view(ctx, view_func, *, query=None):
     }
 
 
-def _affected(description='', *, students=None, groups=None):
+def _affected(description='', *, students=None, groups=None, classroom_ids=None):
     data = {'description': description}
     if students:
         data['students'] = students
     if groups:
         data['groups'] = groups
+    if classroom_ids:
+        data['classroom_ids'] = [int(item) for item in classroom_ids]
     return data
 
 
@@ -175,6 +191,7 @@ def _student_payload(arguments, *, require_name=True):
         'student_id': str(arguments.get('student_id') or '').strip() or None,
         'gender': gender,
         'score': score,
+        'custom_data': normalize_custom_data(arguments.get('custom_data')),
     }
 
 
@@ -341,6 +358,434 @@ def rename_classroom_tool(ctx):
 
 
 @registry.register(
+    name='list_classroom_groups',
+    description='列出班级组及组内班级。',
+    parameters=_schema(),
+    category='classroom_group',
+    read_only=True,
+    requires_classroom=False,
+)
+def list_classroom_groups_tool(ctx):
+    groups = ClassroomGroup.objects.prefetch_related('classrooms').all()
+    return {
+        'items': [serialize_classroom_group(item) for item in groups],
+        'total': groups.count(),
+    }
+
+
+@registry.register(
+    name='create_classroom_group',
+    description='创建班级组。此操作会修改数据，请先向用户口头确认。',
+    parameters=_schema({'name': _string('班级组名称')}, ['name']),
+    category='classroom_group',
+    read_only=False,
+    requires_classroom=False,
+)
+def create_classroom_group_tool(ctx):
+    name = str(ctx.arguments.get('name') or '').strip()
+    if not name:
+        raise ValueError('班级组名称不能为空')
+    group = ClassroomGroup.objects.create(name=name, sort_order=ClassroomGroup.objects.count())
+    return ToolResult(
+        result={'classroom_group': serialize_classroom_group(group)},
+        affected=_affected(f'已创建班级组：{name}'),
+    )
+
+
+@registry.register(
+    name='update_classroom_group',
+    description='重命名班级组或调整排序。',
+    parameters=_schema({
+        'classroom_group_id': _int('班级组 ID', 1),
+        'name': _string('新名称'),
+        'sort_order': _int('排序', 0),
+    }, ['classroom_group_id']),
+    category='classroom_group',
+    read_only=False,
+    requires_classroom=False,
+)
+def update_classroom_group_tool(ctx):
+    group = ClassroomGroup.objects.filter(pk=safe_int(ctx.arguments.get('classroom_group_id'))).first()
+    if not group:
+        raise ValueError('班级组不存在')
+    update_fields = ['updated_at']
+    if 'name' in ctx.arguments:
+        name = str(ctx.arguments.get('name') or '').strip()
+        if not name:
+            raise ValueError('班级组名称不能为空')
+        group.name = name
+        update_fields.append('name')
+    if 'sort_order' in ctx.arguments:
+        group.sort_order = max(0, safe_int(ctx.arguments.get('sort_order')))
+        update_fields.append('sort_order')
+    group.save(update_fields=update_fields)
+    return ToolResult(
+        result={'classroom_group': serialize_classroom_group(group)},
+        affected=_affected(f'已更新班级组：{group.name}', classroom_ids=list(group.classrooms.values_list('pk', flat=True))),
+    )
+
+
+@registry.register(
+    name='delete_classroom_group',
+    description='删除班级组，默认保留组内班级并将其移到未分组。此操作会修改数据，请先向用户口头确认。',
+    parameters=_schema({
+        'classroom_group_id': _int('班级组 ID', 1),
+        'delete_classrooms': _bool('是否同时删除组内班级，默认 false'),
+    }, ['classroom_group_id']),
+    category='classroom_group',
+    read_only=False,
+    requires_classroom=False,
+    danger_level='dangerous',
+)
+def delete_classroom_group_tool(ctx):
+    group = ClassroomGroup.objects.filter(pk=safe_int(ctx.arguments.get('classroom_group_id'))).first()
+    if not group:
+        raise ValueError('班级组不存在')
+    classroom_ids = list(group.classrooms.values_list('pk', flat=True))
+    name = group.name
+    with legacy_views.suspend_sync_version_bump(), transaction.atomic():
+        if parse_bool(ctx.arguments.get('delete_classrooms'), default=False):
+            group.classrooms.update(classroom_group=None, group_order=0)
+            SyncMeta.objects.filter(classroom_id__in=classroom_ids).delete()
+            Classroom.objects.filter(pk__in=classroom_ids).delete()
+        else:
+            group.classrooms.update(classroom_group=None, group_order=0)
+        group.delete()
+    return ToolResult(
+        result={'deleted': True, 'name': name, 'classroom_ids': classroom_ids},
+        affected=_affected(f'已删除班级组：{name}', classroom_ids=classroom_ids),
+    )
+
+
+@registry.register(
+    name='set_classroom_group_members',
+    description='把多个现有班级加入指定班级组，也可传空数组清空班级组成员。',
+    parameters=_schema({
+        'classroom_group_id': _int('班级组 ID', 1),
+        'classroom_ids': _array(_int('班级 ID', 1), '班级 ID 列表'),
+    }, ['classroom_group_id', 'classroom_ids']),
+    category='classroom_group',
+    read_only=False,
+    requires_classroom=False,
+)
+def set_classroom_group_members_tool(ctx):
+    group = ClassroomGroup.objects.filter(pk=safe_int(ctx.arguments.get('classroom_group_id'))).first()
+    if not group:
+        raise ValueError('班级组不存在')
+    ids = [int(item) for item in (ctx.arguments.get('classroom_ids') or [])]
+    classrooms = list(Classroom.objects.filter(pk__in=ids).order_by('pk'))
+    if len(classrooms) != len(set(ids)):
+        raise ValueError('部分班级不存在')
+    previous_ids = list(group.classrooms.values_list('pk', flat=True))
+    with transaction.atomic():
+        group.classrooms.exclude(pk__in=ids).update(classroom_group=None, group_order=0)
+        for index, classroom in enumerate(classrooms):
+            classroom.classroom_group = group
+            classroom.group_order = index
+            classroom.save(update_fields=['classroom_group', 'group_order'])
+    changed_ids = list(dict.fromkeys(previous_ids + ids))
+    return ToolResult(
+        result={'classroom_group': serialize_classroom_group(group)},
+        affected=_affected('已更新班级组成员', classroom_ids=changed_ids),
+    )
+
+
+@registry.register(
+    name='auto_sort_classroom_group',
+    description='调用现有班级排座与自定义排序能力，对整个班级组执行内置策略、字段排序或已保存策略；支持跨班级及原班级偏好。',
+    parameters=_schema({
+        'classroom_group_id': _int('班级组 ID', 1),
+        'sort_kind': {
+            'type': 'string',
+            'enum': ['builtin', 'field', 'strategy'],
+            'description': '排序类型，默认 builtin',
+        },
+        'method': {
+            'type': 'string',
+            'enum': sorted(legacy_views.GROUP_AUTO_ARRANGEMENT_METHODS),
+            'description': '内置排座策略',
+        },
+        'field': _string('字段排序使用的字段，如 name、student_id、score 或 custom:字段名'),
+        'direction': {'type': 'string', 'enum': ['asc', 'desc']},
+        'transform': {
+            'type': 'string',
+            'enum': ['auto', 'text', 'natural', 'numeric', 'pinyin', 'pinyin_initial'],
+        },
+        'strategy_id': _int('已保存班级组排序策略 ID', 1),
+        'cross_classrooms': _bool('是否允许跨班级重新分配学生'),
+        'cross_classroom_mode': {
+            'type': 'string',
+            'enum': ['ignore_original', 'prefer_original', 'avoid_original'],
+            'description': '跨班级时不考虑原班级、原班级优先或原班级尽力排除',
+        },
+    }, ['classroom_group_id']),
+    category='classroom_group',
+    read_only=False,
+    requires_classroom=False,
+    danger_level='dangerous',
+)
+def auto_sort_classroom_group_tool(ctx):
+    classroom_group = ClassroomGroup.objects.filter(
+        pk=safe_int(ctx.arguments.get('classroom_group_id'))
+    ).first()
+    if not classroom_group:
+        raise ValueError('班级组不存在')
+
+    classrooms = classroom_group.classrooms.all().order_by(
+        'group_order',
+        'created_at',
+        'pk',
+    )
+    if not classrooms.exists():
+        raise ValueError('班级组内没有可排序的班级')
+
+    sort_kind = str(ctx.arguments.get('sort_kind') or 'builtin').strip().lower()
+    cross_classrooms = parse_bool(
+        ctx.arguments.get('cross_classrooms'),
+        default=False,
+    )
+    cross_classroom_mode = legacy_views._normalize_group_cross_classroom_mode(
+        ctx.arguments.get('cross_classroom_mode')
+        if cross_classrooms
+        else 'ignore_original'
+    )
+    request = _tool_request(ctx)
+
+    if sort_kind == 'builtin':
+        method = str(ctx.arguments.get('method') or 'random').strip()
+        legacy_views._apply_group_auto_arrangement(
+            request,
+            classroom_group,
+            method,
+            cross_classrooms=cross_classrooms,
+            cross_classroom_mode=cross_classroom_mode,
+        )
+        applied = {'sort_kind': sort_kind, 'method': method}
+    elif sort_kind == 'field':
+        field = str(ctx.arguments.get('field') or 'name').strip()
+        direction = str(ctx.arguments.get('direction') or 'asc').strip()
+        transform = str(ctx.arguments.get('transform') or 'auto').strip()
+        definition = definition_for_field(field, direction, transform)
+        legacy_views._apply_custom_sort_definition(
+            request,
+            classrooms,
+            definition,
+            scope_name='classroom_group',
+            cross_classrooms=cross_classrooms,
+            cross_classroom_mode=cross_classroom_mode,
+            fill_classrooms=True,
+        )
+        applied = {
+            'sort_kind': sort_kind,
+            'field': field,
+            'direction': direction,
+            'transform': transform,
+        }
+    elif sort_kind == 'strategy':
+        strategy = classroom_group.sort_strategies.filter(
+            pk=safe_int(ctx.arguments.get('strategy_id'))
+        ).first()
+        if not strategy:
+            raise ValueError('班级组排序策略不存在')
+        definition = (
+            None
+            if strategy.language == SortStrategy.LANGUAGE_PYTHON
+            else normalize_sort_definition(strategy.definition)
+        )
+        python_code = (
+            normalize_python_sort_code(strategy.python_code)
+            if strategy.language == SortStrategy.LANGUAGE_PYTHON
+            else ''
+        )
+        legacy_views._apply_custom_sort_definition(
+            request,
+            classrooms,
+            definition,
+            scope_name='classroom_group',
+            strategy=strategy,
+            python_code=python_code,
+            cross_classrooms=cross_classrooms,
+            cross_classroom_mode=cross_classroom_mode,
+        )
+        applied = {
+            'sort_kind': sort_kind,
+            'strategy_id': strategy.pk,
+            'strategy_name': strategy.name,
+        }
+    else:
+        raise ValueError('sort_kind 只能是 builtin、field 或 strategy')
+
+    classroom_ids = list(classrooms.values_list('pk', flat=True))
+    return ToolResult(
+        result={
+            'classroom_group': serialize_classroom_group(classroom_group),
+            'cross_classrooms': cross_classrooms,
+            'cross_classroom_mode': cross_classroom_mode,
+            **applied,
+        },
+        affected=_affected(
+            f'已完成班级组自动排序：{classroom_group.name}',
+            classroom_ids=classroom_ids,
+        ),
+    )
+
+
+@registry.register(
+    name='create_group_classrooms_batch',
+    description='在班级组内批量创建班级，可快速生成大组、复制现有布局或创建完全自定义空白布局。',
+    parameters=_schema({
+        'classroom_group_id': _int('班级组 ID', 1),
+        'classrooms': _array(_schema({
+            'name': _string('班级名称'),
+            'mode': {'type': 'string', 'enum': ['quick_groups', 'copy_layout', 'custom']},
+            'seat_rows': _int('快速大组座位行数', 1),
+            'large_group_count': _int('大组数量', 1),
+            'group_cols': _int('单大组列数', 1),
+            'source_classroom_id': _int('复制布局来源班级 ID', 1),
+            'rows': _int('完全自定义总行数', 1),
+            'cols': _int('完全自定义总列数', 1),
+        }, ['name'], allow_extra=True), '班级创建参数'),
+    }, ['classroom_group_id', 'classrooms']),
+    category='classroom_group',
+    read_only=False,
+    requires_classroom=False,
+    danger_level='dangerous',
+)
+def create_group_classrooms_batch_tool(ctx):
+    group = ClassroomGroup.objects.filter(pk=safe_int(ctx.arguments.get('classroom_group_id'))).first()
+    if not group:
+        raise ValueError('班级组不存在')
+    items = ctx.arguments.get('classrooms') or []
+    if not isinstance(items, list) or not items:
+        raise ValueError('classrooms 必须是非空数组')
+    if len(items) > 100:
+        raise ValueError('一次最多创建 100 个班级')
+    created = []
+    with transaction.atomic():
+        start_order = group.classrooms.count()
+        for index, item in enumerate(items):
+            if not isinstance(item, dict):
+                raise ValueError('班级创建参数格式错误')
+            classroom = legacy_views._create_classroom_from_payload(
+                name=item.get('name'),
+                mode=item.get('mode') or 'quick_groups',
+                classroom_group=group,
+                payload=item,
+            )
+            classroom.group_order = start_order + index
+            classroom.save(update_fields=['group_order'])
+            created.append(classroom)
+    ids = [item.pk for item in created]
+    return ToolResult(
+        result={'created': [serialize_classroom(item) for item in created], 'count': len(created)},
+        affected=_affected(f'已批量创建 {len(created)} 个班级', classroom_ids=ids),
+    )
+
+
+@registry.register(
+    name='add_group_students_batch',
+    description='为班级组批量导入学生。班级可省略，省略后学生进入组内待分配列表；支持学号、成绩和自定义信息。',
+    parameters=_schema({
+        'classroom_group_id': _int('班级组 ID', 1),
+        'students': _array(_schema({
+            'classroom': _string('组内班级名称或 ID'),
+            'name': _string('姓名'),
+            'student_id': _string('学号'),
+            'gender': {'type': 'string', 'enum': ['M', 'F', '']},
+            'score': _number('成绩'),
+            'custom_data': _schema({}, allow_extra=True),
+        }, ['name'], allow_extra=True), '学生数组'),
+    }, ['classroom_group_id', 'students']),
+    category='classroom_group',
+    read_only=False,
+    requires_classroom=False,
+    danger_level='dangerous',
+)
+def add_group_students_batch_tool(ctx):
+    group = ClassroomGroup.objects.filter(pk=safe_int(ctx.arguments.get('classroom_group_id'))).first()
+    if not group:
+        raise ValueError('班级组不存在')
+    items = ctx.arguments.get('students') or []
+    if not isinstance(items, list) or not items:
+        raise ValueError('students 必须是非空数组')
+    if len(items) > 1000:
+        raise ValueError('一次最多导入 1000 名学生')
+    classrooms = list(group.classrooms.all())
+    by_id = {str(item.pk): item for item in classrooms}
+    by_name = {}
+    for item in classrooms:
+        key = item.name.casefold()
+        if key in by_name:
+            by_name[key] = None
+        else:
+            by_name[key] = item
+    created = []
+    unassigned = []
+    affected_ids = []
+    with transaction.atomic():
+        for item in items:
+            if not isinstance(item, dict):
+                raise ValueError('学生数据格式错误')
+            classroom_value = str(item.get('classroom') or '').strip()
+            payload = _student_payload(item)
+            if not classroom_value:
+                unassigned.append(ClassroomGroupStudent.objects.create(
+                    classroom_group=group,
+                    **payload,
+                ))
+                continue
+            classroom = by_id.get(classroom_value)
+            if classroom is None:
+                classroom_key = classroom_value.casefold()
+                if classroom_key in by_name and by_name[classroom_key] is None:
+                    raise ValueError(f'班级名称重复：{classroom_value}')
+                classroom = by_name.get(classroom_key)
+            if classroom is None:
+                if len(classrooms) >= 100:
+                    raise ValueError('一个班级组最多自动创建 100 个班级')
+                classroom = legacy_views._create_classroom_from_payload(
+                    name=classroom_value,
+                    mode='quick_groups',
+                    classroom_group=group,
+                    payload={
+                        'seat_rows': 6,
+                        'large_group_count': 2,
+                        'group_cols': 4,
+                    },
+                )
+                classroom.group_order = len(classrooms)
+                classroom.save(update_fields=['group_order'])
+                classrooms.append(classroom)
+                by_id[str(classroom.pk)] = classroom
+                by_name[classroom.name.casefold()] = classroom
+            created.append(Student.objects.create(classroom=classroom, **payload))
+            if classroom.pk not in affected_ids:
+                affected_ids.append(classroom.pk)
+    return ToolResult(
+        result={
+            'created': [serialize_student(item, item.classroom) for item in created],
+            'unassigned': [
+                {
+                    'id': item.pk,
+                    'name': item.name,
+                    'student_id': item.student_id or '',
+                    'gender': item.gender or '',
+                    'score': item.display_score,
+                    'custom_data': item.custom_data,
+                }
+                for item in unassigned
+            ],
+            'count': len(created) + len(unassigned),
+            'unassigned_count': len(unassigned),
+        },
+        affected=_affected(
+            f'已为班级组批量导入 {len(created) + len(unassigned)} 名学生',
+            classroom_ids=affected_ids,
+        ),
+    )
+
+
+@registry.register(
     name='set_podium_guardian',
     description='设置讲台左护法和右护法学生，可传学生姓名、学号或 ID；传空值表示清空对应位置。',
     parameters=_with_classroom({
@@ -429,6 +874,7 @@ def get_student_tool(ctx):
         'student_id': _string('学号'),
         'gender': {'type': 'string', 'enum': ['M', 'F', '']},
         'score': _number('成绩'),
+        'custom_data': _schema({}, allow_extra=True),
         'tag_ids': _array(_int(), '标签 ID 列表'),
         'tag_names': _array(_string(), '标签名称列表'),
     }, ['name']),
@@ -456,6 +902,7 @@ def add_student_tool(ctx):
             'student_id': _string('学号'),
             'gender': {'type': 'string', 'enum': ['M', 'F', '']},
             'score': _number('成绩'),
+            'custom_data': _schema({}, allow_extra=True),
         }, ['name']), '学生数组'),
     }, ['students']),
     category='student',
@@ -497,6 +944,7 @@ def add_students_batch_tool(ctx):
         'student_id': _string('学号'),
         'gender': {'type': 'string', 'enum': ['M', 'F', '']},
         'score': _number('成绩'),
+        'custom_data': _schema({}, allow_extra=True),
         'tag_ids': _array(_int(), '标签 ID 列表'),
         'tag_names': _array(_string(), '标签名称列表'),
     }, ['student', 'name']),
@@ -1234,7 +1682,7 @@ def export_pptx_tool(ctx):
     return _invoke_export_view(ctx, legacy_views.export_students_pptx, query={'theme': ctx.arguments.get('theme') or 'classic'})
 
 
-@registry.register(name='import_students_from_excel', description='从 Excel base64 或 students 数组导入学生。注意：此操作会大规模修改数据，请务必先向用户口头确认并获得明确同意后再执行。', parameters=_with_classroom({'file_base64': _string('Excel 文件 base64'), 'students': _array(_schema({'name': _string(), 'student_id': _string(), 'gender': _string(), 'score': _number()}, ['name'])), 'mode': {'type': 'string', 'enum': ['append', 'replace']} }), category='data', read_only=False, danger_level='dangerous')
+@registry.register(name='import_students_from_excel', description='从 Excel base64 或 students 数组导入学生，支持学号、班级和自定义信息。注意：此操作会大规模修改数据，请务必先向用户口头确认并获得明确同意后再执行。', parameters=_with_classroom({'file_base64': _string('Excel 文件 base64'), 'students': _array(_schema({'name': _string(), 'student_id': _string(), 'gender': _string(), 'score': _number(), 'custom_data': _schema({}, allow_extra=True)}, ['name'])), 'mode': {'type': 'string', 'enum': ['append', 'replace']} }), category='data', read_only=False, danger_level='dangerous')
 def import_students_from_excel_tool(ctx):
     if ctx.arguments.get('students'):
         if ctx.arguments.get('mode') == 'replace':
@@ -1259,18 +1707,35 @@ def import_students_from_excel_tool(ctx):
         return default
     name_idx = find_header(['姓名', 'name', 'Name'], 0)
     sid_idx = find_header(['学号', 'student_id', 'Student ID'])
+    classroom_idx = find_header(['班级', 'classroom', 'Class'])
     gender_idx = find_header(['性别', 'gender'])
     score_idx = find_header(['成绩', 'score'])
+    standard_indexes = {
+        item for item in (name_idx, sid_idx, classroom_idx, gender_idx, score_idx)
+        if item is not None
+    }
+    custom_indexes = [
+        index for index, header in enumerate(headers)
+        if index not in standard_indexes and header
+    ]
     students = []
     for row in rows[1:]:
         name = str(row[name_idx] or '').strip() if name_idx is not None and name_idx < len(row) else ''
         if not name:
             continue
+        custom_data = {
+            headers[index]: row[index]
+            for index in custom_indexes
+            if index < len(row) and row[index] not in (None, '')
+        }
+        if classroom_idx is not None and classroom_idx < len(row) and row[classroom_idx] not in (None, ''):
+            custom_data['班级'] = row[classroom_idx]
         students.append({
             'name': name,
             'student_id': str(row[sid_idx] or '').strip() if sid_idx is not None and sid_idx < len(row) else '',
             'gender': str(row[gender_idx] or '').strip() if gender_idx is not None and gender_idx < len(row) else '',
             'score': row[score_idx] if score_idx is not None and score_idx < len(row) else 0,
+            'custom_data': normalize_custom_data(custom_data),
         })
     return registry.execute('add_students_batch', classroom_id=ctx.classroom.pk, arguments={'students': students}, request=_tool_request(ctx))
 
@@ -1342,6 +1807,371 @@ def batch_operation_tool(ctx):
 @registry.register(name='rearrange_by_description', description='按自然语言描述排座，会选择最接近的内置或自定义排座流程执行。注意：此操作会大规模修改数据，请务必先向用户口头确认并获得明确同意后再执行。', parameters=_with_classroom({'description': _string('排座描述')}, ['description']), category='advanced', read_only=False, danger_level='dangerous')
 def rearrange_by_description_tool(ctx):
     return arrange_with_custom_rules_tool(ctx)
+
+
+def _serialize_sort_strategy(strategy):
+    return {
+        'id': strategy.pk,
+        'name': strategy.name,
+        'description': strategy.description,
+        'language': strategy.language,
+        'definition': strategy.definition,
+        'python_code': strategy.python_code,
+        'classroom_id': strategy.classroom_id,
+        'classroom_group_id': strategy.classroom_group_id,
+        'created_at': strategy.created_at.isoformat() if strategy.created_at else '',
+        'updated_at': strategy.updated_at.isoformat() if strategy.updated_at else '',
+    }
+
+
+def _strategy_queryset_for_classroom(classroom):
+    query = models.Q(classroom=classroom)
+    if classroom.classroom_group_id:
+        query |= models.Q(classroom_group=classroom.classroom_group)
+    return SortStrategy.objects.filter(query)
+
+
+@registry.register(
+    name='list_sort_strategies',
+    description='列出当前班级由用户或 Agent 编写的声明式或 Python 排序方式。',
+    parameters=_with_classroom(),
+    category='sorting',
+    read_only=True,
+)
+def list_sort_strategies_tool(ctx):
+    items = _strategy_queryset_for_classroom(ctx.classroom).distinct()
+    return {'items': [_serialize_sort_strategy(item) for item in items], 'total': items.count()}
+
+
+@registry.register(
+    name='create_sort_strategy',
+    description='为当前班级编写并保存新的排序方式。规则是可验证的声明式 JSON，不执行任意代码。',
+    parameters=_with_classroom({
+        'name': _string('排序方式名称'),
+        'description': _string('说明'),
+        'definition': _schema({}, allow_extra=True),
+        'save_to_group': _bool('当前班级属于班级组时，是否保存为组内共享方式'),
+    }, ['name', 'definition']),
+    category='sorting',
+    read_only=False,
+)
+def create_sort_strategy_tool(ctx):
+    name = str(ctx.arguments.get('name') or '').strip()
+    if not name:
+        raise ValueError('排序方式名称不能为空')
+    definition = normalize_sort_definition(ctx.arguments.get('definition'))
+    save_to_group = parse_bool(ctx.arguments.get('save_to_group'), default=False)
+    strategy = SortStrategy.objects.create(
+        classroom=None if save_to_group and ctx.classroom.classroom_group_id else ctx.classroom,
+        classroom_group=ctx.classroom.classroom_group if save_to_group else None,
+        name=name,
+        description=str(ctx.arguments.get('description') or '').strip()[:240],
+        language=SortStrategy.LANGUAGE_DECLARATIVE,
+        definition=definition,
+        python_code='',
+    )
+    return ToolResult(
+        result={'strategy': _serialize_sort_strategy(strategy)},
+        affected=_affected(f'已创建排序方式：{name}', classroom_ids=[ctx.classroom.pk]),
+    )
+
+
+@registry.register(
+    name='update_sort_strategy',
+    description='更新已有声明式排序方式。',
+    parameters=_with_classroom({
+        'strategy_id': _int('排序方式 ID', 1),
+        'name': _string('新名称'),
+        'description': _string('说明'),
+        'definition': _schema({}, allow_extra=True),
+    }, ['strategy_id']),
+    category='sorting',
+    read_only=False,
+)
+def update_sort_strategy_tool(ctx):
+    strategy = _strategy_queryset_for_classroom(ctx.classroom).filter(
+        pk=safe_int(ctx.arguments.get('strategy_id')),
+    ).first()
+    if not strategy:
+        raise ValueError('排序方式不存在')
+    if strategy.language != SortStrategy.LANGUAGE_DECLARATIVE:
+        raise ValueError('该策略使用 Python，请调用 update_python_sort_strategy')
+    fields = ['updated_at']
+    if 'name' in ctx.arguments:
+        strategy.name = str(ctx.arguments.get('name') or '').strip()
+        if not strategy.name:
+            raise ValueError('排序方式名称不能为空')
+        fields.append('name')
+    if 'description' in ctx.arguments:
+        strategy.description = str(ctx.arguments.get('description') or '').strip()[:240]
+        fields.append('description')
+    if 'definition' in ctx.arguments:
+        strategy.definition = normalize_sort_definition(ctx.arguments.get('definition'))
+        fields.append('definition')
+    strategy.save(update_fields=fields)
+    return ToolResult(
+        result={'strategy': _serialize_sort_strategy(strategy)},
+        affected=_affected(f'已更新排序方式：{strategy.name}', classroom_ids=[ctx.classroom.pk]),
+    )
+
+
+@registry.register(
+    name='create_python_sort_strategy',
+    description=(
+        '使用 Python 为当前班级编写并保存新的排序算法。代码必须只定义 '
+        'sort_students(students)，输入是学生字典列表，返回包含全部学生的排序后列表或 ID 列表。'
+    ),
+    parameters=_with_classroom({
+        'name': _string('排序方式名称'),
+        'description': _string('说明'),
+        'python_code': _string(
+            'Python 源码。学生字段包括 id、name、student_id、gender、score、classroom、group、custom_data、seat。'
+        ),
+        'save_to_group': _bool('当前班级属于班级组时，是否保存为组内共享方式'),
+    }, ['name', 'python_code']),
+    category='sorting',
+    read_only=False,
+)
+def create_python_sort_strategy_tool(ctx):
+    name = str(ctx.arguments.get('name') or '').strip()
+    if not name:
+        raise ValueError('排序方式名称不能为空')
+    python_code = normalize_python_sort_code(ctx.arguments.get('python_code'))
+    save_to_group = parse_bool(ctx.arguments.get('save_to_group'), default=False)
+    strategy = SortStrategy.objects.create(
+        classroom=None if save_to_group and ctx.classroom.classroom_group_id else ctx.classroom,
+        classroom_group=ctx.classroom.classroom_group if save_to_group else None,
+        name=name,
+        description=str(ctx.arguments.get('description') or '').strip()[:240],
+        language=SortStrategy.LANGUAGE_PYTHON,
+        definition={},
+        python_code=python_code,
+    )
+    return ToolResult(
+        result={
+            'strategy': _serialize_sort_strategy(strategy),
+            'contract': {
+                'function': 'sort_students(students)',
+                'example': PYTHON_SORT_EXAMPLE,
+            },
+        },
+        affected=_affected(f'已创建 Python 排序方式：{name}', classroom_ids=[ctx.classroom.pk]),
+    )
+
+
+@registry.register(
+    name='update_python_sort_strategy',
+    description='更新已有 Python 排序算法。',
+    parameters=_with_classroom({
+        'strategy_id': _int('排序方式 ID', 1),
+        'name': _string('新名称'),
+        'description': _string('说明'),
+        'python_code': _string('新的 Python 排序源码'),
+    }, ['strategy_id']),
+    category='sorting',
+    read_only=False,
+)
+def update_python_sort_strategy_tool(ctx):
+    strategy = _strategy_queryset_for_classroom(ctx.classroom).filter(
+        pk=safe_int(ctx.arguments.get('strategy_id')),
+    ).first()
+    if not strategy:
+        raise ValueError('排序方式不存在')
+    if strategy.language != SortStrategy.LANGUAGE_PYTHON:
+        raise ValueError('该策略不是 Python 排序策略')
+    fields = ['updated_at']
+    if 'name' in ctx.arguments:
+        strategy.name = str(ctx.arguments.get('name') or '').strip()
+        if not strategy.name:
+            raise ValueError('排序方式名称不能为空')
+        fields.append('name')
+    if 'description' in ctx.arguments:
+        strategy.description = str(ctx.arguments.get('description') or '').strip()[:240]
+        fields.append('description')
+    if 'python_code' in ctx.arguments:
+        strategy.python_code = normalize_python_sort_code(ctx.arguments.get('python_code'))
+        fields.append('python_code')
+    strategy.save(update_fields=fields)
+    return ToolResult(
+        result={'strategy': _serialize_sort_strategy(strategy)},
+        affected=_affected(f'已更新 Python 排序方式：{strategy.name}', classroom_ids=[ctx.classroom.pk]),
+    )
+
+
+@registry.register(
+    name='delete_sort_strategy',
+    description='删除自定义排序方式，不改变当前座位。',
+    parameters=_with_classroom({'strategy_id': _int('排序方式 ID', 1)}, ['strategy_id']),
+    category='sorting',
+    read_only=False,
+)
+def delete_sort_strategy_tool(ctx):
+    strategy = _strategy_queryset_for_classroom(ctx.classroom).filter(
+        pk=safe_int(ctx.arguments.get('strategy_id')),
+    ).first()
+    if not strategy:
+        raise ValueError('排序方式不存在')
+    name = strategy.name
+    strategy.delete()
+    return ToolResult(
+        result={'deleted': True, 'name': name},
+        affected=_affected(f'已删除排序方式：{name}', classroom_ids=[ctx.classroom.pk]),
+    )
+
+
+def _ordered_students_for_custom_sort(classroom, *, definition=None, python_code=''):
+    queryset = classroom.students.select_related('classroom', 'assigned_seat__group').all()
+    if python_code:
+        return sort_students_with_python(queryset, python_code)
+    return sort_students(queryset, definition)
+
+
+def _apply_sort_definition(ctx, definition=None, *, python_code=''):
+    language = SortStrategy.LANGUAGE_PYTHON if python_code else SortStrategy.LANGUAGE_DECLARATIVE
+    if python_code:
+        python_code = normalize_python_sort_code(python_code)
+        definition = None
+    else:
+        definition = normalize_sort_definition(definition)
+    classroom = ctx.classroom
+    before_state = legacy_views._capture_history_state(classroom)
+    students = _ordered_students_for_custom_sort(
+        classroom,
+        definition=definition,
+        python_code=python_code,
+    )
+    seats = list(classroom.seats.filter(cell_type=SeatCellType.SEAT).order_by('row', 'col'))
+    if len(seats) < len(students):
+        raise ValueError('可用座位不足，无法排座')
+    with transaction.atomic():
+        legacy_views._arrange_standard(classroom, students, seats, 'sort_strategy')
+        violations = legacy_views._stabilize_layout_with_rules(classroom, _tool_request(ctx))
+        if violations:
+            raise ValueError(f'排座失败：{legacy_views._format_issues_preview(violations)}')
+        hard_issues = legacy_views._layout_hard_issues(classroom)
+        if hard_issues:
+            raise ValueError(f'约束未满足：{legacy_views._format_issues_preview(hard_issues)}')
+    legacy_views._push_snapshot_action(
+        _tool_request(ctx),
+        classroom,
+        before_state,
+        'open_api_sort_strategy',
+        extra={
+            'definition': definition,
+            'language': language,
+            'python_code': python_code if python_code else '',
+        },
+    )
+    return {
+        'classroom': serialize_classroom(classroom),
+        'language': language,
+        'definition': definition,
+        'python_code': python_code if python_code else '',
+        'student_order': [serialize_student(item, classroom) for item in students],
+    }
+
+
+@registry.register(
+    name='preview_sort_definition',
+    description='预览声明式排序规则的学生顺序，不修改座位。',
+    parameters=_with_classroom({'definition': _schema({}, allow_extra=True)}, ['definition']),
+    category='sorting',
+    read_only=True,
+)
+def preview_sort_definition_tool(ctx):
+    definition = normalize_sort_definition(ctx.arguments.get('definition'))
+    students = _ordered_students_for_custom_sort(ctx.classroom, definition=definition)
+    return {
+        'language': SortStrategy.LANGUAGE_DECLARATIVE,
+        'definition': definition,
+        'students': [serialize_student(item, ctx.classroom) for item in students],
+    }
+
+
+@registry.register(
+    name='apply_sort_definition',
+    description='直接应用 Agent 编写的声明式排序规则并排座。此操作会大规模修改数据，请先向用户口头确认。',
+    parameters=_with_classroom({'definition': _schema({}, allow_extra=True)}, ['definition']),
+    category='sorting',
+    read_only=False,
+    danger_level='dangerous',
+)
+def apply_sort_definition_tool(ctx):
+    result = _apply_sort_definition(ctx, ctx.arguments.get('definition'))
+    return ToolResult(
+        result=result,
+        affected=_affected('已应用声明式排序规则', classroom_ids=[ctx.classroom.pk]),
+    )
+
+
+@registry.register(
+    name='preview_python_sort',
+    description='预览 Agent 编写的 Python 排序算法结果，不修改座位。',
+    parameters=_with_classroom({
+        'python_code': _string(
+            '只定义 sort_students(students)；返回排序后的学生字典列表或学生 ID 列表。'
+        ),
+    }, ['python_code']),
+    category='sorting',
+    read_only=True,
+)
+def preview_python_sort_tool(ctx):
+    python_code = normalize_python_sort_code(ctx.arguments.get('python_code'))
+    students = _ordered_students_for_custom_sort(ctx.classroom, python_code=python_code)
+    return {
+        'language': SortStrategy.LANGUAGE_PYTHON,
+        'python_code': python_code,
+        'contract': {
+            'function': 'sort_students(students)',
+            'example': PYTHON_SORT_EXAMPLE,
+        },
+        'students': [serialize_student(item, ctx.classroom) for item in students],
+    }
+
+
+@registry.register(
+    name='apply_python_sort',
+    description='直接应用 Agent 编写的 Python 排序算法并排座。此操作会大规模修改数据，请先向用户口头确认。',
+    parameters=_with_classroom({
+        'python_code': _string(
+            '只定义 sort_students(students)；返回排序后的学生字典列表或学生 ID 列表。'
+        ),
+    }, ['python_code']),
+    category='sorting',
+    read_only=False,
+    danger_level='dangerous',
+)
+def apply_python_sort_tool(ctx):
+    result = _apply_sort_definition(ctx, python_code=ctx.arguments.get('python_code'))
+    return ToolResult(
+        result=result,
+        affected=_affected('已应用 Python 排序算法', classroom_ids=[ctx.classroom.pk]),
+    )
+
+
+@registry.register(
+    name='apply_sort_strategy',
+    description='应用已保存的排序方式并排座。此操作会大规模修改数据，请先向用户口头确认。',
+    parameters=_with_classroom({'strategy_id': _int('排序方式 ID', 1)}, ['strategy_id']),
+    category='sorting',
+    read_only=False,
+    danger_level='dangerous',
+)
+def apply_sort_strategy_tool(ctx):
+    strategy = _strategy_queryset_for_classroom(ctx.classroom).filter(
+        pk=safe_int(ctx.arguments.get('strategy_id')),
+    ).first()
+    if not strategy:
+        raise ValueError('排序方式不存在')
+    if strategy.language == SortStrategy.LANGUAGE_PYTHON:
+        result = _apply_sort_definition(ctx, python_code=strategy.python_code)
+    else:
+        result = _apply_sort_definition(ctx, strategy.definition)
+    result['strategy'] = _serialize_sort_strategy(strategy)
+    return ToolResult(
+        result=result,
+        affected=_affected(f'已应用排序方式：{strategy.name}', classroom_ids=[ctx.classroom.pk]),
+    )
 
 
 

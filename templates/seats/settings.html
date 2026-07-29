@@ -195,19 +195,6 @@
 
                     <div class="setting-item">
                         <div class="setting-info">
-                            <label>兑换码</label>
-                            <span class="setting-description">输入兑换码激活订阅</span>
-                        </div>
-                        <div class="cloud-redeem-row">
-                            <input type="text" id="cloud-redeem-input" class="cloud-redeem-input" placeholder="输入兑换码" />
-                            <button type="button" class="btn btn-primary cloud-small-btn" id="cloud-redeem-btn">兑换</button>
-                        </div>
-                    </div>
-
-                    <div class="setting-divider"></div>
-
-                    <div class="setting-item">
-                        <div class="setting-info">
                             <label>退出登录</label>
                             <span class="setting-description">退出后云同步将暂停</span>
                         </div>
@@ -290,7 +277,7 @@
                 </svg>
                 <div>
                     <h2>软件更新</h2>
-                    <p>检查并安装应用更新</p>
+                    <p>{% if app_runtime.platform == 'macos' %}使用本地升级包安全更新{% else %}检查并安装应用更新{% endif %}</p>
                 </div>
             </div>
             <div class="section-content">
@@ -308,15 +295,15 @@
 
                 <div class="setting-item">
                     <div class="setting-info">
-                        <label>检查更新</label>
-                        <span class="setting-description">手动检查是否有新版本可用</span>
+                        <label>{% if app_runtime.platform == 'macos' %}本地升级{% else %}检查更新{% endif %}</label>
+                        <span class="setting-description">{% if app_runtime.platform == 'macos' %}选择自行准备的官方 PKG，应用不会从服务器下载{% else %}手动检查是否有新版本可用{% endif %}</span>
                     </div>
                     <button id="manual-check-update-btn" class="btn btn-primary" type="button">
                         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                             <path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/>
                             <path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/>
                         </svg>
-                        检查更新
+                        {% if app_runtime.platform == 'macos' %}选择升级包{% else %}检查更新{% endif %}
                     </button>
                 </div>
             </div>
@@ -1529,6 +1516,21 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     checkBtn.addEventListener('click', async () => {
+        const isMacosLocalUpdate = document.body && document.body.dataset.appPlatform === 'macos';
+        if (isMacosLocalUpdate) {
+            checkBtn.disabled = true;
+            try {
+                if (typeof window.selectLocalMacUpdate !== 'function') {
+                    throw new Error('本地升级组件尚未准备完成');
+                }
+                await window.selectLocalMacUpdate();
+            } catch (error) {
+                showToast(error && error.message ? error.message : '无法选择升级包');
+            } finally {
+                checkBtn.disabled = false;
+            }
+            return;
+        }
         checkBtn.disabled = true;
         checkBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation: spin 1s linear infinite;"><path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/><path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/></svg>检查中...';
 
@@ -1568,8 +1570,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const logoutBtn = document.getElementById('cloud-logout-btn');
         const syncBtn = document.getElementById('cloud-sync-btn');
         const refreshSubBtn = document.getElementById('cloud-refresh-sub-btn');
-        const redeemBtn = document.getElementById('cloud-redeem-btn');
-        const redeemInput = document.getElementById('cloud-redeem-input');
         const saveUrlBtn = document.getElementById('cloud-save-url-btn');
         const resetUrlBtn = document.getElementById('cloud-reset-url-btn');
         const urlInput = document.getElementById('cloud-server-url-input');
@@ -2044,26 +2044,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        if (redeemBtn) redeemBtn.addEventListener('click', async function() {
-            var code = (redeemInput.value || '').trim();
-            if (!code) { showToast('请输入兑换码'); return; }
-            redeemBtn.disabled = true;
-            try {
-                var data = await CloudManager.redeemCode(code);
-                if (data.status === 'success') {
-                    showToast('兑换成功');
-                    redeemInput.value = '';
-                    CloudManager.getUserInfo(true).then(renderCloudUI);
-                } else {
-                    showToast(data.message || '兑换失败');
-                }
-            } catch(e) {
-                showToast('兑换失败');
-            } finally {
-                redeemBtn.disabled = false;
-            }
-        });
-
         if (saveUrlBtn) saveUrlBtn.addEventListener('click', async function() {
             var url = (urlInput.value || '').trim();
             if (!url) { showToast('请输入云服务器地址'); return; }
@@ -2153,6 +2133,7 @@ document.addEventListener('DOMContentLoaded', () => {
             var allLimitKeys = [];
             plans.forEach(function(p) {
                 Object.keys(p.limits || {}).forEach(function(k) {
+                    if (k === 'sync_ai_conversations') return;
                     if (allLimitKeys.indexOf(k) === -1) allLimitKeys.push(k);
                 });
             });

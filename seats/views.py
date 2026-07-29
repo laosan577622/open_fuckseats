@@ -1,5 +1,5 @@
 from django.shortcuts import render, redirect, get_object_or_404
-from django.http import HttpResponse, HttpResponseRedirect, JsonResponse, StreamingHttpResponse
+from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_POST, require_http_methods
 from django.db import transaction, models, IntegrityError, OperationalError, ProgrammingError
 from django.utils import timezone
@@ -12,8 +12,11 @@ from pypinyin import lazy_pinyin
 import base64
 import desktop_runtime
 import copy
+from app_paths import PROJECT_ROOT, temp_directory
 from .models import (
     Classroom,
+    ClassroomGroup,
+    ClassroomGroupStudent,
     Student,
     Seat,
     SeatCellType,
@@ -32,6 +35,16 @@ from .models import (
     ClassroomHistoryEntry,
     SyncMeta,
     OnboardingState,
+    SortStrategy,
+)
+from .sorting import (
+    definition_for_field,
+    natural_tokens,
+    normalize_custom_data,
+    normalize_python_sort_code,
+    normalize_sort_definition,
+    sort_students,
+    sort_students_with_python,
 )
 from io import BytesIO
 from http.cookies import CookieError, SimpleCookie
@@ -164,7 +177,8 @@ def _is_missing_import_value(value):
         return math.isnan(value)
     return False
 
-DISABLED_SUGGESTION_TYPES = {'jqj_hzh'}
+DISABLED_SUGGESTION_TYPES = set()
+pass # 此部分代码未被披露至开源版本
 DEFAULT_AI_CONVERSATION_TITLE = '新对话'
 AI_CONVERSATION_FETCH_LIMIT = 50
 AI_MESSAGE_FETCH_LIMIT = 120
@@ -177,6 +191,11 @@ GROUP_MOVE_MODE_FIXED = 'fixed'
 GROUP_MOVE_MODE_FOLLOW = 'follow'
 EXPORT_FONT_BLACK = '鸿蒙黑体 Medium'
 EXPORT_FONT_LIGHT = '鸿蒙黑体 Light'
+
+
+def _ensure_ai_feature_enabled():
+    if not bool(getattr(settings, 'AI_FEATURE_ENABLED', False)):
+        raise Http404('页面不存在')
 HISTORY_STUDENT_ID_KEYS = {
     'student_pk',
     'target_student_pk',
@@ -716,17 +735,22 @@ def index(request):
         request.session.pop(_CLEANUP_PENDING_KEY, None)
         request.session.modified = True
         _delete_onboarding_sample(request)
-    classrooms = Classroom.objects.all().order_by('-created_at')
+    classrooms = Classroom.objects.select_related('classroom_group').all().order_by('-created_at')
     sample_pk = None
     if _onboarding_should_show_flag(request):
         try:
             sample = _ensure_onboarding_sample_classroom(request)
             sample_pk = sample.pk
-            classrooms = Classroom.objects.all().order_by('-created_at')
+            classrooms = Classroom.objects.select_related('classroom_group').all().order_by('-created_at')
         except Exception:
             sample_pk = request.session.get('onboarding_sample_pk')
+    classroom_groups = list(
+        ClassroomGroup.objects.prefetch_related('classrooms__students', 'classrooms__seats').all()
+    )
     return render(request, 'seats/index.html', {
         'classrooms': classrooms,
+        'classroom_groups': classroom_groups,
+        'ungrouped_classrooms': [item for item in classrooms if item.classroom_group_id is None],
         'onboarding_sample_pk': sample_pk,
     })
 
@@ -759,19 +783,155 @@ def settings_page(request):
     return render(request, 'seats/settings.html')
 
 
+def _bounded_layout_number(value, default, *, minimum=1, maximum=30):
+    try:
+        number = int(value)
+    except (TypeError, ValueError):
+        number = int(default)
+    return max(minimum, min(maximum, number))
+
+
+def _apply_large_group_layout(classroom, *, seat_rows, large_group_count, group_cols):
+    seat_rows = _bounded_layout_number(seat_rows, 6, maximum=29)
+    large_group_count = _bounded_layout_number(large_group_count, 2, maximum=10)
+    group_cols = _bounded_layout_number(group_cols, 4, maximum=12)
+    total_cols = large_group_count * group_cols + max(0, large_group_count - 1)
+    if total_cols > MAX_LAYOUT_GRID_SIZE:
+        raise ValueError(f'生成后的总列数不能超过 {MAX_LAYOUT_GRID_SIZE}')
+
+    classroom.rows = seat_rows + 1
+    classroom.cols = total_cols
+    classroom.save(update_fields=['rows', 'cols'])
+    classroom.seats.all().delete()
+    classroom.generate_seats()
+    classroom.groups.all().delete()
+
+    seats = list(classroom.seats.all())
+    center_cols = (
+        [total_cols // 2, total_cols // 2 + 1]
+        if total_cols % 2 == 0
+        else [(total_cols + 1) // 2]
+    )
+    aisle_cols = {
+        index * group_cols + index
+        for index in range(1, large_group_count)
+    }
+    for seat in seats:
+        seat.group = None
+        if seat.row == 1:
+            seat.cell_type = SeatCellType.PODIUM if seat.col in center_cols else SeatCellType.EMPTY
+            continue
+        if seat.col in aisle_cols:
+            seat.cell_type = SeatCellType.AISLE
+            continue
+        seat.cell_type = SeatCellType.SEAT
+    Seat.objects.bulk_update(seats, ['cell_type', 'group'])
+
+
+def _clone_classroom_layout(source, target):
+    target.rows = source.rows
+    target.cols = source.cols
+    target.save(update_fields=['rows', 'cols'])
+    target.seats.all().delete()
+    target.generate_seats()
+    target.groups.all().delete()
+
+    group_map = {}
+    for source_group in source.groups.order_by('order', 'created_at', 'pk'):
+        group_map[source_group.pk] = SeatGroup.objects.create(
+            classroom=target,
+            name=source_group.name,
+            order=source_group.order,
+        )
+
+    source_seats = {
+        (seat.row, seat.col): seat
+        for seat in source.seats.select_related('group').all()
+    }
+    target_seats = list(target.seats.all())
+    for target_seat in target_seats:
+        source_seat = source_seats.get((target_seat.row, target_seat.col))
+        if not source_seat:
+            continue
+        target_seat.cell_type = source_seat.cell_type
+        target_seat.group = group_map.get(source_seat.group_id)
+    Seat.objects.bulk_update(target_seats, ['cell_type', 'group'])
+
+
+def _create_classroom_from_payload(*, name, mode='custom', classroom_group=None, payload=None):
+    payload = payload or {}
+    name = str(name or '').strip()
+    if not name:
+        raise ValueError('请输入班级名称')
+    mode = str(mode or 'custom').strip().lower()
+    if mode == 'quick_groups':
+        seat_rows = _bounded_layout_number(payload.get('seat_rows'), 6, maximum=29)
+        large_group_count = _bounded_layout_number(payload.get('large_group_count'), 2, maximum=10)
+        group_cols = _bounded_layout_number(payload.get('group_cols'), 4, maximum=12)
+        total_cols = large_group_count * group_cols + max(0, large_group_count - 1)
+        if total_cols > MAX_LAYOUT_GRID_SIZE:
+            raise ValueError(f'生成后的总列数不能超过 {MAX_LAYOUT_GRID_SIZE}')
+        classroom = Classroom.objects.create(
+            name=name,
+            rows=seat_rows + 1,
+            cols=total_cols,
+            classroom_group=classroom_group,
+        )
+        _apply_large_group_layout(
+            classroom,
+            seat_rows=seat_rows,
+            large_group_count=large_group_count,
+            group_cols=group_cols,
+        )
+        return classroom
+    if mode == 'copy_layout':
+        source_id = _safe_int(payload.get('source_classroom_id'), 0)
+        source = Classroom.objects.filter(pk=source_id).first()
+        if not source:
+            raise ValueError('请选择要复制布局的班级')
+        classroom = Classroom.objects.create(
+            name=name,
+            rows=source.rows,
+            cols=source.cols,
+            classroom_group=classroom_group,
+        )
+        _clone_classroom_layout(source, classroom)
+        return classroom
+
+    rows = _bounded_layout_number(payload.get('rows'), 6)
+    cols = _bounded_layout_number(payload.get('cols'), 8)
+    return Classroom.objects.create(
+        name=name,
+        rows=rows,
+        cols=cols,
+        classroom_group=classroom_group,
+    )
+
+
 def create_classroom(request):
     if request.method == 'POST':
         name = request.POST.get('name')
-        rows = int(request.POST.get('rows', 6))
-        cols = int(request.POST.get('cols', 8))
-        classroom = Classroom.objects.create(name=name, rows=rows, cols=cols)
+        mode = request.POST.get('mode', 'custom')
+        try:
+            with transaction.atomic():
+                classroom = _create_classroom_from_payload(
+                    name=name,
+                    mode=mode,
+                    payload=request.POST,
+                )
+        except ValueError as exc:
+            classrooms = Classroom.objects.all().order_by('name', 'pk')
+            return render(request, 'seats/create_classroom.html', {
+                'classrooms': classrooms,
+                'error_message': str(exc),
+                'submitted': request.POST,
+            }, status=400)
         _emit_plugin_hook(
             'classroom_created',
             request=request,
             classroom=classroom,
-            payload={'name': name, 'rows': rows, 'cols': cols},
+            payload={'name': name, 'rows': classroom.rows, 'cols': classroom.cols, 'mode': mode},
         )
-        mode = request.POST.get('mode', 'blank')
         if mode == 'excel_students':
             return redirect('import_students_options_page', pk=classroom.pk)
         if mode == 'excel_layout':
@@ -780,7 +940,338 @@ def create_classroom(request):
             from django.urls import reverse
             return redirect(reverse('classroom_detail', kwargs={'pk': classroom.pk}) + '?open=bsce-import')
         return redirect('classroom_detail', pk=classroom.pk)
-    return render(request, 'seats/create_classroom.html')
+    return render(request, 'seats/create_classroom.html', {
+        'classrooms': Classroom.objects.all().order_by('name', 'pk'),
+    })
+
+
+def create_classroom_group(request):
+    source_classrooms = Classroom.objects.select_related('classroom_group').all().order_by(
+        'classroom_group__sort_order',
+        'name',
+        'pk',
+    )
+    ungrouped_classrooms = Classroom.objects.filter(classroom_group__isnull=True).order_by('name', 'pk')
+    if request.method != 'POST':
+        return render(request, 'seats/create_classroom_group.html', {
+            'source_classrooms': source_classrooms,
+            'ungrouped_classrooms': ungrouped_classrooms,
+        })
+
+    name = str(request.POST.get('name') or '').strip()
+    if not name:
+        return render(request, 'seats/create_classroom_group.html', {
+            'source_classrooms': source_classrooms,
+            'ungrouped_classrooms': ungrouped_classrooms,
+            'error_message': '请输入班级组名称',
+            'submitted': request.POST,
+        }, status=400)
+
+    handling = str(request.POST.get('classroom_handling') or '').strip()
+    try:
+        with transaction.atomic():
+            group = ClassroomGroup.objects.create(
+                name=name,
+                sort_order=ClassroomGroup.objects.count(),
+            )
+            if handling == 'existing':
+                classroom_ids = [
+                    int(item)
+                    for item in request.POST.getlist('classroom_ids')
+                    if str(item).isdigit()
+                ]
+                classrooms = list(
+                    Classroom.objects.filter(
+                        pk__in=classroom_ids,
+                        classroom_group__isnull=True,
+                    ).order_by('pk')
+                )
+                if not classroom_ids or len(classrooms) != len(set(classroom_ids)):
+                    raise ValueError('请选择要导入的现有班级')
+                for order, classroom in enumerate(classrooms):
+                    classroom.classroom_group = group
+                    classroom.group_order = order
+                    classroom.save(update_fields=['classroom_group', 'group_order'])
+            elif handling == 'batch':
+                names = [
+                    item.strip()
+                    for item in re.split(r'[\n,，]+', str(request.POST.get('names') or ''))
+                    if item.strip()
+                ]
+                if not names:
+                    raise ValueError('请至少输入一个班级名称')
+                if len(names) > 100:
+                    raise ValueError('一次最多创建 100 个班级')
+                mode = str(request.POST.get('mode') or 'quick_groups')
+                for order, classroom_name in enumerate(names):
+                    classroom = _create_classroom_from_payload(
+                        name=classroom_name,
+                        mode=mode,
+                        classroom_group=group,
+                        payload=request.POST,
+                    )
+                    classroom.group_order = order
+                    classroom.save(update_fields=['group_order'])
+            elif request.POST.get('next_action') != 'import_students':
+                raise ValueError('请选择班级组内班级处理方式')
+    except (ValueError, IntegrityError) as exc:
+        return render(request, 'seats/create_classroom_group.html', {
+            'source_classrooms': source_classrooms,
+            'ungrouped_classrooms': ungrouped_classrooms,
+            'error_message': str(exc),
+            'submitted': request.POST,
+        }, status=400)
+
+    if request.POST.get('next_action') == 'import_students':
+        return redirect('classroom_group_import_students_options_page', pk=group.pk)
+    return redirect('classroom_group_detail', pk=group.pk)
+
+
+def classroom_group_detail(request, pk):
+    classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
+    classrooms = list(
+        classroom_group.classrooms.prefetch_related('students', 'seats').order_by('group_order', 'created_at', 'pk')
+    )
+    return render(request, 'seats/classroom_group_detail.html', {
+        'classroom_group': classroom_group,
+        'classrooms': classrooms,
+        'sort_applied': _parse_bool(request.GET.get('sort_applied')),
+    })
+
+
+def classroom_group_students(request, pk):
+    classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
+    classrooms = list(
+        classroom_group.classrooms.all().order_by('group_order', 'created_at', 'pk')
+    )
+    assigned_students = list(
+        Student.objects.filter(classroom__classroom_group=classroom_group)
+        .select_related('classroom')
+        .order_by('classroom__group_order', 'classroom__name', 'name', 'pk')
+    )
+    unassigned_students = list(
+        classroom_group.unassigned_students.all().order_by('name', 'pk')
+    )
+    keyword = str(request.GET.get('q') or '').strip().casefold()
+    classroom_filter = str(request.GET.get('classroom') or '').strip()
+    rows = []
+
+    if classroom_filter != 'unassigned':
+        for student in assigned_students:
+            if classroom_filter.isdigit() and student.classroom_id != int(classroom_filter):
+                continue
+            custom_data = student.custom_data if isinstance(student.custom_data, dict) else {}
+            searchable = ' '.join([
+                student.name,
+                str(student.student_id or ''),
+                student.classroom.name,
+                json.dumps(custom_data, ensure_ascii=False),
+            ]).casefold()
+            if keyword and keyword not in searchable:
+                continue
+            rows.append({
+                'kind': 'assigned',
+                'student': student,
+                'classroom': student.classroom,
+                'custom_text': ' · '.join(f'{key}：{value}' for key, value in custom_data.items()),
+            })
+
+    if not classroom_filter or classroom_filter == 'unassigned':
+        for student in unassigned_students:
+            custom_data = student.custom_data if isinstance(student.custom_data, dict) else {}
+            searchable = ' '.join([
+                student.name,
+                str(student.student_id or ''),
+                json.dumps(custom_data, ensure_ascii=False),
+            ]).casefold()
+            if keyword and keyword not in searchable:
+                continue
+            rows.append({
+                'kind': 'unassigned',
+                'student': student,
+                'classroom': None,
+                'custom_text': ' · '.join(f'{key}：{value}' for key, value in custom_data.items()),
+            })
+
+    return render(request, 'seats/classroom_group_students.html', {
+        'classroom_group': classroom_group,
+        'classrooms': classrooms,
+        'rows': rows,
+        'keyword': str(request.GET.get('q') or '').strip(),
+        'classroom_filter': classroom_filter,
+        'assigned_count': len(assigned_students),
+        'unassigned_count': len(unassigned_students),
+        'student_count': len(assigned_students) + len(unassigned_students),
+    })
+
+
+@require_POST
+def classroom_group_student_action(request, pk):
+    classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
+    action = str(request.POST.get('action') or '').strip()
+    if action == 'assign':
+        pending_student = get_object_or_404(
+            ClassroomGroupStudent,
+            pk=_safe_int(request.POST.get('student_id'), 0),
+            classroom_group=classroom_group,
+        )
+        classroom = get_object_or_404(
+            Classroom,
+            pk=_safe_int(request.POST.get('classroom_id'), 0),
+            classroom_group=classroom_group,
+        )
+        with transaction.atomic():
+            Student.objects.create(
+                classroom=classroom,
+                name=pending_student.name,
+                student_id=pending_student.student_id,
+                gender=pending_student.gender,
+                score=pending_student.score,
+                custom_data=pending_student.custom_data,
+            )
+            pending_student.delete()
+    elif action == 'delete_unassigned':
+        pending_student = get_object_or_404(
+            ClassroomGroupStudent,
+            pk=_safe_int(request.POST.get('student_id'), 0),
+            classroom_group=classroom_group,
+        )
+        pending_student.delete()
+    else:
+        return HttpResponse('未知操作', status=400)
+    return redirect('classroom_group_students', pk=classroom_group.pk)
+
+
+def classroom_group_classrooms_add(request, pk):
+    classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
+    source_classrooms = Classroom.objects.select_related('classroom_group').all().order_by(
+        'classroom_group__sort_order',
+        'name',
+        'pk',
+    )
+    return render(request, 'seats/classroom_group_classrooms_add.html', {
+        'classroom_group': classroom_group,
+        'source_classrooms': source_classrooms,
+        'ungrouped_classrooms': Classroom.objects.filter(classroom_group__isnull=True).order_by('name', 'pk'),
+    })
+
+
+def classroom_group_settings(request, pk):
+    classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
+    classrooms = list(
+        classroom_group.classrooms.prefetch_related('students', 'seats').order_by('group_order', 'created_at', 'pk')
+    )
+    return render(request, 'seats/classroom_group_settings.html', {
+        'classroom_group': classroom_group,
+        'classrooms': classrooms,
+    })
+
+
+def _sync_cloud_deletions_before_classroom_cleanup(classrooms):
+    for classroom in classrooms:
+        _cloud_delete_backed_up_classroom(
+            SyncMeta.objects.filter(classroom=classroom).first()
+        )
+
+
+@require_POST
+def classroom_group_action(request, pk):
+    classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
+    action = str(request.POST.get('action') or '').strip()
+    try:
+        if action == 'rename':
+            name = str(request.POST.get('name') or '').strip()
+            if not name:
+                raise ValueError('请输入班级组名称')
+            classroom_group.name = name
+            classroom_group.save(update_fields=['name', 'updated_at'])
+        elif action == 'delete':
+            classroom_group.classrooms.update(classroom_group=None, group_order=0)
+            classroom_group.delete()
+            return redirect('index')
+        elif action == 'delete_with_classrooms':
+            classrooms = list(classroom_group.classrooms.all().order_by('pk'))
+            _sync_cloud_deletions_before_classroom_cleanup(classrooms)
+            classroom_ids = [classroom.pk for classroom in classrooms]
+            with suspend_sync_version_bump(), transaction.atomic():
+                Classroom.objects.filter(pk__in=classroom_ids).delete()
+                classroom_group.delete()
+            return redirect('index')
+        elif action == 'add_existing':
+            classroom_ids = [
+                int(item)
+                for item in request.POST.getlist('classroom_ids')
+                if str(item).isdigit()
+            ]
+            if not classroom_ids:
+                raise ValueError('请选择班级')
+            start_order = classroom_group.classrooms.count()
+            for offset, classroom in enumerate(Classroom.objects.filter(pk__in=classroom_ids).order_by('pk')):
+                classroom.classroom_group = classroom_group
+                classroom.group_order = start_order + offset
+                classroom.save(update_fields=['classroom_group', 'group_order'])
+        elif action == 'remove':
+            classroom_id = _safe_int(request.POST.get('classroom_id'), 0)
+            classroom = get_object_or_404(Classroom, pk=classroom_id, classroom_group=classroom_group)
+            classroom.classroom_group = None
+            classroom.group_order = 0
+            classroom.save(update_fields=['classroom_group', 'group_order'])
+        elif action == 'batch_delete':
+            classroom_ids = {
+                int(item)
+                for item in request.POST.getlist('classroom_ids')
+                if str(item).isdigit()
+            }
+            if not classroom_ids:
+                raise ValueError('请选择要删除的班级')
+            classrooms = list(
+                classroom_group.classrooms.filter(pk__in=classroom_ids).order_by('pk')
+            )
+            if len(classrooms) != len(classroom_ids):
+                raise ValueError('所选班级不存在或已移出当前班级组')
+            _sync_cloud_deletions_before_classroom_cleanup(classrooms)
+            with suspend_sync_version_bump(), transaction.atomic():
+                Classroom.objects.filter(pk__in=classroom_ids).delete()
+        elif action == 'batch_create':
+            raw_names = str(request.POST.get('names') or '')
+            names = [
+                item.strip()
+                for item in re.split(r'[\n,，]+', raw_names)
+                if item.strip()
+            ]
+            if not names:
+                raise ValueError('请至少输入一个班级名称')
+            if len(names) > 100:
+                raise ValueError('一次最多创建 100 个班级')
+            mode = str(request.POST.get('mode') or 'quick_groups')
+            with transaction.atomic():
+                start_order = classroom_group.classrooms.count()
+                for offset, name in enumerate(names):
+                    classroom = _create_classroom_from_payload(
+                        name=name,
+                        mode=mode,
+                        classroom_group=classroom_group,
+                        payload=request.POST,
+                    )
+                    classroom.group_order = start_order + offset
+                    classroom.save(update_fields=['group_order'])
+        elif action == 'apply_sort':
+            method = str(request.POST.get('method') or 'random').strip()
+            _apply_group_auto_arrangement(
+                request,
+                classroom_group,
+                method,
+                cross_classrooms=_parse_bool(request.POST.get('cross_classrooms')),
+            )
+        else:
+            raise ValueError('未知操作')
+    except (ValueError, IntegrityError) as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+    except CloudAPIError as exc:
+        return _cloud_error_response(exc)
+    if request.POST.get('next') == 'settings':
+        return redirect('classroom_group_settings', pk=classroom_group.pk)
+    return redirect('classroom_group_detail', pk=classroom_group.pk)
 
 
 def _emit_plugin_hook(event_name, *, request=None, classroom=None, payload=None):
@@ -1545,6 +2036,7 @@ def _serialize_student_profile(
         'gender': student.get_gender_display() if student.gender else '',
         'score': _coerce_score_value(student.score),
         'score_display': student.display_score if student.score is not None else '',
+        'custom_data': normalize_custom_data(student.custom_data),
         'seat': {
             'row': seat.row,
             'col': seat.col,
@@ -5664,7 +6156,8 @@ def _snapshot_payload(classroom, include_students=True, include_constraints=True
                 'name': student.name,
                 'student_id': student.student_id,
                 'gender': student.gender,
-                'score': student.score
+                'score': student.score,
+                'custom_data': normalize_custom_data(student.custom_data),
             }
             for student in students
         ]
@@ -5814,6 +6307,7 @@ def _apply_layout_data(classroom, data, replace_students=False):
                 student.student_id = student_id
                 student.gender = student_data.get('gender') or None
                 student.score = float(student_data.get('score') or 0)
+                student.custom_data = normalize_custom_data(student_data.get('custom_data'))
                 student.save()
 
         if data.get('student_tag_memberships') is not None:
@@ -5966,6 +6460,7 @@ def _capture_history_state(classroom):
                 'student_id': student.student_id,
                 'gender': student.gender,
                 'score': student.score,
+                'custom_data': normalize_custom_data(student.custom_data),
             }
             for student in students
         ],
@@ -6061,7 +6556,8 @@ def _serialize_future_mode_config(classroom):
     if not config:
         return None
     return {
-        'api_key': str(config.api_key or ''),
+        # Credentials are intentionally excluded from portable classroom files.
+        'api_key': '',
         'base_url': str(config.base_url or ''),
         'model': str(config.model or ''),
         'thinking_mode': str(config.thinking_mode or ''),
@@ -6513,6 +7009,7 @@ def _restore_history_state(classroom, state):
                 student_id=str(item.get('student_id') or '').strip() or None,
                 gender=item.get('gender') or None,
                 score=float(item.get('score') or 0),
+                custom_data=normalize_custom_data(item.get('custom_data')),
             )
             student.save(force_insert=True)
             student_map[pk] = student
@@ -6832,7 +7329,7 @@ def _apply_move_action(classroom, action):
         target_student = classroom.students.filter(pk=target_student_id).first()
 
     current_seat = getattr(student, 'assigned_seat', None)
-    
+
 
     seat_from = None
     if from_row is not None and from_col is not None:
@@ -7435,6 +7932,17 @@ def classroom_detail(request, pk):
     unseated_students = [student for student in students if student.pk not in seated_student_ids]
     groups = classroom.groups.all()
     snapshots = classroom.layout_snapshots.all()
+    custom_info_keys = sorted({
+        str(key)
+        for data in classroom.students.values_list('custom_data', flat=True)
+        if isinstance(data, dict)
+        for key in data.keys()
+        if str(key).strip()
+    })
+    strategy_scope = models.Q(classroom=classroom)
+    if classroom.classroom_group_id:
+        strategy_scope |= models.Q(classroom_group=classroom.classroom_group)
+    sort_strategies = SortStrategy.objects.filter(strategy_scope).distinct().order_by('name', 'pk')
     constraint_items, constraint_metrics = serialize_constraints(classroom, constraints=constraints)
     tag_rule_items, tag_rule_metrics = serialize_tag_rules(classroom)
     
@@ -7445,6 +7953,8 @@ def classroom_detail(request, pk):
         'unseated_students': unseated_students,
         'groups': groups,
         'snapshots': snapshots,
+        'custom_info_keys': custom_info_keys,
+        'sort_strategies': sort_strategies,
         'constraint_items': constraint_items,
         'constraint_metrics': constraint_metrics,
         'constraint_types': get_constraint_type_definitions(),
@@ -7484,6 +7994,7 @@ def classroom_command(request, pk):
 
 
 def ai_workspace(request, pk):
+    _ensure_ai_feature_enabled()
     classroom = get_object_or_404(Classroom, pk=pk)
     return render(request, 'seats/ai_workspace.html', {
         'classroom': classroom,
@@ -7493,6 +8004,7 @@ def ai_workspace(request, pk):
 
 @require_POST
 def ai_chat(request, pk):
+    _ensure_ai_feature_enabled()
     classroom = get_object_or_404(Classroom, pk=pk)
     try:
         payload = json.loads(request.body or '{}')
@@ -7882,6 +8394,7 @@ def ai_chat(request, pk):
 
 @require_POST
 def ai_chat_stream(request, pk):
+    _ensure_ai_feature_enabled()
     classroom = get_object_or_404(Classroom, pk=pk)
     try:
         payload = json.loads(request.body or '{}')
@@ -8519,7 +9032,11 @@ def shift_layout_options_page(request, pk):
 
 
 def _ensure_temp_import_dir():
-    temp_dir = os.path.join(settings.BASE_DIR, 'temp_imports')
+    if os.path.abspath(str(settings.BASE_DIR)) != os.path.abspath(str(PROJECT_ROOT)):
+        # Django tests and isolated embedders may intentionally override BASE_DIR.
+        temp_dir = os.path.join(settings.BASE_DIR, 'temp_imports')
+    else:
+        temp_dir = str(temp_directory() / 'imports')
     os.makedirs(temp_dir, exist_ok=True)
     return temp_dir
 
@@ -9057,12 +9574,14 @@ def _detect_student_import_defaults(df):
     aliases = {
         'name_col_index': {'姓名', '学生姓名', '名字', 'name', 'studentname'},
         'student_id_col_index': {'学号', '学生号', '编号', 'id', 'studentid'},
+        'classroom_col_index': {'班级', '班级名称', '所属班级', 'class', 'classname'},
         'gender_col_index': {'性别', '男女', 'gender', 'sex'},
         'score_col_index': {'总分', '学生总分', '成绩', '分数', 'score', 'totalscore'},
     }
     weights = {
         'name_col_index': 8,
         'student_id_col_index': 3,
+        'classroom_col_index': 3,
         'gender_col_index': 2,
         'score_col_index': 4,
     }
@@ -9104,6 +9623,7 @@ def _detect_student_import_defaults(df):
         'start_row': first_nonempty_row + 1,
         'name_col_index': None,
         'student_id_col_index': None,
+        'classroom_col_index': None,
         'gender_col_index': None,
         'score_col_index': None,
     }
@@ -9139,6 +9659,21 @@ def _build_student_import_preview(pd_module, temp_path, requested_sheet=None):
         [_serialize_student_import_cell(value) for value in row]
         for row in preview_df.values.tolist()
     ]
+    suggested = _detect_student_import_defaults(df)
+    custom_columns = []
+    header_row = suggested.get('header_row')
+    mapped_columns = {
+        value
+        for key, value in suggested.items()
+        if key.endswith('_col_index') and isinstance(value, int)
+    }
+    if header_row:
+        header_values = df.iloc[header_row - 1].tolist()
+        for index, value in enumerate(header_values):
+            key = _normalize_import_text(value)
+            if key and index not in mapped_columns:
+                custom_columns.append({'key': key[:80], 'col': index})
+    suggested['custom_columns'] = custom_columns[:20]
     return {
         'status': 'ready',
         'sheet_names': sheet_names,
@@ -9148,7 +9683,7 @@ def _build_student_import_preview(pd_module, temp_path, requested_sheet=None):
         'preview_cols': min(col_count, STUDENT_IMPORT_PREVIEW_COL_LIMIT),
         'total_rows': row_count,
         'total_cols': col_count,
-        'suggested': _detect_student_import_defaults(df),
+        'suggested': suggested,
     }
 
 
@@ -9165,6 +9700,55 @@ def _parse_student_import_column(request, key, col_count, required=False):
     if value < 0 or value >= col_count:
         raise ValueError('所选列超出工作表范围')
     return value
+
+
+def _parse_student_import_row_range(request, row_count):
+    try:
+        start_row = int(request.POST.get('start_row', '1'))
+    except (TypeError, ValueError) as exc:
+        raise ValueError('数据开始行无效') from exc
+    try:
+        end_row = int(request.POST.get('end_row') or row_count)
+    except (TypeError, ValueError) as exc:
+        raise ValueError('数据结束行无效') from exc
+    if start_row < 1 or start_row > row_count:
+        raise ValueError('数据开始行超出工作表范围')
+    if end_row < 1 or end_row > row_count:
+        raise ValueError('数据结束行超出工作表范围')
+    if end_row < start_row:
+        raise ValueError('数据结束行不能早于开始行')
+    return start_row, end_row
+
+
+def _parse_student_custom_columns(request, col_count):
+    raw = request.POST.get('custom_columns') or '[]'
+    try:
+        items = json.loads(raw)
+    except (TypeError, json.JSONDecodeError) as exc:
+        raise ValueError('自定义信息列格式错误') from exc
+    if not isinstance(items, list):
+        raise ValueError('自定义信息列格式错误')
+    if len(items) > 40:
+        raise ValueError('自定义信息最多映射 40 列')
+    result = []
+    seen_keys = set()
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError('自定义信息列格式错误')
+        key = str(item.get('key') or '').strip()[:80]
+        if not key:
+            raise ValueError('自定义信息名称不能为空')
+        if key in seen_keys:
+            raise ValueError(f'自定义信息名称重复：{key}')
+        try:
+            col = int(item.get('col'))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f'自定义信息“{key}”的列无效') from exc
+        if col < 0 or col >= col_count:
+            raise ValueError(f'自定义信息“{key}”的列超出工作表范围')
+        seen_keys.add(key)
+        result.append({'key': key, 'col': col})
+    return result
 
 
 def import_students(request, pk):
@@ -9237,12 +9821,7 @@ def import_students(request, pk):
         if row_count == 0 or col_count == 0:
             raise ValueError('所选工作表没有可导入的数据')
 
-        try:
-            start_row = int(request.POST.get('start_row', '1'))
-        except ValueError as exc:
-            raise ValueError('数据开始行无效') from exc
-        if start_row < 1 or start_row > row_count:
-            raise ValueError('数据开始行超出工作表范围')
+        start_row, end_row = _parse_student_import_row_range(request, row_count)
 
         name_col = _parse_student_import_column(
             request,
@@ -9251,17 +9830,20 @@ def import_students(request, pk):
             required=True,
         )
         student_id_col = _parse_student_import_column(request, 'student_id_col_index', col_count)
+        classroom_col = _parse_student_import_column(request, 'classroom_col_index', col_count)
         gender_col = _parse_student_import_column(request, 'gender_col_index', col_count)
         score_col = _parse_student_import_column(request, 'score_col_index', col_count)
+        custom_columns = _parse_student_custom_columns(request, col_count)
         selected_columns = [
             value
-            for value in (name_col, student_id_col, gender_col, score_col)
+            for value in (name_col, student_id_col, classroom_col, gender_col, score_col)
             if value is not None
         ]
+        selected_columns.extend(item['col'] for item in custom_columns)
         if len(selected_columns) != len(set(selected_columns)):
             raise ValueError('同一列不能绑定多个字段')
 
-        df_data = df.iloc[start_row - 1:].copy()
+        df_data = df.iloc[start_row - 1:end_row].copy()
         df_data.columns = list(range(col_count))
         before_state = _capture_history_state(classroom)
         result = _process_import(
@@ -9272,6 +9854,8 @@ def import_students(request, pk):
             gender_col,
             score_col,
             import_mode,
+            classroom_col=classroom_col,
+            custom_columns=custom_columns,
         )
 
         if os.path.exists(temp_path):
@@ -9292,6 +9876,7 @@ def import_students(request, pk):
                 'result': result,
                 'sheet_name': selected_sheet,
                 'start_row': start_row,
+                'end_row': end_row,
             },
         )
         return JsonResponse({'status': 'success', 'message': _format_import_result_message(result)})
@@ -9360,8 +9945,20 @@ def _format_import_result_message(result):
     return "匹配导入完成：" + "，".join(parts)
 
 
-def _process_import(classroom, df, name_col, student_id_col, gender_col, score_col, import_mode=IMPORT_MODE_MATCH):
+def _process_import(
+    classroom,
+    df,
+    name_col,
+    student_id_col,
+    gender_col,
+    score_col,
+    import_mode=IMPORT_MODE_MATCH,
+    *,
+    classroom_col=None,
+    custom_columns=None,
+):
     import_mode = _resolve_student_import_mode(import_mode)
+    custom_columns = custom_columns or []
     created_count = 0
     updated_count = 0
     skipped_count = 0
@@ -9416,6 +10013,17 @@ def _process_import(classroom, df, name_col, student_id_col, gender_col, score_c
             student_id = _normalize_import_text(row.get(student_id_col, '')) if student_id_col is not None else ''
             gender = _parse_import_gender(row.get(gender_col, '')) if gender_col is not None else None
             score_value = _parse_import_score(row.get(score_col, 0)) if has_score_column else 0
+            custom_data = {}
+            if classroom_col is not None:
+                source_classroom = _normalize_import_text(row.get(classroom_col, ''))
+                if source_classroom:
+                    custom_data['班级'] = source_classroom
+            for item in custom_columns:
+                raw_value = row.get(item['col'], '')
+                if _is_missing_import_value(raw_value):
+                    continue
+                custom_data[item['key']] = _serialize_student_import_cell(raw_value)
+            custom_data = normalize_custom_data(custom_data)
 
             if should_match_existing:
                 matched_student = None
@@ -9430,7 +10038,8 @@ def _process_import(classroom, df, name_col, student_id_col, gender_col, score_c
                         name=name,
                         student_id=student_id,
                         gender=gender,
-                        score=score_value
+                        score=score_value,
+                        custom_data=custom_data,
                     )
                     index_student(created_student)
                     created_count += 1
@@ -9450,6 +10059,14 @@ def _process_import(classroom, df, name_col, student_id_col, gender_col, score_c
                 if has_score_column and matched_student.score != score_value:
                     matched_student.score = score_value
                     update_fields.append('score')
+                if custom_data:
+                    merged_custom_data = {
+                        **(matched_student.custom_data if isinstance(matched_student.custom_data, dict) else {}),
+                        **custom_data,
+                    }
+                    if matched_student.custom_data != merged_custom_data:
+                        matched_student.custom_data = merged_custom_data
+                        update_fields.append('custom_data')
 
                 if update_fields:
                     matched_student.save(update_fields=update_fields)
@@ -9461,7 +10078,8 @@ def _process_import(classroom, df, name_col, student_id_col, gender_col, score_c
                 name=name,
                 student_id=student_id,
                 gender=gender,
-                score=score_value
+                score=score_value,
+                custom_data=custom_data,
             )
             created_count += 1
 
@@ -9471,6 +10089,325 @@ def _process_import(classroom, df, name_col, student_id_col, gender_col, score_c
         'updated': updated_count,
         'skipped': skipped_count,
     }
+
+
+def _process_group_unassigned_import(
+    classroom_group,
+    df,
+    name_col,
+    student_id_col,
+    gender_col,
+    score_col,
+    import_mode=IMPORT_MODE_MATCH,
+    *,
+    custom_columns=None,
+):
+    import_mode = _resolve_student_import_mode(import_mode)
+    custom_columns = custom_columns or []
+    has_score_column = score_col is not None
+    created_count = 0
+    updated_count = 0
+
+    if import_mode == IMPORT_MODE_REPLACE:
+        classroom_group.unassigned_students.all().delete()
+
+    existing_students = list(classroom_group.unassigned_students.all())
+    existing_by_id = {}
+    existing_names = defaultdict(list)
+    for student in existing_students:
+        student_id = _normalize_import_text(student.student_id).casefold()
+        if student_id and student_id not in existing_by_id:
+            existing_by_id[student_id] = student
+        name_key = _normalize_import_text(student.name).casefold()
+        if name_key:
+            existing_names[name_key].append(student)
+    unique_name_map = {
+        name_key: students[0]
+        for name_key, students in existing_names.items()
+        if len(students) == 1
+    }
+
+    for _, row in df.iterrows():
+        name = _normalize_import_text(row.get(name_col, ''))
+        if not name or name.casefold() in {'姓名', 'name'}:
+            continue
+        student_id = _normalize_import_text(row.get(student_id_col, '')) if student_id_col is not None else ''
+        gender = _parse_import_gender(row.get(gender_col, '')) if gender_col is not None else None
+        score_value = _parse_import_score(row.get(score_col, 0)) if has_score_column else 0
+        custom_data = {}
+        for item in custom_columns:
+            raw_value = row.get(item['col'], '')
+            if _is_missing_import_value(raw_value):
+                continue
+            custom_data[item['key']] = _serialize_student_import_cell(raw_value)
+        custom_data = normalize_custom_data(custom_data)
+
+        matched_student = None
+        if import_mode == IMPORT_MODE_MATCH:
+            if student_id:
+                matched_student = existing_by_id.get(student_id.casefold())
+            if not matched_student:
+                matched_student = unique_name_map.get(name.casefold())
+        if not matched_student:
+            created_student = ClassroomGroupStudent.objects.create(
+                classroom_group=classroom_group,
+                name=name,
+                student_id=student_id or None,
+                gender=gender,
+                score=score_value,
+                custom_data=custom_data,
+            )
+            if student_id and student_id.casefold() not in existing_by_id:
+                existing_by_id[student_id.casefold()] = created_student
+            existing_names[name.casefold()].append(created_student)
+            if len(existing_names[name.casefold()]) == 1:
+                unique_name_map[name.casefold()] = created_student
+            else:
+                unique_name_map.pop(name.casefold(), None)
+            created_count += 1
+            continue
+
+        update_fields = []
+        if matched_student.name != name:
+            matched_student.name = name
+            update_fields.append('name')
+        if student_id and _normalize_import_text(matched_student.student_id) != student_id:
+            matched_student.student_id = student_id
+            update_fields.append('student_id')
+            existing_by_id[student_id.casefold()] = matched_student
+        if gender is not None and matched_student.gender != gender:
+            matched_student.gender = gender
+            update_fields.append('gender')
+        if has_score_column and matched_student.score != score_value:
+            matched_student.score = score_value
+            update_fields.append('score')
+        if custom_data:
+            merged_custom_data = {
+                **(matched_student.custom_data if isinstance(matched_student.custom_data, dict) else {}),
+                **custom_data,
+            }
+            if matched_student.custom_data != merged_custom_data:
+                matched_student.custom_data = merged_custom_data
+                update_fields.append('custom_data')
+        if update_fields:
+            matched_student.save(update_fields=update_fields)
+        updated_count += 1
+
+    return {
+        'mode': import_mode,
+        'created': created_count,
+        'updated': updated_count,
+        'skipped': 0,
+    }
+
+
+def classroom_group_import_students_options_page(request, pk):
+    classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
+    return render(request, 'seats/import_students_options.html', {
+        'classroom_group': classroom_group,
+        'classrooms': classroom_group.classrooms.order_by('group_order', 'created_at', 'pk'),
+    })
+
+
+def import_classroom_group_students(request, pk):
+    classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
+    if request.method != 'POST':
+        return redirect('classroom_group_detail', pk=pk)
+
+    action = request.POST.get('action', 'upload')
+    if action not in {'upload', 'preview', 'confirm', 'discard'}:
+        return JsonResponse({'status': 'error', 'message': '未知操作'}, status=400)
+    if action == 'discard':
+        temp_path = _student_import_temp_path(request.POST.get('file_id'))
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)
+        return JsonResponse({'status': 'success'})
+
+    try:
+        pd_module = _require_pandas()
+    except RuntimeError as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=500)
+
+    if action == 'upload':
+        excel_file = request.FILES.get('excel_file')
+        if not excel_file:
+            return JsonResponse({'status': 'error', 'message': '请先选择 Excel 文件'}, status=400)
+        suffix = os.path.splitext(excel_file.name)[1].lower()
+        if suffix not in STUDENT_IMPORT_SUFFIXES:
+            return JsonResponse({'status': 'error', 'message': '仅支持 .xlsx、.xls、.xlsm 文件'}, status=400)
+        file_id, temp_path = _save_uploaded_temp_file(excel_file, suffix)
+        try:
+            preview = _build_student_import_preview(pd_module, temp_path)
+            return JsonResponse({
+                **preview,
+                'file_id': file_id,
+                'file_name': os.path.basename(excel_file.name),
+            })
+        except Exception as exc:
+            if os.path.exists(temp_path):
+                os.remove(temp_path)
+            return JsonResponse({'status': 'error', 'message': f'解析失败：{exc}'}, status=400)
+
+    file_id = request.POST.get('file_id')
+    temp_path = _student_import_temp_path(file_id)
+    if not temp_path:
+        return JsonResponse({'status': 'error', 'message': '临时文件已过期，请重新上传'}, status=400)
+    sheet_name = str(request.POST.get('sheet_name', '')).strip() or None
+    if action == 'preview':
+        try:
+            preview = _build_student_import_preview(pd_module, temp_path, requested_sheet=sheet_name)
+            return JsonResponse({**preview, 'file_id': str(file_id)})
+        except Exception as exc:
+            return JsonResponse({'status': 'error', 'message': f'解析失败：{exc}'}, status=400)
+
+    import_mode = _resolve_student_import_mode(request.POST.get('import_mode'))
+    try:
+        _, selected_sheet, df = _read_student_import_sheet(
+            pd_module,
+            temp_path,
+            requested_sheet=sheet_name,
+        )
+        row_count, col_count = df.shape
+        if row_count == 0 or col_count == 0:
+            raise ValueError('所选工作表没有可导入的数据')
+        start_row, end_row = _parse_student_import_row_range(request, row_count)
+        name_col = _parse_student_import_column(request, 'name_col_index', col_count, required=True)
+        student_id_col = _parse_student_import_column(request, 'student_id_col_index', col_count)
+        classroom_col = _parse_student_import_column(request, 'classroom_col_index', col_count, required=False)
+        gender_col = _parse_student_import_column(request, 'gender_col_index', col_count)
+        score_col = _parse_student_import_column(request, 'score_col_index', col_count)
+        custom_columns = _parse_student_custom_columns(request, col_count)
+        selected_columns = [
+            item
+            for item in (name_col, student_id_col, classroom_col, gender_col, score_col)
+            if item is not None
+        ] + [item['col'] for item in custom_columns]
+        if len(selected_columns) != len(set(selected_columns)):
+            raise ValueError('同一列不能绑定多个字段')
+
+        df_data = df.iloc[start_row - 1:end_row].copy()
+        df_data.columns = list(range(col_count))
+        classroom_items = list(classroom_group.classrooms.all())
+        duplicate_names = {
+            item.name.casefold()
+            for item in classroom_items
+            if sum(1 for candidate in classroom_items if candidate.name.casefold() == item.name.casefold()) > 1
+        }
+        if duplicate_names and classroom_col is not None:
+            raise ValueError('班级组内存在同名班级，请先修改班级名称')
+        classroom_map = {item.name.casefold(): item for item in classroom_items}
+        rows_by_classroom_name = defaultdict(list)
+        classroom_names = {}
+        unassigned_row_indexes = []
+        for row_index, row in df_data.iterrows():
+            student_name = _normalize_import_text(row.get(name_col, ''))
+            if not student_name or student_name.casefold() in {'姓名', 'name'}:
+                continue
+            classroom_name = (
+                _normalize_import_text(row.get(classroom_col, ''))
+                if classroom_col is not None
+                else ''
+            )
+            if not classroom_name:
+                unassigned_row_indexes.append(row_index)
+                continue
+            classroom_key = classroom_name.casefold()
+            classroom_names.setdefault(classroom_key, classroom_name)
+            rows_by_classroom_name[classroom_key].append(row_index)
+        if not rows_by_classroom_name and not unassigned_row_indexes:
+            raise ValueError('没有找到可导入的学生')
+
+        summary = []
+        unassigned_result = None
+        with transaction.atomic():
+            missing_classroom_keys = [
+                key for key in rows_by_classroom_name
+                if key not in classroom_map
+            ]
+            if len(classroom_items) + len(missing_classroom_keys) > 100:
+                raise ValueError('一个班级组一次最多处理 100 个班级')
+            start_order = classroom_group.classrooms.count()
+            for offset, classroom_key in enumerate(missing_classroom_keys):
+                classroom = _create_classroom_from_payload(
+                    name=classroom_names[classroom_key],
+                    mode='quick_groups',
+                    classroom_group=classroom_group,
+                    payload={
+                        'seat_rows': 6,
+                        'large_group_count': 2,
+                        'group_cols': 4,
+                    },
+                )
+                classroom.group_order = start_order + offset
+                classroom.save(update_fields=['group_order'])
+                classroom_map[classroom_key] = classroom
+                classroom_items.append(classroom)
+
+            if unassigned_row_indexes:
+                unassigned_result = _process_group_unassigned_import(
+                    classroom_group,
+                    df_data.loc[unassigned_row_indexes].copy(),
+                    name_col,
+                    student_id_col,
+                    gender_col,
+                    score_col,
+                    import_mode,
+                    custom_columns=custom_columns,
+                )
+
+            for classroom in classroom_items:
+                row_indexes = rows_by_classroom_name.get(classroom.name.casefold())
+                if not row_indexes:
+                    continue
+                before_state = _capture_history_state(classroom)
+                result = _process_import(
+                    classroom,
+                    df_data.loc[row_indexes].copy(),
+                    name_col,
+                    student_id_col,
+                    gender_col,
+                    score_col,
+                    import_mode,
+                    classroom_col=classroom_col,
+                    custom_columns=custom_columns,
+                )
+                _push_snapshot_action(
+                    request,
+                    classroom,
+                    before_state,
+                    'import_students_group',
+                    extra={
+                        'classroom_group_id': classroom_group.pk,
+                        'import_mode': import_mode,
+                        'result': result,
+                        'sheet_name': selected_sheet,
+                        'start_row': start_row,
+                        'end_row': end_row,
+                    },
+                )
+                summary.append({
+                    'classroom_id': classroom.pk,
+                    'classroom_name': classroom.name,
+                    **result,
+                })
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        total_created = sum(item['created'] for item in summary)
+        total_updated = sum(item['updated'] for item in summary)
+        unassigned_created = unassigned_result['created'] if unassigned_result else 0
+        unassigned_updated = unassigned_result['updated'] if unassigned_result else 0
+        return JsonResponse({
+            'status': 'success',
+            'message': (
+                f'整组导入完成：新增 {total_created + unassigned_created} 人，'
+                f'更新 {total_updated + unassigned_updated} 人，'
+                f'待分配 {classroom_group.unassigned_students.count()} 人'
+            ),
+            'classrooms': summary,
+            'unassigned': unassigned_result,
+        })
+    except Exception as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
 
 
 def _build_constraint_maps(classroom, students):
@@ -9485,7 +10422,7 @@ def _swap_seats(seat_a, seat_b):
     with transaction.atomic():
         seat_a.student = None
         seat_a.save(update_fields=['student'])
-        
+
         seat_b.student = None
         seat_b.save(update_fields=['student'])
 
@@ -9519,7 +10456,7 @@ def _apply_internal_policy(classroom, request=None, trigger_student_id=None):
 
 
 pass # 此部分代码未被披露至开源版本
-    
+
 
 
 
@@ -9757,8 +10694,8 @@ def _arrange_grouped(classroom, students, method):
     return True
 
 
-def _run_arrangement(classroom, method):
-    students = list(classroom.students.all())
+def _run_arrangement(classroom, method, *, sort_definition=None):
+    students = list(classroom.students.select_related('classroom', 'assigned_seat__group').all())
     if method in ['score_desc', 'score_asc', 'good_front', 'good_back']:
         seats = list(classroom.seats.select_related('student').order_by('col', 'row'))
     else:
@@ -9787,8 +10724,26 @@ def _run_arrangement(classroom, method):
             if students:
                 spread.append(students.pop(0))
         students = spread
+    elif method == 'standard':
+        students.sort(key=lambda s: natural_tokens(''.join(lazy_pinyin(s.name))))
+    elif method == 'student_id':
+        students.sort(key=lambda s: natural_tokens(s.student_id or s.name))
+    elif method == 'snake':
+        students.sort(key=lambda s: natural_tokens(''.join(lazy_pinyin(s.name))))
+        row_seats = defaultdict(list)
+        for seat in seat_cells:
+            row_seats[seat.row].append(seat)
+        seats = []
+        for row in sorted(row_seats):
+            current = sorted(row_seats[row], key=lambda item: item.col)
+            seats.extend(current if row % 2 == 1 else list(reversed(current)))
     elif method in ['group_balanced', 'group_mentor']:
         return _arrange_grouped(classroom, students, method)
+    elif method == 'field_sort':
+        students = sort_students(
+            students,
+            sort_definition or definition_for_field('name', 'asc', 'pinyin_initial'),
+        )
 
     _arrange_standard(classroom, students, seats, method)
     return True
@@ -9844,7 +10799,18 @@ def auto_arrange_seats(request, pk):
                 return JsonResponse({'status': 'error', 'message': message}, status=status)
             return HttpResponse(message, status=status)
 
-        method = request.POST.get('method', 'random')
+        method = str(request.POST.get('method') or 'random').strip()
+        if method not in {
+            'random',
+            'score_desc',
+            'score_asc',
+            'good_front',
+            'good_back',
+            'score_spread',
+            'group_balanced',
+            'group_mentor',
+        }:
+            return _arrange_error('不支持的自动排座策略', status=400)
         students_count = classroom.students.count()
         seat_cells_count = classroom.seats.filter(cell_type=SeatCellType.SEAT).count()
         if seat_cells_count < students_count:
@@ -9868,7 +10834,10 @@ def auto_arrange_seats(request, pk):
                     classroom,
                     before_state,
                     'auto_arrange',
-                    extra={'method': method, 'auto_fixed': True},
+                    extra={
+                        'method': method,
+                        'auto_fixed': True,
+                    },
                 )
                 _emit_plugin_hook(
                     'seats_arranged',
@@ -9886,7 +10855,10 @@ def auto_arrange_seats(request, pk):
             classroom,
             before_state,
             'auto_arrange',
-            extra={'method': method, 'auto_fixed': False},
+            extra={
+                'method': method,
+                'auto_fixed': False,
+            },
         )
         _emit_plugin_hook(
             'seats_arranged',
@@ -9900,6 +10872,750 @@ def auto_arrange_seats(request, pk):
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'status': 'error'}, status=400)
     return redirect('classroom_detail', pk=pk)
+
+
+def _custom_sort_strategy_scope(classroom):
+    scope = models.Q(classroom=classroom)
+    if classroom.classroom_group_id:
+        scope |= models.Q(classroom_group=classroom.classroom_group)
+    return scope
+
+
+def _custom_sort_definition_from_request(request, strategies):
+    strategy_id = _safe_int(request.POST.get('strategy_id'), 0)
+    if strategy_id:
+        strategy = strategies.filter(pk=strategy_id).first()
+        if not strategy:
+            raise ValueError('自定义排序策略不存在')
+        if strategy.language == SortStrategy.LANGUAGE_PYTHON:
+            return None, normalize_python_sort_code(strategy.python_code), strategy
+        return normalize_sort_definition(strategy.definition), '', strategy
+
+    field = str(request.POST.get('field') or 'name').strip()
+    transform = str(request.POST.get('transform') or 'auto').strip()
+    direction = str(request.POST.get('direction') or 'asc').strip()
+    return definition_for_field(field, direction, transform), '', None
+
+
+GROUP_AUTO_ARRANGEMENT_METHODS = {
+    'random',
+    'score_desc',
+    'score_asc',
+    'good_front',
+    'good_back',
+    'score_spread',
+    'group_balanced',
+    'group_mentor',
+}
+
+GROUP_CROSS_CLASSROOM_MODES = {
+    'ignore_original',
+    'prefer_original',
+    'avoid_original',
+}
+
+
+def _normalize_group_cross_classroom_mode(value):
+    mode = str(value or 'ignore_original').strip().lower()
+    if mode not in GROUP_CROSS_CLASSROOM_MODES:
+        raise ValueError('不支持的跨班级处理方式')
+    return mode
+
+
+def _ordered_group_students(students, method, *, definition=None, python_code=''):
+    students = list(students)
+    if python_code:
+        return sort_students_with_python(students, python_code)
+    if method == 'field_sort':
+        return sort_students(
+            students,
+            definition or definition_for_field('name', 'asc', 'pinyin_initial'),
+        )
+    if method == 'random':
+        random.shuffle(students)
+        return students
+    if method == 'score_asc':
+        return sorted(students, key=lambda student: (student.score or 0, student.pk))
+
+    students = sorted(
+        students,
+        key=lambda student: (-(student.score or 0), student.pk),
+    )
+    if method in {'score_spread', 'group_balanced', 'group_mentor'}:
+        spread = []
+        left = 0
+        right = len(students) - 1
+        while left <= right:
+            spread.append(students[left])
+            left += 1
+            if left <= right:
+                spread.append(students[right])
+                right -= 1
+        return spread
+    return students
+
+
+def _cross_classroom_seats(classroom, method):
+    if method in {'score_desc', 'score_asc', 'good_front', 'good_back'}:
+        seats = list(
+            classroom.seats.filter(cell_type=SeatCellType.SEAT).order_by('col', 'row')
+        )
+    else:
+        seats = list(
+            classroom.seats.filter(cell_type=SeatCellType.SEAT).order_by('row', 'col')
+        )
+    if method == 'good_back':
+        seats.reverse()
+    return seats
+
+
+def _assign_pending_group_students(classrooms, *, allow_group_rebalance=False):
+    classrooms = list(classrooms)
+    if not classrooms:
+        return set()
+
+    classroom_group_id = classrooms[0].classroom_group_id
+    if not classroom_group_id:
+        return set()
+    if any(classroom.classroom_group_id != classroom_group_id for classroom in classrooms):
+        raise ValueError('待排序班级不属于同一个班级组')
+
+    pending_students = list(
+        ClassroomGroupStudent.objects.select_for_update()
+        .filter(classroom_group_id=classroom_group_id)
+        .order_by('created_at', 'pk')
+    )
+    if not pending_students:
+        return set()
+
+    seat_capacities = {
+        classroom.pk: classroom.seats.filter(cell_type=SeatCellType.SEAT).count()
+        for classroom in classrooms
+    }
+    student_counts = {
+        classroom.pk: classroom.students.count()
+        for classroom in classrooms
+    }
+    if not allow_group_rebalance:
+        for classroom in classrooms:
+            if student_counts[classroom.pk] > seat_capacities[classroom.pk]:
+                raise ValueError(f'{classroom.name} 的可用座位不足')
+
+    remaining_capacity = sum(
+        max(0, seat_capacities[classroom.pk] - student_counts[classroom.pk])
+        for classroom in classrooms
+    )
+    if remaining_capacity < len(pending_students):
+        raise ValueError(
+            f'班级组还需 {len(pending_students) - remaining_capacity} 个座位'
+            '才能分配全部待分班学生'
+        )
+
+    classroom_order = {
+        classroom.pk: index
+        for index, classroom in enumerate(classrooms)
+    }
+    students_to_create = []
+    for pending_student in pending_students:
+        candidates = [
+            classroom
+            for classroom in classrooms
+            if student_counts[classroom.pk] < seat_capacities[classroom.pk]
+        ]
+        target_classroom = min(
+            candidates,
+            key=lambda classroom: (
+                student_counts[classroom.pk] / seat_capacities[classroom.pk],
+                classroom_order[classroom.pk],
+                classroom.pk,
+            ),
+        )
+        students_to_create.append(
+            Student(
+                classroom=target_classroom,
+                name=pending_student.name,
+                student_id=pending_student.student_id,
+                gender=pending_student.gender,
+                score=pending_student.score,
+                custom_data=pending_student.custom_data,
+            )
+        )
+        student_counts[target_classroom.pk] += 1
+
+    created_students = Student.objects.bulk_create(students_to_create)
+    ClassroomGroupStudent.objects.filter(
+        pk__in=[student.pk for student in pending_students]
+    ).delete()
+    return {student.pk for student in created_students}
+
+
+def _group_target_student_counts(
+    classrooms,
+    seat_capacities,
+    total_students,
+    *,
+    cross_classroom_mode,
+    original_classroom_ids,
+    fill_classrooms=False,
+):
+    cross_classroom_mode = _normalize_group_cross_classroom_mode(cross_classroom_mode)
+    total_capacity = sum(seat_capacities.values())
+    if total_capacity < total_students:
+        raise ValueError(
+            f'班级组可用座位不足（座位 {total_capacity}，学生 {total_students}）'
+        )
+
+    if fill_classrooms:
+        remaining = total_students
+        target_counts = {}
+        for classroom in classrooms:
+            count = min(seat_capacities[classroom.pk], remaining)
+            target_counts[classroom.pk] = count
+            remaining -= count
+        return target_counts
+
+    if cross_classroom_mode == 'prefer_original':
+        target_counts = {
+            classroom.pk: min(
+                seat_capacities[classroom.pk],
+                sum(
+                    1
+                    for classroom_id in original_classroom_ids.values()
+                    if classroom_id == classroom.pk
+                ),
+            )
+            for classroom in classrooms
+        }
+    else:
+        target_counts = {classroom.pk: 0 for classroom in classrooms}
+
+    remaining = total_students - sum(target_counts.values())
+    classroom_order = {
+        classroom.pk: index
+        for index, classroom in enumerate(classrooms)
+    }
+    while remaining > 0:
+        candidates = [
+            classroom
+            for classroom in classrooms
+            if target_counts[classroom.pk] < seat_capacities[classroom.pk]
+        ]
+        target = min(
+            candidates,
+            key=lambda classroom: (
+                target_counts[classroom.pk] / seat_capacities[classroom.pk],
+                classroom_order[classroom.pk],
+                classroom.pk,
+            ),
+        )
+        target_counts[target.pk] += 1
+        remaining -= 1
+    return target_counts
+
+
+def _allocate_group_students_to_classrooms(
+    ordered_students,
+    classrooms,
+    student_counts,
+    *,
+    cross_classroom_mode,
+    original_classroom_ids,
+):
+    cross_classroom_mode = _normalize_group_cross_classroom_mode(cross_classroom_mode)
+    ordered_students = list(ordered_students)
+    if cross_classroom_mode == 'ignore_original':
+        assignments = {}
+        cursor = 0
+        for classroom in classrooms:
+            count = student_counts[classroom.pk]
+            assignments[classroom.pk] = ordered_students[cursor:cursor + count]
+            cursor += count
+        return assignments
+
+    assignments = {}
+    remaining = ordered_students[:]
+    for classroom in classrooms:
+        count = student_counts[classroom.pk]
+        if cross_classroom_mode == 'prefer_original':
+            preferred = [
+                student
+                for student in remaining
+                if original_classroom_ids.get(student.pk) == classroom.pk
+            ]
+        else:
+            preferred = [
+                student
+                for student in remaining
+                if original_classroom_ids.get(student.pk) != classroom.pk
+            ]
+        selected = preferred[:count]
+        selected_ids = {student.pk for student in selected}
+        if len(selected) < count:
+            for student in remaining:
+                if student.pk in selected_ids:
+                    continue
+                selected.append(student)
+                selected_ids.add(student.pk)
+                if len(selected) >= count:
+                    break
+        assignments[classroom.pk] = [
+            student
+            for student in remaining
+            if student.pk in selected_ids
+        ]
+        remaining = [
+            student
+            for student in remaining
+            if student.pk not in selected_ids
+        ]
+    return assignments
+
+
+def _arrange_group_across_classrooms(
+    request,
+    classrooms,
+    method,
+    *,
+    definition=None,
+    python_code='',
+    cross_classroom_mode='ignore_original',
+    newly_assigned_student_ids=None,
+    fill_classrooms=False,
+):
+    classrooms = list(classrooms)
+    newly_assigned_student_ids = set(newly_assigned_student_ids or [])
+    seat_capacities = {
+        classroom.pk: classroom.seats.filter(cell_type=SeatCellType.SEAT).count()
+        for classroom in classrooms
+    }
+
+    all_students = list(
+        Student.objects.filter(classroom__in=classrooms)
+        .select_related('classroom', 'assigned_seat__group')
+        .order_by('classroom__group_order', 'classroom_id', 'pk')
+    )
+    original_classroom_ids = {
+        student.pk: (
+            None
+            if student.pk in newly_assigned_student_ids
+            else student.classroom_id
+        )
+        for student in all_students
+    }
+    target_counts = _group_target_student_counts(
+        classrooms,
+        seat_capacities,
+        len(all_students),
+        cross_classroom_mode=cross_classroom_mode,
+        original_classroom_ids=original_classroom_ids,
+        fill_classrooms=fill_classrooms,
+    )
+    ordered_students = _ordered_group_students(
+        all_students,
+        method,
+        definition=definition,
+        python_code=python_code,
+    )
+    assignments = _allocate_group_students_to_classrooms(
+        ordered_students,
+        classrooms,
+        target_counts,
+        cross_classroom_mode=cross_classroom_mode,
+        original_classroom_ids=original_classroom_ids,
+    )
+
+    moved_students = [
+        student
+        for classroom in classrooms
+        for student in assignments[classroom.pk]
+        if student.classroom_id != classroom.pk
+    ]
+    moved_ids = [student.pk for student in moved_students]
+
+    for classroom in classrooms:
+        classroom.seats.update(student=None)
+        classroom.left_guardian = None
+        classroom.right_guardian = None
+        classroom.save(update_fields=['left_guardian', 'right_guardian'])
+        classroom.groups.update(leader=None)
+
+    if moved_ids:
+        StudentTagMembership.objects.filter(student_id__in=moved_ids).delete()
+        SeatConstraint.objects.filter(
+            models.Q(student_id__in=moved_ids)
+            | models.Q(target_student_id__in=moved_ids)
+        ).delete()
+
+    for classroom in classrooms:
+        for student in assignments[classroom.pk]:
+            if student.classroom_id != classroom.pk:
+                student.classroom = classroom
+                student.save(update_fields=['classroom'])
+
+    for classroom in classrooms:
+        classroom_students = assignments[classroom.pk]
+        if method in {'group_balanced', 'group_mentor'}:
+            if not _run_arrangement(classroom, method):
+                raise ValueError(f'{classroom.name} 尚未设置可用小组')
+        else:
+            _arrange_standard(
+                classroom,
+                classroom_students,
+                _cross_classroom_seats(classroom, method),
+                method,
+            )
+        _stabilize_layout_with_rules(classroom, request)
+        violations = _layout_hard_issues(classroom)
+        if violations:
+            raise ValueError(
+                f'{classroom.name} 的约束未满足：{_format_issues_preview(violations)}'
+            )
+
+
+def _apply_group_auto_arrangement(
+    request,
+    classroom_group,
+    method,
+    *,
+    cross_classrooms=False,
+    cross_classroom_mode='ignore_original',
+):
+    if method not in GROUP_AUTO_ARRANGEMENT_METHODS:
+        raise ValueError('不支持的自动排座策略')
+    classrooms = list(
+        classroom_group.classrooms.all().order_by('group_order', 'created_at', 'pk')
+    )
+    if not classrooms:
+        raise ValueError('班级组内没有可排序的班级')
+    before_states = {
+        classroom.pk: _capture_history_state(classroom)
+        for classroom in classrooms
+    }
+    with transaction.atomic():
+        newly_assigned_student_ids = _assign_pending_group_students(
+            classrooms,
+            allow_group_rebalance=cross_classrooms and len(classrooms) > 1,
+        )
+        if cross_classrooms and len(classrooms) > 1:
+            _arrange_group_across_classrooms(
+                request,
+                classrooms,
+                method,
+                cross_classroom_mode=cross_classroom_mode,
+                newly_assigned_student_ids=newly_assigned_student_ids,
+            )
+        else:
+            for classroom in classrooms:
+                if not _run_arrangement(classroom, method):
+                    if method in {'group_balanced', 'group_mentor'}:
+                        raise ValueError(f'{classroom.name} 尚未设置可用小组')
+                    raise ValueError(f'{classroom.name} 的可用座位不足')
+                _stabilize_layout_with_rules(classroom, request)
+                violations = _layout_hard_issues(classroom)
+                if violations:
+                    raise ValueError(
+                        f'{classroom.name} 的约束未满足：{_format_issues_preview(violations)}'
+                    )
+    for classroom in classrooms:
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_states[classroom.pk],
+            'group_auto_arrange',
+            extra={
+                'method': method,
+                'classroom_group_id': classroom_group.pk,
+                'cross_classrooms': cross_classrooms,
+                'cross_classroom_mode': (
+                    _normalize_group_cross_classroom_mode(cross_classroom_mode)
+                    if cross_classrooms
+                    else 'ignore_original'
+                ),
+            },
+        )
+        _emit_plugin_hook(
+            'seats_arranged',
+            request=request,
+            classroom=classroom,
+            payload={
+                'method': method,
+                'cross_classrooms': cross_classrooms,
+                'cross_classroom_mode': (
+                    _normalize_group_cross_classroom_mode(cross_classroom_mode)
+                    if cross_classrooms
+                    else 'ignore_original'
+                ),
+            },
+        )
+
+
+def _apply_custom_sort_definition(
+    request,
+    classrooms,
+    definition,
+    *,
+    scope_name,
+    strategy=None,
+    python_code='',
+    cross_classrooms=False,
+    cross_classroom_mode='ignore_original',
+    fill_classrooms=False,
+):
+    classrooms = list(classrooms)
+    before_states = {
+        classroom.pk: _capture_history_state(classroom)
+        for classroom in classrooms
+    }
+    with transaction.atomic():
+        newly_assigned_student_ids = _assign_pending_group_students(
+            classrooms,
+            allow_group_rebalance=cross_classrooms and len(classrooms) > 1,
+        )
+        if cross_classrooms and len(classrooms) > 1:
+            _arrange_group_across_classrooms(
+                request,
+                classrooms,
+                'field_sort',
+                definition=definition,
+                python_code=python_code,
+                cross_classroom_mode=cross_classroom_mode,
+                newly_assigned_student_ids=newly_assigned_student_ids,
+                fill_classrooms=fill_classrooms,
+            )
+        else:
+            for classroom in classrooms:
+                if python_code:
+                    students = sort_students_with_python(
+                        classroom.students.select_related('classroom', 'assigned_seat__group').all(),
+                        python_code,
+                    )
+                    seats = list(
+                        classroom.seats.filter(cell_type=SeatCellType.SEAT).order_by('row', 'col')
+                    )
+                    if len(seats) < len(students):
+                        raise ValueError(f'{classroom.name} 的可用座位不足')
+                    _arrange_standard(classroom, students, seats, 'python_sort_strategy')
+                elif not _run_arrangement(classroom, 'field_sort', sort_definition=definition):
+                    raise ValueError(f'{classroom.name} 的可用座位不足')
+                _stabilize_layout_with_rules(classroom, request)
+                violations = _layout_hard_issues(classroom)
+                if violations:
+                    raise ValueError(
+                        f'{classroom.name} 的约束未满足：{_format_issues_preview(violations)}'
+                    )
+
+    for classroom in classrooms:
+        _push_snapshot_action(
+            request,
+            classroom,
+            before_states[classroom.pk],
+            'custom_sort',
+            extra={
+                'definition': definition,
+                'language': SortStrategy.LANGUAGE_PYTHON if python_code else SortStrategy.LANGUAGE_DECLARATIVE,
+                'strategy_id': strategy.pk if strategy else None,
+                'scope': scope_name,
+                'cross_classrooms': cross_classrooms,
+                'cross_classroom_mode': (
+                    _normalize_group_cross_classroom_mode(cross_classroom_mode)
+                    if cross_classrooms
+                    else 'ignore_original'
+                ),
+            },
+        )
+        _emit_plugin_hook(
+            'seats_arranged',
+            request=request,
+            classroom=classroom,
+            payload={
+                'method': 'custom_sort',
+                'sort_definition': definition,
+                'strategy_language': SortStrategy.LANGUAGE_PYTHON if python_code else SortStrategy.LANGUAGE_DECLARATIVE,
+                'strategy_id': strategy.pk if strategy else None,
+                'cross_classrooms': cross_classrooms,
+                'cross_classroom_mode': (
+                    _normalize_group_cross_classroom_mode(cross_classroom_mode)
+                    if cross_classrooms
+                    else 'ignore_original'
+                ),
+            },
+        )
+
+
+def _custom_sort_context(*, classroom=None, classroom_group=None, error_message='', submitted=None):
+    if classroom_group is not None:
+        classrooms = list(classroom_group.classrooms.all().order_by('group_order', 'created_at', 'pk'))
+        custom_info_keys = sorted({
+            str(key)
+            for data in [
+                *(
+                    item
+                    for classroom in classrooms
+                    for item in classroom.students.values_list('custom_data', flat=True)
+                ),
+                *classroom_group.unassigned_students.values_list('custom_data', flat=True),
+            ]
+            if isinstance(data, dict)
+            for key in data.keys()
+            if str(key).strip()
+        })
+        strategies = classroom_group.sort_strategies.all().order_by('name', 'pk')
+        return {
+            'classroom_group': classroom_group,
+            'classrooms': classrooms,
+            'custom_info_keys': custom_info_keys,
+            'sort_strategies': strategies,
+            'error_message': error_message,
+            'submitted': submitted or {},
+            'back_url_name': 'classroom_group_detail',
+        }
+
+    custom_info_keys = sorted({
+        str(key)
+        for data in classroom.students.values_list('custom_data', flat=True)
+        if isinstance(data, dict)
+        for key in data.keys()
+        if str(key).strip()
+    })
+    strategies = SortStrategy.objects.filter(
+        _custom_sort_strategy_scope(classroom)
+    ).distinct().order_by('name', 'pk')
+    return {
+        'classroom': classroom,
+        'classrooms': [classroom],
+        'custom_info_keys': custom_info_keys,
+        'sort_strategies': strategies,
+        'error_message': error_message,
+        'submitted': submitted or {},
+        'back_url_name': 'classroom_detail',
+    }
+
+
+def classroom_custom_sort(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    strategies = SortStrategy.objects.filter(_custom_sort_strategy_scope(classroom)).distinct()
+    if request.method == 'POST':
+        try:
+            definition, python_code, strategy = _custom_sort_definition_from_request(request, strategies)
+            _apply_custom_sort_definition(
+                request,
+                [classroom],
+                definition,
+                scope_name='classroom',
+                strategy=strategy,
+                python_code=python_code,
+            )
+            return redirect('classroom_detail', pk=classroom.pk)
+        except ValueError as exc:
+            return render(
+                request,
+                'seats/custom_sort.html',
+                _custom_sort_context(
+                    classroom=classroom,
+                    error_message=str(exc),
+                    submitted=request.POST,
+                ),
+                status=400,
+            )
+    return render(
+        request,
+        'seats/custom_sort.html',
+        _custom_sort_context(classroom=classroom),
+    )
+
+
+def classroom_group_custom_sort(request, pk):
+    classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
+    strategies = classroom_group.sort_strategies.all()
+    classrooms = classroom_group.classrooms.all().order_by('group_order', 'created_at', 'pk')
+    if request.method == 'POST':
+        try:
+            if not classrooms.exists():
+                raise ValueError('班级组内没有可排序的班级')
+            cross_classrooms = _parse_bool(request.POST.get('cross_classrooms'))
+            cross_classroom_mode = _normalize_group_cross_classroom_mode(
+                request.POST.get('cross_classroom_mode')
+                if cross_classrooms
+                else 'ignore_original'
+            )
+            sort_kind = str(request.POST.get('sort_kind') or '').strip()
+            if sort_kind in {'strategy', 'automatic'}:
+                strategy_choice = str(request.POST.get('strategy_choice') or '').strip()
+                if strategy_choice.startswith('saved:'):
+                    strategy = strategies.filter(
+                        pk=_safe_int(strategy_choice.split(':', 1)[1], 0)
+                    ).first()
+                    if not strategy:
+                        raise ValueError('自定义排序策略不存在')
+                    definition = (
+                        None
+                        if strategy.language == SortStrategy.LANGUAGE_PYTHON
+                        else normalize_sort_definition(strategy.definition)
+                    )
+                    python_code = (
+                        normalize_python_sort_code(strategy.python_code)
+                        if strategy.language == SortStrategy.LANGUAGE_PYTHON
+                        else ''
+                    )
+                    _apply_custom_sort_definition(
+                        request,
+                        classrooms,
+                        definition,
+                        scope_name='classroom_group',
+                        strategy=strategy,
+                        python_code=python_code,
+                        cross_classrooms=cross_classrooms,
+                        cross_classroom_mode=cross_classroom_mode,
+                    )
+                else:
+                    method = (
+                        strategy_choice.split(':', 1)[1]
+                        if strategy_choice.startswith('builtin:')
+                        else str(request.POST.get('method') or 'random').strip()
+                    )
+                    _apply_group_auto_arrangement(
+                        request,
+                        classroom_group,
+                        method,
+                        cross_classrooms=cross_classrooms,
+                        cross_classroom_mode=cross_classroom_mode,
+                    )
+                return HttpResponseRedirect(
+                    reverse('classroom_group_detail', args=[classroom_group.pk])
+                    + '?sort_applied=1'
+                )
+            definition, python_code, strategy = _custom_sort_definition_from_request(request, strategies)
+            _apply_custom_sort_definition(
+                request,
+                classrooms,
+                definition,
+                scope_name='classroom_group',
+                strategy=strategy,
+                python_code=python_code,
+                cross_classrooms=cross_classrooms,
+                cross_classroom_mode=cross_classroom_mode,
+                fill_classrooms=True,
+            )
+            return HttpResponseRedirect(
+                reverse('classroom_group_detail', args=[classroom_group.pk])
+                + '?sort_applied=1'
+            )
+        except ValueError as exc:
+            return render(
+                request,
+                'seats/custom_sort.html',
+                _custom_sort_context(
+                    classroom_group=classroom_group,
+                    error_message=str(exc),
+                    submitted=request.POST,
+                ),
+                status=400,
+            )
+    return render(
+        request,
+        'seats/custom_sort.html',
+        _custom_sort_context(classroom_group=classroom_group),
+    )
 
 
 def _perform_move_fixed_group(classroom, student, target_seat):
@@ -10232,8 +11948,15 @@ def search_students(request, pk):
                 'student_id': student.student_id or '',
                 'seat': seat_info,
                 'tags': student_tags,
+                '_exact_student_id': bool(query and query == student_number),
             })
 
+    matches.sort(key=lambda item: (
+        0 if item.pop('_exact_student_id', False) else 1,
+        natural_tokens(item.get('student_id')),
+        ''.join(lazy_pinyin(item.get('name') or '')),
+        item.get('id') or 0,
+    ))
     return JsonResponse({'students': matches})
 
 
@@ -10355,6 +12078,7 @@ def add_student(request, pk):
             student_id=student_id_val,
             gender=gender,
             score=score,
+            custom_data=normalize_custom_data(data.get('custom_data')),
         )
         tag_changes = _apply_student_tag_payload(classroom, [student], data, default_mode='set')
     _push_snapshot_action(request, classroom, before_state, 'add_student',
@@ -10386,6 +12110,8 @@ def update_student(request, pk, student_id):
         student.score = float(data.get('score', 0) or 0)
     except (ValueError, TypeError):
         student.score = 0
+    if 'custom_data' in data:
+        student.custom_data = normalize_custom_data(data.get('custom_data'))
     with transaction.atomic():
         student.save()
         tag_changes = _apply_student_tag_payload(classroom, [student], data, default_mode='set')
@@ -14560,6 +16286,117 @@ def cloud_sync(request):
 
 @csrf_exempt
 @require_POST
+def cloud_sync_group(request, pk):
+    try:
+        session = _cloud_local_session_or_401()
+        _refresh_cloud_subscription_if_logged_in(session)
+        classroom_group = get_object_or_404(
+            ClassroomGroup.objects.prefetch_related('classrooms__sync_meta'),
+            pk=pk,
+        )
+        classrooms = list(classroom_group.classrooms.all().order_by('group_order', 'created_at', 'pk'))
+        if not classrooms:
+            raise ValueError('班级组内没有可备份的班级')
+
+        try:
+            data = _cloud_json_body(request)
+        except ValueError:
+            data = {}
+        force = bool(data.get('force'))
+        device_id = str(data.get('device_id') or 'local-desktop')[:64]
+        metas = {}
+        items = []
+        for classroom in classrooms:
+            meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
+            metas[str(meta.uuid)] = (classroom, meta)
+            operation_at = _sync_meta_operation_time(meta, classroom)
+            items.append({
+                'uuid': str(meta.uuid),
+                'base_version': int(meta.cloud_version or 0),
+                'cloud_version': int(meta.cloud_version or 0),
+                'local_version': int(meta.local_version or 0),
+                'force': force,
+                'device_id': device_id,
+                'last_operation_at': operation_at.isoformat() if operation_at else None,
+                'data': _cloud_export_payload(classroom, session),
+            })
+
+        payload = cloud_api_request(
+            session,
+            'POST',
+            '/api/sync/push-group',
+            {
+                'group': {
+                    'uuid': str(classroom_group.uuid),
+                    'name': classroom_group.name,
+                },
+                'items': items,
+            },
+            refresh_subscription=False,
+        )
+        raw_results = payload.get('results') if isinstance(payload, dict) else None
+        if not isinstance(raw_results, list) or len(raw_results) != len(classrooms):
+            raise ValueError('云端未返回完整的班级组备份结果')
+
+        result_by_uuid = {
+            str(item.get('uuid') or ''): item
+            for item in raw_results
+            if isinstance(item, dict) and item.get('uuid')
+        }
+        if any(classroom_uuid not in result_by_uuid for classroom_uuid in metas):
+            raise ValueError('云端返回的班级组备份结果不完整')
+
+        synced_at = timezone.now()
+        response_results = []
+        with transaction.atomic():
+            for classroom_uuid, (classroom, meta) in metas.items():
+                result = result_by_uuid[classroom_uuid]
+                version = int(result.get('version') or meta.cloud_version or 0)
+                operation_at = (
+                    _parse_cloud_operation_time(result.get('last_operation_at') or result.get('last_modified_at'))
+                    or _sync_meta_operation_time(meta, classroom)
+                )
+                meta.cloud_version = version
+                meta.local_version = version
+                if operation_at:
+                    meta.last_operation_at = operation_at
+                meta.last_sync_at = synced_at
+                meta.last_error = ''
+                meta.save(update_fields=[
+                    'cloud_version',
+                    'local_version',
+                    'last_operation_at',
+                    'last_sync_at',
+                    'last_error',
+                    'updated_at',
+                ])
+                response_results.append({
+                    'classroom_id': classroom.pk,
+                    'name': classroom.name,
+                    'version': version,
+                    **_serialize_classroom_sync_meta(classroom, meta),
+                })
+
+        return JsonResponse({
+            'status': 'success',
+            'message': f'已完整备份班级组“{classroom_group.name}”中的 {len(classrooms)} 个班级',
+            'group': payload.get('group') if isinstance(payload, dict) else {},
+            'results': response_results,
+        })
+    except CloudAPIError as exc:
+        payload = dict(exc.payload or {})
+        payload.setdefault('status', 'error')
+        payload.setdefault('message', str(exc))
+        if payload.get('code') == 'CLASSROOM_LIMIT_EXCEEDED':
+            payload['upgrade_required'] = True
+            payload['upgrade_url'] = reverse('settings') + '#cloud-settings-section'
+        return JsonResponse(payload, status=exc.status_code)
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_POST
 def cloud_sync_pull(request, classroom_uuid):
     try:
         session = _cloud_local_session_or_401()
@@ -14695,38 +16532,6 @@ def cloud_subscription_plans(request):
         for p in plans:
             p.setdefault('key', p.get('tier', ''))
         return JsonResponse({'status': 'success', 'plans': plans, 'current_tier': current_tier})
-    except Exception as exc:
-        return _cloud_error_response(exc)
-
-
-@csrf_exempt
-@require_POST
-def cloud_subscription_redeem(request):
-    try:
-        session = _cloud_local_session_or_401()
-        data = _cloud_json_body(request)
-        payload = cloud_api_request(session, 'POST', '/api/subscription/redeem', {
-            'code': data.get('code'),
-        })
-        if payload.get('uid') or payload.get('subscription'):
-            session_payload = {
-                'uid': payload.get('uid') or session.uid,
-                'nickname': payload.get('nickname') or session.nickname,
-                'email': payload.get('email') or session.email,
-                'avatar_url': payload.get('avatar_url') or session.avatar_url,
-                'session_token': session.session_token,
-                'client_key_id': session.client_key_id,
-                'client_public_key': session.client_public_key_pem,
-                'client_private_key': session.client_private_key_pem,
-                'server_key_id': session.server_key_id,
-                'server_public_key': session.server_public_key_pem,
-                'token_expires_at': session.token_expires_at.isoformat(),
-                'subscription': payload.get('subscription') or {},
-            }
-            save_cloud_session_from_payload(session_payload)
-        elif isinstance(payload, dict):
-            apply_cloud_subscription_payload(session, payload)
-        return JsonResponse({'status': 'success', **payload})
     except Exception as exc:
         return _cloud_error_response(exc)
 
@@ -14876,7 +16681,10 @@ def desktop_update_start(request):
         }, status=400)
 
     try:
-        result = desktop_runtime.start_manual_update(payload.get('target_version'))
+        result = desktop_runtime.start_manual_update(
+            payload.get('target_version'),
+            payload.get('package_path'),
+        )
         return JsonResponse({'status': 'success', **result})
     except ValueError as exc:
         return JsonResponse({
@@ -15020,6 +16828,7 @@ def frontend_improve_logs(request):
 @csrf_exempt
 @require_http_methods(['GET'])
 def ai_session_status(request):
+    _ensure_ai_feature_enabled()
     from seats.open_api import ai_session, realtime
     payload = ai_session.status()
     return JsonResponse({
@@ -15032,6 +16841,7 @@ def ai_session_status(request):
 @csrf_exempt
 @require_POST
 def ai_session_end(request):
+    _ensure_ai_feature_enabled()
     from seats.open_api import ai_session
     ai_session.end()
     return JsonResponse({'status': 'success', 'session': ai_session.status()})
@@ -15039,6 +16849,7 @@ def ai_session_end(request):
 
 @require_http_methods(['GET'])
 def ai_session_stream(request):
+    _ensure_ai_feature_enabled()
     from seats.open_api import ai_session, realtime
 
     def event_stream():
@@ -15058,3 +16869,12 @@ def ai_session_stream(request):
     response['Cache-Control'] = 'no-cache'
     response['X-Accel-Buffering'] = 'no'
     return response
+
+
+@require_http_methods(['GET'])
+def realtime_status(request):
+    from seats.open_api import realtime
+    return JsonResponse({
+        'status': 'success',
+        'realtime': realtime.snapshot(),
+    })

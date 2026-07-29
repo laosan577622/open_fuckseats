@@ -11,6 +11,7 @@ from seats.constraints import (
 )
 from seats.models import (
     Classroom,
+    ClassroomGroup,
     ClassroomHistoryEntry,
     LayoutSnapshot,
     Seat,
@@ -53,6 +54,11 @@ def serialize_classroom(classroom, *, include_metrics=True):
         'rows': classroom.rows,
         'cols': classroom.cols,
         'created_at': classroom.created_at.isoformat() if classroom.created_at else '',
+        'classroom_group': {
+            'id': classroom.classroom_group_id,
+            'name': classroom.classroom_group.name,
+            'uuid': str(classroom.classroom_group.uuid),
+        } if classroom.classroom_group_id and classroom.classroom_group else None,
         'podium_guards': legacy_views._serialize_podium_guards(classroom),
     }
     if include_metrics:
@@ -67,6 +73,27 @@ def serialize_classroom(classroom, *, include_metrics=True):
             'tags': classroom.student_tags.count(),
             'snapshots': classroom.layout_snapshots.count(),
         }
+    return data
+
+
+def serialize_classroom_group(classroom_group, *, include_classrooms=True):
+    data = {
+        'id': classroom_group.pk,
+        'uuid': str(classroom_group.uuid),
+        'name': classroom_group.name,
+        'sort_order': classroom_group.sort_order,
+        'created_at': classroom_group.created_at.isoformat() if classroom_group.created_at else '',
+        'classroom_count': classroom_group.classrooms.count(),
+    }
+    if include_classrooms:
+        data['classrooms'] = [
+            serialize_classroom(item)
+            for item in classroom_group.classrooms.select_related('classroom_group').order_by(
+                'group_order',
+                'created_at',
+                'pk',
+            )
+        ]
     return data
 
 

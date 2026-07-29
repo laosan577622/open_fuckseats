@@ -1,62 +1,201 @@
 {% extends 'base.html' %}
 
-{% block title %}班级列表{% endblock %}
+{% block title %}班级与班级组{% endblock %}
+{% block body_class %}home-dashboard-body{% endblock %}
 
-{% block actions %}
-<div class="header-action-row office-ribbon-row">
-    <div class="ribbon-group">
-        <a href="{% url 'create_classroom' %}" class="btn btn-primary">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path d="M12 5V19M5 12H19" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
-            </svg>
-            新建班级
-        </a>
-        <span class="ribbon-group-label">班级</span>
-    </div>
-    <div class="ribbon-group">
-        <a href="{% url 'settings' %}" class="btn btn-secondary">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><rect width="24" height="24" opacity="0"></rect><g><path d="M12.02 9Q12.84 9 13.52 9.41Q14.21 9.82 14.6 10.51Q15 11.21 15 12.02Q15 12.84 14.6 13.52Q14.21 14.21 13.52 14.6Q12.84 15 12 15Q11.18 15 10.49 14.59Q9.79 14.18 9.4 13.49Q9 12.79 9 11.98Q9 11.16 9.41 10.48Q9.82 9.79 10.51 9.4Q11.21 9 12.02 9ZM12.05 7.51Q10.82 7.51 9.78 8.11Q8.74 8.71 8.12 9.73Q7.51 10.75 7.51 11.98Q7.51 13.2 8.11 14.24Q8.71 15.29 9.74 15.9Q10.78 16.51 12 16.51Q13.22 16.51 14.26 15.91Q15.29 15.31 15.9 14.28Q16.51 13.25 16.51 12.02Q16.51 10.8 15.91 9.77Q15.31 8.74 14.29 8.12Q13.27 7.51 12.05 7.51ZM13.56 22.66Q14.02 22.66 14.4 22.4Q14.78 22.15 14.98 21.74L15.79 19.85L15.98 19.75Q16.42 19.49 16.85 19.22L18.91 19.49Q19.39 19.54 19.8 19.33Q20.21 19.13 20.45 18.72L22.03 15.98Q22.27 15.58 22.24 15.12Q22.2 14.66 21.94 14.28L20.69 12.6L20.69 11.42L21.94 9.74Q22.22 9.36 22.25 8.9Q22.27 8.45 22.03 8.04L20.45 5.28Q20.23 4.9 19.82 4.68Q19.42 4.46 18.94 4.51L16.85 4.78Q16.42 4.46 15.86 4.2L15.02 2.23Q14.83 1.82 14.45 1.56Q14.06 1.3 13.61 1.3L10.44 1.3Q9.98 1.3 9.59 1.56Q9.19 1.82 9 2.23L8.16 4.2L7.92 4.34Q7.73 4.44 7.55 4.54Q7.37 4.63 7.2 4.75L5.09 4.51Q4.63 4.44 4.21 4.64Q3.79 4.85 3.55 5.26L1.97 8.02Q1.73 8.4 1.76 8.87Q1.8 9.34 2.06 9.72L3.34 11.42L3.34 12.53L2.06 14.23Q1.78 14.62 1.75 15.07Q1.73 15.53 1.97 15.94L3.53 18.67Q3.77 19.08 4.18 19.28Q4.58 19.49 5.06 19.44L7.13 19.2Q7.8 19.63 8.14 19.8L8.98 21.72Q9.14 22.15 9.53 22.4Q9.91 22.66 10.39 22.66L13.56 22.66ZM7.08 17.66L4.8 17.9L3.22 15.1L4.58 13.27Q4.8 12.94 4.8 12.6Q4.78 12.31 4.78 11.95Q4.78 11.59 4.8 11.3Q4.8 10.92 4.58 10.61L3.22 8.74L4.85 5.95L7.15 6.24Q7.37 6.26 7.55 6.22Q7.73 6.17 7.87 6.07Q8.3 5.76 8.93 5.47Q9.29 5.28 9.43 4.94L10.39 2.78L13.61 2.81L14.52 4.94Q14.64 5.26 15.02 5.47Q15.55 5.71 16.1 6.1Q16.46 6.34 16.82 6.26L19.13 6.02L20.71 8.83L19.37 10.63Q19.1 10.92 19.15 11.33Q19.18 11.64 19.18 12.01Q19.18 12.38 19.15 12.67Q19.13 13.06 19.37 13.37L20.71 15.19L19.08 17.98L16.85 17.71Q16.66 17.69 16.46 17.72Q16.27 17.76 16.13 17.88Q15.6 18.26 15 18.53Q14.83 18.62 14.69 18.76Q14.54 18.89 14.47 19.06L13.56 21.14L10.34 21.12L9.46 19.03Q9.29 18.67 8.95 18.5Q8.47 18.29 7.85 17.88Q7.58 17.69 7.25 17.69Z" fill="currentColor"></path></g></svg>
-            设置
-        </a>
-        <span class="ribbon-group-label">应用</span>
+{% block ribbon_tabs %}{% endblock %}
+{% block actions %}{% endblock %}
+
+{% block titlebar_actions %}
+<a href="{% url 'settings' %}" class="home-titlebar-settings" aria-label="设置" title="设置">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+        <rect width="24" height="24" opacity="0"></rect>
+        <path d="M12.02 9Q12.84 9 13.52 9.41Q14.21 9.82 14.6 10.51Q15 11.21 15 12.02Q15 12.84 14.6 13.52Q14.21 14.21 13.52 14.6Q12.84 15 12 15Q11.18 15 10.49 14.59Q9.79 14.18 9.4 13.49Q9 12.79 9 11.98Q9 11.16 9.41 10.48Q9.82 9.79 10.51 9.4Q11.21 9 12.02 9ZM12.05 7.51Q10.82 7.51 9.78 8.11Q8.74 8.71 8.12 9.73Q7.51 10.75 7.51 11.98Q7.51 13.2 8.11 14.24Q8.71 15.29 9.74 15.9Q10.78 16.51 12 16.51Q13.22 16.51 14.26 15.91Q15.29 15.31 15.9 14.28Q16.51 13.25 16.51 12.02Q16.51 10.8 15.91 9.77Q15.31 8.74 14.29 8.12Q13.27 7.51 12.05 7.51ZM13.56 22.66Q14.02 22.66 14.4 22.4Q14.78 22.15 14.98 21.74L15.79 19.85L15.98 19.75Q16.42 19.49 16.85 19.22L18.91 19.49Q19.39 19.54 19.8 19.33Q20.21 19.13 20.45 18.72L22.03 15.98Q22.27 15.58 22.24 15.12Q22.2 14.66 21.94 14.28L20.69 12.6L20.69 11.42L21.94 9.74Q22.22 9.36 22.25 8.9Q22.27 8.45 22.03 8.04L20.45 5.28Q20.23 4.9 19.82 4.68Q19.42 4.46 18.94 4.51L16.85 4.78Q16.42 4.46 15.86 4.2L15.02 2.23Q14.83 1.82 14.45 1.56Q14.06 1.3 13.61 1.3L10.44 1.3Q9.98 1.3 9.59 1.56Q9.19 1.82 9 2.23L8.16 4.2L7.92 4.34Q7.73 4.44 7.55 4.54Q7.37 4.63 7.2 4.75L5.09 4.51Q4.63 4.44 4.21 4.64Q3.79 4.85 3.55 5.26L1.97 8.02Q1.73 8.4 1.76 8.87Q1.8 9.34 2.06 9.72L3.34 11.42L3.34 12.53L2.06 14.23Q1.78 14.62 1.75 15.07Q1.73 15.53 1.97 15.94L3.53 18.67Q3.77 19.08 4.18 19.28Q4.58 19.49 5.06 19.44L7.13 19.2Q7.8 19.63 8.14 19.8L8.98 21.72Q9.14 22.15 9.53 22.4Q9.91 22.66 10.39 22.66L13.56 22.66ZM7.08 17.66L4.8 17.9L3.22 15.1L4.58 13.27Q4.8 12.94 4.8 12.6Q4.78 12.31 4.78 11.95Q4.78 11.59 4.8 11.3Q4.8 10.92 4.58 10.61L3.22 8.74L4.85 5.95L7.15 6.24Q7.37 6.26 7.55 6.22Q7.73 6.17 7.87 6.07Q8.3 5.76 8.93 5.47Q9.29 5.28 9.43 4.94L10.39 2.78L13.61 2.81L14.52 4.94Q14.64 5.26 15.02 5.47Q15.55 5.71 16.1 6.1Q16.46 6.34 16.82 6.26L19.13 6.02L20.71 8.83L19.37 10.63Q19.1 10.92 19.15 11.33Q19.18 11.64 19.18 12.01Q19.18 12.38 19.15 12.67Q19.13 13.06 19.37 13.37L20.71 15.19L19.08 17.98L16.85 17.71Q16.66 17.69 16.46 17.72Q16.27 17.76 16.13 17.88Q15.6 18.26 15 18.53Q14.83 18.62 14.69 18.76Q14.54 18.89 14.47 19.06L13.56 21.14L10.34 21.12L9.46 19.03Q9.29 18.67 8.95 18.5Q8.47 18.29 7.85 17.88Q7.58 17.69 7.25 17.69Z" fill="currentColor"></path>
+    </svg>
+</a>
+{% endblock %}
+
+{% block content %}
+<div class="home-dashboard-page">
+    <section class="home-dashboard-hero animate-fade-in">
+        <div class="home-dashboard-heading">
+            <h1>班级与班级组</h1>
+        </div>
+        <div class="home-dashboard-tools">
+            <details class="home-create-menu" data-home-create-menu>
+                <summary class="home-primary-action">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/>
+                    </svg>
+                    <span>新建</span>
+                    <svg class="home-action-chevron" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                        <path d="m6 8 4 4 4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </summary>
+                <div class="home-create-dropdown">
+                    <a href="{% url 'create_classroom' %}">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7.5h16v12H4v-12Zm3-3h10v3H7v-3ZM8 19.5v2m8-2v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        <span><strong>新建班级</strong></span>
+                    </a>
+                    <a href="{% url 'create_classroom_group' %}">
+                        <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.5 8.5h6l1.7 2H20.5v8.75a1.75 1.75 0 0 1-1.75 1.75H5.25a1.75 1.75 0 0 1-1.75-1.75V8.5Zm0 0V6.75A1.75 1.75 0 0 1 5.25 5h4l1.5 1.75h8A1.75 1.75 0 0 1 20.5 8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                        <span><strong>新建班级组</strong></span>
+                    </a>
+                </div>
+            </details>
+            <label class="home-search-box">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/>
+                    <path d="m16 16 4 4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+                </svg>
+                <input type="search" placeholder="搜索班级或班级组..." aria-label="搜索班级或班级组" data-home-search>
+            </label>
+        </div>
+    </section>
+
+    <section class="home-library-section" data-home-section="groups">
+        <header class="home-section-heading">
+            <div class="home-section-title">
+                <span class="home-section-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5h6l1.7 2H20.5v8.75A1.75 1.75 0 0 1 18.75 21H5.25a1.75 1.75 0 0 1-1.75-1.75V8.5Zm0 0V6.75A1.75 1.75 0 0 1 5.25 5h4l1.5 1.75h8A1.75 1.75 0 0 1 20.5 8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                </span>
+                <h2>班级组</h2>
+                <span class="home-section-count">· {{ classroom_groups|length }} 个</span>
+            </div>
+            <a href="{% url 'create_classroom_group' %}" class="home-outline-action home-outline-link">
+                    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+                    新建班级组
+            </a>
+        </header>
+
+        {% if classroom_groups %}
+        <div class="home-group-grid">
+            {% for group in classroom_groups %}
+            <article class="home-group-card" data-home-group-card data-search-value="{{ group.name|lower }}">
+                <div class="home-card-leading">
+                    <span class="home-card-icon home-card-icon-folder" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none"><path d="M3.5 8.5h6l1.7 2H20.5v8.75A1.75 1.75 0 0 1 18.75 21H5.25a1.75 1.75 0 0 1-1.75-1.75V8.5Zm0 0V6.75A1.75 1.75 0 0 1 5.25 5h4l1.5 1.75h8A1.75 1.75 0 0 1 20.5 8.5" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
+                    </span>
+                    <div>
+                        <h3>{{ group.name }}</h3>
+                        <p>{{ group.classrooms.count }} 个班级</p>
+                    </div>
+                </div>
+                <a href="{% url 'classroom_group_detail' group.pk %}" class="home-manage-action">
+                    进入管理
+                    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </a>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="home-section-empty" data-home-empty-group>
+            <span>暂无班级组</span>
+        </div>
+        {% endif %}
+    </section>
+
+    <section class="home-library-section" data-home-section="classrooms">
+        <header class="home-section-heading">
+            <div class="home-section-title">
+                <span class="home-section-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="m4 9 8-4.5L20 9l-8 4.5L4 9Zm3 2.1v5.15c0 1.4 2.25 2.75 5 2.75s5-1.35 5-2.75V11.1M20 9v6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <h2>未分组班级</h2>
+                <span class="home-section-count">· {{ ungrouped_classrooms|length }} 个</span>
+            </div>
+            <a href="{% url 'create_classroom' %}" class="home-outline-action home-outline-link">
+                <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+                新建班级
+            </a>
+        </header>
+
+        {% if ungrouped_classrooms %}
+        <div class="home-classroom-grid">
+            {% for classroom in ungrouped_classrooms %}
+            <article class="home-classroom-card" data-home-classroom-card data-search-value="{{ classroom.name|lower }}"{% if onboarding_sample_pk and classroom.pk == onboarding_sample_pk %} data-sample="1"{% endif %}>
+                <div class="home-classroom-card-head">
+                    <div class="home-card-leading">
+                        <span class="home-card-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5h16v12H4v-12Zm3-3h10v3H7v-3ZM8 19.5v2m8-2v2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        </span>
+                        <h3>{{ classroom.name }}</h3>
+                        {% if onboarding_sample_pk and classroom.pk == onboarding_sample_pk %}<span class="home-sample-badge">示例</span>{% endif %}
+                    </div>
+                </div>
+                <div class="home-classroom-metrics">
+                    <span>
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M3 3h3v3H3V3Zm5.5 0h3v3h-3V3ZM14 3h3v3h-3V3ZM3 8.5h3v3H3v-3Zm5.5 0h3v3h-3v-3Zm5.5 0h3v3h-3v-3ZM3 14h3v3H3v-3Zm5.5 0h3v3h-3v-3Zm5.5 0h3v3h-3v-3Z" stroke="currentColor" stroke-width="1.25"/></svg>
+                        {{ classroom.rows }} × {{ classroom.cols }} 布局
+                    </span>
+                    <i></i>
+                    <span>
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><circle cx="10" cy="6.2" r="3" stroke="currentColor" stroke-width="1.4"/><path d="M4.5 17v-1.2A4.8 4.8 0 0 1 9.3 11h1.4a4.8 4.8 0 0 1 4.8 4.8V17" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
+                        {{ classroom.students.count }} 名学生
+                    </span>
+                    <i></i>
+                    <span>
+                        <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 9.5h12v6H4v-6Zm1.5-5h9v5h-9v-5ZM5.5 15.5v2m9-2v2" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                        {{ classroom.seats.count }} 个座位
+                    </span>
+                </div>
+                <a href="{% url 'classroom_detail' classroom.pk %}" class="home-enter-classroom">
+                    进入班级
+                    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10h12m-4-4 4 4-4 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </a>
+            </article>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="home-section-empty">
+            <span>暂无未分组班级</span>
+            <a href="{% url 'create_classroom' %}" class="btn btn-primary">新建班级</a>
+        </div>
+        {% endif %}
+    </section>
+
+    <div class="home-search-empty" data-home-search-empty hidden>
+        <strong>没有找到匹配内容</strong>
     </div>
 </div>
 {% endblock %}
 
-{% block content %}
-<section class="home-hero animate-fade-in">
-    <h1>一键排座，随时调整</h1>
-    <p>先创建班级，再导入学生，最后用自动排座和约束规则快速得到可用方案。</p>
-</section>
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var searchInput = document.querySelector('[data-home-search]');
+    var searchableCards = Array.from(document.querySelectorAll('[data-search-value]'));
+    var sections = Array.from(document.querySelectorAll('[data-home-section]'));
+    var searchEmpty = document.querySelector('[data-home-search-empty]');
+    var createMenu = document.querySelector('[data-home-create-menu]');
 
-<section class="classrooms-grid animate-fade-in">
-    {% for classroom in classrooms %}
-    <a href="{% url 'classroom_detail' classroom.pk %}" class="classroom-card-link" style="--card-index: {{ forloop.counter0 }}"{% if onboarding_sample_pk and classroom.pk == onboarding_sample_pk %} data-sample="1"{% endif %}>
-        <article class="card classroom-card">
-            <header class="classroom-card-header">
-                <h3>{{ classroom.name }}</h3>
-                <span class="pill">进入管理</span>
-            </header>
-            <div class="classroom-metrics">
-                <div>
-                    <strong>{{ classroom.rows }} × {{ classroom.cols }}</strong>
-                    <span>座位网格</span>
-                </div>
-                <div>
-                    <strong>{{ classroom.students.count }}</strong>
-                    <span>学生人数</span>
-                </div>
-                <div>
-                    <strong>{{ classroom.seats.count }}</strong>
-                    <span>总座位</span>
-                </div>
-            </div>
-        </article>
-    </a>
-    {% empty %}
-    <div class="empty-hero">
-        <p>还没有班级，点击右上角"新建班级"开始。</p>
-    </div>
-    {% endfor %}
-</section>
+    function normalize(value) {
+        return String(value || '').trim().toLocaleLowerCase('zh-CN');
+    }
+
+    function filterCards() {
+        var keyword = normalize(searchInput ? searchInput.value : '');
+        var visibleTotal = 0;
+        searchableCards.forEach(function (card) {
+            var matched = !keyword || normalize(card.dataset.searchValue).includes(keyword);
+            card.hidden = !matched;
+            if (matched) visibleTotal += 1;
+        });
+        sections.forEach(function (section) {
+            var cards = Array.from(section.querySelectorAll('[data-search-value]'));
+            var hasVisibleCard = cards.some(function (card) { return !card.hidden; });
+            section.hidden = Boolean(keyword) && cards.length > 0 && !hasVisibleCard;
+        });
+        if (searchEmpty) searchEmpty.hidden = !keyword || visibleTotal > 0;
+    }
+
+    if (searchInput) searchInput.addEventListener('input', filterCards);
+
+    document.addEventListener('click', function (event) {
+        [createMenu].forEach(function (details) {
+            if (details && details.open && !details.contains(event.target)) details.open = false;
+        });
+    });
+});
+</script>
 {% endblock %}

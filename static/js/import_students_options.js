@@ -6,9 +6,18 @@ document.addEventListener('DOMContentLoaded', () => {
     const fileInput = document.getElementById('student-import-file');
     const fileNameLabel = document.getElementById('student-import-file-name');
     const mappingPanel = document.getElementById('import-mapping-panel');
+    const uploadPanel = document.getElementById('student-import-upload-panel');
     const cancelBtn = document.getElementById('student-import-cancel-btn');
     const remapBtn = document.getElementById('student-import-remap-btn');
     const confirmBtn = document.getElementById('student-import-confirm-btn');
+    const regionPanel = document.getElementById('student-import-region-panel');
+    const regionStatus = document.getElementById('student-import-region-status');
+    const regionBackBtn = document.getElementById('student-import-region-back-btn');
+    const finalConfirmBtn = document.getElementById('student-import-final-confirm-btn');
+    const regionLegend = document.getElementById('student-import-region-legend');
+    const regionFirstStudent = document.getElementById('student-import-region-first');
+    const regionLastStudent = document.getElementById('student-import-region-last');
+    const importSidebar = root.querySelector('.student-import-sidebar');
     const startRowInput = document.getElementById('import-start-row');
     const rowMinusBtn = document.getElementById('student-import-row-minus');
     const rowPlusBtn = document.getElementById('student-import-row-plus');
@@ -23,6 +32,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const guideOptions = document.getElementById('student-import-guide-options');
     const guideCloseBtn = document.getElementById('student-import-guide-close');
     const guideConfirmBtn = document.getElementById('student-import-guide-confirm');
+    const customNameInput = document.getElementById('student-import-custom-name');
+    const customAddBtn = document.getElementById('student-import-custom-add-btn');
+    const customList = document.getElementById('student-import-custom-list');
 
     const importUrl = root.dataset.importUrl || '';
     const backUrl = root.dataset.backUrl || '/';
@@ -39,6 +51,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const fieldConfig = {
         name: { label: '姓名', requestKey: 'name_col_index' },
         studentId: { label: '学号', requestKey: 'student_id_col_index' },
+        classroom: { label: '班级', requestKey: 'classroom_col_index' },
         gender: { label: '性别', requestKey: 'gender_col_index' },
         score: { label: '分数', requestKey: 'score_col_index' }
     };
@@ -53,9 +66,16 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentPreviewCols = 0;
     let activeField = null;
     let guideLastFocused = null;
+    let customFieldCounter = 0;
+    let isRegionConfirming = false;
+    let selectedRegionStart = 1;
+    let selectedRegionEnd = 1;
+    let regionSelectionStage = 'start';
+    let regionSelectionComplete = false;
     let fieldMappings = {
         name: null,
         studentId: null,
+        classroom: null,
         gender: null,
         score: null
     };
@@ -112,6 +132,133 @@ document.addEventListener('DOMContentLoaded', () => {
         return Object.keys(fieldMappings).find((field) => fieldMappings[field] === columnIndex) || null;
     };
 
+    const updateRegionStatus = () => {
+        if (!regionStatus) return;
+        if (regionSelectionStage === 'start') {
+            regionStatus.textContent = `当前为第 ${selectedRegionStart} 至 ${selectedRegionEnd} 行，请单击开始行`;
+            return;
+        }
+        if (regionSelectionStage === 'end') {
+            regionStatus.textContent = `开始行已选为第 ${selectedRegionStart} 行，请单击结束行`;
+            return;
+        }
+        regionStatus.textContent = `已确认第 ${selectedRegionStart} 至 ${selectedRegionEnd} 行`;
+    };
+
+    const findRegionStudentRow = (fromStart) => {
+        const firstIndex = Math.max(selectedRegionStart - 1, 0);
+        const lastIndex = Math.min(selectedRegionEnd - 1, currentImportData.length - 1);
+        if (lastIndex < firstIndex) return null;
+        const indexes = [];
+        if (fromStart) {
+            for (let index = firstIndex; index <= lastIndex; index += 1) indexes.push(index);
+        } else {
+            for (let index = lastIndex; index >= firstIndex; index -= 1) indexes.push(index);
+        }
+        for (const index of indexes) {
+            const row = currentImportData[index];
+            const nameValue = Array.isArray(row) && fieldMappings.name !== null
+                ? String(row[fieldMappings.name] ?? '').trim()
+                : '';
+            if (nameValue && !['姓名', 'name'].includes(nameValue.toLowerCase())) {
+                return { row, rowNumber: index + 1 };
+            }
+        }
+        return null;
+    };
+
+    const renderRegionStudent = (target, studentRow) => {
+        if (!target) return;
+        if (!studentRow) {
+            target.innerHTML = '<strong>未识别到学生数据</strong>';
+            return;
+        }
+        const mappedFields = Object.keys(fieldConfig).filter((field) =>
+            Number.isInteger(fieldMappings[field])
+        );
+        const name = String(studentRow.row[fieldMappings.name] ?? '').trim() || `第 ${studentRow.rowNumber} 行`;
+        const details = mappedFields
+            .filter((field) => field !== 'name')
+            .map((field) => {
+                const value = String(studentRow.row[fieldMappings[field]] ?? '').trim() || '未填写';
+                return `<span><b>${escapeHtml(fieldConfig[field].label)}</b>${escapeHtml(value)}</span>`;
+            })
+            .join('');
+        target.innerHTML = `
+            <strong>${escapeHtml(name)}</strong>
+            <small>第 ${studentRow.rowNumber} 行</small>
+            <div>${details}</div>
+        `;
+    };
+
+    const renderRegionStudents = () => {
+        renderRegionStudent(regionFirstStudent, findRegionStudentRow(true));
+        renderRegionStudent(regionLastStudent, findRegionStudentRow(false));
+    };
+
+    const updateFinalConfirmState = () => {
+        if (!finalConfirmBtn) return;
+        finalConfirmBtn.classList.toggle('is-incomplete', !regionSelectionComplete);
+        finalConfirmBtn.setAttribute('aria-disabled', regionSelectionComplete ? 'false' : 'true');
+    };
+
+    const setRegionConfirming = (enabled) => {
+        isRegionConfirming = Boolean(enabled);
+        root.classList.toggle('is-region-confirming', isRegionConfirming);
+        if (uploadPanel) uploadPanel.hidden = isRegionConfirming;
+        if (mappingPanel) mappingPanel.hidden = isRegionConfirming || !currentImportFileId;
+        if (regionPanel) regionPanel.hidden = !isRegionConfirming;
+        if (regionLegend) regionLegend.hidden = !isRegionConfirming;
+
+        if (isRegionConfirming) {
+            activeField = null;
+            selectedRegionStart = getStartRow();
+            selectedRegionEnd = Math.max(
+                selectedRegionStart,
+                Math.min(currentTotalRows || selectedRegionStart, currentImportData.length || selectedRegionStart)
+            );
+            regionSelectionStage = 'complete';
+            regionSelectionComplete = true;
+        }
+        updateFinalConfirmState();
+        updateRegionStatus();
+        renderRegionStudents();
+        renderMappingState();
+        renderPreview();
+        if (isRegionConfirming) {
+            window.requestAnimationFrame(() => {
+                if (importSidebar) importSidebar.scrollTop = 0;
+                regionPanel?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+                regionPanel?.focus({ preventScroll: true });
+            });
+        }
+    };
+
+    const selectRegionBoundary = (rowNumber) => {
+        if (!isRegionConfirming) return;
+        if (regionSelectionStage === 'start') {
+            selectedRegionStart = rowNumber;
+            selectedRegionEnd = Math.max(rowNumber, selectedRegionEnd);
+            regionSelectionStage = 'end';
+            regionSelectionComplete = false;
+        } else if (regionSelectionStage === 'end') {
+            const firstBoundary = selectedRegionStart;
+            selectedRegionStart = Math.min(firstBoundary, rowNumber);
+            selectedRegionEnd = Math.max(firstBoundary, rowNumber);
+            regionSelectionStage = 'complete';
+            regionSelectionComplete = true;
+        } else {
+            selectedRegionStart = rowNumber;
+            selectedRegionEnd = rowNumber;
+            regionSelectionStage = 'end';
+            regionSelectionComplete = false;
+        }
+        updateFinalConfirmState();
+        updateRegionStatus();
+        renderRegionStudents();
+        renderPreview();
+    };
+
     const renderMappingState = () => {
         Object.keys(fieldConfig).forEach((field) => {
             const mappingValue = fieldMappings[field];
@@ -130,6 +277,46 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearButton.disabled = mappingValue === null;
             }
         });
+    };
+
+    const renderCustomFields = () => {
+        if (!customList) return;
+        const customFields = Object.keys(fieldConfig).filter((field) => fieldConfig[field].custom);
+        customList.innerHTML = customFields.map((field) => `
+            <div class="student-import-field-row">
+                <button type="button" class="student-import-field-btn" data-import-field="${field}">
+                    <span>${escapeHtml(fieldConfig[field].label)}</span>
+                    <strong id="student-import-map-${field}">未选择</strong>
+                </button>
+                <button type="button" class="student-import-field-clear" data-clear-field="${field}" aria-label="清除${escapeHtml(fieldConfig[field].label)}列">
+                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8m0-8-8 8"/></svg>
+                </button>
+                <button type="button" class="student-import-custom-remove" data-remove-custom="${field}" aria-label="删除${escapeHtml(fieldConfig[field].label)}">删除</button>
+            </div>
+        `).join('');
+        renderMappingState();
+    };
+
+    const addCustomField = (label, columnIndex = null) => {
+        const normalizedLabel = String(label || '').trim();
+        if (!normalizedLabel) return null;
+        const duplicate = Object.keys(fieldConfig).find((field) =>
+            fieldConfig[field].custom && fieldConfig[field].label === normalizedLabel
+        );
+        if (duplicate) {
+            if (columnIndex !== null) fieldMappings[duplicate] = columnIndex;
+            renderCustomFields();
+            return duplicate;
+        }
+        customFieldCounter += 1;
+        const field = `custom_${customFieldCounter}`;
+        fieldConfig[field] = {
+            label: normalizedLabel.slice(0, 80),
+            custom: true
+        };
+        fieldMappings[field] = Number.isInteger(columnIndex) ? columnIndex : null;
+        renderCustomFields();
+        return field;
     };
 
     const setActiveField = (field, options = {}) => {
@@ -218,13 +405,18 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const resetMappings = () => {
+        Object.keys(fieldConfig).forEach((field) => {
+            if (fieldConfig[field].custom) delete fieldConfig[field];
+        });
         fieldMappings = {
             name: null,
             studentId: null,
+            classroom: null,
             gender: null,
             score: null
         };
         activeField = null;
+        renderCustomFields();
         renderMappingState();
     };
 
@@ -247,11 +439,16 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
 
-        const startRow = getStartRow();
-        let html = '<table class="student-import-sheet" aria-label="Excel 工作表预览"><thead><tr>';
-        html += '<th class="student-import-sheet-corner" scope="col">行</th>';
+        const startRow = isRegionConfirming ? selectedRegionStart : getStartRow();
+        const endRow = isRegionConfirming ? selectedRegionEnd : currentTotalRows;
+        const tableClass = isRegionConfirming ? ' is-region-confirming' : '';
+        let html = `<table class="student-import-sheet${tableClass}" aria-label="Excel 工作表预览"><thead><tr>`;
+        html += `<th class="student-import-sheet-corner${isRegionConfirming ? ' region-invalid' : ''}" scope="col">行</th>`;
         for (let columnIndex = 0; columnIndex < currentPreviewCols; columnIndex += 1) {
             const mappedField = mappedFieldForColumn(columnIndex);
+            const regionClass = isRegionConfirming
+                ? (mappedField ? ' region-valid' : ' region-invalid')
+                : '';
             const fieldClass = mappedField ? ` mapped field-${mappedField}` : '';
             const badge = mappedField
                 ? `<span class="student-import-column-badge">${fieldConfig[mappedField].label}</span>`
@@ -259,8 +456,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const columnActionLabel = activeField
                 ? `将 ${columnLabel(columnIndex)} 列设为${fieldConfig[activeField].label}`
                 : `设置 ${columnLabel(columnIndex)} 列绑定`;
-            html += `<th class="student-import-column-head${fieldClass}" scope="col">
-                <button type="button" data-import-column="${columnIndex}" aria-label="${columnActionLabel}">
+            html += `<th class="student-import-column-head${fieldClass}${regionClass}" scope="col">
+                <button type="button" data-import-column="${columnIndex}" aria-label="${columnActionLabel}"${isRegionConfirming ? ' disabled' : ''}>
                     <span>${columnLabel(columnIndex)}</span>${badge}
                 </button>
             </th>`;
@@ -270,16 +467,23 @@ document.addEventListener('DOMContentLoaded', () => {
         currentImportData.forEach((row, rowIndex) => {
             const rowNumber = rowIndex + 1;
             const isStartRow = rowNumber === startRow;
-            const rowClass = isStartRow ? ' data-start-row' : (rowNumber < startRow ? ' before-data-row' : '');
+            const isEndRow = isRegionConfirming && rowNumber === endRow;
+            const isSelectedRow = isRegionConfirming && rowNumber >= startRow && rowNumber <= endRow;
+            const rowClass = isRegionConfirming
+                ? `${isSelectedRow ? ' selected-data-row' : ' invalid-data-row'}${isStartRow ? ' data-start-row' : ''}${isEndRow ? ' data-end-row' : ''}`
+                : (isStartRow ? ' data-start-row' : (rowNumber < startRow ? ' before-data-row' : ''));
             html += `<tr class="${rowClass.trim()}">`;
-            html += `<th class="student-import-row-head" scope="row">
-                <button type="button" data-import-row="${rowNumber}" aria-label="从第 ${rowNumber} 行开始导入">${rowNumber}</button>
+            html += `<th class="student-import-row-head${isRegionConfirming ? (isSelectedRow ? ' region-valid' : ' region-invalid') : ''}" scope="row">
+                <button type="button" data-import-row="${rowNumber}" aria-label="${isRegionConfirming ? `选择第 ${rowNumber} 行作为数据边界` : `从第 ${rowNumber} 行开始导入`}">${rowNumber}</button>
             </th>`;
             for (let columnIndex = 0; columnIndex < currentPreviewCols; columnIndex += 1) {
                 const mappedField = mappedFieldForColumn(columnIndex);
                 const cellClass = mappedField ? ` mapped field-${mappedField}` : '';
+                const regionClass = isRegionConfirming
+                    ? (isSelectedRow && mappedField ? ' region-valid' : ' region-invalid')
+                    : '';
                 const value = Array.isArray(row) ? row[columnIndex] : '';
-                html += `<td class="${cellClass.trim()}" data-import-cell="true" data-import-cell-row="${rowNumber}" data-import-cell-column="${columnIndex}" title="${escapeHtml(value)}">${escapeHtml(value)}</td>`;
+                html += `<td class="${`${cellClass}${regionClass}`.trim()}" data-import-cell="true" data-import-cell-row="${rowNumber}" data-import-cell-column="${columnIndex}" title="${escapeHtml(value)}">${escapeHtml(value)}</td>`;
             }
             html += '</tr>';
         });
@@ -320,6 +524,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const suggestedMappings = {
                 name: suggested.name_col_index,
                 studentId: suggested.student_id_col_index,
+                classroom: suggested.classroom_col_index,
                 gender: suggested.gender_col_index,
                 score: suggested.score_col_index
             };
@@ -327,6 +532,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 const value = suggestedMappings[field];
                 if (Number.isInteger(value) && value >= 0 && value < currentTotalCols) {
                     fieldMappings[field] = value;
+                }
+            });
+            (suggested.custom_columns || []).forEach((item) => {
+                const value = Number(item?.col);
+                if (item?.key && Number.isInteger(value) && value >= 0 && value < currentTotalCols) {
+                    addCustomField(item.key, value);
                 }
             });
         }
@@ -399,6 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const resetImport = () => {
+        if (isRegionConfirming) setRegionConfirming(false);
         currentImportFileId = '';
         currentFileName = '';
         currentSheetName = '';
@@ -409,6 +621,7 @@ document.addEventListener('DOMContentLoaded', () => {
         currentPreviewCols = 0;
         resetMappings();
         if (mappingPanel) mappingPanel.hidden = true;
+        if (uploadPanel) uploadPanel.hidden = false;
         if (previewMeta) previewMeta.textContent = '';
         if (stageText) stageText.textContent = '';
         if (fileInput) fileInput.value = '';
@@ -451,6 +664,50 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    customAddBtn?.addEventListener('click', () => {
+        const label = customNameInput?.value || '';
+        if (!label.trim()) {
+            notify('请输入自定义信息名称');
+            customNameInput?.focus();
+            return;
+        }
+        const field = addCustomField(label);
+        if (customNameInput) customNameInput.value = '';
+        setActiveField(field);
+    });
+
+    customNameInput?.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        customAddBtn?.click();
+    });
+
+    customList?.addEventListener('click', (event) => {
+        const removeButton = event.target.closest('[data-remove-custom]');
+        if (removeButton) {
+            const field = removeButton.dataset.removeCustom;
+            if (activeField === field) activeField = null;
+            delete fieldConfig[field];
+            delete fieldMappings[field];
+            renderCustomFields();
+            renderPreview();
+            return;
+        }
+        const clearButton = event.target.closest('[data-clear-field]');
+        if (clearButton) {
+            const field = clearButton.dataset.clearField;
+            if (fieldConfig[field]) {
+                fieldMappings[field] = null;
+                setActiveField(field);
+            }
+            return;
+        }
+        const fieldButton = event.target.closest('[data-import-field]');
+        if (fieldButton) {
+            setActiveField(fieldButton.dataset.importField, { toggle: true });
+        }
+    });
+
     rowMinusBtn?.addEventListener('click', () => setStartRow(getStartRow() - 1));
     rowPlusBtn?.addEventListener('click', () => setStartRow(getStartRow() + 1));
     startRowInput?.addEventListener('input', () => setStartRow(getStartRow()));
@@ -460,14 +717,13 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     previewArea?.addEventListener('click', (event) => {
-        const cell = event.target.closest('[data-import-cell]');
-        if (cell) {
-            openCellGuide();
-            return;
-        }
         const rowButton = event.target.closest('[data-import-row]');
         if (rowButton) {
             const rowNumber = Number(rowButton.dataset.importRow);
+            if (isRegionConfirming) {
+                selectRegionBoundary(rowNumber);
+                return;
+            }
             if (activeField === null) {
                 openRowGuide(rowNumber);
             } else {
@@ -475,8 +731,14 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
+        const cell = event.target.closest('[data-import-cell]');
+        if (cell) {
+            if (!isRegionConfirming) openCellGuide();
+            return;
+        }
         const columnTarget = event.target.closest('[data-import-column]');
         if (columnTarget) {
+            if (isRegionConfirming) return;
             const columnIndex = Number(columnTarget.dataset.importColumn);
             if (activeField === null) {
                 openColumnGuide(columnIndex);
@@ -524,7 +786,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
-    confirmBtn?.addEventListener('click', async () => {
+    confirmBtn?.addEventListener('click', () => {
         if (!currentImportFileId) {
             notify('请先打开 Excel 文件');
             return;
@@ -534,26 +796,50 @@ document.addEventListener('DOMContentLoaded', () => {
             setActiveField('name');
             return;
         }
+        setHint('');
+        setRegionConfirming(true);
+    });
 
-        const originalText = confirmBtn.textContent;
-        confirmBtn.textContent = '导入中...';
-        confirmBtn.disabled = true;
+    regionBackBtn?.addEventListener('click', () => {
+        setRegionConfirming(false);
+    });
+
+    finalConfirmBtn?.addEventListener('click', async () => {
+        if (!currentImportFileId) {
+            notify('导入文件已失效，请返回修改并重新打开文件');
+            return;
+        }
+        if (!regionSelectionComplete) {
+            notify('请再单击一个行标确认结束行');
+            return;
+        }
+        const originalText = finalConfirmBtn.textContent;
+        finalConfirmBtn.textContent = '导入中...';
+        finalConfirmBtn.disabled = true;
         setHint('正在导入...');
-
         const formData = new FormData();
         formData.append('action', 'confirm');
         formData.append('file_id', currentImportFileId);
         formData.append('sheet_name', currentSheetName);
-        formData.append('start_row', String(getStartRow()));
+        formData.append('start_row', String(selectedRegionStart));
+        formData.append('end_row', String(selectedRegionEnd));
         formData.append('import_mode', getImportMode());
+        const customColumns = [];
         Object.keys(fieldConfig).forEach((field) => {
             const value = fieldMappings[field];
-            if (value !== null) formData.append(fieldConfig[field].requestKey, String(value));
+            if (value === null) return;
+            if (fieldConfig[field].custom) {
+                customColumns.push({ key: fieldConfig[field].label, col: value });
+            } else {
+                formData.append(fieldConfig[field].requestKey, String(value));
+            }
         });
+        formData.append('custom_columns', JSON.stringify(customColumns));
 
         try {
             const data = await postFormData(formData);
             setHint(data.message || '导入成功');
+            currentImportFileId = '';
             markImportReturn();
             window.setTimeout(() => {
                 window.location.href = backUrl;
@@ -562,8 +848,9 @@ document.addEventListener('DOMContentLoaded', () => {
             setHint('');
             notify(error?.message || '导入失败');
         } finally {
-            confirmBtn.textContent = originalText;
-            confirmBtn.disabled = false;
+            finalConfirmBtn.textContent = originalText;
+            finalConfirmBtn.disabled = false;
+            updateFinalConfirmState();
         }
     });
 

@@ -75,6 +75,25 @@ class CloudClassroom(models.Model):
         return f'{self.user_id}-{self.name}'
 
 
+class CloudClassroomGroup(models.Model):
+    user = models.ForeignKey(CloudUser, on_delete=models.CASCADE, related_name='classroom_groups')
+    uuid = models.UUIDField(default=uuid.uuid4, db_index=True)
+    name = models.CharField(max_length=100)
+    classroom_uuids = models.JSONField(default=list, blank=True)
+    version = models.BigIntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(fields=['user', 'uuid'], name='cloud_group_user_uuid_uniq'),
+        ]
+        ordering = ['name', 'pk']
+
+    def __str__(self):
+        return f'{self.user_id}-{self.name}'
+
+
 class CloudHistoryEntry(models.Model):
     classroom = models.ForeignKey(CloudClassroom, on_delete=models.CASCADE, related_name='history_entries')
     action_type = models.CharField(max_length=40, blank=True, default='')
@@ -126,23 +145,3 @@ class CloudServiceKey(models.Model):
 
     def __str__(self):
         return f'{self.key_id}-{"active" if self.is_active else "inactive"}'
-
-
-class RedeemCode(models.Model):
-    code = models.CharField(max_length=64, unique=True, db_index=True)
-    tier = models.CharField(max_length=32)
-    expires_at = models.DateTimeField(null=True, blank=True)
-    max_uses = models.PositiveIntegerField(default=1)
-    used_count = models.PositiveIntegerField(default=0)
-    active = models.BooleanField(default=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def can_use(self):
-        if not self.active:
-            return False
-        if self.expires_at and self.expires_at <= timezone.now():
-            return False
-        return self.used_count < self.max_uses
-
-    def __str__(self):
-        return f'{self.code}-{self.tier}'

@@ -1,7 +1,9 @@
 import ctypes
+import hashlib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -9,10 +11,13 @@ import threading
 import time
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 
 APP_NAME = "不想排座位"
+MACOS_PACKAGE_IDENTIFIER = "xyz.577622.fuckseats.pkg"
+MAX_LOCAL_UPDATE_PACKAGE_BYTES = 2 * 1024 * 1024 * 1024
 DEFAULT_UPDATE_MANIFEST_URL = "https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/api.json"
 LOCAL_RELEASE_MANIFEST_RELATIVE_PATHS = (
     ("runtime", "release.json"),
@@ -39,6 +44,10 @@ UPDATE_STATE = {
     "download_url": "",
     "notes": "",
     "published_at": "",
+    "mode": "remote_download",
+    "package_path": "",
+    "package_sha256": "",
+    "signature": "",
     "progress": {
         "received_bytes": 0,
         "total_bytes": 0,
@@ -52,6 +61,10 @@ def is_windows():
     return sys.platform.startswith("win")
 
 
+def is_macos():
+    return sys.platform == "darwin"
+
+
 def get_platform_name():
     if sys.platform.startswith("win"):
         return "windows"
@@ -61,7 +74,7 @@ def get_platform_name():
 
 
 def is_update_api_supported():
-    if not is_windows():
+    if not (is_windows() or is_macos()):
         return False
     return (os.getenv("FUCKSEATS_APP_SHELL") or "").strip().lower() != "browser"
 
@@ -229,6 +242,9 @@ def get_update_status():
     payload["current_version"] = get_current_version()
     payload["platform"] = get_platform_name()
     payload["supported"] = is_update_api_supported()
+    if is_macos():
+        payload["mode"] = "local_package"
+        payload["network_used"] = False
     return payload
 
 
@@ -256,6 +272,10 @@ def reset_update_state():
         download_url="",
         notes="",
         published_at="",
+        mode="local_package" if is_macos() else "remote_download",
+        package_path="",
+        package_sha256="",
+        signature="",
         progress=_build_progress_payload(),
         last_error="",
     )
@@ -390,6 +410,128 @@ def fetch_remote_release_manifest():
     return data
 
 
+def _sha256_file(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        while chunk := source.read(1024 * 1024):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _run_checked(command, error_message):
+    result = subprocess.run(
+        [str(item) for item in command],
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    output = "\n".join(part.strip() for part in (result.stdout, result.stderr) if part.strip())
+    if result.returncode != 0:
+        raise RuntimeError(f"{error_message}{f'：{output}' if output else ''}")
+    return output
+
+
+def _allow_unsigned_macos_package():
+    return not getattr(sys, "frozen", False) and str(
+        os.getenv("FUCKSEATS_MACOS_ALLOW_UNSIGNED_UPDATE") or ""
+    ).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _expected_macos_team_id():
+    configured = str(os.getenv("FUCKSEATS_MACOS_TEAM_ID") or "").strip()
+    if configured:
+        return configured
+    return str(load_release_manifest().get("team_id") or "").strip()
+
+
+def _inspect_macos_package_metadata(package_path):
+    package_path = Path(package_path).resolve(strict=True)
+    with tempfile.TemporaryDirectory(prefix="fuckseats-pkg-inspect-") as temp_root:
+        expanded = Path(temp_root) / "expanded"
+        _run_checked(
+            ["/usr/sbin/pkgutil", "--expand", str(package_path), str(expanded)],
+            "无法读取升级包内容",
+        )
+        package_info_files = list(expanded.rglob("PackageInfo"))
+        if not package_info_files:
+            raise RuntimeError("升级包缺少 PackageInfo")
+        root = ET.parse(package_info_files[0]).getroot()
+        identifier = str(root.attrib.get("identifier") or "").strip()
+        version = str(root.attrib.get("version") or "").strip()
+        if identifier != MACOS_PACKAGE_IDENTIFIER:
+            raise RuntimeError("升级包不是不想排座位的官方 macOS 安装包")
+        if not version:
+            raise RuntimeError("升级包缺少版本号")
+        return {"identifier": identifier, "version": version}
+
+
+def prepare_macos_local_update(package_path):
+    if not is_macos():
+        raise RuntimeError("本地 PKG 更新仅支持 macOS")
+    if not is_update_api_supported():
+        raise RuntimeError("请在 macOS 桌面版中选择本地升级包")
+
+    selected = Path(str(package_path or "")).expanduser()
+    if selected.is_symlink():
+        raise RuntimeError("升级包不能是符号链接")
+    try:
+        selected = selected.resolve(strict=True)
+    except OSError as exc:
+        raise RuntimeError("选择的升级包不存在") from exc
+    if not selected.is_file() or selected.suffix.lower() != ".pkg":
+        raise RuntimeError("请选择 .pkg 格式的 macOS 升级包")
+    size = selected.stat().st_size
+    if size <= 0 or size > MAX_LOCAL_UPDATE_PACKAGE_BYTES:
+        raise RuntimeError("升级包大小无效或超过 2 GB 限制")
+    free_bytes = shutil.disk_usage(selected.parent).free
+    if free_bytes < size * 3:
+        raise RuntimeError("可用磁盘空间不足，至少需要升级包大小的三倍空间")
+
+    allow_unsigned = _allow_unsigned_macos_package()
+    signature_output = ""
+    try:
+        signature_output = _run_checked(
+            ["/usr/sbin/pkgutil", "--check-signature", str(selected)],
+            "升级包签名校验失败",
+        )
+        _run_checked(
+            ["/usr/sbin/spctl", "--assess", "--type", "install", "--verbose=2", str(selected)],
+            "升级包未通过 macOS 安全检查",
+        )
+    except RuntimeError:
+        if not allow_unsigned:
+            raise
+        signature_output = "开发模式：允许未签名升级包"
+
+    expected_team_id = _expected_macos_team_id()
+    if expected_team_id and expected_team_id not in signature_output:
+        raise RuntimeError("升级包签名团队与当前应用不一致")
+
+    metadata = _inspect_macos_package_metadata(selected)
+    current_version = get_current_version()
+    if not is_newer_version(metadata["version"], current_version):
+        raise ValueError("升级包版本必须高于当前版本")
+
+    package_hash = _sha256_file(selected)
+    _set_prepared_installer_path(selected)
+    _update_state(
+        state="ready_to_install",
+        message="本地升级包校验完成",
+        mode="local_package",
+        target_version=metadata["version"],
+        latest_version=metadata["version"],
+        download_url="",
+        notes="升级包来自本地文件，应用不会从服务器下载安装包。",
+        package_path=str(selected),
+        package_sha256=package_hash,
+        signature=signature_output,
+        progress=_build_progress_payload(size, size),
+        last_error="",
+    )
+    return get_update_status()
+
+
 def _normalize_remote_manifest(manifest):
     latest_version = str(manifest.get("version") or "").strip()
     download_url = str(manifest.get("download_url") or "").strip()
@@ -416,6 +558,16 @@ def check_for_updates():
         "current_version": get_current_version(),
         "requires_manual_trigger": True,
     }
+
+    if is_macos():
+        payload.update({
+            "supported": is_update_api_supported(),
+            "mode": "local_package",
+            "network_used": False,
+            "update_available": False,
+            "message": "macOS 使用用户自备的本地 PKG 升级包",
+        })
+        return payload
 
     if not payload["supported"]:
         payload["message"] = "当前平台暂不支持自动更新"
@@ -459,8 +611,11 @@ def _run_manual_update_task(manifest):
         )
 
 
-def start_manual_update(target_version=""):
+def start_manual_update(target_version="", package_path=""):
     global UPDATE_THREAD
+
+    if is_macos():
+        return prepare_macos_local_update(package_path)
 
     if not is_update_api_supported():
         raise RuntimeError("仅 Windows 桌面端支持自动更新。")
@@ -533,10 +688,19 @@ def launch_prepared_update():
     installer_path = Path(installer_path_text).resolve()
     if not installer_path.exists():
         _set_prepared_installer_path("")
-        raise RuntimeError("更新安装包不存在，请重新下载更新。")
+        raise RuntimeError("更新安装包不存在，请重新选择升级包。")
 
     try:
-        launch_installer_as_admin(installer_path)
+        if is_macos():
+            expected_hash = str(current_status.get("package_sha256") or "")
+            if not expected_hash or _sha256_file(installer_path) != expected_hash:
+                raise RuntimeError("升级包在校验后发生变化，请重新选择")
+            from database_security import backup_database_for_update
+
+            backup_database_for_update(current_status.get("target_version") or "unknown")
+            subprocess.Popen(["/usr/bin/open", str(installer_path)], close_fds=True)
+        else:
+            launch_installer_as_admin(installer_path)
         _set_prepared_installer_path("")
         _update_state(
             state="installer_started",

@@ -2931,7 +2931,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const input = document.createElement('input');
         input.className = 'quick-swap-input';
-        input.placeholder = '输入姓名首字母';
+        input.placeholder = '输入姓名、首字母或学号';
         input.autocomplete = 'off';
         seat.appendChild(input);
 
@@ -2955,12 +2955,15 @@ document.addEventListener('DOMContentLoaded', () => {
                     const data = await res.json();
                     const matches = data.students || [];
 
+                    const exactStudentIdMatch = matches.find((item) =>
+                        String(item.student_id || '').trim().toLowerCase() === query.toLowerCase()
+                    );
                     if (matches.length === 0) {
                         input.style.borderColor = '#ef4444';
                         setTimeout(() => input.style.borderColor = '', 300);
-                    } else if (matches.length === 1) {
+                    } else if (exactStudentIdMatch || matches.length === 1) {
                         cleanup();
-                        await swapStudents(seat, matches[0].id);
+                        await swapStudents(seat, (exactStudentIdMatch || matches[0]).id);
                     } else {
                         cleanup();
                         showQuickSwapModal(seat, matches);
@@ -2975,7 +2978,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const swapStudents = async (seat, targetStudentId) => {
         const currentStudentId = seat.dataset.studentId;
-        if (currentStudentId === targetStudentId) return;
+        if (String(currentStudentId || '') === String(targetStudentId || '')) return;
 
         const row = parseInt(seat.dataset.row, 10);
         const col = parseInt(seat.dataset.col, 10);
@@ -3013,7 +3016,7 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="quick-swap-content">
                 <div class="quick-swap-title">选择学生</div>
                 <div class="quick-swap-list">
-                    ${matches.map((m, i) => `<div class="quick-swap-item" data-student-id="${m.id}"><span class="quick-swap-num">${i + 1}</span>${m.name}</div>`).join('')}
+                    ${matches.map((m, i) => `<div class="quick-swap-item" data-student-id="${m.id}"><span class="quick-swap-num">${i + 1}</span><span>${m.name}</span>${m.student_id ? `<small>学号 ${m.student_id}</small>` : ''}</div>`).join('')}
                 </div>
             </div>
         `;

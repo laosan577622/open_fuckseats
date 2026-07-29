@@ -4,6 +4,8 @@
     const INSTALL_LAUNCH_DELAY_TEXT = '2 秒';
     const DEFAULT_UPDATE_DETAILS_URL = '/update.txt';
     let updateDetailsRequestId = 0;
+    const appPlatform = String(document.body && document.body.dataset.appPlatform || '').toLowerCase();
+    const isMacosLocalUpdate = appPlatform === 'macos';
 
     window.updateInfo = null;
 
@@ -12,6 +14,9 @@
     }
 
     async function checkUpdate() {
+        // macOS is intentionally local-only: no manifest, release-note, or
+        // package request is allowed from this automatic path.
+        if (isMacosLocalUpdate) return;
         if (shouldDeferForOnboarding()) {
             window.setTimeout(checkUpdate, 1000);
             return;
@@ -61,6 +66,11 @@
         const updateDetailsUrl = (detailsEl && detailsEl.dataset.detailsUrl) || DEFAULT_UPDATE_DETAILS_URL;
 
         renderUpdateDetails('正在加载更新详情...', 'loading');
+
+        if (isMacosLocalUpdate) {
+            renderUpdateDetails(fallbackText || '升级包来自你选择的本地文件，应用不会从服务器下载安装包。', 'loaded');
+            return;
+        }
 
         try {
             const detailUrl = `${updateDetailsUrl}?t=${Date.now()}`;
@@ -140,6 +150,7 @@
     }
 
     async function startUpdate() {
+        if (isMacosLocalUpdate) return;
         const promptDiv = document.getElementById('update-prompt');
         const progressDiv = document.getElementById('update-progress');
         const closeBtn = document.getElementById('close-update-modal');
@@ -265,7 +276,9 @@
         } else if (data.state === 'ready_to_install') {
             statusEl.textContent = '更新准备完成';
             progressFill.style.width = '100%';
-            progressText.textContent = `点击下方按钮后，将在 ${INSTALL_LAUNCH_DELAY_TEXT} 后打开安装程序，然后自动退出当前程序`;
+            progressText.textContent = isMacosLocalUpdate
+                ? `本地 PKG 已验证。点击下方按钮后，将打开 macOS 系统安装器并退出当前程序`
+                : `点击下方按钮后，将在 ${INSTALL_LAUNCH_DELAY_TEXT} 后打开安装程序，然后自动退出当前程序`;
             closeBtn.style.display = '';
             setInstallActionVisible(true, false);
             clearInterval(pollingInterval);
@@ -285,9 +298,45 @@
 
     window.showUpdateModal = showUpdateModal;
     window.hideUpdateModal = hideUpdateModal;
+    window.selectLocalMacUpdate = async function selectLocalMacUpdate() {
+        if (!isMacosLocalUpdate) return { status: 'unsupported' };
+        const api = window.pywebview && window.pywebview.api;
+        if (!api || typeof api.select_macos_update_package !== 'function') {
+            if (typeof showToast === 'function') showToast('请在 macOS 桌面版中选择升级包');
+            return { status: 'unsupported' };
+        }
+        try {
+            const selection = await api.select_macos_update_package();
+            if (!selection || selection.status === 'cancelled') return { status: 'cancelled' };
+            if (selection.status !== 'selected') {
+                throw new Error(selection.message || '无法读取升级包');
+            }
+
+            const response = await fetch('/api/update/start/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ package_path: selection.path })
+            });
+            const data = await response.json();
+            if (data.status !== 'success') throw new Error(data.message || '升级包校验失败');
+
+            window.updateInfo = data;
+            doShowUpdateModal();
+            document.getElementById('update-prompt').style.display = 'none';
+            document.getElementById('update-progress').style.display = 'block';
+            updateProgress(data);
+            if (typeof showToast === 'function') showToast('本地升级包校验完成');
+            return data;
+        } catch (error) {
+            const message = error && error.message ? error.message : '升级包校验失败';
+            if (typeof showToast === 'function') showToast(message);
+            console.error('Local macOS update error:', error);
+            return { status: 'error', message };
+        }
+    };
 
     document.addEventListener('DOMContentLoaded', () => {
-        checkUpdate();
+        if (!isMacosLocalUpdate) checkUpdate();
 
         document.getElementById('close-update-modal').addEventListener('click', hideUpdateModal);
         document.getElementById('later-btn').addEventListener('click', hideUpdateModal);

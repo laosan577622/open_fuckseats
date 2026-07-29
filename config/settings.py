@@ -13,6 +13,9 @@ https://docs.djangoproject.com/en/6.0/ref/settings/
 import os
 from pathlib import Path
 
+from app_paths import database_path, plugin_directories
+from database_security import database_encryption_enabled
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-1bux7tnh9ubww-d(pohhj#nw=n5ndw-&8tvns(!yx-pb*sn3xz'
 DEBUG = True
@@ -67,8 +70,12 @@ WSGI_APPLICATION = 'config.wsgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': (
+            'config.sqlcipher_backend'
+            if database_encryption_enabled()
+            else 'django.db.backends.sqlite3'
+        ),
+        'NAME': database_path(),
     }
 }
 
@@ -106,8 +113,11 @@ STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
 
 
-PLUGIN_DIRS = [str(BASE_DIR / 'plugins')]
+PLUGIN_DIRS = plugin_directories()
 
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
 OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', '').strip()
 OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4.1-mini').strip() or 'gpt-4.1-mini'
+
+# 保留 AI 实现代码，但当前产品版本不暴露任何 AI 界面或调用入口。
+AI_FEATURE_ENABLED = False

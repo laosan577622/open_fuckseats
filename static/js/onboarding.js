@@ -336,6 +336,15 @@
         },
         {
             element: '.seat-stage',
+            advanceOn: 'fuckseats:student-moved',
+            advanceScope: 'document',
+            popover: {
+                title: '双击输入学号快速换座',
+                description: '双击任意座位，在输入框中填写另一名学生的完整学号，或输入姓名和姓名首字母，即可直接换座。请实际完成一次快速换座。'
+            }
+        },
+        {
+            element: '.seat-stage',
             advanceOn: 'contextmenu',
             popover: {
                 title: '座位右键菜单',

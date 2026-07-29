@@ -73,7 +73,7 @@ DEFAULT_CONFIG = {
                     'max_classrooms': -1,
                     'sync_enabled': True,
                     'max_history_steps': 100,
-                    'sync_ai_conversations': True,
+                    'sync_ai_conversations': False,
                     'max_snapshots_per_classroom': 50,
                 },
             },

@@ -47,8 +47,8 @@ CURRENT_STATE_KEYS = {
     'layout_snapshots',
 }
 STATE_CLASSROOM_KEYS = {'pk', 'name', 'rows', 'cols', 'left_guardian_student_pk', 'right_guardian_student_pk', 'created_at'}
-STUDENT_KEYS = {'name', 'student_id', 'gender', 'score'}
-STATE_STUDENT_KEYS = {'pk', 'name', 'student_id', 'gender', 'score'}
+STUDENT_KEYS = {'name', 'student_id', 'gender', 'score', 'custom_data'}
+STATE_STUDENT_KEYS = {'pk', 'name', 'student_id', 'gender', 'score', 'custom_data'}
 GROUP_KEYS = {'name', 'order'}
 STATE_GROUP_KEYS = {'pk', 'name', 'order', 'leader_student_pk', 'created_at'}
 SEAT_KEYS = {'row', 'col', 'cell_type', 'student_pk', 'student_id', 'student_name', 'group_name'}
@@ -220,6 +220,8 @@ def _validate_student_payload(item, path, allowed_keys):
     if gender not in (None, '', 'M', 'F'):
         raise ValueError(f'{_format_path(path)} 性别字段不合法')
     _to_float(item.get('score'), f'{path}.score')
+    if 'custom_data' in item and not isinstance(item.get('custom_data'), dict):
+        raise ValueError(f'{_format_path(path)}.custom_data 必须是对象')
 
 
 def _validate_group_payload(item, path, allowed_keys):

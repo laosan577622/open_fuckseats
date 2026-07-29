@@ -1,0 +1,118 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ classroom_group.name }} - 学生管理{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="group-students">学生管理</button>
+{% endblock %}
+
+{% block actions %}
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="group-students">
+        <div class="ribbon-group">
+            <a href="{% url 'classroom_group_detail' classroom_group.pk %}" class="btn btn-secondary">返回班级管理</a>
+            <span class="ribbon-group-label">导航</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<section class="classroom-group-students-page">
+    <header class="group-students-hero">
+        <div>
+            <span class="classroom-group-kicker">学生管理</span>
+            <h1>{{ classroom_group.name }}</h1>
+            <div class="group-student-stats">
+                <span>{{ student_count }} 名学生</span>
+                <i></i>
+                <span>{{ assigned_count }} 名已分班</span>
+                <i></i>
+                <span>{{ unassigned_count }} 名待分配</span>
+            </div>
+        </div>
+        <a href="{% url 'classroom_group_import_students_options_page' classroom_group.pk %}" class="btn btn-primary">导入学生</a>
+    </header>
+
+    <form method="get" class="group-student-toolbar">
+        <label class="group-student-search">
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <circle cx="8.5" cy="8.5" r="5.5" stroke="currentColor" stroke-width="1.5"/>
+                <path d="m13 13 4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <input type="search" name="q" value="{{ keyword }}" placeholder="搜索姓名、学号或信息">
+        </label>
+        <select name="classroom" aria-label="按班级筛选">
+            <option value="">全部班级</option>
+            <option value="unassigned"{% if classroom_filter == "unassigned" %} selected{% endif %}>待分配</option>
+            {% for classroom in classrooms %}
+            <option value="{{ classroom.pk }}"{% if classroom_filter == classroom.pk|stringformat:"s" %} selected{% endif %}>{{ classroom.name }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" class="btn btn-secondary">筛选</button>
+    </form>
+
+    <div class="group-student-table-wrap">
+        <table class="group-student-table">
+            <thead>
+                <tr>
+                    <th>学生</th>
+                    <th>班级</th>
+                    <th>成绩</th>
+                    <th>自定义信息</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                <tr>
+                    <td>
+                        <strong>{{ row.student.name }}</strong>
+                        <span>{{ row.student.student_id|default:"未填写学号" }}</span>
+                    </td>
+                    <td>
+                        {% if row.kind == "assigned" %}
+                        <a href="{% url 'classroom_detail' row.classroom.pk %}">{{ row.classroom.name }}</a>
+                        {% else %}
+                        <span class="group-student-unassigned">待分配</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ row.student.display_score|default:"—" }}</td>
+                    <td class="group-student-custom">{{ row.custom_text|default:"—" }}</td>
+                    <td>
+                        {% if row.kind == "unassigned" %}
+                        <div class="group-student-row-actions">
+                            <form method="post" action="{% url 'classroom_group_student_action' classroom_group.pk %}" class="group-student-assign">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="assign">
+                                <input type="hidden" name="student_id" value="{{ row.student.pk }}">
+                                <select name="classroom_id" aria-label="为 {{ row.student.name }} 选择班级" required{% if not classrooms %} disabled{% endif %}>
+                                    <option value="">选择班级</option>
+                                    {% for classroom in classrooms %}
+                                    <option value="{{ classroom.pk }}">{{ classroom.name }}</option>
+                                    {% endfor %}
+                                </select>
+                                <button type="submit" class="btn btn-secondary"{% if not classrooms %} disabled{% endif %}>分配</button>
+                            </form>
+                            <form method="post" action="{% url 'classroom_group_student_action' classroom_group.pk %}">
+                                {% csrf_token %}
+                                <input type="hidden" name="action" value="delete_unassigned">
+                                <input type="hidden" name="student_id" value="{{ row.student.pk }}">
+                                <button type="submit" class="group-student-delete">删除</button>
+                            </form>
+                        </div>
+                        {% else %}
+                        <a href="{% url 'classroom_detail' row.classroom.pk %}" class="group-student-enter">进入班级</a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% empty %}
+                <tr>
+                    <td colspan="5" class="group-student-empty">暂无学生</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+{% endblock %}

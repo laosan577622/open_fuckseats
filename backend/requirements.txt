@@ -4,3 +4,4 @@ PyYAML
 certifi
 cryptography
 tzdata
+sqlcipher3==0.6.2

@@ -1,7 +1,7 @@
 {% extends 'base.html' %}
 {% load static %}
 
-{% block title %}{{ classroom.name }} - 导入 Excel 成绩表{% endblock %}
+{% block title %}{% if classroom_group %}{{ classroom_group.name }} - 批量导入学生{% else %}{{ classroom.name }} - 导入 Excel 成绩表{% endif %}{% endblock %}
 
 {% block ribbon_tabs %}
 <button type="button" class="ribbon-tab active" data-ribbon-tab="import">导入配置</button>
@@ -11,7 +11,11 @@
 <div class="ribbon-panels">
     <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="import">
         <div class="ribbon-group">
+            {% if classroom_group %}
+            <a href="{% url 'classroom_group_students' classroom_group.pk %}" class="btn btn-secondary">返回学生管理</a>
+            {% else %}
             <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=import-return" class="btn btn-secondary">返回班级</a>
+            {% endif %}
             <span class="ribbon-group-label">导航</span>
         </div>
     </div>
@@ -21,15 +25,16 @@
 {% block content %}
 <section class="options-workspace student-import-workspace">
     <div class="options-shell" id="import-students-root"
-        data-classroom-id="{{ classroom.pk }}"
-        data-import-url="{% url 'import_students' classroom.pk %}"
-        data-back-url="{% url 'classroom_detail' classroom.pk %}?cloud_sync=import-return">
-        <h1 class="options-title">导入 Excel 成绩表</h1>
+        data-classroom-id="{{ classroom.pk|default:'' }}"
+        data-group-id="{{ classroom_group.pk|default:'' }}"
+        data-import-url="{% if classroom_group %}{% url 'import_classroom_group_students' classroom_group.pk %}{% else %}{% url 'import_students' classroom.pk %}{% endif %}"
+        data-back-url="{% if classroom_group %}{% url 'classroom_group_students' classroom_group.pk %}{% else %}{% url 'classroom_detail' classroom.pk %}?cloud_sync=import-return{% endif %}">
+        <h1 class="options-title">{% if classroom_group %}为“{{ classroom_group.name }}”批量导入学生{% else %}导入 Excel 成绩表{% endif %}</h1>
 
         <div class="options-layout student-import-layout">
             <div class="options-left student-import-sidebar">
-                <div class="panel-card options-card student-import-upload-card">
-                    <form id="excel-import-form" method="post" action="{% url 'import_students' classroom.pk %}" enctype="multipart/form-data">
+                <div class="panel-card options-card student-import-upload-card" id="student-import-upload-panel">
+                    <form id="excel-import-form" method="post" action="{% if classroom_group %}{% url 'import_classroom_group_students' classroom_group.pk %}{% else %}{% url 'import_students' classroom.pk %}{% endif %}" enctype="multipart/form-data">
                         {% csrf_token %}
                         <div class="form-group student-import-file-group">
                             <label for="student-import-file">Excel 文件</label>
@@ -91,6 +96,15 @@
                                 </button>
                             </div>
                             <div class="student-import-field-row">
+                                <button type="button" class="student-import-field-btn" data-import-field="classroom">
+                                    <span>班级{% if classroom_group %}（可选）{% endif %}</span>
+                                    <strong id="student-import-map-classroom">未选择</strong>
+                                </button>
+                                <button type="button" class="student-import-field-clear" data-clear-field="classroom" aria-label="清除班级列">
+                                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="m6 6 8 8m0-8-8 8"/></svg>
+                                </button>
+                            </div>
+                            <div class="student-import-field-row">
                                 <button type="button" class="student-import-field-btn" data-import-field="gender">
                                     <span>性别</span>
                                     <strong id="student-import-map-gender">未选择</strong>
@@ -112,6 +126,16 @@
                     </div>
 
                     <div class="student-import-section">
+                        <div class="student-import-section-title">自定义信息</div>
+                        <p class="student-import-section-description">可添加任意 Excel 列，字段名称会作为学生的“自定义信息”保存。</p>
+                        <div class="student-import-custom-add">
+                            <input type="text" id="student-import-custom-name" maxlength="80" placeholder="例如：宿舍、身高、分组编号">
+                            <button type="button" class="btn btn-secondary" id="student-import-custom-add-btn">添加信息列</button>
+                        </div>
+                        <div class="student-import-field-list" id="student-import-custom-list"></div>
+                    </div>
+
+                    <div class="student-import-section">
                         <div class="student-import-section-title">导入模式</div>
                         <div class="student-import-mode-switch">
                             <label>
@@ -128,6 +152,25 @@
                     <div class="options-actions student-import-confirm-actions">
                         <button type="button" class="btn btn-secondary" id="student-import-remap-btn">更换文件</button>
                         <button type="button" class="btn btn-primary" id="student-import-confirm-btn">确认导入</button>
+                    </div>
+                </div>
+
+                <div class="student-import-region-panel" id="student-import-region-panel" tabindex="-1" hidden>
+                    <p>请最后确认数据区域，红色为无效区域，绿色是您选择的区域，请单击行标来确认开始行和结束行</p>
+                    <div class="student-import-region-status" id="student-import-region-status" role="status" aria-live="polite"></div>
+                    <div class="student-import-region-students" aria-label="数据区域首尾学生">
+                        <div class="student-import-region-student">
+                            <span>第一个学生</span>
+                            <div id="student-import-region-first"></div>
+                        </div>
+                        <div class="student-import-region-student">
+                            <span>最后一个学生</span>
+                            <div id="student-import-region-last"></div>
+                        </div>
+                    </div>
+                    <div class="options-actions student-import-region-actions">
+                        <button type="button" class="btn btn-secondary" id="student-import-region-back-btn">返回修改</button>
+                        <button type="button" class="btn btn-primary" id="student-import-final-confirm-btn">确定导入</button>
                     </div>
                 </div>
             </div>
@@ -149,6 +192,10 @@
                             </svg>
                             <span>等待选择文件</span>
                         </div>
+                    </div>
+                    <div class="student-import-region-legend" id="student-import-region-legend" hidden aria-label="数据区域图例">
+                        <span><i class="student-import-legend-swatch valid" aria-hidden="true"></i>您选择的区域</span>
+                        <span><i class="student-import-legend-swatch invalid" aria-hidden="true"></i>无效区域</span>
                     </div>
                 </div>
             </div>
@@ -176,5 +223,5 @@
     </div>
 </div>
 
-<script src="{% static 'js/import_students_options.js' %}?v=4"></script>
+<script src="{% static 'js/import_students_options.js' %}?v=9"></script>
 {% endblock %}

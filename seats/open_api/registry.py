@@ -2,6 +2,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from django.db import transaction
+from django.conf import settings
 from django.http import Http404
 
 from seats.models import Classroom
@@ -98,12 +99,17 @@ class ToolRegistry:
 
     def get(self, name):
         tool = self._tools.get(str(name or '').strip())
+        if tool and tool.category == 'ai' and not bool(getattr(settings, 'AI_FEATURE_ENABLED', False)):
+            tool = None
         if not tool:
             raise ToolExecutionError(f'未知工具：{name}', code='TOOL_NOT_FOUND', status=404)
         return tool
 
     def all(self):
-        return [self._tools[name] for name in sorted(self._tools)]
+        tools = [self._tools[name] for name in sorted(self._tools)]
+        if not bool(getattr(settings, 'AI_FEATURE_ENABLED', False)):
+            tools = [tool for tool in tools if tool.category != 'ai']
+        return tools
 
     def schemas(self, *, category=None):
         tools = self.all()
@@ -167,11 +173,33 @@ class ToolRegistry:
         if not tool.read_only and tool.category != 'ai':
             from . import realtime
             changed_classroom_id = classroom.pk if classroom is not None else None
+            changed_classroom_ids = []
+            affected = payload.get('affected') if isinstance(payload.get('affected'), dict) else {}
+            if isinstance(affected.get('classroom_ids'), list):
+                changed_classroom_ids.extend(affected.get('classroom_ids'))
             if changed_classroom_id is None:
                 result_classroom = payload.get('result', {}).get('classroom') if isinstance(payload.get('result'), dict) else None
                 if isinstance(result_classroom, dict):
                     changed_classroom_id = result_classroom.get('id')
-            transaction.on_commit(lambda cid=changed_classroom_id: realtime.bump(cid, data=True))
+            if changed_classroom_id is not None:
+                changed_classroom_ids.append(changed_classroom_id)
+            normalized_ids = []
+            for value in changed_classroom_ids:
+                try:
+                    value = int(value)
+                except (TypeError, ValueError):
+                    continue
+                if value not in normalized_ids:
+                    normalized_ids.append(value)
+
+            def bump_changed(ids=normalized_ids):
+                if not ids:
+                    realtime.bump(None, data=True)
+                    return
+                for index, classroom_value in enumerate(ids):
+                    realtime.bump(classroom_value, data=index == 0)
+
+            transaction.on_commit(bump_changed)
 
         return payload
 

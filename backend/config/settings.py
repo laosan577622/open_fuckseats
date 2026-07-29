@@ -10,6 +10,17 @@ DB_NAME = os.getenv('CLOUD_SQLITE_PATH') or CONFIG.get('database', {}).get('name
 if isinstance(DB_NAME, str) and not os.path.isabs(DB_NAME):
     DB_NAME = BASE_DIR / DB_NAME
 
+# WSGI/ASGI process managers can import settings without going through run.py
+# or manage.py. Bootstrap here as well so encrypted production databases are
+# migrated and verified before Django opens its first connection.
+if os.getenv('FUCKSEATS_CLOUD_DB_KEY') or os.getenv('FUCKSEATS_IMPROVE_DB_KEY') or (
+    str(os.getenv('FUCKSEATS_REQUIRE_SERVER_DB_ENCRYPTION') or '').strip().lower()
+    in {'1', 'true', 'yes', 'on'}
+):
+    from cloud.db_security import prepare_cloud_databases
+
+    prepare_cloud_databases()
+
 SECRET_KEY = os.getenv('CLOUD_SECRET_KEY') or CONFIG.get('server', {}).get('secret_key') or 'django-insecure-change-me'
 DEBUG = bool(CONFIG.get('server', {}).get('debug', False))
 
@@ -42,7 +53,11 @@ ASGI_APPLICATION = 'config.asgi.application'
 
 DATABASES = {
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
+        'ENGINE': (
+            'config.sqlcipher_backend'
+            if os.getenv('FUCKSEATS_CLOUD_DB_KEY')
+            else 'django.db.backends.sqlite3'
+        ),
         'NAME': DB_NAME,
     }
 }

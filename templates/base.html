@@ -7,8 +7,8 @@
     <title>{% block title %}不想排座位{% endblock %}</title>
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=3.5">
-    <link rel="stylesheet" href="{% static 'css/ai_session.css' %}?v=1.1">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4.9">
+    {% if ai_feature_enabled %}<link rel="stylesheet" href="{% static 'css/ai_session.css' %}?v=1.1">{% endif %}
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css" />
     {% block extra_head %}{% endblock %}
     <meta name="csrf-token" content="{{ csrf_token }}">
@@ -17,7 +17,7 @@
     <script src="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.js.iife.js"></script>
 </head>
 
-<body data-app-shell="{{ app_runtime.shell }}">
+<body class="{% block body_class %}{% endblock %}" data-app-shell="{{ app_runtime.shell }}" data-app-platform="{{ app_runtime.platform }}">
     <header class="app-header">
         <div class="header-content" data-ribbon-host>
             <div class="header-titlebar">
@@ -40,6 +40,7 @@
                         {% endblock %}
                     </div>
                 </div>
+                {% block titlebar_actions %}{% endblock %}
                 <div class="cloud-header-area" id="cloud-header-area"></div>
                 <div class="titlebar-badge">开始</div>
             </div>
@@ -57,6 +58,7 @@
 
     <div id="toast-container"></div>
 
+    {% if ai_feature_enabled %}
     <div id="ai-session-overlay" aria-live="polite" aria-hidden="true">
         <div class="ai-session-backdrop"></div>
         <div class="ai-session-card">
@@ -73,6 +75,7 @@
             <p class="ai-session-footer">由 AI 通过 Open API 控制，任务完成后自动关闭</p>
         </div>
     </div>
+    {% endif %}
 
     <div id="update-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content update-modal">
@@ -95,7 +98,7 @@
             </div>
             <div class="modal-body">
                 <div id="update-prompt">
-                    <p>检测到新版本可用，是否立即更新？</p>
+                            <p>{% if app_runtime.platform == 'macos' %}本地升级包已验证，是否开始安装？{% else %}检测到新版本可用，是否立即更新？{% endif %}</p>
                     <div class="modal-actions">
                         <button id="later-btn" class="btn btn-secondary">稍后提醒</button>
                         <button id="update-btn" class="btn btn-primary">
@@ -127,11 +130,12 @@
     <script src="{% static 'js/cloud.js' %}?v=2.0"></script>
     <script src="{% static 'js/data_sharing.js' %}?v=1.0"></script>
     <script src="{% static 'js/toast.js' %}?v=2.0"></script>
-    <script src="{% static 'js/update.js' %}?v=2.2"></script>
+        <script src="{% static 'js/update.js' %}?v=3.0"></script>
     <script src="{% static 'js/effects.js' %}?v=2.0"></script>
     <script src="{% static 'js/desktop_bridge.js' %}?v=20260430"></script>
     <script src="{% static 'js/main.js' %}?v=1.1"></script>
-    <script src="{% static 'js/ai_session.js' %}?v=1.3"></script>
+    <script src="{% static 'js/realtime.js' %}?v=1.0"></script>
+    {% if ai_feature_enabled %}<script src="{% static 'js/ai_session.js' %}?v=1.3"></script>{% endif %}
 
     <div id="welcome-finale-overlay" style="display:none" aria-hidden="true">
         <div class="wf-backdrop"></div>

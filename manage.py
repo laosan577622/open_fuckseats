@@ -7,6 +7,10 @@ import sys
 def main():
     """Run administrative tasks."""
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
+    if not any(str(arg).strip().lower() == 'test' for arg in sys.argv[1:]):
+        from database_security import prepare_desktop_database
+
+        prepare_desktop_database()
     try:
         from django.core.management import execute_from_command_line
     except ImportError as exc:

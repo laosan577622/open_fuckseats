@@ -1,3 +1,4 @@
+import json
 import os
 import shutil
 import subprocess
@@ -50,6 +51,9 @@ COMMON_HIDDEN_IMPORTS = (
     'cryptography.hazmat.bindings._rust',
     'cryptography.hazmat.bindings._rust.openssl',
     'cryptography.hazmat.bindings._rust.openssl.aead',
+    'keyring',
+    'sqlcipher3',
+    'sqlcipher3.dbapi2',
 )
 
 OPEN_API_HIDDEN_IMPORTS = (
@@ -74,6 +78,11 @@ WINDOWS_HIDDEN_IMPORTS = (
     'webview.platforms.winforms',
     'webview.platforms.edgechromium',
     'webview.platforms.mshtml',
+    'keyring.backends.Windows',
+)
+
+MACOS_HIDDEN_IMPORTS = (
+    'keyring.backends.macOS',
 )
 
 COMMON_COLLECT_ALL = (
@@ -84,6 +93,8 @@ COMMON_COLLECT_ALL = (
     'webview',
     'whitenoise',
     'cryptography',
+    'keyring',
+    'sqlcipher3',
 )
 
 WINDOWS_COLLECT_ALL = (
@@ -94,6 +105,8 @@ WINDOWS_COLLECT_ALL = (
 COMMON_COLLECT_DATA = (
     'certifi',
     'cryptography',
+    'keyring',
+    'sqlcipher3',
 )
 
 COMMON_COPY_METADATA = (
@@ -161,6 +174,8 @@ def _build_pyinstaller_command(data_args):
 
     if _is_windows() or _is_macos():
         cmd.append('--windowed')
+    if _is_macos():
+        cmd.extend(['--osx-bundle-identifier', 'xyz.577622.fuckseats'])
 
     _extend_option_pairs(cmd, '--hidden-import', COMMON_HIDDEN_IMPORTS)
     _extend_option_pairs(cmd, '--hidden-import', OPEN_API_HIDDEN_IMPORTS)
@@ -172,6 +187,8 @@ def _build_pyinstaller_command(data_args):
         _extend_option_pairs(cmd, '--hidden-import', WINDOWS_HIDDEN_IMPORTS)
         _extend_option_pairs(cmd, '--collect-all', WINDOWS_COLLECT_ALL)
         _extend_option_pairs(cmd, '--copy-metadata', WINDOWS_COPY_METADATA)
+    elif _is_macos():
+        _extend_option_pairs(cmd, '--hidden-import', MACOS_HIDDEN_IMPORTS)
 
     _extend_option_pairs(cmd, '--exclude-module', EXCLUDED_MODULES)
     cmd.append('run_app.py')
@@ -184,6 +201,34 @@ def _build_output_path(dist_dir):
     if _is_windows():
         return os.path.join(dist_dir, 'FuckSeats', 'FuckSeats.exe')
     return os.path.join(dist_dir, 'FuckSeats', 'FuckSeats')
+
+
+def _write_staged_release_manifest(stage_dir):
+    version = str(os.getenv('FUCKSEATS_APP_VERSION') or '').strip()
+    if not version:
+        return
+    manifest_path = os.path.join(stage_dir, 'runtime', 'release.json')
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+    try:
+        with open(manifest_path, 'r', encoding='utf-8') as source:
+            payload = json.load(source)
+        if not isinstance(payload, dict):
+            payload = {}
+    except Exception:
+        payload = {}
+    payload['version'] = version
+    team_id = str(
+        os.getenv('MACOS_TEAM_ID')
+        or os.getenv('MACOS_NOTARY_TEAM_ID')
+        or ''
+    ).strip()
+    if team_id:
+        payload['team_id'] = team_id
+    else:
+        payload.pop('team_id', None)
+    with open(manifest_path, 'w', encoding='utf-8') as output:
+        json.dump(payload, output, ensure_ascii=False, indent=2)
+        output.write('\n')
 
 
 def _remove_embedded_databases(dist_root):
@@ -233,7 +278,7 @@ def main():
     BUILD_DIR = os.path.join(BASE_DIR, 'build')
     SPEC_FILE = os.path.join(BASE_DIR, 'FuckSeats.spec')
     STAGE_DIR = os.path.join(BASE_DIR, '_data_stage')
-    DATA_DIRS = ['templates', 'static', 'seats', 'runtime', 'config', 'skill']
+    DATA_DIRS = ['templates', 'static', 'seats', 'runtime', 'config', 'plugins', 'skill']
     DB_EXCLUDE_PATTERNS = ['*.sqlite3', '*.sqlite', '*.db']
     
     print("正在清理旧构建文件...", flush=True)
@@ -277,6 +322,8 @@ def main():
             ignore=shutil.ignore_patterns(*DB_EXCLUDE_PATTERNS),
         )
         staged_data_dirs[data_dir] = dst_dir
+
+    _write_staged_release_manifest(STAGE_DIR)
 
     data_args = []
     for data_dir in DATA_DIRS:

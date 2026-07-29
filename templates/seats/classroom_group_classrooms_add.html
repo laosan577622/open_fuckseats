@@ -1,0 +1,265 @@
+{% extends 'base.html' %}
+
+{% block title %}添加班级 - {{ classroom_group.name }}{% endblock %}
+
+{% block ribbon_tabs %}
+<button type="button" class="ribbon-tab active" data-ribbon-tab="group-add">添加班级</button>
+{% endblock %}
+
+{% block actions %}
+<div class="ribbon-panels">
+    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="group-add">
+        <div class="ribbon-group">
+            <a href="{% url 'classroom_group_detail' classroom_group.pk %}" class="btn btn-secondary">返回班级管理</a>
+            <span class="ribbon-group-label">导航</span>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block content %}
+<main class="group-add-page">
+    <header class="group-add-hero">
+        <span class="classroom-group-kicker">添加班级</span>
+        <h1>{{ classroom_group.name }}</h1>
+    </header>
+
+    <nav class="create-flow-progress" aria-label="添加进度">
+        <span class="is-active" data-group-add-progress="1"><b>1</b>选择方式</span>
+        <i></i>
+        <span data-group-add-progress="2"><b>2</b>填写信息</span>
+    </nav>
+
+    <section class="create-flow-stage" data-group-add-step="1">
+        <header class="create-flow-stage-heading">
+            <span>第一步</span>
+            <h2>选择添加方式</h2>
+        </header>
+        <div class="create-choice-grid">
+            <button type="button" class="create-choice" data-group-add-method="batch">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><rect x="4" y="4" width="8" height="8" rx="2"/><rect x="16" y="4" width="8" height="8" rx="2"/><rect x="4" y="16" width="8" height="8" rx="2"/><path d="M20 16v8M16 20h8"/></svg>
+                </span>
+                <span class="create-choice-copy"><strong>批量新建班级</strong></span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+            <button type="button" class="create-choice" data-group-add-method="existing">
+                <span class="create-choice-icon" aria-hidden="true">
+                    <svg viewBox="0 0 28 28" fill="none"><path d="M4 8h8l2 3h10v12H4V8Zm0 0V5h8l2 3"/></svg>
+                </span>
+                <span class="create-choice-copy"><strong>添加现有班级</strong></span>
+                <svg class="create-choice-arrow" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </button>
+        </div>
+    </section>
+
+    <section class="create-flow-stage" data-group-add-step="2" hidden>
+        <button type="button" class="create-flow-back" data-group-add-back>
+            <svg viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m12 5-5 5 5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            返回选择方式
+        </button>
+        <header class="create-flow-stage-heading">
+            <span>第二步</span>
+            <h2 data-group-add-title>填写班级信息</h2>
+        </header>
+
+        <form method="post" action="{% url 'classroom_group_action' classroom_group.pk %}" class="create-final-form" data-group-add-form="batch" hidden>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="batch_create">
+            <label>班级名称
+                <textarea
+                    name="names"
+                    rows="6"
+                    placeholder="2301&#10;2302&#10;2303"
+                    data-classroom-sequence-input
+                    required
+                ></textarea>
+            </label>
+            <label>布局方式
+                <select name="mode" data-group-layout-mode>
+                    <option value="quick_groups">快速大组布局</option>
+                    <option value="copy_layout">复制现有班级布局</option>
+                    <option value="custom">完全自定义空白布局</option>
+                </select>
+            </label>
+            <div class="group-layout-fields" data-layout-fields="quick_groups">
+                <label>座位行数<input type="number" name="seat_rows" value="6" min="1" max="29"></label>
+                <label>大组数量<input type="number" name="large_group_count" value="2" min="1" max="10"></label>
+                <label>单大组列数<input type="number" name="group_cols" value="4" min="1" max="12"></label>
+            </div>
+            <div class="group-layout-fields" data-layout-fields="copy_layout" hidden>
+                <label>布局来源
+                    <select name="source_classroom_id">
+                        <option value="">请选择班级</option>
+                        {% for item in source_classrooms %}
+                        <option value="{{ item.pk }}">{{ item.classroom_group.name|default:"未分组" }} · {{ item.name }}</option>
+                        {% endfor %}
+                    </select>
+                </label>
+            </div>
+            <div class="group-layout-fields" data-layout-fields="custom" hidden>
+                <label>总行数<input type="number" name="rows" value="6" min="1" max="30"></label>
+                <label>总列数<input type="number" name="cols" value="8" min="1" max="30"></label>
+            </div>
+            <button type="submit" class="btn btn-primary">批量创建班级</button>
+        </form>
+
+        <form method="post" action="{% url 'classroom_group_action' classroom_group.pk %}" class="create-final-form" data-group-add-form="existing" hidden>
+            {% csrf_token %}
+            <input type="hidden" name="action" value="add_existing">
+            <div class="group-existing-list">
+                {% for item in ungrouped_classrooms %}
+                <label><input type="checkbox" name="classroom_ids" value="{{ item.pk }}"> <span>{{ item.name }}</span></label>
+                {% empty %}
+                <p>暂无未分组班级</p>
+                {% endfor %}
+            </div>
+            <button type="submit" class="btn btn-primary">添加选中班级</button>
+        </form>
+    </section>
+</main>
+
+<div class="modal-overlay classroom-sequence-modal" id="classroom-sequence-modal" hidden aria-hidden="true">
+    <div class="modal-card classroom-sequence-dialog" role="dialog" aria-modal="true" aria-labelledby="classroom-sequence-title">
+        <div data-sequence-question>
+            <span class="classroom-group-kicker">批量创建</span>
+            <h3 id="classroom-sequence-title">是否自动排序</h3>
+            <div class="classroom-sequence-actions">
+                <button type="button" class="btn btn-secondary" data-sequence-cancel>暂不</button>
+                <button type="button" class="btn btn-primary" data-sequence-continue>继续设置</button>
+            </div>
+        </div>
+        <div data-sequence-range hidden>
+            <span class="classroom-group-kicker">自动排序</span>
+            <h3>设置结束班级编号</h3>
+            <label>排到
+                <input type="number" id="classroom-sequence-end" min="1" step="1">
+            </label>
+            <div class="classroom-sequence-actions">
+                <button type="button" class="btn btn-secondary" data-sequence-back>返回</button>
+                <button type="button" class="btn btn-primary" data-sequence-generate>生成班级名称</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var steps = Array.from(document.querySelectorAll('[data-group-add-step]'));
+    var progress = Array.from(document.querySelectorAll('[data-group-add-progress]'));
+    var forms = Array.from(document.querySelectorAll('[data-group-add-form]'));
+    var title = document.querySelector('[data-group-add-title]');
+
+    function showStep(step) {
+        steps.forEach(function (item) {
+            item.hidden = Number(item.dataset.groupAddStep) !== step;
+        });
+        progress.forEach(function (item) {
+            var itemStep = Number(item.dataset.groupAddProgress);
+            item.classList.toggle('is-active', itemStep === step);
+            item.classList.toggle('is-complete', itemStep < step);
+        });
+    }
+
+    document.querySelectorAll('[data-group-add-method]').forEach(function (button) {
+        button.addEventListener('click', function () {
+            var method = button.dataset.groupAddMethod;
+            forms.forEach(function (form) {
+                form.hidden = form.dataset.groupAddForm !== method;
+            });
+            if (title) title.textContent = method === 'batch' ? '批量新建班级' : '添加现有班级';
+            showStep(2);
+        });
+    });
+
+    var backButton = document.querySelector('[data-group-add-back]');
+    if (backButton) backButton.addEventListener('click', function () { showStep(1); });
+
+    document.querySelectorAll('[data-group-layout-mode]').forEach(function (select) {
+        function sync() {
+            var form = select.closest('form');
+            form.querySelectorAll('[data-layout-fields]').forEach(function (panel) {
+                panel.hidden = panel.dataset.layoutFields !== select.value;
+            });
+        }
+        select.addEventListener('change', sync);
+        sync();
+    });
+
+    var sequenceInput = document.querySelector('[data-classroom-sequence-input]');
+    var sequenceModal = document.getElementById('classroom-sequence-modal');
+    var sequenceQuestion = sequenceModal ? sequenceModal.querySelector('[data-sequence-question]') : null;
+    var sequenceRange = sequenceModal ? sequenceModal.querySelector('[data-sequence-range]') : null;
+    var sequenceEnd = document.getElementById('classroom-sequence-end');
+    var sequenceState = null;
+
+    function closeSequenceModal(appendLineBreak) {
+        if (!sequenceModal) return;
+        sequenceModal.hidden = true;
+        sequenceModal.setAttribute('aria-hidden', 'true');
+        if (sequenceQuestion) sequenceQuestion.hidden = false;
+        if (sequenceRange) sequenceRange.hidden = true;
+        if (appendLineBreak && sequenceInput && !sequenceInput.value.endsWith('\n')) {
+            sequenceInput.value += '\n';
+        }
+        if (sequenceInput) sequenceInput.focus();
+    }
+
+    if (sequenceInput && sequenceModal) {
+        sequenceInput.addEventListener('keydown', function (event) {
+            if (event.key !== 'Enter' || event.shiftKey || sequenceInput.value.includes('\n')) return;
+            var firstLine = sequenceInput.value.trim();
+            var numberMatch = firstLine.match(/\d+/);
+            if (!firstLine || !numberMatch) return;
+            event.preventDefault();
+            sequenceState = {
+                start: Number.parseInt(numberMatch[0], 10),
+                digits: numberMatch[0].length,
+                prefix: firstLine.slice(0, numberMatch.index),
+                suffix: firstLine.slice(numberMatch.index + numberMatch[0].length)
+            };
+            if (sequenceEnd) sequenceEnd.value = String(sequenceState.start + 9);
+            sequenceModal.hidden = false;
+            sequenceModal.setAttribute('aria-hidden', 'false');
+        });
+
+        sequenceModal.querySelector('[data-sequence-cancel]').addEventListener('click', function () {
+            closeSequenceModal(true);
+        });
+        sequenceModal.querySelector('[data-sequence-continue]').addEventListener('click', function () {
+            sequenceQuestion.hidden = true;
+            sequenceRange.hidden = false;
+            sequenceEnd.focus();
+            sequenceEnd.select();
+        });
+        sequenceModal.querySelector('[data-sequence-back]').addEventListener('click', function () {
+            sequenceRange.hidden = true;
+            sequenceQuestion.hidden = false;
+        });
+        sequenceModal.querySelector('[data-sequence-generate]').addEventListener('click', function () {
+            if (!sequenceState) return;
+            var end = Number.parseInt(sequenceEnd.value, 10);
+            var count = end - sequenceState.start + 1;
+            if (!Number.isFinite(end) || count < 1 || count > 100) {
+                if (window.showToast) window.showToast('结束编号需不小于起始编号，且一次最多生成 100 个班级');
+                return;
+            }
+            var names = [];
+            for (var value = sequenceState.start; value <= end; value += 1) {
+                names.push(
+                    sequenceState.prefix
+                    + String(value).padStart(sequenceState.digits, '0')
+                    + sequenceState.suffix
+                );
+            }
+            sequenceInput.value = names.join('\n');
+            closeSequenceModal(false);
+        });
+    }
+
+    showStep(1);
+});
+</script>
+{% endblock %}

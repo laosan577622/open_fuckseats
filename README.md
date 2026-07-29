@@ -2,7 +2,7 @@
 
 > 让排座位这件事，不再是一件事。
 
-一个面向班主任和教务人员的智能教室排座系统。覆盖班级管理、名单导入、布局编辑、自动排座、约束规则、小组管理、AI 赋能和多格式导出等完整工作流。桌面版通过 pywebview 提供原生窗口体验，开发模式下也可直接使用浏览器访问。
+一个面向班主任和教务人员的智能教室排座系统。覆盖班级组管理、名单导入、布局编辑、自动排座、约束规则、小组管理、自定义排序和多格式导出等完整工作流。桌面版通过 pywebview 提供原生窗口体验，开发模式下也可直接使用浏览器访问。
 
 项目总代码量约 48000 行，核心业务逻辑 13000+ 行，前端交互 4500+ 行。
 
@@ -12,10 +12,11 @@
 
 - 8 种自动排座算法，覆盖随机、成绩、小组等多种策略
 - 8 种约束类型，支持指定/禁用座位、行、列、相邻关系
-- AI 赋能工作台，基于 OpenAI API function calling 实现自然语言操控座位
+- 班级组批量创建、批量导入、原子云备份与订阅配额校验
+- 按姓名、学号、成绩和自定义信息进行自然数字、拼音及升降序排序
 - 多格式导出：Excel、SVG、PPTX、`.seats` 快照
 - 插件系统：Hook + Action + UI Script + Workspace Script 四种扩展方式
-- 桌面端原生体验：pywebview + EdgeChromium，支持 Windows 自动更新
+- 桌面端原生体验：pywebview + EdgeChromium，支持 Windows 在线更新与 macOS 本地 PKG 保数据升级
 - 完整撤销/重做历史、Spotlight 命令面板、3D Toast 通知
 
 ---
@@ -23,13 +24,15 @@
 ## 核心能力
 
 ### 班级与布局
-- 新建、重命名、删除班级
+- 新建、重命名、删除班级及班级组
+- 快速生成仅用于地点分区的大组、组间走廊和自动居中的独立讲台行，不自动建立学生小组
+- 批量创建班级并复用现有班级的布局与小组分配
 - 编辑行列网格，支持座位、走廊、讲台、空位四种单元类型
 - 行列插入/删除、布局整体平移、镜像翻转
 - 布局快照保存与加载，支持 `.seats` 文件导入导出
 
 ### 学生管理
-- 手动添加单个学生（姓名、学号、性别、成绩）
+- 手动添加单个学生（姓名、学号、性别、成绩、自定义信息）
 - 右键编辑未入座学生信息
 - Excel 批量导入（自动识别列或手动映射）
 - 拖拽入座、单人/批量移动、框选多选操作
@@ -71,15 +74,11 @@
 - `.seats` 快照文件
 - 导出均采用独立配置页面（左侧设置、右侧预览），桌面版调用系统原生保存对话框
 
-### AI 赋能模式
-- 顶部 AI 选项卡打开闻道赋能工作台
-- 基于 OpenAI API + function calling
-- 支持交换座位、查询学生信息、统计小组评分、发送结构化图卡
-- 多轮对话、对话隔离、消息持久化
-- 学生列表工具支持排序、分页、筛选
-- 兼容 OpenAI Compatible API（非官方地址自动切换 Chat Completions）
-- 工具调用前需用户授权确认
-- 外部 Agent 通过 Open API 操作时，前端显示「AI 操作中」全屏提示，由 Agent 调用 `ai_operation_begin` / `ai_operation_end` 工具控制开关
+### 自定义排序
+- 班级页保留原有 8 种自动排座算法
+- 自定义策略设置使用独立页面，不与原有算法控件混排
+- 支持自然数字、文本、拼音、首字母、纯数字转换
+- Open API Agent 可创建、预览、保存和应用声明式多字段排序策略
 
 ### 云同步
 - 班级数据推送/拉取，冲突检测与解决
@@ -100,7 +99,9 @@
 - 系统原生文件保存对话框（导出时自动调用）
 - Windows 右键菜单桥接（复制/粘贴/全选等原生操作）
 - Windows 管理员权限自动提权
-- 自动更新：检测新版本 -> 下载安装包 -> 静默安装
+- Windows 更新：检测新版本 -> 下载安装包 -> 系统安装器覆盖升级
+- macOS 更新：用户自行准备官方 `.pkg` -> 应用本地验签和备份 -> 系统安装器覆盖升级；应用不会联网下载安装包
+- 用户数据库、插件和设置位于系统用户数据目录，替换应用本体不会覆盖数据
 - 版本清单通过 `runtime/release.json` 管理
 
 ### 其他
@@ -118,7 +119,7 @@
 | 层级 | 技术 |
 |------|------|
 | 后端框架 | Django 6.0 |
-| 数据库 | SQLite3 |
+| 数据库 | SQLCipher（SQLite 兼容，AES-256 整库加密） |
 | 生产服务器 | Waitress（端口 23948） |
 | 桌面壳 | pywebview（Windows 使用 EdgeChromium） |
 | 静态文件 | WhiteNoise + CompressedManifestStaticFilesStorage |
@@ -137,11 +138,14 @@
 .
 ├── manage.py                  # Django 管理入口
 ├── run_app.py                 # 统一启动脚本（迁移 + Waitress + pywebview/浏览器）
+├── app_paths.py               # 系统用户数据目录与只读资源目录
+├── database_security.py       # Keychain/Credential Locker 密钥、明文库迁移与备份
 ├── desktop_shell.py           # 桌面桥接层（原生对话框、文件导入导出、Windows 右键菜单）
 ├── desktop_runtime.py         # 桌面运行时（版本管理、自动更新、Windows 提权）
 ├── package.py                 # PyInstaller 打包脚本（清理数据库、环境变量脱敏）
 ├── config/                    # Django 配置
-│   ├── settings.py            # 全局设置（数据库、插件目录、OpenAI 配置）
+│   ├── settings.py            # 全局设置（SQLCipher、插件目录、OpenAI 配置）
+│   ├── sqlcipher_backend/     # Django 6 SQLCipher 数据库适配层
 │   ├── urls.py                # 根路由
 │   ├── wsgi.py                # WSGI 入口
 │   └── asgi.py                # ASGI 入口
@@ -195,19 +199,22 @@
 │   └── release.json           # 当前版本号
 ├── doc/                       # 开发文档
 │   └── plugin-system.md       # 插件系统开发文档
-└── requirements.txt           # Python 依赖（13 个包）
+└── requirements.txt           # Python 依赖
 ```
 
 ---
 
 ## 数据模型
 
-系统共包含 11 个 Django 模型，覆盖班级管理、排座、AI 全链路：
+系统共包含 21 个 Django 模型，覆盖班级组、排座、云同步和保留的内部数据结构：
 
 | 模型 | 说明 | 关键字段 |
 |------|------|----------|
+| `ClassroomGroup` | 班级组 | 名称、UUID、排序、组内班级 |
+| `ClassroomGroupStudent` | 班级组待分配学生 | 未选择班级时保存姓名、学号、成绩和自定义信息 |
 | `Classroom` | 班级/教室 | 名称、行列数、左右护法 |
-| `Student` | 学生 | 姓名、学号、性别、成绩 |
+| `Student` | 学生 | 姓名、学号、性别、成绩、自定义信息 |
+| `SortStrategy` | 自定义排序 | 班级或班级组范围、声明式排序规则 |
 | `Seat` | 座位 | 行列坐标、单元类型（座位/走廊/讲台/空位）、入座学生、所属小组 |
 | `SeatGroup` | 小组 | 名称、组长、排序 |
 | `SeatConstraint` | 排座约束 | 8 种约束类型、启用/禁用、距离参数 |
@@ -232,7 +239,7 @@
 pip install -r requirements.txt
 ```
 
-依赖清单（13 个包）：Django, certifi, pandas, openai, openpyxl, python-pptx, xlrd, waitress, whitenoise, tzdata, pytz, pypinyin, pywebview
+数据库加密依赖 `sqlcipher3`，桌面密钥通过 `keyring` 写入 macOS Keychain 或 Windows Credential Locker。
 
 ### 初始化数据库
 ```bash
@@ -272,46 +279,82 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\LaosanApps\fuckseats\ski
 | 变量 | 说明 | 默认值 |
 |------|------|--------|
 | `FUCKSEATS_APP_SHELL` | 运行模式（`browser` / `webview`） | 由启动参数自动设置 |
-| `OPENAI_API_KEY` | OpenAI API 密钥 | 空 |
-| `OPENAI_BASE_URL` | OpenAI API 地址 | 空（使用官方地址） |
-| `OPENAI_MODEL` | AI 模型 ID | `gpt-4.1-mini` |
+| `FUCKSEATS_DATA_DIR` | 覆盖用户数据根目录，主要用于开发和测试 | 安装版使用系统规范目录 |
+| `FUCKSEATS_DATABASE_PATH` | 覆盖桌面数据库路径 | 用户数据目录下 `data/db.sqlite3` |
+| `FUCKSEATS_DATABASE_KEY` | 源码开发/CI 注入数据库密钥，正式桌面包不使用 | 系统钥匙串 |
+| `OPENAI_API_KEY` | 保留的兼容配置，当前 AI 功能关闭 | 空 |
+| `OPENAI_BASE_URL` | 保留的兼容配置，当前 AI 功能关闭 | 空 |
+| `OPENAI_MODEL` | 保留的兼容配置，当前 AI 功能关闭 | `gpt-4.1-mini` |
 | `PLUGIN_DIRS` | 额外插件目录（逗号分隔） | 空 |
+
+### 数据库加密与数据目录
+
+正式桌面版首次启动会生成随机 256 位数据库密钥，并写入当前系统用户的安全钥匙串。旧版明文 `db.sqlite3` 会在 Django 建立连接前转换成 SQLCipher 数据库，完成完整性检查后再原子切换；密钥缺失、错误或迁移失败时应用停止启动，不会创建一个看似正常的空库。
+
+macOS 用户数据目录：
+
+```text
+~/Library/Application Support/xyz.577622.fuckseats/
+```
+
+Windows 用户数据目录：
+
+```text
+%LOCALAPPDATA%\FuckSeats\
+```
+
+`.seats` 便携文件默认不再导出 OpenAI API Key。Excel 等用户主动导出的文件仍属于明文文件，应由用户自行妥善保管。
+
+云端服务可通过以下变量启用两套服务端 SQLite 加密：
+
+```text
+FUCKSEATS_CLOUD_DB_KEY
+FUCKSEATS_IMPROVE_DB_KEY
+FUCKSEATS_REQUIRE_SERVER_DB_ENCRYPTION=1
+```
+
+启用强制开关后，任一服务端密钥缺失都会阻止服务启动。
+
+### macOS 本地保数据升级
+
+macOS 不执行远程版本检查，也不会请求服务器下载升级包。进入“设置 -> 软件更新”，点击“选择升级包”，选择自行准备的官方 `Fuckseats_vX.Y.Z_macos.pkg`。应用会验证文件类型、版本、SHA-256、Bundle ID、Developer ID Installer 签名和 macOS 安全策略，随后备份加密数据库并打开系统安装器。
+
+首次从旧版迁移时，PKG 的安装前脚本会先从旧 App Bundle 中抢救数据库到 Application Support；只有数据复制和完整性检查成功后才允许覆盖旧应用。
+
+本地构建 macOS 首次安装 DMG 与升级 PKG：
+
+```bash
+python package_macos.py 2.3.0
+```
+
+输出：
+
+```text
+artifacts/macos/Fuckseats_v2.3.0_macos.dmg
+artifacts/macos/Fuckseats_v2.3.0_macos.pkg
+```
+
+正式签名构建使用 `MACOS_APP_SIGNING_IDENTITY`、`MACOS_INSTALLER_SIGNING_IDENTITY`；设置 `MACOS_REQUIRE_SIGNING=1` 可在缺少签名时直接让构建失败。公证可以使用 `MACOS_NOTARY_PROFILE`，也可以配置 `MACOS_NOTARY_APPLE_ID`、`MACOS_NOTARY_PASSWORD`、`MACOS_NOTARY_TEAM_ID`，并通过 `MACOS_REQUIRE_NOTARIZATION=1` 强制执行。
+
+GitHub Actions 的 macOS 发布任务默认强制签名与公证，需配置以下仓库 Secrets：
+
+```text
+MACOS_CERTIFICATE_P12_BASE64
+MACOS_CERTIFICATE_PASSWORD
+MACOS_APP_SIGNING_IDENTITY
+MACOS_INSTALLER_SIGNING_IDENTITY
+MACOS_NOTARY_APPLE_ID
+MACOS_NOTARY_PASSWORD
+MACOS_NOTARY_TEAM_ID
+```
+
+P12 中需要同时包含 `Developer ID Application` 和 `Developer ID Installer` 证书及私钥。Actions 会把 Team ID 写入应用内发布清单，运行时除系统验签外还会核对签名团队，任何证书、公证凭据或 Team ID 缺失都会中止发布。
 
 ---
 
-## AI 赋能模式
+## AI 功能状态
 
-AI 赋能模式（闻道工作台）基于 OpenAI API 的 function calling 能力，让班主任可以用自然语言操控座位表。
-
-### 支持的工具调用
-- 交换两个学生的座位
-- 查询学生信息（姓名、学号、成绩、座位位置）
-- 统计小组评分
-- 发送结构化图卡
-- 学生列表查询（支持排序、分页、筛选）
-
-### 配置方式
-
-**方式一：环境变量**
-```bash
-export OPENAI_API_KEY="你的 API Key"
-export OPENAI_BASE_URL="https://api.openai.com/v1"
-export OPENAI_MODEL="gpt-4.1-mini"
-```
-
-**方式二：前端配置**
-进入班级详情页顶部 AI 选项卡，打开闻道赋能工作台，右侧可直接填写 API Key、Base URL、Model ID，保存后写入数据库（`FutureModeConfig` 模型）并同步到 localStorage。
-
-### API 兼容性
-- 未填写时自动回退到服务端环境变量
-- 官方 OpenAI 地址走 Responses API
-- 非官方 Compatible 地址自动切换 Chat Completions Tool Calling
-- 支持思考模式配置
-
-### 安全机制
-- 工具调用前需用户授权确认
-- 多轮对话支持、对话隔离
-- 消息持久化到数据库
+AI 界面、AI 状态接口及 Open API 的 AI 类工具当前统一关闭，不会出现在页面、工具发现或 MCP 中，相关内部实现和历史数据模型仅保留在代码中。
 
 ---
 

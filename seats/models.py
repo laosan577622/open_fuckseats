@@ -9,10 +9,36 @@ class SeatCellType(models.TextChoices):
     PODIUM = 'podium', '讲台'
     EMPTY = 'empty', '空位'
 
+
+class ClassroomGroup(models.Model):
+    name = models.CharField(max_length=100, verbose_name="班级组名称")
+    uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, verbose_name="班级组 UUID")
+    sort_order = models.PositiveIntegerField(default=0, verbose_name="排序")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "班级组"
+        verbose_name_plural = verbose_name
+        ordering = ['sort_order', 'created_at', 'pk']
+
+    def __str__(self):
+        return self.name
+
+
 class Classroom(models.Model):
     name = models.CharField(max_length=100, verbose_name="班级/教室名称")
     rows = models.IntegerField(default=6, verbose_name="行数")
     cols = models.IntegerField(default=8, verbose_name="列数")
+    classroom_group = models.ForeignKey(
+        ClassroomGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='classrooms',
+        verbose_name="所属班级组",
+    )
+    group_order = models.PositiveIntegerField(default=0, verbose_name="组内排序")
     left_guardian = models.OneToOneField(
         'Student',
         on_delete=models.SET_NULL,
@@ -146,6 +172,7 @@ class Student(models.Model):
     student_id = models.CharField(max_length=20, blank=True, null=True, verbose_name="学号")
     gender = models.CharField(max_length=1, choices=GENDER_CHOICES, blank=True, null=True, verbose_name="性别")
     score = models.FloatField(default=0, verbose_name="成绩", help_text="用于按成绩排座")
+    custom_data = models.JSONField(default=dict, blank=True, verbose_name="自定义信息")
 
     def __str__(self):
         return self.name
@@ -161,6 +188,105 @@ class Student(models.Model):
     class Meta:
         verbose_name = "学生"
         verbose_name_plural = verbose_name
+
+
+class ClassroomGroupStudent(models.Model):
+    classroom_group = models.ForeignKey(
+        ClassroomGroup,
+        on_delete=models.CASCADE,
+        related_name='unassigned_students',
+        verbose_name="所属班级组",
+    )
+    name = models.CharField(max_length=50, verbose_name="姓名")
+    student_id = models.CharField(max_length=20, blank=True, null=True, verbose_name="学号")
+    gender = models.CharField(
+        max_length=1,
+        choices=Student.GENDER_CHOICES,
+        blank=True,
+        null=True,
+        verbose_name="性别",
+    )
+    score = models.FloatField(default=0, verbose_name="成绩")
+    custom_data = models.JSONField(default=dict, blank=True, verbose_name="自定义信息")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = "班级组待分配学生"
+        verbose_name_plural = verbose_name
+        ordering = ['name', 'pk']
+        indexes = [
+            models.Index(
+                fields=['classroom_group', 'student_id'],
+                name='group_student_id_idx',
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
+
+    @property
+    def display_score(self):
+        if self.score is None:
+            return ""
+        if self.score % 1 == 0:
+            return int(self.score)
+        return self.score
+
+
+class SortStrategy(models.Model):
+    LANGUAGE_DECLARATIVE = 'declarative'
+    LANGUAGE_PYTHON = 'python'
+    LANGUAGE_CHOICES = [
+        (LANGUAGE_DECLARATIVE, '声明式'),
+        (LANGUAGE_PYTHON, 'Python'),
+    ]
+
+    classroom = models.ForeignKey(
+        Classroom,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='sort_strategies',
+        verbose_name="所属班级",
+    )
+    classroom_group = models.ForeignKey(
+        ClassroomGroup,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='sort_strategies',
+        verbose_name="所属班级组",
+    )
+    name = models.CharField(max_length=80, verbose_name="排序方式名称")
+    description = models.CharField(max_length=240, blank=True, default='', verbose_name="说明")
+    language = models.CharField(
+        max_length=16,
+        choices=LANGUAGE_CHOICES,
+        default=LANGUAGE_DECLARATIVE,
+        verbose_name="策略语言",
+    )
+    definition = models.JSONField(default=dict, blank=True, verbose_name="排序规则")
+    python_code = models.TextField(blank=True, default='', verbose_name="Python 排序代码")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = "自定义排序方式"
+        verbose_name_plural = verbose_name
+        ordering = ['name', 'pk']
+        constraints = [
+            models.UniqueConstraint(
+                fields=['classroom', 'name'],
+                name='sort_strategy_class_name_uniq',
+            ),
+            models.UniqueConstraint(
+                fields=['classroom_group', 'name'],
+                name='sort_strategy_group_name_uniq',
+            ),
+        ]
+
+    def __str__(self):
+        return self.name
 
 
 class StudentTag(models.Model):
@@ -395,6 +521,12 @@ class CloudSession(models.Model):
 
 
 class LocalCloudKeyMaterial(models.Model):
+    id = models.BigAutoField(
+        auto_created=True,
+        primary_key=True,
+        serialize=False,
+        verbose_name='ID',
+    )
     scope = models.CharField(max_length=32, unique=True, default='default', verbose_name="密钥作用域")
     key_id = models.CharField(max_length=96, blank=True, default='', verbose_name="本地密钥 ID")
     public_key_pem = models.TextField(blank=True, default='', verbose_name="本地公钥")
