@@ -116,7 +116,15 @@ def _session_code_expired(pending):
 
 
 def health(request):
-    return JsonResponse({'ok': True, 'status': 'success', 'service': 'fuckseats-cloud-backend'})
+    return JsonResponse({
+        'ok': True,
+        'status': 'success',
+        'service': 'fuckseats-cloud-backend',
+        'sync_capabilities': {
+            'student_custom_data': True,
+            'classroom_group_data': True,
+        },
+    })
 
 
 @require_http_methods(['GET'])

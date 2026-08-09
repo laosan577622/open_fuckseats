@@ -74,7 +74,31 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    const initExternalLinks = () => {
+        document.addEventListener('click', async (event) => {
+            const link = event.target.closest('a[data-open-external]');
+            if (!link || event.defaultPrevented) return;
+            if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+            const url = String(link.href || '').trim();
+            if (!url) return;
+            event.preventDefault();
+
+            try {
+                if (window.CloudManager && typeof window.CloudManager.openExternalUrl === 'function') {
+                    await window.CloudManager.openExternalUrl(url);
+                    return;
+                }
+            } catch (_) {
+            }
+
+            const popup = window.open(url, '_blank', 'noopener,noreferrer');
+            if (!popup) window.location.href = url;
+        });
+    };
+
     initRibbonTabs();
+    initExternalLinks();
     syncTouchMode();
     syncHeaderHeight();
     window.addEventListener('resize', syncHeaderHeight);

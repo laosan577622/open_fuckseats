@@ -249,23 +249,33 @@ def sort_students_with_python(students, source):
     return [by_id[student_id] for student_id in ordered_ids]
 
 
+def _normalize_custom_value(value, depth=0):
+    if value is None or isinstance(value, (int, float, bool)):
+        return value
+    if isinstance(value, str):
+        return value[:2000]
+    if depth >= 8:
+        return str(value)[:2000]
+    if isinstance(value, dict):
+        normalized = {}
+        for raw_key, raw_value in value.items():
+            key = str(raw_key or '').strip()
+            if not key:
+                continue
+            normalized[key[:80]] = _normalize_custom_value(raw_value, depth + 1)
+            if len(normalized) >= 100:
+                break
+        return normalized
+    if isinstance(value, (list, tuple)):
+        return [_normalize_custom_value(item, depth + 1) for item in list(value)[:200]]
+    return str(value)[:2000]
+
+
 def normalize_custom_data(value):
     if not isinstance(value, dict):
         return {}
-    normalized = {}
-    for raw_key, raw_value in value.items():
-        key = str(raw_key or '').strip()
-        if not key:
-            continue
-        if isinstance(raw_value, (dict, list)):
-            normalized[key[:80]] = str(raw_value)[:500]
-        elif raw_value is None or isinstance(raw_value, (str, int, float, bool)):
-            normalized[key[:80]] = raw_value
-        else:
-            normalized[key[:80]] = str(raw_value)[:500]
-        if len(normalized) >= 40:
-            break
-    return normalized
+    normalized = _normalize_custom_value(value)
+    return dict(list(normalized.items())[:40])
 
 
 def normalize_sort_definition(definition):

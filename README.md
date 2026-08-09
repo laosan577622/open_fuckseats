@@ -174,7 +174,6 @@
 │   ├── css/                   # 样式文件
 │   │   ├── styles.css         # 主样式（3800+ 行）
 │   │   ├── ai_workspace.css   # AI 工作台样式
-│   │   ├── dynamic-island.css # 灵动岛样式
 │   │   └── plugin_ui.css      # 插件 UI 样式
 │   ├── js/                    # 前端脚本
 │   │   ├── classroom.js       # 班级详情页核心交互（4500+ 行）
@@ -184,9 +183,6 @@
 │   │   ├── toast.js           # 3D Toast 通知系统
 │   │   ├── theme.js           # 主题管理
 │   │   ├── effects.js         # 视觉特效
-│   │   ├── water-ripple.js    # 水波纹效果
-│   │   ├── metaball.js        # Metaball 动画
-│   │   ├── dynamic-island.js  # 灵动岛交互
 │   │   ├── update.js          # 桌面端自动更新 UI
 │   │   └── export_options.js  # 导出配置页通用逻辑
 │   ├── favicon.svg            # 站点图标

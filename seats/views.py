@@ -3895,7 +3895,7 @@ def _handle_classroom_view_command(classroom, command_text, args):
         'ai': {
             'target': 'ai',
             'label': '闻道智能',
-            'url': reverse('ai_workspace', args=[classroom.pk]),
+            'url': getattr(settings, 'WENDAO_AI_URL', 'https://ai.577622.xyz'),
         },
     }
     navigation = view_targets[target]
@@ -7995,12 +7995,8 @@ def classroom_command(request, pk):
 
 
 def ai_workspace(request, pk):
-    _ensure_ai_feature_enabled()
-    classroom = get_object_or_404(Classroom, pk=pk)
-    return render(request, 'seats/ai_workspace.html', {
-        'classroom': classroom,
-        'ai_overview': _get_classroom_overview_payload(classroom),
-    })
+    get_object_or_404(Classroom, pk=pk)
+    return redirect(getattr(settings, 'WENDAO_AI_URL', 'https://ai.577622.xyz'))
 
 
 @require_POST

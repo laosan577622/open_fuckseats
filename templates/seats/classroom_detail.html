@@ -3,16 +3,12 @@
 
 {% block title %}{{ classroom.name }} - 排座详情{% endblock %}
 
-{% block extra_head %}{% if ai_feature_enabled %}
-<link rel="stylesheet" href="{% static 'css/dynamic-island.css' %}?v=1.0">
-{% endif %}{% endblock %}
-
 {% block ribbon_tabs %}
 <button type="button" class="ribbon-tab active" data-ribbon-tab="home">开始</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="view">视图</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="file">文件</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="transform">变换</button>
-{% if ai_feature_enabled %}<button type="button" class="ribbon-tab" data-ribbon-tab="ai">AI</button>{% endif %}
+<button type="button" class="ribbon-tab" data-ribbon-tab="ai">AI</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="plugins">插件</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="help">帮助</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="class">班级</button>
@@ -206,15 +202,13 @@
         </div>
     </div>
 
-    {% if ai_feature_enabled %}
     <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="ai">
         <div class="ribbon-group">
-            <a href="{% url 'ai_workspace' classroom.pk %}" class="btn btn-primary" id="btn-open-future-mode">闻道（Window
-                Inteligence）赋能模式（Beta）</a>
+            <a href="{{ wendao_ai_url }}" class="btn btn-primary" id="btn-open-future-mode"
+                target="_blank" rel="noopener noreferrer" data-open-external>打开闻道智能</a>
             <span class="ribbon-group-label">AI</span>
         </div>
     </div>
-    {% endif %}
 
     <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="plugins">
         <div class="ribbon-group">
@@ -1189,17 +1183,6 @@
 {{ constraint_types|json_script:"constraint-type-data" }}
 {{ sync_meta_payload|json_script:"classroom-sync-meta" }}
 
-<script src="{% static 'js/water-ripple.js' %}?v=1.0"></script>
-<script src="{% static 'js/metaball.js' %}?v=1.0"></script>
-{% if ai_feature_enabled %}<script src="{% static 'js/dynamic-island.js' %}?v=1.0"></script>{% endif %}
-<script>
-(function () {
-    var metaball = new MetaballManager();
-    var island = new DynamicIsland();
-    island.attachMetaball(metaball);
-    window._dynamicIsland = island;
-})();
-</script>
 <script>
 (function () {
     var headerArea = document.getElementById('cloud-header-area');

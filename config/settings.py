@@ -118,6 +118,7 @@ PLUGIN_DIRS = plugin_directories()
 OPENAI_API_KEY = os.getenv('OPENAI_API_KEY', '').strip()
 OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', '').strip()
 OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4.1-mini').strip() or 'gpt-4.1-mini'
+WENDAO_AI_URL = 'https://ai.577622.xyz'
 
-# 保留 AI 实现代码，但当前产品版本不暴露任何 AI 界面或调用入口。
+# 保留内置 AI 实现代码但不开放调用；闻道入口统一跳转外部服务。
 AI_FEATURE_ENABLED = False

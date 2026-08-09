@@ -47,8 +47,9 @@ CURRENT_STATE_KEYS = {
     'layout_snapshots',
 }
 STATE_CLASSROOM_KEYS = {'pk', 'name', 'rows', 'cols', 'left_guardian_student_pk', 'right_guardian_student_pk', 'created_at'}
-STUDENT_KEYS = {'name', 'student_id', 'gender', 'score', 'custom_data'}
-STATE_STUDENT_KEYS = {'pk', 'name', 'student_id', 'gender', 'score', 'custom_data'}
+STUDENT_COMMON_KEYS = {'name', 'student_id', 'gender', 'score', 'custom_data'}
+STUDENT_KEYS = set(STUDENT_COMMON_KEYS)
+STATE_STUDENT_KEYS = {'pk', *STUDENT_COMMON_KEYS}
 GROUP_KEYS = {'name', 'order'}
 STATE_GROUP_KEYS = {'pk', 'name', 'order', 'leader_student_pk', 'created_at'}
 SEAT_KEYS = {'row', 'col', 'cell_type', 'student_pk', 'student_id', 'student_name', 'group_name'}

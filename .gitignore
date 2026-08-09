@@ -15,6 +15,7 @@ backend/cloud.sqlite3
 backend/cloud.sqlite3-journal
 backend/improve_data.sqlite3
 backend/improve_data.sqlite3-*
+backend/cloud_config.yaml
 *.encryption.lock
 media/
 staticfiles/
