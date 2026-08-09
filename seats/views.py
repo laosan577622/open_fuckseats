@@ -10,6 +10,7 @@ from django.conf import settings
 from django.test import RequestFactory
 from pypinyin import lazy_pinyin
 import base64
+import hashlib
 import desktop_runtime
 import copy
 from app_paths import PROJECT_ROOT, temp_directory
@@ -15577,6 +15578,11 @@ def _cloud_classrooms_from_status(payload):
     return rows if isinstance(rows, list) else []
 
 
+def _cloud_classroom_groups_from_status(payload):
+    rows = payload.get('classroom_groups') if isinstance(payload, dict) else []
+    return rows if isinstance(rows, list) else []
+
+
 def _cloud_remote_version_for(versions, classroom_uuid):
     raw = versions.get(str(classroom_uuid))
     if raw in (None, ''):
@@ -15693,6 +15699,150 @@ def _cloud_export_payload(classroom, session):
     return payload
 
 
+def _cloud_export_classroom_group_data(classroom_group):
+    classroom_order = []
+    classrooms = classroom_group.classrooms.all().order_by('group_order', 'created_at', 'pk')
+    for classroom in classrooms:
+        meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
+        classroom_order.append({
+            'uuid': str(meta.uuid),
+            'group_order': int(classroom.group_order or 0),
+        })
+
+    unassigned_students = [
+        {
+            'name': student.name,
+            'student_id': student.student_id,
+            'gender': student.gender,
+            'score': student.score,
+            'custom_data': student.custom_data if isinstance(student.custom_data, dict) else {},
+            'created_at': student.created_at.isoformat() if student.created_at else None,
+        }
+        for student in classroom_group.unassigned_students.all().order_by('created_at', 'pk')
+    ]
+    sort_strategies = [
+        {
+            'name': strategy.name,
+            'description': strategy.description,
+            'language': strategy.language,
+            'definition': strategy.definition if isinstance(strategy.definition, dict) else {},
+            'python_code': strategy.python_code,
+            'created_at': strategy.created_at.isoformat() if strategy.created_at else None,
+            'updated_at': strategy.updated_at.isoformat() if strategy.updated_at else None,
+        }
+        for strategy in classroom_group.sort_strategies.all().order_by('name', 'pk')
+    ]
+    return {
+        'sort_order': int(classroom_group.sort_order or 0),
+        'classroom_order': classroom_order,
+        'unassigned_students': unassigned_students,
+        'sort_strategies': sort_strategies,
+    }
+
+
+def _cloud_group_fingerprint(data, name=''):
+    encoded = json.dumps(
+        {
+            'name': str(name or ''),
+            'data': data if isinstance(data, dict) else {},
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(',', ':'),
+        default=str,
+    ).encode('utf-8')
+    return hashlib.sha256(encoded).hexdigest()
+
+
+def _cloud_restore_classroom_group_data(group_payload):
+    if not isinstance(group_payload, dict):
+        raise ValueError('云端班级组数据格式错误')
+    try:
+        group_uuid = uuid.UUID(str(group_payload.get('uuid') or ''))
+    except (TypeError, ValueError, AttributeError) as exc:
+        raise ValueError('云端班级组 UUID 无效') from exc
+
+    group_data = group_payload.get('data') if isinstance(group_payload.get('data'), dict) else {}
+    name = str(group_payload.get('name') or '云端班级组').strip() or '云端班级组'
+    classroom_order = group_data.get('classroom_order') if isinstance(group_data.get('classroom_order'), list) else []
+    referenced = []
+    seen_classroom_ids = set()
+    for index, item in enumerate(classroom_order):
+        if not isinstance(item, dict):
+            continue
+        meta = SyncMeta.objects.select_related('classroom').filter(uuid=item.get('uuid')).first()
+        if not meta or meta.classroom_id in seen_classroom_ids:
+            continue
+        try:
+            group_order = max(0, int(item.get('group_order') or index))
+        except (TypeError, ValueError):
+            group_order = index
+        referenced.append((meta.classroom, group_order))
+        seen_classroom_ids.add(meta.classroom_id)
+
+    with transaction.atomic(), suspend_sync_version_bump():
+        classroom_group, _ = ClassroomGroup.objects.get_or_create(
+            uuid=group_uuid,
+            defaults={'name': name},
+        )
+        classroom_group.name = name
+        try:
+            classroom_group.sort_order = max(0, int(group_data.get('sort_order') or 0))
+        except (TypeError, ValueError):
+            classroom_group.sort_order = 0
+        classroom_group.cloud_version = int(group_payload.get('version') or 0)
+        classroom_group.last_sync_at = timezone.now()
+        classroom_group.save(update_fields=['name', 'sort_order', 'cloud_version', 'last_sync_at', 'updated_at'])
+
+        classroom_group.classrooms.exclude(pk__in=seen_classroom_ids).update(
+            classroom_group=None,
+            group_order=0,
+        )
+        for classroom, group_order in referenced:
+            Classroom.objects.filter(pk=classroom.pk).update(
+                classroom_group=classroom_group,
+                group_order=group_order,
+            )
+
+        classroom_group.unassigned_students.all().delete()
+        ClassroomGroupStudent.objects.bulk_create([
+            ClassroomGroupStudent(
+                classroom_group=classroom_group,
+                name=str(item.get('name') or '').strip(),
+                student_id=item.get('student_id') or None,
+                gender=item.get('gender') or None,
+                score=float(item.get('score') or 0),
+                custom_data=item.get('custom_data') if isinstance(item.get('custom_data'), dict) else {},
+            )
+            for item in (group_data.get('unassigned_students') or [])
+            if isinstance(item, dict) and str(item.get('name') or '').strip()
+        ])
+
+        classroom_group.sort_strategies.all().delete()
+        SortStrategy.objects.bulk_create([
+            SortStrategy(
+                classroom_group=classroom_group,
+                name=str(item.get('name') or '').strip(),
+                description=str(item.get('description') or ''),
+                language=(
+                    item.get('language')
+                    if item.get('language') in {SortStrategy.LANGUAGE_DECLARATIVE, SortStrategy.LANGUAGE_PYTHON}
+                    else SortStrategy.LANGUAGE_DECLARATIVE
+                ),
+                definition=item.get('definition') if isinstance(item.get('definition'), dict) else {},
+                python_code=str(item.get('python_code') or ''),
+            )
+            for item in (group_data.get('sort_strategies') or [])
+            if isinstance(item, dict) and str(item.get('name') or '').strip()
+        ])
+
+        restored_data = _cloud_export_classroom_group_data(classroom_group)
+        classroom_group.last_synced_fingerprint = _cloud_group_fingerprint(restored_data, classroom_group.name)
+        classroom_group.save(update_fields=['last_synced_fingerprint', 'updated_at'])
+
+    return classroom_group
+
+
 def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None, operation_time=None):
     if not isinstance(data, dict):
         raise ValueError('云端班级数据格式错误')
@@ -15750,6 +15900,28 @@ def _cloud_pull_and_restore_classroom(
     version = payload.get('version') if payload.get('version') is not None else fallback_version
     operation_time = payload.get('last_operation_at') or payload.get('last_modified_at') or fallback_operation_time
     return _cloud_restore_classroom_data(request, classroom_uuid, data, version=version, operation_time=operation_time)
+
+
+def _cloud_pull_and_restore_classroom_group(request, session, group_uuid, *, refresh_subscription=True):
+    payload = cloud_api_request(
+        session,
+        'GET',
+        f'/api/sync/pull-group/{group_uuid}',
+        refresh_subscription=refresh_subscription,
+    )
+    for item in payload.get('classrooms') or []:
+        if not isinstance(item, dict) or not item.get('uuid'):
+            continue
+        _cloud_restore_classroom_data(
+            request,
+            item.get('uuid'),
+            item.get('data') or item.get('data_snapshot'),
+            version=item.get('version'),
+            operation_time=item.get('last_operation_at') or item.get('last_modified_at') or item.get('updated_at'),
+        )
+    group_payload = payload.get('group') if isinstance(payload.get('group'), dict) else {}
+    classroom_group = _cloud_restore_classroom_group_data(group_payload)
+    return classroom_group, group_payload
 
 
 @require_http_methods(['GET', 'POST'])
@@ -15926,6 +16098,9 @@ def cloud_refresh_subscription(request):
         return _cloud_error_response(exc)
 
 
+pass # 此部分代码未被披露至开源版本
+
+
 @csrf_exempt
 @require_POST
 def cloud_logout(request):
@@ -15985,7 +16160,7 @@ def cloud_sync_status(request):
         return _cloud_error_response(exc)
 
 
-def _cloud_sync_classrooms(request, session, data=None):
+def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None):
     data = data if isinstance(data, dict) else {}
     _refresh_cloud_subscription_if_logged_in(session)
     classroom_ids = data.get('classroom_ids')
@@ -16009,6 +16184,9 @@ def _cloud_sync_classrooms(request, session, data=None):
     limits = session.limits if isinstance(session.limits, dict) else {}
     max_classrooms = int(limits.get('max_classrooms', 3) or 3)
     remote_status = _cloud_remote_status(session, refresh_subscription=False)
+    if isinstance(remote_status_sink, dict):
+        remote_status_sink.clear()
+        remote_status_sink.update(remote_status)
     remote_versions = _cloud_versions_from_status(remote_status)
     remote_operation_times = _cloud_operation_times_from_status(remote_status)
     remote_classrooms = _cloud_classrooms_from_status(remote_status)
@@ -16220,7 +16398,7 @@ def _cloud_sync_classrooms(request, session, data=None):
                 'message': payload.get('message') or payload.get('error') or '云端未接受同步',
             })
 
-    if sync_all_classrooms and sync_scope == 'all':
+    if sync_all_classrooms:
         local_uuids = {
             str(value)
             for value in SyncMeta.objects.values_list('uuid', flat=True)
@@ -16269,6 +16447,186 @@ def _cloud_sync_classrooms(request, session, data=None):
     return results
 
 
+def _cloud_sync_classroom_groups(request, session, data=None, remote_status=None):
+    data = data if isinstance(data, dict) else {}
+    sync_scope = str(data.get('scope') or 'all').strip().lower()
+    if sync_scope not in {'all', 'linked'}:
+        sync_scope = 'all'
+    force = bool(data.get('force'))
+    remote_status = remote_status if isinstance(remote_status, dict) else _cloud_remote_status(session, refresh_subscription=False)
+    remote_groups = _cloud_classroom_groups_from_status(remote_status)
+    remote_by_uuid = {
+        str(item.get('uuid')): item
+        for item in remote_groups
+        if isinstance(item, dict) and item.get('uuid')
+    }
+    results = []
+
+    queryset = ClassroomGroup.objects.prefetch_related(
+        'classrooms__sync_meta',
+        'unassigned_students',
+        'sort_strategies',
+    ).all().order_by('sort_order', 'created_at', 'pk')
+    for classroom_group in queryset:
+        group_uuid = str(classroom_group.uuid)
+        remote = remote_by_uuid.get(group_uuid)
+        try:
+            remote_version = int(remote.get('version') or 0) if remote else None
+        except (TypeError, ValueError):
+            remote_version = 0 if remote else None
+        group_data = _cloud_export_classroom_group_data(classroom_group)
+        fingerprint = _cloud_group_fingerprint(group_data, classroom_group.name)
+        local_changed = fingerprint != str(classroom_group.last_synced_fingerprint or '')
+
+        if remote_version is not None and remote_version > int(classroom_group.cloud_version or 0) and not force:
+            if classroom_group.last_synced_fingerprint and local_changed:
+                results.append({
+                    'group_id': classroom_group.pk,
+                    'uuid': group_uuid,
+                    'name': classroom_group.name,
+                    'status': 'conflict',
+                    'cloud_version': remote_version,
+                    'message': '云端班级组版本更新，且本地班级组也有修改',
+                })
+                continue
+            try:
+                restored_group, restored_payload = _cloud_pull_and_restore_classroom_group(
+                    request,
+                    session,
+                    group_uuid,
+                    refresh_subscription=False,
+                )
+            except Exception as exc:
+                results.append({
+                    'group_id': classroom_group.pk,
+                    'uuid': group_uuid,
+                    'name': classroom_group.name,
+                    'status': 'error',
+                    'message': str(exc),
+                })
+            else:
+                results.append({
+                    'group_id': restored_group.pk,
+                    'uuid': group_uuid,
+                    'name': restored_group.name,
+                    'status': 'pulled',
+                    'version': int(restored_payload.get('version') or remote_version or 0),
+                    'message': '已从云端更新班级组',
+                })
+            continue
+
+        if remote is None and sync_scope == 'linked' and not force:
+            results.append({
+                'group_id': classroom_group.pk,
+                'uuid': group_uuid,
+                'name': classroom_group.name,
+                'status': 'skipped',
+                'message': '本地班级组尚未启用云同步',
+            })
+            continue
+
+        if (
+            not force
+            and remote_version is not None
+            and remote_version == int(classroom_group.cloud_version or 0)
+            and not local_changed
+        ):
+            results.append({
+                'group_id': classroom_group.pk,
+                'uuid': group_uuid,
+                'name': classroom_group.name,
+                'status': 'up_to_date',
+                'version': remote_version,
+                'message': '云端班级组已是最新',
+            })
+            continue
+
+        try:
+            payload = cloud_api_request(
+                session,
+                'POST',
+                '/api/sync/push-group-state',
+                {
+                    'group': {
+                        'uuid': group_uuid,
+                        'name': classroom_group.name,
+                        'base_version': int(classroom_group.cloud_version or 0),
+                        'force': force,
+                        'data': group_data,
+                    },
+                },
+                refresh_subscription=False,
+            )
+        except CloudAPIError as exc:
+            error_payload = exc.payload or {}
+            results.append({
+                'group_id': classroom_group.pk,
+                'uuid': group_uuid,
+                'name': classroom_group.name,
+                'status': 'conflict' if error_payload.get('code') == 'CLASSROOM_GROUP_SYNC_CONFLICT' else 'error',
+                'cloud_version': error_payload.get('version'),
+                'message': error_payload.get('message') or str(exc),
+            })
+            continue
+        except Exception as exc:
+            results.append({
+                'group_id': classroom_group.pk,
+                'uuid': group_uuid,
+                'name': classroom_group.name,
+                'status': 'error',
+                'message': str(exc),
+            })
+            continue
+
+        returned_group = payload.get('group') if isinstance(payload.get('group'), dict) else {}
+        classroom_group.cloud_version = int(returned_group.get('version') or classroom_group.cloud_version or 0)
+        classroom_group.last_sync_at = timezone.now()
+        classroom_group.last_synced_fingerprint = fingerprint
+        classroom_group.save(update_fields=['cloud_version', 'last_sync_at', 'last_synced_fingerprint', 'updated_at'])
+        results.append({
+            'group_id': classroom_group.pk,
+            'uuid': group_uuid,
+            'name': classroom_group.name,
+            'status': 'ok',
+            'version': classroom_group.cloud_version,
+        })
+
+    local_uuids = {str(value) for value in ClassroomGroup.objects.values_list('uuid', flat=True)}
+    for remote in remote_groups:
+        if not isinstance(remote, dict):
+            continue
+        remote_uuid = str(remote.get('uuid') or '').strip()
+        if not remote_uuid or remote_uuid in local_uuids:
+            continue
+        try:
+            classroom_group, group_payload = _cloud_pull_and_restore_classroom_group(
+                request,
+                session,
+                remote_uuid,
+                refresh_subscription=False,
+            )
+        except Exception as exc:
+            results.append({
+                'uuid': remote_uuid,
+                'name': str(remote.get('name') or '云端班级组'),
+                'status': 'error',
+                'message': str(exc),
+            })
+            continue
+        local_uuids.add(remote_uuid)
+        results.append({
+            'group_id': classroom_group.pk,
+            'uuid': remote_uuid,
+            'name': classroom_group.name,
+            'status': 'pulled',
+            'remote_only': True,
+            'version': int(group_payload.get('version') or remote.get('version') or 0),
+            'message': '已从云端恢复班级组到本地',
+        })
+
+    return results
+
+
 @csrf_exempt
 @require_POST
 def cloud_sync(request):
@@ -16278,8 +16636,12 @@ def cloud_sync(request):
             data = _cloud_json_body(request)
         except ValueError:
             data = {}
-        results = _cloud_sync_classrooms(request, session, data)
-        return JsonResponse({'status': 'success', 'results': results})
+        remote_status = {}
+        results = _cloud_sync_classrooms(request, session, data, remote_status_sink=remote_status)
+        group_results = []
+        if not data.get('classroom_ids'):
+            group_results = _cloud_sync_classroom_groups(request, session, data, remote_status=remote_status)
+        return JsonResponse({'status': 'success', 'results': results, 'group_results': group_results})
     except Exception as exc:
         return _cloud_error_response(exc)
 
@@ -16304,6 +16666,8 @@ def cloud_sync_group(request, pk):
             data = {}
         force = bool(data.get('force'))
         device_id = str(data.get('device_id') or 'local-desktop')[:64]
+        group_data = _cloud_export_classroom_group_data(classroom_group)
+        group_fingerprint = _cloud_group_fingerprint(group_data, classroom_group.name)
         metas = {}
         items = []
         for classroom in classrooms:
@@ -16329,6 +16693,9 @@ def cloud_sync_group(request, pk):
                 'group': {
                     'uuid': str(classroom_group.uuid),
                     'name': classroom_group.name,
+                    'base_version': int(classroom_group.cloud_version or 0),
+                    'force': force,
+                    'data': group_data,
                 },
                 'items': items,
             },
@@ -16376,6 +16743,11 @@ def cloud_sync_group(request, pk):
                     'version': version,
                     **_serialize_classroom_sync_meta(classroom, meta),
                 })
+            returned_group = payload.get('group') if isinstance(payload, dict) and isinstance(payload.get('group'), dict) else {}
+            classroom_group.cloud_version = int(returned_group.get('version') or classroom_group.cloud_version or 0)
+            classroom_group.last_sync_at = synced_at
+            classroom_group.last_synced_fingerprint = group_fingerprint
+            classroom_group.save(update_fields=['cloud_version', 'last_sync_at', 'last_synced_fingerprint', 'updated_at'])
 
         return JsonResponse({
             'status': 'success',
@@ -16391,6 +16763,27 @@ def cloud_sync_group(request, pk):
             payload['upgrade_required'] = True
             payload['upgrade_url'] = reverse('settings') + '#cloud-settings-section'
         return JsonResponse(payload, status=exc.status_code)
+    except Exception as exc:
+        return _cloud_error_response(exc)
+
+
+@csrf_exempt
+@require_POST
+def cloud_sync_group_pull(request, group_uuid):
+    try:
+        session = _cloud_local_session_or_401()
+        classroom_group, group_payload = _cloud_pull_and_restore_classroom_group(
+            request,
+            session,
+            group_uuid,
+        )
+        return JsonResponse({
+            'status': 'success',
+            'group_id': classroom_group.pk,
+            'uuid': str(classroom_group.uuid),
+            'name': classroom_group.name,
+            'version': int(group_payload.get('version') or classroom_group.cloud_version or 0),
+        })
     except Exception as exc:
         return _cloud_error_response(exc)
 

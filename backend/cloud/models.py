@@ -80,7 +80,9 @@ class CloudClassroomGroup(models.Model):
     uuid = models.UUIDField(default=uuid.uuid4, db_index=True)
     name = models.CharField(max_length=100)
     classroom_uuids = models.JSONField(default=list, blank=True)
+    data_snapshot = models.JSONField(default=dict, blank=True)
     version = models.BigIntegerField(default=0)
+    last_modified_at = models.DateTimeField(default=timezone.now)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -274,6 +274,8 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\LaosanApps\fuckseats\ski
 
 安装脚本会写入 `~/.codex/skills/fuckseats-agent-operator` 和 `~/.agents/skills/fuckseats-agent-operator`，安装后重启对应 agent 应用。
 
+<!-- 此部分代码未被披露至开源版本 -->
+
 ### 环境变量
 
 | 变量 | 说明 | 默认值 |

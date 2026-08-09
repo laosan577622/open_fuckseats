@@ -7,6 +7,13 @@
 {% block actions %}{% endblock %}
 
 {% block titlebar_actions %}
+<button type="button" class="home-titlebar-sync" id="home-sync-all-btn" title="同步所有班级和班级组">
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M19 7v4h-4M5 17v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+        <path d="M18.1 10A7 7 0 0 0 6.4 6.4L5 8m.9 6A7 7 0 0 0 17.6 17.6L19 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <span>同步所有班级</span>
+</button>
 <a href="{% url 'settings' %}" class="home-titlebar-settings" aria-label="设置" title="设置">
     <svg viewBox="0 0 24 24" aria-hidden="true">
         <rect width="24" height="24" opacity="0"></rect>
@@ -168,6 +175,8 @@ document.addEventListener('DOMContentLoaded', function () {
     var sections = Array.from(document.querySelectorAll('[data-home-section]'));
     var searchEmpty = document.querySelector('[data-home-search-empty]');
     var createMenu = document.querySelector('[data-home-create-menu]');
+    var syncAllButton = document.getElementById('home-sync-all-btn');
+    var syncAllButtonLabel = syncAllButton ? syncAllButton.querySelector('span') : null;
 
     function normalize(value) {
         return String(value || '').trim().toLocaleLowerCase('zh-CN');
@@ -195,6 +204,89 @@ document.addEventListener('DOMContentLoaded', function () {
         [createMenu].forEach(function (details) {
             if (details && details.open && !details.contains(event.target)) details.open = false;
         });
+    });
+
+    function syncRows(result) {
+        var rows = [];
+        if (result && Array.isArray(result.results)) rows = rows.concat(result.results);
+        if (result && Array.isArray(result.group_results)) rows = rows.concat(result.group_results);
+        return rows;
+    }
+
+    function syncSummary(result) {
+        var rows = syncRows(result);
+        var uploaded = rows.filter(function (row) { return row && row.status === 'ok'; }).length;
+        var pulled = rows.filter(function (row) { return row && row.status === 'pulled'; }).length;
+        var current = rows.filter(function (row) { return row && row.status === 'up_to_date'; }).length;
+        var skipped = rows.filter(function (row) { return row && row.status === 'skipped'; }).length;
+        var failed = rows.filter(function (row) { return row && row.status === 'error'; }).length;
+        var conflicts = rows.filter(function (row) { return row && row.status === 'conflict'; }).length;
+        var parts = [];
+        if (uploaded) parts.push(uploaded + ' 项已上传');
+        if (pulled) parts.push(pulled + ' 项已拉取');
+        if (current) parts.push(current + ' 项已是最新');
+        if (skipped) parts.push(skipped + ' 项未启用同步');
+        if (conflicts) parts.push(conflicts + ' 项仍有冲突');
+        if (failed) parts.push(failed + ' 项失败');
+        return parts.length ? '同步完成：' + parts.join('，') : '没有需要同步的数据';
+    }
+
+    async function pullConflictRows(rows) {
+        for (var i = 0; i < rows.length; i += 1) {
+            var row = rows[i];
+            if (!row || row.status !== 'conflict' || !row.uuid) continue;
+            if (row.group_id && CloudManager.pullClassroomGroup) {
+                await CloudManager.pullClassroomGroup(row.uuid);
+            } else {
+                await CloudManager.pullClassroom(row.uuid);
+            }
+        }
+    }
+
+    if (syncAllButton) syncAllButton.addEventListener('click', async function () {
+        if (!window.CloudManager || syncAllButton.disabled) return;
+        syncAllButton.disabled = true;
+        syncAllButton.classList.add('is-syncing');
+        if (syncAllButtonLabel) syncAllButtonLabel.textContent = '同步中...';
+        try {
+            var user = await CloudManager.getUserInfo(false, { refreshSubscription: false });
+            if (!user || !user.logged_in) {
+                await CloudManager.openLogin();
+                return;
+            }
+            var result = await CloudManager.sync(null, { scope: 'all', deviceId: 'home-manual' });
+            var conflicts = syncRows(result).filter(function (row) { return row && row.status === 'conflict'; });
+            if (conflicts.length) {
+                var keepLocal = window.confirm(
+                    '检测到 ' + conflicts.length + ' 项云同步冲突。\n确定：保留本地版本并覆盖云端。\n取消：使用云端版本覆盖本地。'
+                );
+                if (keepLocal) {
+                    result = await CloudManager.sync(null, { scope: 'all', force: true, deviceId: 'home-manual-force' });
+                } else {
+                    await pullConflictRows(conflicts);
+                    result = { status: 'success', results: [], group_results: conflicts.map(function (row) {
+                        return { status: 'pulled', name: row.name, uuid: row.uuid };
+                    }) };
+                }
+            }
+            try {
+                sessionStorage.setItem(
+                    'fuckseats_cloud_entry_sync_v2',
+                    JSON.stringify({ state: 'done', at: Date.now() })
+                );
+            } catch (error) {}
+            if (typeof showToast === 'function') showToast(syncSummary(result));
+            var shouldReload = syncRows(result).some(function (row) {
+                return row && (row.status === 'pulled' || row.remote_only);
+            });
+            if (shouldReload) setTimeout(function () { window.location.reload(); }, 350);
+        } catch (error) {
+            if (typeof showToast === 'function') showToast('同步失败：' + ((error && error.message) || '网络错误'));
+        } finally {
+            syncAllButton.disabled = false;
+            syncAllButton.classList.remove('is-syncing');
+            if (syncAllButtonLabel) syncAllButtonLabel.textContent = '同步所有班级';
+        }
     });
 });
 </script>

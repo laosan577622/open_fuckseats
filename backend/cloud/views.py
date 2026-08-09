@@ -20,7 +20,14 @@ from .config import (
 )
 from .models import CloudClassroom, CloudClassroomGroup, CloudSnapshot, PendingLogin
 from .oauth import OAuthError, exchange_code_for_token, fetch_userinfo, refresh_user_subscription, upsert_cloud_user
-from .sync import check_payload_size, payload_size_bytes, push_classroom_snapshot, validate_push_payload, validate_snapshot_for_user
+from .sync import (
+    check_payload_size,
+    payload_size_bytes,
+    push_classroom_snapshot,
+    validate_classroom_group_snapshot,
+    validate_push_payload,
+    validate_snapshot_for_user,
+)
 from .crypto import decrypt_payload, encrypt_payload, ensure_service_key, public_key_payload
 
 
@@ -276,12 +283,25 @@ def sync_status(request):
         }
         for item in classrooms
     ]
+    group_rows = [
+        {
+            'uuid': str(item.uuid),
+            'name': item.name,
+            'version': item.version,
+            'classroom_uuids': [str(value) for value in (item.classroom_uuids or [])],
+            'updated_at': item.updated_at.isoformat(),
+            'last_modified_at': item.last_modified_at.isoformat() if item.last_modified_at else None,
+        }
+        for item in CloudClassroomGroup.objects.filter(user=request.cloud_user).order_by('name', 'pk')
+    ]
     return _encrypted_json_response({
         'ok': True,
         'status': 'success',
         'classrooms': rows,
         'versions': {item['uuid']: item['version'] for item in rows},
         'operation_times': {item['uuid']: item['last_operation_at'] for item in rows if item.get('last_operation_at')},
+        'classroom_groups': group_rows,
+        'group_versions': {item['uuid']: item['version'] for item in group_rows},
     }, session=request.cloud_session)
 
 
@@ -359,6 +379,9 @@ def sync_push_group(request):
             group_uuid = uuid.UUID(str(group_payload.get('uuid') or ''))
         except (TypeError, ValueError, AttributeError) as exc:
             raise ValueError('班级组 UUID 无效') from exc
+        group_data = group_payload.get('data') if isinstance(group_payload.get('data'), dict) else {}
+        group_classroom_uuids = validate_classroom_group_snapshot(group_data)
+        check_payload_size(group_data, 'max_push_size_mb')
 
         validated = []
         seen_uuids = set()
@@ -370,6 +393,9 @@ def sync_push_group(request):
             seen_uuids.add(classroom_uuid)
             limits = limits or item_limits
             validated.append((item, data, classroom_uuid))
+        validated_uuids = [str(item[2]) for item in validated]
+        if group_classroom_uuids and group_classroom_uuids != validated_uuids:
+            raise ValueError('班级组内班级顺序与上传班级不一致')
 
         existing = {
             str(item.uuid): item
@@ -412,6 +438,18 @@ def sync_push_group(request):
                     version=classroom.version,
                 )
 
+        existing_group = CloudClassroomGroup.objects.filter(user=request.cloud_user, uuid=group_uuid).first()
+        group_base_version = int(group_payload.get('base_version') or 0)
+        group_force = bool(group_payload.get('force'))
+        if existing_group and group_base_version < int(existing_group.version or 0) and not group_force:
+            return _json_error(
+                f'{group_name} 的云端班级组版本更新，请先拉取或选择保留版本',
+                status=409,
+                code='CLASSROOM_GROUP_SYNC_CONFLICT',
+                group_uuid=str(group_uuid),
+                version=existing_group.version,
+            )
+
         results = []
         with transaction.atomic():
             group, _ = CloudClassroomGroup.objects.select_for_update().get_or_create(
@@ -426,7 +464,9 @@ def sync_push_group(request):
                 results.append({'status': 'ok', **result})
             group.name = group_name
             group.classroom_uuids = [str(item[2]) for item in validated]
+            group.data_snapshot = group_data
             group.version = int(group.version or 0) + 1
+            group.last_modified_at = timezone.now()
             group.save()
 
         return _encrypted_json_response({
@@ -437,11 +477,79 @@ def sync_push_group(request):
                 'name': group.name,
                 'version': group.version,
                 'classroom_uuids': group.classroom_uuids,
+                'last_modified_at': group.last_modified_at.isoformat(),
             },
             'results': results,
         }, session=request.cloud_session)
     except PermissionError as exc:
         return _json_error(exc, status=403, code='SUBSCRIPTION_LIMIT')
+    except ValueError as exc:
+        return _json_error(exc, status=400)
+
+
+@require_http_methods(['POST'])
+@require_session
+def sync_push_group_state(request):
+    try:
+        raw_payload = _json_body(request)
+        payload = _decrypt_request_if_needed(request, raw_payload, session=request.cloud_session)
+        group_payload = payload.get('group') if isinstance(payload.get('group'), dict) else {}
+        group_name = str(group_payload.get('name') or '').strip()
+        if not group_name:
+            raise ValueError('班级组名称不能为空')
+        try:
+            group_uuid = uuid.UUID(str(group_payload.get('uuid') or ''))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ValueError('班级组 UUID 无效') from exc
+        group_data = group_payload.get('data') if isinstance(group_payload.get('data'), dict) else {}
+        classroom_uuids = validate_classroom_group_snapshot(group_data)
+        check_payload_size(group_data, 'max_push_size_mb')
+        existing_uuids = set(
+            str(value)
+            for value in CloudClassroom.objects.filter(
+                user=request.cloud_user,
+                uuid__in=classroom_uuids,
+                is_deleted=False,
+            ).values_list('uuid', flat=True)
+        )
+        if existing_uuids != set(classroom_uuids):
+            raise ValueError('班级组只能引用当前用户已同步的有效云班级')
+
+        with transaction.atomic():
+            group = CloudClassroomGroup.objects.select_for_update().filter(
+                user=request.cloud_user,
+                uuid=group_uuid,
+            ).first()
+            base_version = int(group_payload.get('base_version') or 0)
+            force = bool(group_payload.get('force'))
+            if group and base_version < int(group.version or 0) and not force:
+                return _json_error(
+                    f'{group_name} 的云端班级组版本更新，请先拉取或选择保留版本',
+                    status=409,
+                    code='CLASSROOM_GROUP_SYNC_CONFLICT',
+                    group_uuid=str(group_uuid),
+                    version=group.version,
+                )
+            if group is None:
+                group = CloudClassroomGroup(user=request.cloud_user, uuid=group_uuid)
+            group.name = group_name
+            group.classroom_uuids = classroom_uuids
+            group.data_snapshot = group_data
+            group.version = int(group.version or 0) + 1
+            group.last_modified_at = timezone.now()
+            group.save()
+
+        return _encrypted_json_response({
+            'ok': True,
+            'status': 'success',
+            'group': {
+                'uuid': str(group.uuid),
+                'name': group.name,
+                'version': group.version,
+                'classroom_uuids': group.classroom_uuids,
+                'last_modified_at': group.last_modified_at.isoformat(),
+            },
+        }, session=request.cloud_session)
     except ValueError as exc:
         return _json_error(exc, status=400)
 
@@ -480,6 +588,9 @@ def sync_pull_group(request, group_uuid):
             'uuid': str(group.uuid),
             'name': group.name,
             'version': group.version,
+            'classroom_uuids': [str(value) for value in (group.classroom_uuids or [])],
+            'data': group.data_snapshot,
+            'last_modified_at': group.last_modified_at.isoformat() if group.last_modified_at else None,
         },
         'classrooms': items,
     }, session=request.cloud_session)

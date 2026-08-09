@@ -179,19 +179,7 @@
 
                     <div class="setting-divider"></div>
 
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <label>云同步</label>
-                            <span class="setting-description">将所有班级数据推送到云端</span>
-                            <span class="setting-value" id="cloud-last-sync">上次同步：从未</span>
-                        </div>
-                        <button type="button" class="btn btn-primary" id="cloud-sync-btn">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/></svg>
-                            立即同步
-                        </button>
-                    </div>
-
-                    <div class="setting-divider"></div>
+                    <!-- 此部分代码未被披露至开源版本 -->
 
                     <div class="setting-item">
                         <div class="setting-info">
@@ -533,6 +521,73 @@
 
 .cloud-classroom-manager {
     gap: 14px;
+}
+
+.local-open-api-setting {
+    gap: 12px;
+}
+
+.local-open-api-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+}
+
+.local-open-api-actions,
+.local-open-api-key-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.local-open-api-actions {
+    flex-shrink: 0;
+}
+
+.local-open-api-endpoint {
+    width: 100%;
+    color: var(--text-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.local-open-api-key-panel {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
+    border-radius: 13px;
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.055);
+}
+
+.local-open-api-key-panel > span {
+    display: block;
+    margin-bottom: 8px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.local-open-api-key-row input {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    padding: 0 11px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    outline: none;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+}
+
+.local-open-api-key-row input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
 }
 
 .cloud-manager-heading {
@@ -1085,7 +1140,8 @@
     }
 
     .cloud-manager-heading,
-    .cloud-classroom-row {
+    .cloud-classroom-row,
+    .local-open-api-heading {
         align-items: stretch;
         flex-direction: column;
     }
@@ -1102,6 +1158,18 @@
 
     .cloud-classroom-meta {
         white-space: normal;
+    }
+
+    .local-open-api-actions,
+    .local-open-api-key-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .local-open-api-actions .btn,
+    .local-open-api-key-row .btn {
+        justify-content: center;
+        width: 100%;
     }
 
     .cloud-manager-modal {
@@ -1568,7 +1636,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const loggedIn = document.getElementById('cloud-logged-in');
         const loginBtn = document.getElementById('cloud-login-btn');
         const logoutBtn = document.getElementById('cloud-logout-btn');
-        const syncBtn = document.getElementById('cloud-sync-btn');
         const refreshSubBtn = document.getElementById('cloud-refresh-sub-btn');
         const saveUrlBtn = document.getElementById('cloud-save-url-btn');
         const resetUrlBtn = document.getElementById('cloud-reset-url-btn');
@@ -1583,8 +1650,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const deleteModal = document.getElementById('cloud-classroom-delete-modal');
         const deleteMessage = document.getElementById('cloud-classroom-delete-message');
         const deleteConfirmBtn = document.getElementById('cloud-manager-delete-confirm');
+        const localOpenAPIStatus = document.getElementById('local-open-api-status');
+        const localOpenAPIEndpoint = document.getElementById('local-open-api-endpoint');
+        const localOpenAPIGenerateBtn = document.getElementById('local-open-api-generate-btn');
+        const localOpenAPIRevokeBtn = document.getElementById('local-open-api-revoke-btn');
+        const localOpenAPIKeyPanel = document.getElementById('local-open-api-key-panel');
+        const localOpenAPIKeyValue = document.getElementById('local-open-api-key-value');
+        const localOpenAPICopyBtn = document.getElementById('local-open-api-copy-btn');
         const DEFAULT_CLOUD_URL = 'https://fuckseatsapi.577622.xyz';
-        const syncIdleHtml = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4V1L8 5l4 4V6c3.31 0 6 2.69 6 6 0 1.01-.25 1.97-.7 2.8l1.46 1.46A7.93 7.93 0 0 0 20 12c0-4.42-3.58-8-8-8zm0 14c-3.31 0-6-2.69-6-6 0-1.01.25-1.97.7-2.8L5.24 7.74A7.93 7.93 0 0 0 4 12c0 4.42 3.58 8 8 8v3l4-4-4-4v3z" fill="currentColor"/></svg> 立即同步';
         let currentCloudUser = null;
         let currentCloudStatus = null;
         let pendingDeleteClassroom = null;
@@ -1630,6 +1703,30 @@ document.addEventListener('DOMContentLoaded', () => {
             button.textContent = text;
             button.addEventListener('click', handler);
             return button;
+        }
+
+        function renderLocalOpenAPIState(data) {
+            if (!localOpenAPIStatus) return;
+            var enabled = !!(data && data.enabled);
+            localOpenAPIStatus.textContent = enabled
+                ? ('已授权 · ' + (data.key_prefix || 'Key 已生成') + '...')
+                : '尚未授权';
+            if (localOpenAPIEndpoint) {
+                localOpenAPIEndpoint.hidden = !(data && data.endpoint);
+                localOpenAPIEndpoint.textContent = data && data.endpoint ? ('接口地址：' + data.endpoint) : '';
+            }
+            if (localOpenAPIGenerateBtn) localOpenAPIGenerateBtn.textContent = enabled ? '重新生成 Key' : '生成 Key';
+            if (localOpenAPIRevokeBtn) localOpenAPIRevokeBtn.hidden = !enabled;
+        }
+
+        async function loadLocalOpenAPIState() {
+            if (!localOpenAPIStatus || !window.CloudManager || !CloudManager.getLocalOpenAPIKeyStatus) return;
+            localOpenAPIStatus.textContent = '正在读取授权状态...';
+            try {
+                renderLocalOpenAPIState(await CloudManager.getLocalOpenAPIKeyStatus());
+            } catch (error) {
+                localOpenAPIStatus.textContent = '授权状态读取失败';
+            }
         }
 
         function renderCloudClassrooms(status) {
@@ -1817,42 +1914,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 } else {
                     expiresText.textContent = data.expires_at ? formatDate(data.expires_at) : '永久有效';
                 }
+                loadLocalOpenAPIState();
             } else {
                 notLoggedIn.style.display = 'block';
                 loggedIn.style.display = 'none';
                 currentCloudStatus = null;
+                if (localOpenAPIStatus) localOpenAPIStatus.textContent = '登录后可生成 Key';
+                if (localOpenAPIKeyPanel) localOpenAPIKeyPanel.hidden = true;
             }
             if (data.cloud_server_url && urlInput) {
                 urlInput.value = data.cloud_server_url;
             }
-        }
-
-        function makeSyncCounts() {
-            return { ok: 0, latest: 0, conflict: 0, skipped: 0, err: 0, pulled: 0 };
-        }
-
-        function addSyncResult(counts, result) {
-            if (!result) {
-                counts.err += 1;
-                return;
-            }
-            if (result.status === 'ok') counts.ok += 1;
-            else if (result.status === 'up_to_date') counts.latest += 1;
-            else if (result.status === 'pulled') counts.pulled += 1;
-            else if (result.status === 'conflict') counts.conflict += 1;
-            else if (result.status === 'skipped') counts.skipped += 1;
-            else counts.err += 1;
-        }
-
-        function buildSyncMessage(counts) {
-            var parts = [];
-            if (counts.ok) parts.push(counts.ok + ' 个已上传');
-            if (counts.latest) parts.push(counts.latest + ' 个已是最新');
-            if (counts.pulled) parts.push(counts.pulled + ' 个已从云端拉取');
-            if (counts.conflict) parts.push(counts.conflict + ' 个仍有冲突');
-            if (counts.skipped) parts.push(counts.skipped + ' 个跳过');
-            if (counts.err) parts.push(counts.err + ' 个失败');
-            return parts.length ? ('同步完成：' + parts.join('，')) : '没有需要同步的班级';
         }
 
         CloudManager.getUserInfo(true).then(function(data) {
@@ -1876,10 +1948,6 @@ document.addEventListener('DOMContentLoaded', () => {
             var user = await CloudManager.getUserInfo(true);
             renderCloudUI(user);
             await loadCloudClassrooms();
-            var lastSyncEl = document.getElementById('cloud-last-sync');
-            if (lastSyncEl) {
-                lastSyncEl.textContent = '上次同步：刚刚';
-            }
         });
 
         if (logoutBtn) logoutBtn.addEventListener('click', async function() {
@@ -1890,56 +1958,56 @@ document.addEventListener('DOMContentLoaded', () => {
             logoutBtn.disabled = false;
         });
 
-        if (syncBtn) syncBtn.addEventListener('click', async function() {
-            syncBtn.disabled = true;
-            syncBtn.textContent = '同步中...';
+        if (localOpenAPIGenerateBtn) localOpenAPIGenerateBtn.addEventListener('click', async function() {
+            var rotating = localOpenAPIRevokeBtn && !localOpenAPIRevokeBtn.hidden;
+            if (rotating && !window.confirm('重新生成会立即停用旧 Key，确定继续吗？')) return;
+            localOpenAPIGenerateBtn.disabled = true;
+            localOpenAPIGenerateBtn.textContent = rotating ? '重新生成中...' : '生成中...';
             try {
-                var data = await CloudManager.sync();
-                if (!data || data.status !== 'success') {
-                    showToast(data && data.message ? data.message : '同步失败');
-                    return;
-                }
-                var results = data.results || [];
-                var counts = makeSyncCounts();
-                for (var i = 0; i < results.length; i++) {
-                    var r = results[i];
-                    if (r.status === 'conflict') {
-                        var choice = confirm('"' + r.name + '" 存在冲突。\n点击"确定"保留本地版本并强制推送，点击"取消"使用云端版本。');
-                        if (choice && r.classroom_id) {
-                            syncBtn.textContent = '更新云端...';
-                            var forced = await CloudManager.sync([r.classroom_id], { force: true });
-                            if (!forced || forced.status !== 'success') {
-                                counts.err += 1;
-                                continue;
-                            }
-                            var forcedResults = forced.results || [];
-                            if (!forcedResults.length) counts.err += 1;
-                            for (var j = 0; j < forcedResults.length; j++) {
-                                addSyncResult(counts, forcedResults[j]);
-                            }
-                        } else if (!choice && r.uuid) {
-                            syncBtn.textContent = '拉取云端...';
-                            await CloudManager.pullClassroom(r.uuid);
-                            counts.pulled += 1;
-                            showToast('"' + r.name + '" 已从云端拉取');
-                        } else {
-                            counts.conflict += 1;
-                        }
-                    } else {
-                        addSyncResult(counts, r);
-                    }
-                }
-                showToast(buildSyncMessage(counts));
-                var lastSyncEl = document.getElementById('cloud-last-sync');
-                if (lastSyncEl && !counts.err && !counts.conflict) {
-                    lastSyncEl.textContent = '上次同步：刚刚';
-                }
-                await loadCloudClassrooms();
-            } catch(e) {
-                showToast('同步失败：' + (e.message || '网络错误'));
+                var result = await CloudManager.generateLocalOpenAPIKey();
+                renderLocalOpenAPIState(result);
+                if (localOpenAPIKeyValue) localOpenAPIKeyValue.value = result.key || '';
+                if (localOpenAPIKeyPanel) localOpenAPIKeyPanel.hidden = !result.key;
+                if (typeof showToast === 'function') showToast(rotating ? '新 Key 已生成，旧 Key 已停用' : '已授权服务器本机 API');
+            } catch (error) {
+                if (typeof showToast === 'function') showToast('生成失败：' + ((error && error.message) || '网络错误'));
             } finally {
-                syncBtn.disabled = false;
-                syncBtn.innerHTML = syncIdleHtml;
+                localOpenAPIGenerateBtn.disabled = false;
+                localOpenAPIGenerateBtn.textContent = (localOpenAPIRevokeBtn && !localOpenAPIRevokeBtn.hidden) ? '重新生成 Key' : '生成 Key';
+            }
+        });
+
+        if (localOpenAPIRevokeBtn) localOpenAPIRevokeBtn.addEventListener('click', async function() {
+            if (!window.confirm('撤销后，使用当前 Key 的服务器本机程序会立即失去访问权限。确定撤销吗？')) return;
+            localOpenAPIRevokeBtn.disabled = true;
+            try {
+                var result = await CloudManager.revokeLocalOpenAPIKey();
+                renderLocalOpenAPIState(result);
+                if (localOpenAPIKeyValue) localOpenAPIKeyValue.value = '';
+                if (localOpenAPIKeyPanel) localOpenAPIKeyPanel.hidden = true;
+                if (typeof showToast === 'function') showToast('服务器本机 API 授权已撤销');
+            } catch (error) {
+                if (typeof showToast === 'function') showToast('撤销失败：' + ((error && error.message) || '网络错误'));
+            } finally {
+                localOpenAPIRevokeBtn.disabled = false;
+            }
+        });
+
+        if (localOpenAPICopyBtn) localOpenAPICopyBtn.addEventListener('click', async function() {
+            var value = localOpenAPIKeyValue ? localOpenAPIKeyValue.value : '';
+            if (!value) return;
+            try {
+                if (navigator.clipboard && window.isSecureContext) {
+                    await navigator.clipboard.writeText(value);
+                } else {
+                    localOpenAPIKeyValue.focus();
+                    localOpenAPIKeyValue.select();
+                    document.execCommand('copy');
+                    localOpenAPIKeyValue.setSelectionRange(0, 0);
+                }
+                if (typeof showToast === 'function') showToast('Key 已复制');
+            } catch (error) {
+                if (typeof showToast === 'function') showToast('复制失败，请手动复制');
             }
         });
 

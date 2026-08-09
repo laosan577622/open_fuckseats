@@ -2515,6 +2515,53 @@ input:focus {
     height: 20px;
 }
 
+.home-titlebar-sync {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-height: 31px;
+    margin-left: auto;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 999px;
+    background: #0a59f7;
+    color: #fff;
+    font: inherit;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    box-shadow: 0 2px 7px rgba(10, 89, 247, .18);
+    transition: background .18s ease, transform .18s ease, opacity .18s ease;
+}
+
+.home-titlebar-sync:hover {
+    background: #084dcc;
+}
+
+.home-titlebar-sync:active {
+    transform: scale(.97);
+}
+
+.home-titlebar-sync:disabled {
+    cursor: wait;
+    opacity: .68;
+}
+
+.home-titlebar-sync svg {
+    width: 16px;
+    height: 16px;
+    flex: 0 0 auto;
+}
+
+.home-titlebar-sync.is-syncing svg {
+    animation: spin .8s linear infinite;
+}
+
+.home-titlebar-sync + .home-titlebar-settings {
+    margin-left: 5px;
+}
+
 .home-dashboard-page {
     width: 100%;
     min-height: calc(100vh - 52px);
@@ -3214,7 +3261,18 @@ input:focus {
     }
 
     .home-titlebar-settings {
+        margin-left: 5px;
+    }
+
+    .home-titlebar-sync {
+        width: 31px;
+        min-width: 31px;
+        padding: 0;
         margin-left: auto;
+    }
+
+    .home-titlebar-sync span {
+        display: none;
     }
 
     .home-dashboard-page {

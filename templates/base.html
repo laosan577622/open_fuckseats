@@ -604,6 +604,7 @@
     <script>
     (function() {
         var HOME_SYNC_SESSION_KEY = 'fuckseats_cloud_entry_sync_v2';
+        var HOME_SYNC_RECENT_MS = 5000;
         var homeSyncRunning = false;
 
         function loggedInAvatar(data) {
@@ -629,7 +630,7 @@
             if (!container || !window.CloudManager) return Promise.resolve();
             if (container.dataset.cloudHeaderManaged === 'classroom') return Promise.resolve();
             return CloudManager.getUserInfo(false, { refreshSubscription: false }).then(function(data) {
-                var isHome = window.location.pathname === '/' && document.querySelector('.classrooms-grid');
+                var isHome = window.location.pathname === '/' && document.querySelector('.home-dashboard-page');
                 if (data.logged_in) {
                     container.innerHTML = '<div class="cloud-header-sync-cluster">' +
                         (isHome ? buildHomeStatusPill() : '') +
@@ -662,12 +663,28 @@
         }
 
         function saveHomeSyncState(value) {
-            try { sessionStorage.setItem(HOME_SYNC_SESSION_KEY, value); } catch (error) {}
+            try {
+                sessionStorage.setItem(HOME_SYNC_SESSION_KEY, JSON.stringify({ state: value, at: Date.now() }));
+            } catch (error) {}
+        }
+
+        function readHomeSyncState() {
+            var raw = '';
+            try { raw = sessionStorage.getItem(HOME_SYNC_SESSION_KEY) || ''; } catch (error) {}
+            if (!raw) return { state: '', at: 0 };
+            try {
+                var parsed = JSON.parse(raw);
+                return {
+                    state: String(parsed.state || ''),
+                    at: Number(parsed.at || 0)
+                };
+            } catch (error) {
+                return { state: raw, at: 0 };
+            }
         }
 
         function restoreHomeSyncStatus() {
-            var value = '';
-            try { value = sessionStorage.getItem(HOME_SYNC_SESSION_KEY) || ''; } catch (error) {}
+            var value = readHomeSyncState().state;
             if (value === 'done') setHomeSyncStatus('synced', '云端已检查', '本次应用会话已完成云同步检查');
             else if (value === 'updated') setHomeSyncStatus('synced', '云端已更新', '已从云端更新班级数据');
             else if (value === 'offline') setHomeSyncStatus('offline', '离线使用', '点击重新检查网络并同步', true);
@@ -675,7 +692,9 @@
         }
 
         function countSyncedRows(result) {
-            var rows = result && Array.isArray(result.results) ? result.results : [];
+            var rows = [];
+            if (result && Array.isArray(result.results)) rows = rows.concat(result.results);
+            if (result && Array.isArray(result.group_results)) rows = rows.concat(result.group_results);
             return rows.filter(function(row) {
                 return row && (row.status === 'ok' || row.status === 'up_to_date' || row.status === 'pulled');
             }).length;
@@ -683,8 +702,10 @@
         function shouldRefreshHomeAfterCloudSync(result) {
             if (window.FuckSeatsCloudSync) return false;
             if (window.location.pathname !== '/') return false;
-            if (!document.querySelector('.classrooms-grid')) return false;
-            var rows = result && Array.isArray(result.results) ? result.results : [];
+            if (!document.querySelector('.home-dashboard-page')) return false;
+            var rows = [];
+            if (result && Array.isArray(result.results)) rows = rows.concat(result.results);
+            if (result && Array.isArray(result.group_results)) rows = rows.concat(result.group_results);
             return rows.some(function(row) {
                 return row && (
                     row.remote_only ||
@@ -701,16 +722,17 @@
         }
 
         function summarizeSyncResult(result) {
-            var rows = result && Array.isArray(result.results) ? result.results : [];
+            var rows = [];
+            if (result && Array.isArray(result.results)) rows = rows.concat(result.results);
+            if (result && Array.isArray(result.group_results)) rows = rows.concat(result.group_results);
             var failed = rows.filter(function(row) { return row && (row.status === 'error' || row.status === 'conflict'); });
             return { rows: rows, failed: failed, changed: shouldRefreshHomeAfterCloudSync(result) };
         }
 
         function runHomeEntrySync(force) {
-            if (homeSyncRunning || window.location.pathname !== '/' || !document.querySelector('.classrooms-grid')) return;
-            var saved = '';
-            try { saved = sessionStorage.getItem(HOME_SYNC_SESSION_KEY) || ''; } catch (error) {}
-            if (!force && saved) {
+            if (homeSyncRunning || window.location.pathname !== '/' || !document.querySelector('.home-dashboard-page')) return;
+            var saved = readHomeSyncState();
+            if (!force && saved.at && Date.now() - saved.at < HOME_SYNC_RECENT_MS) {
                 restoreHomeSyncStatus();
                 return;
             }
@@ -723,7 +745,7 @@
                     setHomeSyncStatus('offline', '离线使用', '点击重新检查网络并同步', true);
                     return null;
                 }
-                setHomeSyncStatus('syncing', '同步中', '正在同步已上云班级');
+                setHomeSyncStatus('syncing', '同步中', '正在同步已上云班级和班级组');
                 return CloudManager.sync(null, { auto: true, scope: 'linked', deviceId: 'app-entry' });
             }).then(function(result) {
                 if (!result) return;

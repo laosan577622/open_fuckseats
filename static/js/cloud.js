@@ -380,6 +380,10 @@ window.CloudManager = (function () {
         return fetchJSON('/cloud/sync/pull/' + uuid, { method: 'POST' });
     }
 
+    async function pullClassroomGroup(uuid) {
+        return fetchJSON('/cloud/sync-group/pull/' + uuid, { method: 'POST' });
+    }
+
     async function deleteCloudClassroom(uuid, options) {
         const opts = options || {};
         return fetchJSON('/cloud/sync/delete/' + uuid, {
@@ -411,6 +415,8 @@ window.CloudManager = (function () {
     async function deleteSnapshot(snapshotId) {
         return fetchJSON('/cloud/snapshots/' + snapshotId + '/delete', { method: 'POST' });
     }
+
+    // 此部分代码未被披露至开源版本
 
     async function getSubscriptionPlans() {
         return fetchJSON('/cloud/subscription/plans');
@@ -464,11 +470,13 @@ window.CloudManager = (function () {
         getSyncStatus,
         sync,
         pullClassroom,
+        pullClassroomGroup,
         deleteCloudClassroom,
         getSnapshots,
         createSnapshot,
         restoreSnapshot,
         deleteSnapshot,
+        // 此部分代码未被披露至开源版本
         getSubscriptionPlans,
         getPurchaseUrl,
         openExternalUrl,

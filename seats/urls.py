@@ -128,6 +128,8 @@ urlpatterns = [
     path('cloud/sync/', views.cloud_sync, name='cloud_sync_slash'),
     path('cloud/sync-group/<int:pk>', views.cloud_sync_group, name='cloud_sync_group'),
     path('cloud/sync-group/<int:pk>/', views.cloud_sync_group, name='cloud_sync_group_slash'),
+    path('cloud/sync-group/pull/<str:group_uuid>', views.cloud_sync_group_pull, name='cloud_sync_group_pull'),
+    path('cloud/sync-group/pull/<str:group_uuid>/', views.cloud_sync_group_pull, name='cloud_sync_group_pull_slash'),
     path('cloud/sync/pull/<str:classroom_uuid>', views.cloud_sync_pull, name='cloud_sync_pull'),
     path('cloud/sync/pull/<str:classroom_uuid>/', views.cloud_sync_pull, name='cloud_sync_pull_slash'),
     path('cloud/sync/delete/<str:classroom_uuid>', views.cloud_sync_delete, name='cloud_sync_delete'),
@@ -161,3 +163,5 @@ urlpatterns = [
     path('api/realtime', views.realtime_status, name='realtime_status'),
     path('api/realtime/', views.realtime_status, name='realtime_status_slash'),
 ]
+
+pass # 此部分代码未被披露至开源版本

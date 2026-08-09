@@ -257,6 +257,9 @@ def cloud_api_request(session, method, path, body=None, timeout=20, refresh_subs
     return unwrapped
 
 
+pass # 此部分代码未被披露至开源版本
+
+
 def cloud_exchange_session_code(code, device_id='local-desktop'):
     local_keys = get_or_create_local_cloud_keypair()
     payload = cloud_public_request('POST', '/auth/exchange', {

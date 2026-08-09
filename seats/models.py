@@ -14,6 +14,9 @@ class ClassroomGroup(models.Model):
     name = models.CharField(max_length=100, verbose_name="班级组名称")
     uuid = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True, verbose_name="班级组 UUID")
     sort_order = models.PositiveIntegerField(default=0, verbose_name="排序")
+    cloud_version = models.BigIntegerField(default=0, verbose_name="云端版本号")
+    last_sync_at = models.DateTimeField(null=True, blank=True, verbose_name="最近云同步时间")
+    last_synced_fingerprint = models.CharField(max_length=64, blank=True, default='', verbose_name="最近云同步指纹")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

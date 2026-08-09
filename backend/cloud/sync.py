@@ -119,6 +119,10 @@ CONSTRAINT_TYPES = {
 }
 STUDENT_TAG_RULE_TYPES = {'must_area', 'forbid_area', 'separate_same_tag'}
 AI_ROLES = {'user', 'assistant', 'system', 'tool'}
+GROUP_SNAPSHOT_KEYS = {'sort_order', 'classroom_order', 'unassigned_students', 'sort_strategies'}
+GROUP_STUDENT_KEYS = {'name', 'student_id', 'gender', 'score', 'custom_data', 'created_at'}
+GROUP_SORT_STRATEGY_KEYS = {'name', 'description', 'language', 'definition', 'python_code', 'created_at', 'updated_at'}
+GROUP_CLASSROOM_ORDER_KEYS = {'uuid', 'group_order'}
 
 
 def payload_size_bytes(payload):
@@ -131,6 +135,50 @@ def check_payload_size(payload, limit_name='max_push_size_mb'):
     if size > max_mb * 1024 * 1024:
         raise ValueError(f'同步数据超过 {max_mb}MB 限制')
     return size
+
+
+def validate_classroom_group_snapshot(data):
+    data = _ensure_dict(data, 'group.data')
+    _reject_unknown_keys(data, GROUP_SNAPSHOT_KEYS, 'group.data')
+    _to_int(data.get('sort_order') or 0, 'group.data.sort_order', minimum=0)
+
+    classroom_uuids = []
+    seen = set()
+    for index, item in enumerate(_ensure_list(data.get('classroom_order') or [], 'group.data.classroom_order')):
+        item = _ensure_dict(item, f'group.data.classroom_order[{index}]')
+        _reject_unknown_keys(item, GROUP_CLASSROOM_ORDER_KEYS, f'group.data.classroom_order[{index}]')
+        try:
+            classroom_uuid = str(uuid.UUID(str(item.get('uuid') or '')))
+        except (TypeError, ValueError, AttributeError) as exc:
+            raise ValueError(f'group.data.classroom_order[{index}].uuid 无效') from exc
+        if classroom_uuid in seen:
+            raise ValueError('group.data.classroom_order 存在重复班级')
+        seen.add(classroom_uuid)
+        classroom_uuids.append(classroom_uuid)
+        _to_int(item.get('group_order') or 0, f'group.data.classroom_order[{index}].group_order', minimum=0)
+
+    for index, item in enumerate(_ensure_list(data.get('unassigned_students') or [], 'group.data.unassigned_students')):
+        item = _ensure_dict(item, f'group.data.unassigned_students[{index}]')
+        _reject_unknown_keys(item, GROUP_STUDENT_KEYS, f'group.data.unassigned_students[{index}]')
+        if not str(item.get('name') or '').strip():
+            raise ValueError(f'group.data.unassigned_students[{index}] 缺少姓名')
+        if item.get('gender') not in (None, '', 'M', 'F'):
+            raise ValueError(f'group.data.unassigned_students[{index}].gender 不合法')
+        _to_float(item.get('score'), f'group.data.unassigned_students[{index}].score')
+        if not isinstance(item.get('custom_data') or {}, dict):
+            raise ValueError(f'group.data.unassigned_students[{index}].custom_data 必须是对象')
+
+    for index, item in enumerate(_ensure_list(data.get('sort_strategies') or [], 'group.data.sort_strategies')):
+        item = _ensure_dict(item, f'group.data.sort_strategies[{index}]')
+        _reject_unknown_keys(item, GROUP_SORT_STRATEGY_KEYS, f'group.data.sort_strategies[{index}]')
+        if not str(item.get('name') or '').strip():
+            raise ValueError(f'group.data.sort_strategies[{index}] 缺少名称')
+        if str(item.get('language') or 'declarative') not in {'declarative', 'python'}:
+            raise ValueError(f'group.data.sort_strategies[{index}].language 不合法')
+        if not isinstance(item.get('definition') or {}, dict):
+            raise ValueError(f'group.data.sort_strategies[{index}].definition 必须是对象')
+
+    return classroom_uuids
 
 
 def _effective_limits_for_user(user):
