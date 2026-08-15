@@ -21,7 +21,12 @@
         }
         const plainMatch = contentDisposition.match(/filename\s*=\s*"([^"]+)"|filename\s*=\s*([^;]+)/i);
         if (!plainMatch) return '';
-        return (plainMatch[1] || plainMatch[2] || '').trim();
+        const plainFilename = (plainMatch[1] || plainMatch[2] || '').trim();
+        try {
+            return decodeURIComponent(plainFilename);
+        } catch (_) {
+            return plainFilename;
+        }
     };
 
     const inferFilenameFromUrl = (url, fallback = '导出文件') => {
@@ -174,6 +179,128 @@
         return { status: 'downloaded', filename: finalFilename };
     };
 
+    const nextAvailableFilename = (filename, usedNames) => {
+        const normalized = sanitizeFilename(filename, '导出文件');
+        const dotIndex = normalized.lastIndexOf('.');
+        const stem = dotIndex > 0 ? normalized.slice(0, dotIndex) : normalized;
+        const suffix = dotIndex > 0 ? normalized.slice(dotIndex) : '';
+        let candidate = normalized;
+        let index = 1;
+        while (usedNames.has(candidate.toLocaleLowerCase())) {
+            index += 1;
+            candidate = `${stem} (${index})${suffix}`;
+        }
+        usedNames.add(candidate.toLocaleLowerCase());
+        return candidate;
+    };
+
+    const nextAvailableDirectoryFilename = async (directoryHandle, filename, usedNames) => {
+        let candidate = nextAvailableFilename(filename, usedNames);
+        let index = 1;
+        const dotIndex = candidate.lastIndexOf('.');
+        const stem = dotIndex > 0 ? candidate.slice(0, dotIndex) : candidate;
+        const suffix = dotIndex > 0 ? candidate.slice(dotIndex) : '';
+        while (true) {
+            try {
+                await directoryHandle.getFileHandle(candidate);
+                usedNames.delete(candidate.toLocaleLowerCase());
+                index += 1;
+                candidate = `${stem} (${index})${suffix}`;
+                while (usedNames.has(candidate.toLocaleLowerCase())) {
+                    index += 1;
+                    candidate = `${stem} (${index})${suffix}`;
+                }
+                usedNames.add(candidate.toLocaleLowerCase());
+            } catch (error) {
+                if (error?.name === 'NotFoundError') return candidate;
+                if (error?.name !== 'TypeMismatchError') throw error;
+                usedNames.delete(candidate.toLocaleLowerCase());
+                index += 1;
+                candidate = `${stem} (${index})${suffix}`;
+                while (usedNames.has(candidate.toLocaleLowerCase())) {
+                    index += 1;
+                    candidate = `${stem} (${index})${suffix}`;
+                }
+                usedNames.add(candidate.toLocaleLowerCase());
+            }
+        }
+    };
+
+    const saveExportsToDirectory = async (exports, options = {}) => {
+        const exportItems = Array.isArray(exports)
+            ? exports.filter((item) => item && typeof item === 'object' && item.url)
+            : [];
+        if (!exportItems.length) throw new Error('没有可导出的文件');
+
+        // 浏览器端要在点击事件的同一调用栈中打开文件夹选择器，避免丢失用户手势。
+        const desktopApi = APP_SHELL === 'webview'
+            ? await waitForDesktopApi('save_exports_to_directory')
+            : null;
+        if (desktopApi) {
+            const result = await desktopApi.save_exports_to_directory(
+                exportItems,
+                options.suggestedDirectoryName || ''
+            );
+            if (!result || typeof result !== 'object') {
+                throw new Error('批量导出失败');
+            }
+            return result;
+        }
+
+        if (!window.isSecureContext || typeof window.showDirectoryPicker !== 'function') {
+            throw new Error('当前浏览器不支持选择文件夹，请使用桌面版或通过 HTTPS 访问');
+        }
+
+        let directoryHandle;
+        try {
+            directoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+        } catch (error) {
+            if (error?.name === 'AbortError') return { status: 'cancelled' };
+            throw error;
+        }
+
+        const savedFiles = [];
+        const usedNames = new Set();
+        for (let index = 0; index < exportItems.length; index += 1) {
+            const item = exportItems[index];
+            const response = await fetch(item.url, {
+                method: 'GET',
+                credentials: 'same-origin'
+            });
+            if (!response.ok) {
+                throw new Error(`导出失败（${response.status}）`);
+            }
+
+            const headerFilename = parseContentDispositionFilename(
+                response.headers.get('Content-Disposition') || ''
+            );
+            const filename = await nextAvailableDirectoryFilename(
+                directoryHandle,
+                headerFilename || item.filename || inferFilenameFromUrl(item.url),
+                usedNames
+            );
+            const writableFile = await directoryHandle.getFileHandle(filename, { create: true });
+            const writable = await writableFile.createWritable();
+            await writable.write(await response.blob());
+            await writable.close();
+            savedFiles.push({ filename });
+            if (typeof options.onProgress === 'function') {
+                options.onProgress({
+                    completed: index + 1,
+                    total: exportItems.length,
+                    filename,
+                });
+            }
+        }
+
+        return {
+            status: 'saved',
+            directory_name: directoryHandle.name || '',
+            files: savedFiles,
+            count: savedFiles.length,
+        };
+    };
+
     const uploadLocalFile = async (url, options = {}) => {
         const desktopApi = await waitForDesktopApi('upload_local_file');
         if (!desktopApi) return null;
@@ -208,6 +335,7 @@
 
     window.FuckSeatsDesktop = {
         saveExportFromUrl,
+        saveExportsToDirectory,
         importSeatsFile,
         uploadLocalFile,
         parseAcceptExtensions: (raw) => normalizeAcceptExtensions(raw)

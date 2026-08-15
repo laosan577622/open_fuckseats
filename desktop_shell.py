@@ -144,7 +144,11 @@ def parse_content_disposition_filename(content_disposition):
     if not plain_match:
         return ""
 
-    return (plain_match.group(1) or plain_match.group(2) or "").strip()
+    plain_filename = (plain_match.group(1) or plain_match.group(2) or "").strip()
+    try:
+        return urllib.parse.unquote(plain_filename)
+    except Exception:
+        return plain_filename
 
 
 def normalize_accept_extensions(raw_extensions, fallback_filename=""):
@@ -1054,6 +1058,23 @@ class DesktopBridge:
             return str(result[0]) if result else ""
         return str(result)
 
+    def _show_folder_dialog(self):
+        if self._window is None:
+            raise RuntimeError("桌面窗口尚未准备完成")
+
+        import webview
+
+        result = self._window.create_file_dialog(
+            webview.FileDialog.FOLDER,
+            directory=self._last_export_dir,
+        )
+
+        if not result:
+            return ""
+        if isinstance(result, (list, tuple)):
+            return str(result[0]) if result else ""
+        return str(result)
+
     def _show_open_dialog(self, file_types=()):
         if self._window is None:
             raise RuntimeError("桌面窗口尚未准备完成")
@@ -1118,6 +1139,76 @@ class DesktopBridge:
                 "status": "saved",
                 "filename": target_path.name,
                 "path": str(target_path),
+            }
+
+    @staticmethod
+    def _next_available_export_filename(directory, filename, used_names):
+        candidate = sanitize_filename(filename)
+        stem = Path(candidate).stem or "导出文件"
+        suffix = Path(candidate).suffix
+        index = 1
+        while candidate.casefold() in used_names or (directory / candidate).exists():
+            index += 1
+            candidate = f"{stem} ({index}){suffix}"
+        used_names.add(candidate.casefold())
+        return candidate
+
+    def save_exports_to_directory(self, exports=None, suggested_directory_name=""):
+        """选择一个文件夹并把多个本地导出地址连续保存进去。"""
+        with self._save_lock:
+            export_items = exports if isinstance(exports, (list, tuple)) else []
+            export_items = [item for item in export_items if isinstance(item, dict)]
+            if not export_items:
+                return {"status": "error", "message": "没有可导出的文件"}
+
+            selected_directory = self._show_folder_dialog()
+            if not selected_directory:
+                return {"status": "cancelled"}
+
+            target_directory = Path(selected_directory).expanduser()
+            if target_directory.is_symlink() or not target_directory.is_dir():
+                return {"status": "error", "message": "选择的文件夹不存在或不可用"}
+
+            saved_files = []
+            used_names = set()
+            try:
+                for item in export_items:
+                    export_url = str(item.get("url") or "").strip()
+                    if not export_url:
+                        raise ValueError("导出地址无效")
+
+                    exported = self._download_export(export_url)
+                    header_filename = parse_content_disposition_filename(
+                        exported.get("content_disposition", "")
+                    )
+                    fallback_filename = item.get("filename") or infer_filename_from_url(export_url)
+                    filename = self._next_available_export_filename(
+                        target_directory,
+                        header_filename or fallback_filename,
+                        used_names,
+                    )
+                    target_path = target_directory / filename
+                    target_path.write_bytes(exported["content"])
+                    saved_files.append({
+                        "filename": target_path.name,
+                        "path": str(target_path),
+                        "url": export_url,
+                    })
+            except Exception as exc:
+                return {
+                    "status": "error",
+                    "message": str(exc) or "批量导出失败",
+                    "directory": str(target_directory),
+                    "files": saved_files,
+                }
+
+            self._last_export_dir = str(target_directory)
+            return {
+                "status": "saved",
+                "directory": str(target_directory),
+                "directory_name": target_directory.name or str(target_directory),
+                "files": saved_files,
+                "count": len(saved_files),
             }
 
     def _upload_selected_file(self, upload_url, csrf_token="", field_name="file", accept_extensions=None):

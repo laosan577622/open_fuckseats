@@ -8,12 +8,72 @@
 
 {% block actions %}
 <div class="ribbon-panels">
-    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="group">
+    <div class="header-action-row office-ribbon-row ribbon-panel active group-export-ribbon-panel" data-ribbon-panel="group">
         <div class="ribbon-group">
             <a href="{% url 'index' %}" class="btn btn-secondary">返回首页</a>
             <a href="{% url 'classroom_group_settings' classroom_group.pk %}" class="btn btn-secondary">班级组设置</a>
+            <a href="https://blog.577622.xyz/post/47" target="_blank" class="btn btn-secondary" title="查看班级组使用教程">教程</a>
             <span class="ribbon-group-label">班级组</span>
         </div>
+        {% if classrooms %}
+        <div class="ribbon-group file-ribbon-group">
+            <div class="menu-dropdown" data-menu-root data-group-export-menu-root>
+                <button type="button" class="btn btn-secondary menu-trigger" id="btn-export"
+                    data-menu-toggle="file-export-menu" aria-haspopup="true" aria-expanded="false">导出</button>
+                <div class="menu-panel menu-panel-root" id="file-export-menu" role="menu">
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-export-third-party-menu" aria-haspopup="true" aria-expanded="false">
+                            第三方软件
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-export-third-party-menu" role="menu">
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-export-third-party-seat-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    座位表
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-export-third-party-seat-table-menu"
+                                    role="menu">
+                                    <a href="#" class="menu-item-link" id="btn-export-excel" role="menuitem"
+                                        data-group-export-format="seat_table_excel">导出排座表</a>
+                                    <a href="#" class="menu-item-link" id="btn-export-svg" role="menuitem"
+                                        data-group-export-format="seat_chart_svg">导出 SVG</a>
+                                    <a href="#" class="menu-item-link" id="btn-export-pptx" role="menuitem"
+                                        data-group-export-format="seat_chart_pptx">导出单页 PPT</a>
+                                </div>
+                            </div>
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-export-third-party-other-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    其他表格
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-export-third-party-other-table-menu"
+                                    role="menu">
+                                    <a href="#" class="menu-item-link" id="btn-export-group-report" role="menuitem"
+                                        data-group-export-format="group_report">导出小组登记表</a>
+                                    <a href="#" class="menu-item-link" id="btn-export-csis" role="menuitem"
+                                        data-group-export-format="csis">导出 CSIS（CSLS）</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-export-system-menu" aria-haspopup="true" aria-expanded="false">
+                            系统操作
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-export-system-menu" role="menu">
+                            <a href="#" class="menu-item-link" id="btn-export-seats-file" role="menuitem"
+                                data-group-export-format="seats_snapshot">导出 .seats</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <span class="ribbon-group-label">导出</span>
+        </div>
+        {% endif %}
     </div>
 </div>
 {% endblock %}
@@ -122,12 +182,249 @@
         </div>
     </section>
 </section>
+
+<div
+    class="modal group-export-selection-modal"
+    id="group-export-selection-modal"
+    role="dialog"
+    aria-modal="true"
+    aria-hidden="true"
+    aria-labelledby="group-export-selection-title"
+>
+    <div class="modal-content group-delete-dialog group-export-selection-dialog">
+        <span class="group-delete-dialog-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+                <rect x="4" y="4" width="16" height="16" rx="4" stroke="currentColor" stroke-width="1.7"/>
+                <path d="m8 12 2.4 2.4L16 8.8" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </span>
+        <h3 id="group-export-selection-title">请先选择班级</h3>
+        <p>请在班级列表中勾选至少一个班级，再选择需要导出的文件。</p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-primary" data-group-export-selection-close>去选择班级</button>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
+{{ bulk_export_items|json_script:"classroom-group-bulk-export-items" }}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var batchForm = document.querySelector('[data-group-batch-form]');
+    var exportMenuRoot = document.querySelector('[data-group-export-menu-root]');
+    var exportSelectionModal = document.getElementById('group-export-selection-modal');
+    var exportSelectionClose = exportSelectionModal
+        ? exportSelectionModal.querySelector('[data-group-export-selection-close]')
+        : null;
+    var bulkExportItems = [];
+    var bulkExportData = document.getElementById('classroom-group-bulk-export-items');
+    try {
+        bulkExportItems = JSON.parse(bulkExportData ? bulkExportData.textContent : '[]');
+    } catch (_) {
+        bulkExportItems = [];
+    }
+    if (!Array.isArray(bulkExportItems)) bulkExportItems = [];
+
+    function selectedClassroomIds() {
+        return Array.from(document.querySelectorAll('[data-group-classroom-checkbox]:checked'))
+            .map(function (input) { return input.value; })
+            .filter(Boolean);
+    }
+
+    function notifyExport(message) {
+        if (message && typeof window.showToast === 'function') {
+            window.showToast(message);
+        }
+    }
+
+    function closeExportSelectionModal(focusClassroom) {
+        if (!exportSelectionModal) return;
+        exportSelectionModal.classList.remove('modal-visible');
+        exportSelectionModal.setAttribute('aria-hidden', 'true');
+        window.setTimeout(function () {
+            exportSelectionModal.style.display = 'none';
+            if (focusClassroom) {
+                var firstCheckbox = document.querySelector('[data-group-classroom-checkbox]');
+                if (firstCheckbox) firstCheckbox.focus();
+            }
+        }, 220);
+    }
+
+    function openExportSelectionModal() {
+        closeExportMenu();
+        if (!exportSelectionModal) return;
+        exportSelectionModal.style.display = 'flex';
+        exportSelectionModal.setAttribute('aria-hidden', 'false');
+        window.requestAnimationFrame(function () {
+            exportSelectionModal.classList.add('modal-visible');
+            if (exportSelectionClose) exportSelectionClose.focus();
+        });
+    }
+
+    function closeExportMenu() {
+        if (!exportMenuRoot) return;
+        exportMenuRoot.classList.remove('open');
+        var rootTrigger = exportMenuRoot.querySelector('.menu-trigger[data-menu-toggle]');
+        if (rootTrigger) rootTrigger.setAttribute('aria-expanded', 'false');
+        exportMenuRoot.querySelectorAll('.menu-submenu.open').forEach(function (submenu) {
+            submenu.classList.remove('open');
+        });
+        exportMenuRoot.querySelectorAll('.menu-item-has-children[data-menu-toggle]').forEach(function (trigger) {
+            trigger.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    function initExportMenu() {
+        if (!exportMenuRoot) return;
+        var rootTrigger = exportMenuRoot.querySelector('.menu-trigger[data-menu-toggle]');
+        if (rootTrigger) {
+            rootTrigger.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                var shouldOpen = !exportMenuRoot.classList.contains('open');
+                closeExportMenu();
+                if (shouldOpen) {
+                    exportMenuRoot.classList.add('open');
+                    rootTrigger.setAttribute('aria-expanded', 'true');
+                }
+            });
+        }
+        exportMenuRoot.querySelectorAll('.menu-item-has-children[data-menu-toggle]').forEach(function (submenuTrigger) {
+            submenuTrigger.addEventListener('click', function (event) {
+                event.preventDefault();
+                event.stopPropagation();
+                var submenu = submenuTrigger.closest('.menu-submenu');
+                if (!submenu) return;
+                var shouldOpen = !submenu.classList.contains('open');
+                var parentPanel = submenu.parentElement;
+                if (parentPanel) {
+                    parentPanel.querySelectorAll(':scope > .menu-submenu.open').forEach(function (sibling) {
+                        sibling.classList.remove('open');
+                        var siblingTrigger = sibling.querySelector(':scope > .menu-item-has-children[data-menu-toggle]');
+                        if (siblingTrigger) siblingTrigger.setAttribute('aria-expanded', 'false');
+                    });
+                }
+                submenu.classList.toggle('open', shouldOpen);
+                submenuTrigger.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false');
+            });
+        });
+        document.addEventListener('click', function (event) {
+            if (event.target.closest('[data-group-export-menu-root]')) return;
+            closeExportMenu();
+        });
+        document.addEventListener('keydown', function (event) {
+            if (event.key === 'Escape') closeExportMenu();
+        });
+    }
+
+    function getSelectedExportItems(formatKey) {
+        var classroomIds = selectedClassroomIds();
+        return {
+            classroomIds: classroomIds,
+            items: bulkExportItems.filter(function (item) {
+                return item.format_key === formatKey && classroomIds.indexOf(String(item.classroom_id)) >= 0;
+            })
+        };
+    }
+
+    function buildBatchOptionsUrl(item, classroomIds) {
+        var optionsUrl = new URL(item.options_url, window.location.origin);
+        optionsUrl.searchParams.delete('classroom_ids');
+        classroomIds.forEach(function (classroomId) {
+            optionsUrl.searchParams.append('classroom_ids', classroomId);
+        });
+        optionsUrl.searchParams.set('classroom_group_id', '{{ classroom_group.pk }}');
+        return optionsUrl.pathname + optionsUrl.search;
+    }
+
+    async function startBatchExport(anchor) {
+        var selected = getSelectedExportItems(anchor.dataset.groupExportFormat || '');
+        if (!selected.classroomIds.length) {
+            openExportSelectionModal();
+            return;
+        }
+        if (!selected.items.length) {
+            closeExportMenu();
+            notifyExport('当前没有可导出的班级。');
+            return;
+        }
+
+        var firstItem = selected.items[0];
+        if (firstItem.options_url) {
+            closeExportMenu();
+            window.location.href = buildBatchOptionsUrl(firstItem, selected.classroomIds);
+            return;
+        }
+
+        var bridge = window.FuckSeatsDesktop || {};
+        if (typeof bridge.saveExportsToDirectory !== 'function') {
+            closeExportMenu();
+            notifyExport('批量导出桥接未加载。');
+            return;
+        }
+
+        closeExportMenu();
+        anchor.dataset.prevText = anchor.textContent || '';
+        anchor.textContent = '导出中...';
+        anchor.style.pointerEvents = 'none';
+        try {
+            var result = await bridge.saveExportsToDirectory(selected.items, {
+                suggestedDirectoryName: '{{ classroom_group.name|escapejs }}',
+                onProgress: function (progress) {
+                    var completed = Number(progress && progress.completed) || 0;
+                    anchor.textContent = '导出 ' + completed + ' / ' + selected.items.length;
+                }
+            });
+            if (!result || result.status === 'cancelled') {
+                notifyExport('已取消批量导出。');
+                return;
+            }
+            if (result.status === 'error') {
+                throw new Error(result.message || '批量导出失败');
+            }
+            var count = Number(result.count) || (Array.isArray(result.files) ? result.files.length : selected.items.length);
+            notifyExport('已保存 ' + count + ' 个文件。');
+        } catch (error) {
+            notifyExport(error && error.message ? error.message : '批量导出失败');
+        } finally {
+            anchor.style.pointerEvents = '';
+            anchor.textContent = anchor.dataset.prevText || '导出';
+            anchor.dataset.prevText = '';
+        }
+    }
+
+    initExportMenu();
+    if (exportSelectionClose) {
+        exportSelectionClose.addEventListener('click', function () {
+            closeExportSelectionModal(true);
+        });
+    }
+    if (exportSelectionModal) {
+        exportSelectionModal.addEventListener('click', function (event) {
+            if (event.target === exportSelectionModal) closeExportSelectionModal(false);
+        });
+    }
+    document.addEventListener('keydown', function (event) {
+        if (
+            event.key === 'Escape'
+            && exportSelectionModal
+            && exportSelectionModal.classList.contains('modal-visible')
+        ) {
+            closeExportSelectionModal(false);
+        }
+    });
+    document.querySelectorAll('[data-group-export-format]').forEach(function (anchor) {
+        anchor.addEventListener('click', function (event) {
+            event.preventDefault();
+            if (anchor.dataset.pending === '1') return;
+            anchor.dataset.pending = '1';
+            startBatchExport(anchor).finally(function () {
+                anchor.dataset.pending = '';
+            });
+        });
+    });
+
     if (batchForm) {
         var selectAll = batchForm.querySelector('[data-group-select-all]');
         var deleteButton = batchForm.querySelector('[data-group-batch-delete]');
@@ -154,7 +451,9 @@ document.addEventListener('DOMContentLoaded', function () {
             updateBatchState();
         });
         classroomCheckboxes.forEach(function (input) {
-            input.addEventListener('change', updateBatchState);
+            input.addEventListener('change', function () {
+                updateBatchState();
+            });
         });
         batchForm.addEventListener('submit', function (event) {
             var selectedCount = classroomCheckboxes.filter(function (input) {

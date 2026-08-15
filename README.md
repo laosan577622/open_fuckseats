@@ -164,7 +164,6 @@
 │   └── seats/                 # 14 个业务页面模板
 │       ├── index.html         # 首页（班级列表）
 │       ├── classroom_detail.html  # 班级详情（座位表主界面）
-│       ├── ai_workspace.html  # AI 闻道赋能工作台
 │       ├── layout_editor.html # 布局编辑器
 │       ├── settings.html      # 全局设置页
 │       ├── extensions_overview.html  # 扩展管理页
@@ -173,11 +172,9 @@
 ├── static/
 │   ├── css/                   # 样式文件
 │   │   ├── styles.css         # 主样式（3800+ 行）
-│   │   ├── ai_workspace.css   # AI 工作台样式
 │   │   └── plugin_ui.css      # 插件 UI 样式
 │   ├── js/                    # 前端脚本
 │   │   ├── classroom.js       # 班级详情页核心交互（4500+ 行）
-│   │   ├── ai_workspace.js    # AI 赋能工作台（850+ 行）
 │   │   ├── desktop_bridge.js  # 桌面端导出桥接
 │   │   ├── layout_editor.js   # 布局编辑器
 │   │   ├── toast.js           # 3D Toast 通知系统
@@ -278,9 +275,10 @@ powershell -NoProfile -ExecutionPolicy Bypass -File "C:\LaosanApps\fuckseats\ski
 | `FUCKSEATS_DATA_DIR` | 覆盖用户数据根目录，主要用于开发和测试 | 安装版使用系统规范目录 |
 | `FUCKSEATS_DATABASE_PATH` | 覆盖桌面数据库路径 | 用户数据目录下 `data/db.sqlite3` |
 | `FUCKSEATS_DATABASE_KEY` | 源码开发/CI 注入数据库密钥，正式桌面包不使用 | 系统钥匙串 |
-| `OPENAI_API_KEY` | 保留的兼容配置，当前 AI 功能关闭 | 空 |
-| `OPENAI_BASE_URL` | 保留的兼容配置，当前 AI 功能关闭 | 空 |
-| `OPENAI_MODEL` | 保留的兼容配置，当前 AI 功能关闭 | `gpt-4.1-mini` |
+| `OPENAI_API_KEY` | 原有 AI 赋能模式的兼容配置（页面入口保持关闭） | 空 |
+| `OPENAI_BASE_URL` | 原有 AI 赋能模式的兼容配置（页面入口保持关闭） | 空 |
+| `OPENAI_MODEL` | 原有 AI 赋能模式的兼容配置（页面入口保持关闭） | `gpt-4.1-mini` |
+| `OPEN_API_AI_TOOLS_ENABLED` | 是否在 Open API/MCP 中发现 AI 类工具 | `True` |
 | `PLUGIN_DIRS` | 额外插件目录（逗号分隔） | 空 |
 
 ### 数据库加密与数据目录
@@ -350,7 +348,9 @@ P12 中需要同时包含 `Developer ID Application` 和 `Developer ID Installer
 
 ## AI 功能状态
 
-AI 界面、AI 状态接口及 Open API 的 AI 类工具当前统一关闭，不会出现在页面、工具发现或 MCP 中，相关内部实现和历史数据模型仅保留在代码中。
+原有 AI 赋能工作台、聊天接口和状态接口由 `AI_FEATURE_ENABLED=False` 保持关闭，班级页不再加载 AI 选项卡、入口、浮层和对应前端资源；访问原有页面或状态接口会返回 404。
+
+Open API/MCP 的 AI 类工具由 `OPEN_API_AI_TOOLS_ENABLED=True` 独立控制，默认开放 `ai_operation_begin`、`ai_operation_progress` 和 `ai_operation_end`，用于外部 AI 工具记录操作生命周期，不会重新启用原有 AI 前端。将该设置改为 `False` 可从 Open API 发现、MCP 列表和工具执行中隐藏这三个工具。
 
 ---
 

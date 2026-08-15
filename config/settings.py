@@ -120,5 +120,10 @@ OPENAI_BASE_URL = os.getenv('OPENAI_BASE_URL', '').strip()
 OPENAI_MODEL = os.getenv('OPENAI_MODEL', 'gpt-4.1-mini').strip() or 'gpt-4.1-mini'
 WENDAO_AI_URL = 'https://ai.577622.xyz'
 
-# 保留内置 AI 实现代码但不开放调用；闻道入口统一跳转外部服务。
+# 原有 AI 赋能工作台和聊天接口保持关闭；Open API 的 AI 类工具单独开放，
+# 供外部 AI 工具调用班级能力和同步操作状态。
 AI_FEATURE_ENABLED = False
+OPEN_API_AI_TOOLS_ENABLED = os.getenv(
+    'OPEN_API_AI_TOOLS_ENABLED',
+    '1',
+).strip().lower() not in {'0', 'false', 'no', 'off'}

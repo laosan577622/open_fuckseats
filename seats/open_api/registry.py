@@ -99,7 +99,7 @@ class ToolRegistry:
 
     def get(self, name):
         tool = self._tools.get(str(name or '').strip())
-        if tool and tool.category == 'ai' and not bool(getattr(settings, 'AI_FEATURE_ENABLED', False)):
+        if tool and tool.category == 'ai' and not bool(getattr(settings, 'OPEN_API_AI_TOOLS_ENABLED', True)):
             tool = None
         if not tool:
             raise ToolExecutionError(f'未知工具：{name}', code='TOOL_NOT_FOUND', status=404)
@@ -107,7 +107,7 @@ class ToolRegistry:
 
     def all(self):
         tools = [self._tools[name] for name in sorted(self._tools)]
-        if not bool(getattr(settings, 'AI_FEATURE_ENABLED', False)):
+        if not bool(getattr(settings, 'OPEN_API_AI_TOOLS_ENABLED', True)):
             tools = [tool for tool in tools if tool.category != 'ai']
         return tools
 

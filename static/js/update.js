@@ -8,6 +8,13 @@
     const isMacosLocalUpdate = appPlatform === 'macos';
 
     window.updateInfo = null;
+    window.FUCKSEATS_UPDATE_CHECK_COMPLETE = false;
+
+    function markUpdateCheckComplete() {
+        if (window.FUCKSEATS_UPDATE_CHECK_COMPLETE === true) return;
+        window.FUCKSEATS_UPDATE_CHECK_COMPLETE = true;
+        window.dispatchEvent(new CustomEvent('fuckseats:update-check-complete'));
+    }
 
     function shouldDeferForOnboarding() {
         return window.FUCKSEATS_ONBOARDING_ACTIVE === true || window.ONBOARDING_SHOULD_SHOW === true;
@@ -16,7 +23,10 @@
     async function checkUpdate() {
         // macOS is intentionally local-only: no manifest, release-note, or
         // package request is allowed from this automatic path.
-        if (isMacosLocalUpdate) return;
+        if (isMacosLocalUpdate) {
+            markUpdateCheckComplete();
+            return;
+        }
         if (shouldDeferForOnboarding()) {
             window.setTimeout(checkUpdate, 1000);
             return;
@@ -31,6 +41,8 @@
             }
         } catch (error) {
             console.error('Update check error:', error);
+        } finally {
+            markUpdateCheckComplete();
         }
     }
 
@@ -113,7 +125,7 @@
             return;
         }
         if (window.PopupManager) {
-            PopupManager.request('update', doShowUpdateModal);
+            PopupManager.request('update', doShowUpdateModal, null, { priority: 100 });
         } else {
             doShowUpdateModal();
         }
@@ -337,6 +349,7 @@
 
     document.addEventListener('DOMContentLoaded', () => {
         if (!isMacosLocalUpdate) checkUpdate();
+        else markUpdateCheckComplete();
 
         document.getElementById('close-update-modal').addEventListener('click', hideUpdateModal);
         document.getElementById('later-btn').addEventListener('click', hideUpdateModal);

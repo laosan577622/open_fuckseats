@@ -120,3 +120,7 @@ _mac_dmg_stage/
 node_modules/
 dist/
 npm-debug.log
+
+# Generated promo media
+promo-video/presentation/public/audio/
+promo-video/exports/

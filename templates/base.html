@@ -7,8 +7,7 @@
     <title>{% block title %}不想排座位{% endblock %}</title>
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4.9">
-    {% if ai_feature_enabled %}<link rel="stylesheet" href="{% static 'css/ai_session.css' %}?v=1.1">{% endif %}
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4.10">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/driver.js@1.0.1/dist/driver.css" />
     {% block extra_head %}{% endblock %}
     <meta name="csrf-token" content="{{ csrf_token }}">
@@ -58,25 +57,6 @@
 
     <div id="toast-container"></div>
 
-    {% if ai_feature_enabled %}
-    <div id="ai-session-overlay" aria-live="polite" aria-hidden="true">
-        <div class="ai-session-backdrop"></div>
-        <div class="ai-session-card">
-            <div class="ai-session-spinner" aria-hidden="true">
-                <svg viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg">
-                    <circle class="ai-session-spinner-track" cx="28" cy="28" r="24"/>
-                    <path class="ai-session-spinner-arc" d="M52 28a24 24 0 0 0-24-24"/>
-                </svg>
-            </div>
-            <h3 class="ai-session-title">AI 操作中</h3>
-            <p class="ai-session-message">AI 正在操作中，请稍候</p>
-            <div class="ai-session-progress"><span class="ai-session-progress-bar"></span></div>
-            <button type="button" class="ai-session-cancel" id="ai-session-cancel">取消 AI 操作</button>
-            <p class="ai-session-footer">由 AI 通过 Open API 控制，任务完成后自动关闭</p>
-        </div>
-    </div>
-    {% endif %}
-
     <div id="update-modal" class="modal-overlay" style="display: none;">
         <div class="modal-content update-modal">
             <div class="modal-header">
@@ -124,18 +104,38 @@
         </div>
     </div>
 
+    <div id="announcement-modal" class="modal-overlay" style="display: none;" aria-hidden="true">
+        <div class="modal-content update-modal announcement-modal" role="dialog" aria-modal="true" aria-labelledby="announcement-title">
+            <div class="modal-header">
+                <div>
+                    <h3 id="announcement-title">应用公告</h3>
+                    <p class="version-info">来自不想排座位的最新通知</p>
+                    <div class="update-details-block announcement-details-block" aria-live="polite">
+                        <div class="update-details-label">公告内容</div>
+                        <div id="announcement-content" class="update-details-content" data-state="loaded"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-body">
+                <div class="modal-actions announcement-actions">
+                    <button id="announcement-confirm-btn" class="btn btn-primary" type="button">我知道了</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <template id="cloud-login-icon-template">{% include "login.svg" %}</template>
     <template id="cloud-offline-icon-template">{% include "wifi.exclamationmark.circle.fill.svg" %}</template>
     <script src="{% static 'js/popup_manager.js' %}?v=1.0"></script>
     <script src="{% static 'js/cloud.js' %}?v=2.0"></script>
     <script src="{% static 'js/data_sharing.js' %}?v=1.0"></script>
     <script src="{% static 'js/toast.js' %}?v=2.0"></script>
-        <script src="{% static 'js/update.js' %}?v=3.0"></script>
+    <script src="{% static 'js/update.js' %}?v=3.1"></script>
+    <script src="{% static 'js/client_control.js' %}?v=1.0"></script>
     <script src="{% static 'js/effects.js' %}?v=2.0"></script>
-    <script src="{% static 'js/desktop_bridge.js' %}?v=20260430"></script>
+    <script src="{% static 'js/desktop_bridge.js' %}?v=20260810"></script>
     <script src="{% static 'js/main.js' %}?v=1.2"></script>
     <script src="{% static 'js/realtime.js' %}?v=1.0"></script>
-    {% if ai_feature_enabled %}<script src="{% static 'js/ai_session.js' %}?v=1.3"></script>{% endif %}
 
     <div id="welcome-finale-overlay" style="display:none" aria-hidden="true">
         <div class="wf-backdrop"></div>
@@ -986,7 +986,7 @@
             overlay.querySelector('.qq-group-backdrop').addEventListener('click', dismiss);
 
             if (window.PopupManager) {
-                PopupManager.request('qq_group', doShow);
+                PopupManager.request('qq_group', doShow, null, { priority: 10 });
             } else {
                 doShow();
             }
@@ -996,6 +996,10 @@
             if (localStorage.getItem(QQ_GROUP_KEY)) return;
             if (shouldDeferForOnboarding()) {
                 setTimeout(checkQQGroupPrompt, 1000);
+                return;
+            }
+            if (window.FUCKSEATS_UPDATE_CHECK_COMPLETE !== true || window.FUCKSEATS_ANNOUNCEMENT_CHECK_COMPLETE !== true) {
+                setTimeout(checkQQGroupPrompt, 400);
                 return;
             }
             setTimeout(showQQGroupPrompt, 1200);

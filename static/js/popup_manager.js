@@ -4,6 +4,7 @@
     var queue = [];
     var current = null;
     var forceHiddenIds = {};
+    var requestSequence = 0;
 
     function isAnyShowing() {
         return current !== null;
@@ -27,14 +28,20 @@
         }
     }
 
-    function request(id, showFn, hideFn) {
+    function request(id, showFn, hideFn, options) {
         if (!id) return;
         for (var i = 0; i < queue.length; i++) {
             if (queue[i].id === id) return;
         }
         if (current === id) return;
 
-        queue.push({ id: id, showFn: showFn, hideFn: hideFn });
+        var priority = Number(options && options.priority);
+        if (!Number.isFinite(priority)) priority = 0;
+        queue.push({ id: id, showFn: showFn, hideFn: hideFn, priority: priority, sequence: requestSequence++ });
+        queue.sort(function (a, b) {
+            if (a.priority !== b.priority) return b.priority - a.priority;
+            return a.sequence - b.sequence;
+        });
         tryShowNext();
     }
 

@@ -24,11 +24,13 @@
         data-kind="svg"
         data-export-url="{% url 'export_students_svg' classroom.pk %}"
         data-preview-student-url="{% url 'export_students_svg_preview_student' classroom.pk %}"
-        data-back-url="{% url 'classroom_detail' classroom.pk %}"
+        data-back-url="{% if batch_export %}{{ batch_export_back_url }}{% else %}{% url 'classroom_detail' classroom.pk %}{% endif %}"
+        data-batch-export="{% if batch_export %}1{% else %}0{% endif %}"
+        data-batch-directory-name="{{ batch_export_directory_name|default:'批量导出' }}"
         data-default-filename="{{ classroom.name }}_座次图.svg"
         data-accept-mime="image/svg+xml"
         data-accept-ext=".svg">
-        <h1 class="options-title">导出 SVG 图片</h1>
+        <h1 class="options-title">导出 SVG 图片{% if batch_export %}（{{ batch_classrooms|length }} 个班级）{% endif %}</h1>
         <div class="options-layout">
             <div class="options-left">
                 <div class="panel-card options-card">
@@ -90,7 +92,7 @@
 
                     <div class="options-actions">
                         <button type="button" class="btn btn-secondary" id="export-options-cancel-btn">取消</button>
-                        <button type="button" class="btn btn-primary" id="export-options-confirm-btn">开始导出</button>
+                        <button type="button" class="btn btn-primary" id="export-options-confirm-btn">{% if batch_export %}选择文件夹并批量导出{% else %}开始导出{% endif %}</button>
                     </div>
                     <div class="options-hint" id="export-options-hint"></div>
                 </div>
@@ -114,5 +116,6 @@
     </div>
 </section>
 
-<script src="{% static 'js/export_options.js' %}?v=1"></script>
+{{ batch_export_items|json_script:"export-batch-items" }}
+<script src="{% static 'js/export_options.js' %}?v=2"></script>
 {% endblock %}

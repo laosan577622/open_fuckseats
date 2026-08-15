@@ -5,7 +5,6 @@ from django.db import transaction, models, IntegrityError, OperationalError, Pro
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.urls import reverse
-from django.utils.encoding import escape_uri_path
 from django.conf import settings
 from django.test import RequestFactory
 from pypinyin import lazy_pinyin
@@ -121,6 +120,7 @@ from .data_sharing import (
     share_usage_event,
 )
 from .network_status import get_system_network_status
+from .client_control import get_resolved_client_control, load_announcement
 
 APP_MANIFEST_REDIRECT_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/api.json'
 UPDATE_DETAILS_REDIRECT_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/update.txt'
@@ -533,7 +533,6 @@ CLASSROOM_COMMAND_ALIASES = {
 CLASSROOM_VIEW_TARGET_ALIASES = {
     'classroom': {'classroom', 'banji', 'home', 'zhuye'},
     'layout': {'layout', 'buju'},
-    'ai': {'ai', 'wendao', 'zhineng'},
 }
 
 CLASSROOM_STUDENT_SUBCOMMAND_ALIASES = {
@@ -784,6 +783,34 @@ def settings_page(request):
     return render(request, 'seats/settings.html')
 
 
+@require_http_methods(['GET'])
+def about_page(request):
+    client_control = get_resolved_client_control()
+    if not client_control.get('feature_flags', {}).get('about_page', True):
+        raise Http404('页面不存在')
+    return render(request, 'seats/about.html', {
+        'about': client_control['about'],
+        'client_control_source': client_control.get('source', 'default'),
+        'about_layout_variant': client_control.get('experiments', {}).get('about_layout', 'control'),
+    })
+
+
+@require_http_methods(['GET'])
+def client_control_config(request):
+    payload = get_resolved_client_control(force=request.GET.get('refresh') == '1')
+    response = JsonResponse({'status': 'success', **payload})
+    response['Cache-Control'] = 'no-store'
+    return response
+
+
+@require_http_methods(['GET'])
+def client_control_announcement(request):
+    payload = load_announcement(force=request.GET.get('refresh') == '1')
+    response = JsonResponse({'status': 'success', **payload})
+    response['Cache-Control'] = 'no-store'
+    return response
+
+
 def _bounded_layout_number(value, default, *, minimum=1, maximum=30):
     try:
         number = int(value)
@@ -1028,6 +1055,82 @@ def create_classroom_group(request):
     return redirect('classroom_group_detail', pk=group.pk)
 
 
+CLASSROOM_GROUP_BULK_EXPORT_FORMATS = (
+    {
+        'key': 'seat_table_excel',
+        'label': '排座表（Excel）',
+        'url_name': 'export_students',
+        'options_url_name': 'export_students_options_page',
+        'filename_suffix': '_座次图.xlsx',
+        'accept_mime': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'accept_extensions': ['.xlsx'],
+    },
+    {
+        'key': 'seat_chart_svg',
+        'label': '座次图（SVG）',
+        'url_name': 'export_students_svg',
+        'options_url_name': 'export_students_svg_options_page',
+        'filename_suffix': '_座次图.svg',
+        'accept_mime': 'image/svg+xml',
+        'accept_extensions': ['.svg'],
+    },
+    {
+        'key': 'seat_chart_pptx',
+        'label': '单页座次图（PPTX）',
+        'url_name': 'export_students_pptx',
+        'options_url_name': 'export_students_pptx_options_page',
+        'filename_suffix': '_座次图.pptx',
+        'accept_mime': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'accept_extensions': ['.pptx'],
+    },
+    {
+        'key': 'group_report',
+        'label': '小组登记表（Excel）',
+        'url_name': 'export_group_report',
+        'filename_suffix': '_小组作业表.xlsx',
+        'accept_mime': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'accept_extensions': ['.xlsx'],
+    },
+    {
+        'key': 'csis',
+        'label': 'CSIS（CSLS）',
+        'url_name': 'export_students_csis',
+        'filename_suffix': '_CSIS.csls',
+        'accept_mime': 'application/json',
+        'accept_extensions': ['.csls', '.json'],
+    },
+    {
+        'key': 'seats_snapshot',
+        'label': '.seats 座位快照',
+        'url_name': 'export_seats_file',
+        'filename_suffix': '.seats',
+        'accept_mime': 'application/octet-stream',
+        'accept_extensions': ['.seats', '.json'],
+    },
+)
+
+
+def _build_classroom_group_bulk_export_items(classrooms):
+    items = []
+    for classroom in classrooms:
+        for export_format in CLASSROOM_GROUP_BULK_EXPORT_FORMATS:
+            items.append({
+                'classroom_id': classroom.pk,
+                'classroom_name': classroom.name,
+                'format_key': export_format['key'],
+                'format_label': export_format['label'],
+                'url': reverse(export_format['url_name'], args=[classroom.pk]),
+                'options_url': (
+                    reverse(export_format['options_url_name'], args=[classroom.pk])
+                    if export_format.get('options_url_name') else ''
+                ),
+                'filename': f"{classroom.name}{export_format['filename_suffix']}",
+                'accept_mime': export_format['accept_mime'],
+                'accept_extensions': list(export_format['accept_extensions']),
+            })
+    return items
+
+
 def classroom_group_detail(request, pk):
     classroom_group = get_object_or_404(ClassroomGroup, pk=pk)
     classrooms = list(
@@ -1036,6 +1139,11 @@ def classroom_group_detail(request, pk):
     return render(request, 'seats/classroom_group_detail.html', {
         'classroom_group': classroom_group,
         'classrooms': classrooms,
+        'bulk_export_formats': [
+            {'key': item['key'], 'label': item['label']}
+            for item in CLASSROOM_GROUP_BULK_EXPORT_FORMATS
+        ],
+        'bulk_export_items': _build_classroom_group_bulk_export_items(classrooms),
         'sort_applied': _parse_bool(request.GET.get('sort_applied')),
     })
 
@@ -3879,7 +3987,7 @@ def _handle_classroom_view_command(classroom, command_text, args):
             command_text,
             f'不支持的视图：{args[0]}',
             command='view',
-            suggestions=['/view classroom', '/view layout', '/view ai'],
+            suggestions=['/view classroom', '/view layout'],
         )
     view_targets = {
         'classroom': {
@@ -3891,11 +3999,6 @@ def _handle_classroom_view_command(classroom, command_text, args):
             'target': 'layout',
             'label': '布局视图',
             'url': reverse('layout_editor', args=[classroom.pk]),
-        },
-        'ai': {
-            'target': 'ai',
-            'label': '闻道智能',
-            'url': getattr(settings, 'WENDAO_AI_URL', 'https://ai.577622.xyz'),
         },
     }
     navigation = view_targets[target]
@@ -7995,6 +8098,7 @@ def classroom_command(request, pk):
 
 
 def ai_workspace(request, pk):
+    _ensure_ai_feature_enabled()
     get_object_or_404(Classroom, pk=pk)
     return redirect(getattr(settings, 'WENDAO_AI_URL', 'https://ai.577622.xyz'))
 
@@ -13585,6 +13689,17 @@ def _build_csis_csls_payload(classroom):
     }
 
 
+def _download_content_disposition(filename):
+    normalized = re.sub(r'[\r\n"]+', '_', str(filename or '').strip()) or 'export'
+    suffix_match = re.search(r'(\.[A-Za-z0-9]{1,12})$', normalized)
+    suffix = suffix_match.group(1) if suffix_match else ''
+    stem = normalized[:-len(suffix)] if suffix else normalized
+    ascii_stem = re.sub(r'[^A-Za-z0-9._-]+', '_', stem).strip('._-') or 'export'
+    fallback = f'{ascii_stem}{suffix}'
+    encoded = urllib.parse.quote(normalized, safe='')
+    return f'attachment; filename="{fallback}"; filename*=UTF-8\'\'{encoded}'
+
+
 def export_students(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
 
@@ -13673,7 +13788,9 @@ def export_students(request, pk):
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
     filename_suffix = "_座次图_180度翻转.xlsx" if rotate_180 else "_座次图.xlsx"
-    response['Content-Disposition'] = f'attachment; filename="{classroom.name}{filename_suffix}"'
+    response['Content-Disposition'] = _download_content_disposition(
+        f'{classroom.name}{filename_suffix}'
+    )
     wb.save(response)
 
     return response
@@ -13684,15 +13801,78 @@ def export_students_csis(request, pk):
     payload = _build_csis_csls_payload(classroom)
     content = json.dumps(payload, ensure_ascii=False, indent=2)
     response = HttpResponse(content, content_type='application/json; charset=utf-8')
-    filename = escape_uri_path(f'{classroom.name}_CSIS.csls')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response['Content-Disposition'] = _download_content_disposition(
+        f'{classroom.name}_CSIS.csls'
+    )
     return response
+
+
+def _resolve_export_classrooms(request, fallback_classroom):
+    raw_values = request.GET.getlist('classroom_ids')
+    requested = bool(raw_values)
+    classroom_ids = []
+    for raw_value in raw_values:
+        for value in str(raw_value or '').split(','):
+            value = value.strip()
+            if not value.isdigit():
+                continue
+            classroom_id = int(value)
+            if classroom_id not in classroom_ids:
+                classroom_ids.append(classroom_id)
+
+    if not classroom_ids:
+        return [fallback_classroom], requested
+
+    classrooms_qs = Classroom.objects.filter(pk__in=classroom_ids)
+    group_id = str(request.GET.get('classroom_group_id') or '').strip()
+    if group_id.isdigit():
+        classrooms_qs = classrooms_qs.filter(classroom_group_id=int(group_id))
+    classrooms_by_id = {
+        classroom.pk: classroom
+        for classroom in classrooms_qs
+    }
+    classrooms = [classrooms_by_id[classroom_id] for classroom_id in classroom_ids if classroom_id in classrooms_by_id]
+    return (classrooms or [fallback_classroom]), requested
+
+
+def _bulk_export_options_context(request, fallback_classroom, format_key):
+    classrooms, requested = _resolve_export_classrooms(request, fallback_classroom)
+    export_format = next(
+        (item for item in CLASSROOM_GROUP_BULK_EXPORT_FORMATS if item['key'] == format_key),
+        None,
+    )
+    batch_items = []
+    if requested and export_format:
+        batch_items = [
+            item
+            for item in _build_classroom_group_bulk_export_items(classrooms)
+            if item['format_key'] == export_format['key']
+        ]
+
+    group_id = str(request.GET.get('classroom_group_id') or '').strip()
+    export_group = None
+    if group_id.isdigit():
+        export_group = ClassroomGroup.objects.filter(pk=int(group_id)).first()
+    if export_group is None and fallback_classroom.classroom_group_id:
+        export_group = getattr(fallback_classroom, 'classroom_group', None)
+
+    return {
+        'batch_export': bool(requested and batch_items),
+        'batch_classrooms': classrooms,
+        'batch_export_items': batch_items,
+        'batch_export_directory_name': export_group.name if export_group else '批量导出',
+        'batch_export_back_url': (
+            reverse('classroom_group_detail', args=[export_group.pk])
+            if export_group else reverse('classroom_detail', args=[fallback_classroom.pk])
+        ),
+    }
 
 
 def export_students_options_page(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     return render(request, 'seats/export_excel_options.html', {
-        'classroom': classroom
+        'classroom': classroom,
+        **_bulk_export_options_context(request, classroom, 'seat_table_excel'),
     })
 
 
@@ -13856,8 +14036,9 @@ def export_students_svg(request, pk):
     svg_content = ''.join(chunks)
 
     response = HttpResponse(svg_content, content_type='image/svg+xml; charset=utf-8')
-    filename = escape_uri_path(f'{classroom.name}_座次图.svg')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response['Content-Disposition'] = _download_content_disposition(
+        f'{classroom.name}_座次图.svg'
+    )
     return response
 
 
@@ -13900,7 +14081,8 @@ def export_students_svg_preview_student(request, pk):
 def export_students_svg_options_page(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     return render(request, 'seats/export_svg_options.html', {
-        'classroom': classroom
+        'classroom': classroom,
+        **_bulk_export_options_context(request, classroom, 'seat_chart_svg'),
     })
 
 
@@ -14247,15 +14429,17 @@ def export_students_pptx(request, pk):
         buffer.getvalue(),
         content_type='application/vnd.openxmlformats-officedocument.presentationml.presentation',
     )
-    filename = escape_uri_path(f'{classroom.name}_座次图.pptx')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response['Content-Disposition'] = _download_content_disposition(
+        f'{classroom.name}_座次图.pptx'
+    )
     return response
 
 
 def export_students_pptx_options_page(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     return render(request, 'seats/export_pptx_options.html', {
-        'classroom': classroom
+        'classroom': classroom,
+        **_bulk_export_options_context(request, classroom, 'seat_chart_pptx'),
     })
 
 
@@ -14479,7 +14663,9 @@ def export_group_report(request, pk):
     ws.page_setup.fitToHeight = 1
 
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="{classroom.name}_小组作业表.xlsx"'
+    response['Content-Disposition'] = _download_content_disposition(
+        f'{classroom.name}_小组作业表.xlsx'
+    )
     wb.save(response)
 
     return response
@@ -14548,8 +14734,9 @@ def export_seats_file(request, pk):
     data = _serialize_seats_file_bundle(classroom)
     payload = json.dumps(data, ensure_ascii=False, indent=2)
     response = HttpResponse(payload, content_type='application/octet-stream')
-    filename = escape_uri_path(f'{classroom.name}.seats')
-    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    response['Content-Disposition'] = _download_content_disposition(
+        f'{classroom.name}.seats'
+    )
     return response
 
 

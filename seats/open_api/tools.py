@@ -2177,10 +2177,10 @@ def apply_sort_strategy_tool(ctx):
 
 @registry.register(
     name='ai_operation_begin',
-    description='通知前端 AI 即将开始操作 FuckSeats，前端会显示「AI 操作中」全屏提示并暂时阻挡用户操作。在开始任何会修改教室数据的任务前调用一次。可选提供 task_id 用于配对结束信号，message 展示给用户。',
+    description='通知 FuckSeats 外部 Open API 操作开始并记录任务状态。在开始任何会修改教室数据的任务前调用一次。可选提供 task_id 用于配对结束信号，message 用于记录操作说明。',
     parameters=_schema({
         'task_id': _string('任务标识，可选，用于与 ai_operation_end 配对'),
-        'message': _string('展示给用户的操作说明，例如「正在为三班排座位」'),
+        'message': _string('记录操作说明，例如「正在为三班排座位」'),
     }),
     category='ai',
     read_only=False,
@@ -2191,14 +2191,14 @@ def ai_operation_begin_tool(ctx):
     from . import ai_session
     snap = ai_session.begin(
         task_id=ctx.arguments.get('task_id'),
-        message=str(ctx.arguments.get('message') or 'AI 正在操作中，请稍候'),
+        message=str(ctx.arguments.get('message') or '外部 Open API 操作进行中'),
     )
     return ToolResult(result=snap, affected={})
 
 
 @registry.register(
     name='ai_operation_progress',
-    description='更新「AI 操作中」提示上的进度文案或百分比，不改变提示的显示状态。可在长时间任务中段调用以反馈进度。',
+    description='更新外部 Open API 操作的任务说明或百分比，不改变任务状态。可在长时间任务中段调用以记录进度。',
     parameters=_schema({
         'task_id': _string('任务标识，可选，需与 ai_operation_begin 一致才会更新'),
         'message': _string('新的操作说明文案'),
@@ -2221,7 +2221,7 @@ def ai_operation_progress_tool(ctx):
 
 @registry.register(
     name='ai_operation_end',
-    description='通知前端 AI 操作全部结束，关闭「AI 操作中」全屏提示。在所有操作（含校验）完成后必须调用一次。若提供了与 begin 一致的 task_id，仅结束该任务；否则结束当前任务。',
+    description='通知 FuckSeats 外部 Open API 操作全部结束并清理任务状态。在所有操作（含校验）完成后必须调用一次。若提供了与 begin 一致的 task_id，仅结束该任务；否则结束当前任务。',
     parameters=_schema({
         'task_id': _string('任务标识，可选，仅当与 begin 的 task_id 一致时才会结束'),
     }),

@@ -11,8 +11,6 @@ def app_runtime(request):
         },
         "onboarding_should_show": _onboarding_should_show(request),
         "onboarding_sample_pk": request.session.get('onboarding_sample_pk') if hasattr(request, 'session') else None,
-        "ai_feature_enabled": bool(getattr(settings, "AI_FEATURE_ENABLED", False)),
-        "wendao_ai_url": getattr(settings, "WENDAO_AI_URL", "https://ai.577622.xyz"),
     }
     return ctx
 

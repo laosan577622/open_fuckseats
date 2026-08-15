@@ -12,6 +12,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const previewStudentUrl = root.dataset.previewStudentUrl || '';
     const backUrl = root.dataset.backUrl || '/';
     const defaultFilename = root.dataset.defaultFilename || '导出文件';
+    const isBatchExport = root.dataset.batchExport === '1';
+    const batchDirectoryName = root.dataset.batchDirectoryName || '批量导出';
+    let batchExportItems = [];
+    try {
+        batchExportItems = JSON.parse(document.getElementById('export-batch-items')?.textContent || '[]');
+    } catch (_) {
+        batchExportItems = [];
+    }
+    if (!Array.isArray(batchExportItems)) batchExportItems = [];
     const acceptMime = root.dataset.acceptMime || '';
     const acceptExtensions = (root.dataset.acceptExt || '')
         .split(',')
@@ -73,12 +82,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return element && element.checked ? '1' : '0';
     };
 
-    const buildExcelExport = () => {
+    const buildExcelExport = (item = null) => {
         const layoutTransform = document.querySelector('input[name="excel-export-layout-transform"]:checked')?.value || 'none';
         const query = {
             layout_transform: layoutTransform === 'rotate_180' ? 'rotate_180' : ''
         };
-        let filename = defaultFilename;
+        let filename = item?.filename || defaultFilename;
         if (layoutTransform === 'rotate_180') {
             filename = /\.xlsx$/i.test(filename)
                 ? filename.replace(/\.xlsx$/i, '_180度翻转.xlsx')
@@ -90,7 +99,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
     };
 
-    const buildSvgExport = () => {
+    const buildSvgExport = (item = null) => {
         const query = {
             theme: document.querySelector('input[name="svg-export-theme"]:checked')?.value || 'classic',
             show_title: getChecked('svg-export-show-title'),
@@ -104,7 +113,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         return {
             url: buildUrlWithQuery(exportUrl, query),
-            filename: defaultFilename
+            filename: item?.filename || defaultFilename
         };
     };
 
@@ -357,10 +366,34 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    const getExportPayload = () => {
-        if (kind === 'excel') return buildExcelExport();
-        if (isSvgLike) return buildSvgExport();
-        return { url: exportUrl, filename: defaultFilename };
+    const getExportPayload = (item = null) => {
+        const targetUrl = item?.url || exportUrl;
+        if (kind === 'excel') {
+            const payload = buildExcelExport(item);
+            payload.url = buildUrlWithQuery(targetUrl, {
+                layout_transform: document.querySelector('input[name="excel-export-layout-transform"]:checked')?.value === 'rotate_180'
+                    ? 'rotate_180'
+                    : ''
+            });
+            return payload;
+        }
+        if (isSvgLike) {
+            const payload = buildSvgExport(item);
+            const query = {
+                theme: document.querySelector('input[name="svg-export-theme"]:checked')?.value || 'classic',
+                show_title: getChecked('svg-export-show-title'),
+                show_podium: getChecked('svg-export-show-podium'),
+                show_coords: getChecked('svg-export-show-coords'),
+                show_name: getChecked('svg-export-show-name'),
+                show_score: getChecked('svg-export-show-score'),
+                show_group: getChecked('svg-export-show-group'),
+                show_empty_label: getChecked('svg-export-show-empty-label'),
+                show_seat_type: getChecked('svg-export-show-seat-type')
+            };
+            payload.url = buildUrlWithQuery(targetUrl, query);
+            return payload;
+        }
+        return { url: targetUrl, filename: item?.filename || defaultFilename };
     };
 
     if (cancelBtn) {
@@ -388,8 +421,10 @@ document.addEventListener('DOMContentLoaded', () => {
     if (confirmBtn) {
         confirmBtn.addEventListener('click', async () => {
             if (confirmBtn.dataset.pending === '1') return;
-            const payload = getExportPayload();
-            if (!payload.url) {
+            const payloads = isBatchExport
+                ? batchExportItems.map((item) => getExportPayload(item)).filter((item) => item.url)
+                : [getExportPayload()];
+            if (!payloads.length || payloads.some((item) => !item.url)) {
                 notify('导出地址无效');
                 return;
             }
@@ -398,19 +433,41 @@ document.addEventListener('DOMContentLoaded', () => {
             confirmBtn.dataset.prevText = confirmBtn.textContent || '开始导出';
             confirmBtn.textContent = '导出中...';
             confirmBtn.disabled = true;
-            setHint('正在导出，请稍候...');
+            setHint(isBatchExport ? '正在准备批量导出，请选择目标文件夹...' : '正在导出，请稍候...');
 
             try {
-                const result = await saveExportFromUrl(payload.url, {
-                    fallbackFilename: payload.filename,
-                    acceptMime,
-                    acceptExtensions
-                });
+                let result;
+                if (isBatchExport) {
+                    if (typeof exportBridge.saveExportsToDirectory !== 'function') {
+                        throw new Error('批量导出桥接未加载');
+                    }
+                    result = await exportBridge.saveExportsToDirectory(payloads, {
+                        suggestedDirectoryName: batchDirectoryName,
+                        onProgress: (progress) => {
+                            const completed = Number(progress?.completed) || 0;
+                            setHint(`正在导出：${completed} / ${payloads.length}`);
+                        }
+                    });
+                } else {
+                    result = await saveExportFromUrl(payloads[0].url, {
+                        fallbackFilename: payloads[0].filename,
+                        acceptMime,
+                        acceptExtensions
+                    });
+                }
                 if (result.status === 'cancelled') {
-                    setHint('已取消保存。');
+                    setHint(isBatchExport ? '已取消批量导出。' : '已取消保存。');
                     return;
                 }
-                setHint(`导出成功：${result.filename}，正在返回...`);
+                if (result.status === 'error') {
+                    throw new Error(result.message || '导出失败');
+                }
+                if (isBatchExport) {
+                    const count = Number(result.count) || (Array.isArray(result.files) ? result.files.length : payloads.length);
+                    setHint(`已保存 ${count} 个文件，正在返回...`);
+                } else {
+                    setHint(`导出成功：${result.filename}，正在返回...`);
+                }
                 setTimeout(exitPage, 220);
             } catch (error) {
                 setHint('');

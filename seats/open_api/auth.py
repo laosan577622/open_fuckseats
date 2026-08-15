@@ -11,6 +11,12 @@ from seats.models import FrontendKVStore
 
 OPEN_API_STORE_KEY = 'fuckseats_open_api_key'
 OPEN_API_KEY_PREFIX = 'fks-'
+OPEN_API_BROWSER_ORIGINS_ENV = 'FUCKSEATS_OPEN_API_BROWSER_ORIGINS'
+DEFAULT_OPEN_API_BROWSER_ORIGINS = {
+    'https://ai.577622.xyz',
+    'http://127.0.0.1:3000',
+    'http://localhost:3000',
+}
 
 
 def generate_open_api_key():
@@ -74,6 +80,11 @@ def is_authorized(request):
     return any(secrets.compare_digest(token, key) for key in valid_open_api_keys())
 
 
+def is_trusted_browser_request(request):
+    origin = str(request.headers.get('origin') or '').strip().rstrip('/')
+    return bool(origin and origin in allowed_browser_origins())
+
+
 def unauthorized_response(message='缺少或无效的 Bearer API Key'):
     response = JsonResponse({
         'status': 'error',
@@ -84,14 +95,53 @@ def unauthorized_response(message='缺少或无效的 Bearer API Key'):
     return response
 
 
+def allowed_browser_origins():
+    configured = str(os.environ.get(OPEN_API_BROWSER_ORIGINS_ENV) or '').strip()
+    if not configured:
+        return set(DEFAULT_OPEN_API_BROWSER_ORIGINS)
+    return {
+        origin.strip().rstrip('/')
+        for origin in configured.split(',')
+        if origin.strip()
+    }
+
+
+def _append_vary(response, value):
+    current = [item.strip() for item in str(response.get('Vary') or '').split(',') if item.strip()]
+    if value not in current:
+        current.append(value)
+    response['Vary'] = ', '.join(current)
+
+
+def apply_open_api_browser_headers(request, response):
+    origin = str(request.headers.get('origin') or '').strip().rstrip('/')
+    if not origin or origin not in allowed_browser_origins():
+        return response
+    response['Access-Control-Allow-Origin'] = origin
+    response['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+    response['Access-Control-Allow-Headers'] = 'Authorization, Content-Type'
+    response['Access-Control-Max-Age'] = '600'
+    if str(request.headers.get('access-control-request-private-network') or '').lower() == 'true':
+        response['Access-Control-Allow-Private-Network'] = 'true'
+    _append_vary(response, 'Origin')
+    return response
+
+
 def require_open_api_auth(view_func):
     @csrf_exempt
     @wraps(view_func)
     def wrapper(request, *args, **kwargs):
         if request.method == 'OPTIONS':
-            return JsonResponse({'status': 'ok'})
-        if not is_authorized(request):
-            return unauthorized_response()
-        return view_func(request, *args, **kwargs)
+            origin = str(request.headers.get('origin') or '').strip().rstrip('/')
+            if origin and origin not in allowed_browser_origins():
+                return JsonResponse({
+                    'status': 'error',
+                    'error': '浏览器来源未获允许',
+                    'code': 'ORIGIN_NOT_ALLOWED',
+                }, status=403)
+            return apply_open_api_browser_headers(request, JsonResponse({'status': 'ok'}))
+        if not is_authorized(request) and not is_trusted_browser_request(request):
+            return apply_open_api_browser_headers(request, unauthorized_response())
+        return apply_open_api_browser_headers(request, view_func(request, *args, **kwargs))
 
     return wrapper

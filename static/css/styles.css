@@ -321,24 +321,6 @@ select {
     color: #c6423a;
 }
 
-.ai-ribbon-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    min-width: 0;
-}
-
-.ai-ribbon-copy strong {
-    font-size: 13px;
-    color: var(--text-primary);
-}
-
-.ai-ribbon-copy span {
-    font-size: 12px;
-    color: var(--text-secondary);
-    line-height: 1.35;
-}
-
 .btn {
     display: inline-flex;
     align-items: center;
@@ -1917,6 +1899,10 @@ input:focus {
 }
 
 .file-ribbon-group {
+    overflow: visible;
+}
+
+.group-export-ribbon-panel {
     overflow: visible;
 }
 
@@ -3803,6 +3789,11 @@ input:focus {
 
 .group-delete-dialog .modal-actions {
     margin-top: 20px;
+}
+
+.group-export-selection-dialog .group-delete-dialog-icon {
+    color: #0a59f7;
+    background: rgba(10, 89, 247, .08);
 }
 
 .custom-sort-card [data-cross-classroom-mode][hidden] {
@@ -7511,6 +7502,77 @@ body.student-import-guide-open {
     align-items: center;
     padding: 40px;
     text-align: center;
+}
+
+#announcement-modal .modal-content.announcement-modal {
+    max-width: 100vw;
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    padding: 40px;
+    text-align: center;
+}
+
+#announcement-modal .modal-header {
+    justify-content: center;
+    width: 100%;
+    position: relative;
+    margin-bottom: 40px;
+}
+
+#announcement-modal .modal-header > div {
+    width: min(100%, 720px);
+}
+
+#announcement-modal .modal-header h3 {
+    font-size: 36px;
+    margin-bottom: 16px;
+}
+
+#announcement-modal .version-info {
+    font-size: 18px;
+}
+
+#announcement-modal .modal-body {
+    width: 100%;
+    max-width: 400px;
+    margin: 0 auto;
+}
+
+#announcement-modal .announcement-details-block {
+    margin-top: 20px;
+    padding: 20px 22px;
+    border-radius: 24px;
+}
+
+#announcement-modal .update-details-content {
+    font-size: 15px;
+    max-height: 260px;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+}
+
+#announcement-modal .announcement-actions {
+    justify-content: center;
+    margin-top: 0;
+}
+
+#announcement-modal .announcement-actions .btn {
+    min-width: 116px;
+}
+
+.client-feature-disabled {
+    opacity: 0.52 !important;
+    filter: saturate(0.65);
+    cursor: not-allowed !important;
+}
+
+.client-feature-disabled * {
+    cursor: not-allowed !important;
 }
 
 #update-modal .modal-header {

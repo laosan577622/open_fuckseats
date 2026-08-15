@@ -1,0 +1,114 @@
+{
+  "schema_version": 1,
+  "revision": "builtin-default-v1",
+  "enabled": true,
+  "salt": "fuckseats-client-control-v1",
+  "features": {
+    "about_page": {
+      "enabled": true,
+      "rollout_percentage": 100,
+      "mode": "hide",
+      "message": "关于页面暂时不可用"
+    },
+    "announcement": {
+      "enabled": true,
+      "rollout_percentage": 100,
+      "mode": "hide",
+      "message": "公告功能暂时不可用"
+    },
+    "cloud_sync": {
+      "enabled": true,
+      "rollout_percentage": 100,
+      "mode": "disable",
+      "message": "云同步正在维护，请稍后重试"
+    },
+    "check_update": {
+      "enabled": true,
+      "rollout_percentage": 100,
+      "mode": "disable",
+      "message": "更新服务正在维护，请稍后重试"
+    },
+    "feedback": {
+      "enabled": true,
+      "rollout_percentage": 100,
+      "mode": "hide",
+      "message": "意见反馈入口暂时不可用"
+    }
+  },
+  "experiments": {
+    "about_layout": {
+      "enabled": false,
+      "rollout_percentage": 100,
+      "variants": {
+        "reference": 50,
+        "compact": 50
+      }
+    }
+  },
+  "about": {
+    "page_title": "关于应用",
+    "page_subtitle": "了解不想排座位如何帮助学校与教师更高效地管理班级与座位。",
+    "product_name": "不想排座位",
+    "product_tagline": "让班级管理与座位安排更简单高效",
+    "product_description": "不想排座位是一款面向班主任和教务人员的班级管理工具，覆盖班级组、名单导入、布局编辑、自动排座、约束规则、小组管理、自定义排序、多格式导出与云同步。",
+    "hero_label": "不想排座位",
+    "highlights": [
+      {
+        "title": "数据可靠",
+        "description": "本地加密存储，云同步采用端到端加密",
+        "icon": "shield"
+      },
+      {
+        "title": "高效易用",
+        "description": "批量操作与自动排座减少重复工作",
+        "icon": "bolt"
+      },
+      {
+        "title": "持续完善",
+        "description": "围绕真实学校场景持续更新",
+        "icon": "people"
+      }
+    ],
+    "core_features": [
+      {
+        "title": "班级与班级组",
+        "description": "创建、归类并集中管理多个班级",
+        "icon": "classroom"
+      },
+      {
+        "title": "布局与自动排座",
+        "description": "编辑教室布局并按多种算法快速排座",
+        "icon": "layout"
+      },
+      {
+        "title": "名单、约束与小组",
+        "description": "批量导入学生，设置座位约束与学习小组",
+        "icon": "rules"
+      },
+      {
+        "title": "云同步与多格式导出",
+        "description": "同步班级数据并导出 Excel、PPTX、SVG 等格式",
+        "icon": "cloud"
+      }
+    ],
+    "product_info": {
+      "update_date": "2026-08-11",
+      "audience": "班主任 / 教师 / 教务人员",
+      "license": "GPL-3.0（含项目许可例外）",
+      "sync_label": "云端已检查"
+    },
+    "developer": {
+      "name": "老三",
+      "role": "独立开发者与产品维护者",
+      "description": "负责不想排座位的产品设计、开发、测试与维护，持续根据真实教学管理场景完善产品。",
+      "avatar_url": "https://www.577622.xyz/static/imgs/avatar-easter-egg.jpeg",
+      "website": "https://www.577622.xyz"
+    },
+    "contact": {
+      "product_website": "https://fuckseats.577622.xyz",
+      "developer_website": "https://www.577622.xyz",
+      "feedback_url": "https://guestbook.577622.xyz/"
+    },
+    "footer_line": "致力于让班级管理与座位安排更高效、更可靠。"
+  }
+}
