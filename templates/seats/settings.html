@@ -587,6 +587,8 @@
 .settings-nav-item svg {
     width: 19px;
     height: 19px;
+    max-width: 19px;
+    max-height: 19px;
     flex-shrink: 0;
     color: var(--text-secondary);
     transition: color 0.15s ease;
@@ -648,15 +650,18 @@
     flex-shrink: 0;
     width: 46px;
     height: 46px;
+    max-width: 46px;
+    max-height: 46px;
     border-radius: 13px;
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
     background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
     color: var(--primary-color);
 }
 
-.settings-panel-glyph svg { width: 24px; height: 24px; }
+.settings-panel-glyph svg { width: 24px; height: 24px; max-width: 24px; max-height: 24px; }
 
 .settings-panel-head h1 {
     margin: 0;
@@ -1339,7 +1344,7 @@
 .data-sharing-privacy-no span:last-child { color: var(--text-secondary); }
 
 /* ===== 关于 ===== */
-.settings-about-icon-lg svg { width: 26px; height: 26px; }
+.settings-about-icon-lg svg { width: 26px; height: 26px; max-width: 26px; max-height: 26px; }
 
 .settings-about-hero {
     display: flex;
@@ -1356,9 +1361,12 @@
 .settings-about-logo {
     width: 76px;
     height: 76px;
+    max-width: 76px;
+    max-height: 76px;
     display: flex;
     align-items: center;
     justify-content: center;
+    overflow: hidden;
     border-radius: 20px;
     background: #fff;
     border: 1px solid rgba(0, 0, 0, 0.06);
@@ -1367,7 +1375,7 @@
     margin-bottom: 4px;
 }
 
-.settings-about-logo svg { width: 44px; height: 44px; }
+.settings-about-logo svg { width: 44px; height: 44px; max-width: 44px; max-height: 44px; }
 
 .settings-about-name {
     font-size: 18px;

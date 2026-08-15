@@ -7,11 +7,18 @@
     <title>{% block title %}不想排座位{% endblock %}</title>
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4.16">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4.20">
     <link rel="stylesheet" href="{% static 'css/vendor/driver.css' %}?v=1.0.1">
     <link rel="stylesheet" href="{% static 'css/welcome_finale.css' %}?v=1.0">
     <link rel="stylesheet" href="{% static 'css/data_sharing_prompt.css' %}?v=1.0">
     <link rel="stylesheet" href="{% static 'css/qq_group.css' %}?v=1.0">
+    {% if app_runtime.shell != 'webview' %}
+    <style>
+        @view-transition {
+            navigation: auto;
+        }
+    </style>
+    {% endif %}
     {% block extra_head %}{% endblock %}
     <meta name="csrf-token" content="{{ csrf_token }}">
     <script src="{% static 'js/theme.js' %}?v=1.2"></script>

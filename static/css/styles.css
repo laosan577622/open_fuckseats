@@ -58,21 +58,10 @@ select {
     background: linear-gradient(180deg, rgba(249, 251, 255, 0.95) 0%, rgba(241, 246, 255, 0.86) 100%);
     backdrop-filter: saturate(170%) blur(18px);
     -webkit-backdrop-filter: saturate(170%) blur(18px);
-    border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+    border-bottom: 1px solid #e4e4e9;
     box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
     z-index: 1000;
     padding: 6px 10px 6px;
-}
-
-.app-header::after {
-    content: "";
-    position: absolute;
-    left: 16px;
-    right: 16px;
-    bottom: -1px;
-    height: 1px;
-    background: linear-gradient(90deg, rgba(var(--primary-color-rgb, 10, 89, 247), 0.12), rgba(var(--primary-color-rgb, 10, 89, 247), 0.02));
-    pointer-events: none;
 }
 
 .app-footer {
@@ -2429,10 +2418,6 @@ input:focus {
     box-shadow: 0 6px 20px rgba(15, 23, 42, .06);
     backdrop-filter: saturate(170%) blur(18px);
     -webkit-backdrop-filter: saturate(170%) blur(18px);
-}
-
-.home-dashboard-body .app-header::after {
-    display: block;
 }
 
 .home-dashboard-body .header-content {
@@ -8812,11 +8797,6 @@ body.cloud-connectivity-locked {
 @keyframes seatPop {
     from { transform: scale(0.92); }
     to { transform: scale(1); }
-}
-
-/* 支持跨文档 View Transitions 的浏览器自动获得页面淡入淡出，其余无损降级 */
-@view-transition {
-    navigation: auto;
 }
 
 @media (prefers-reduced-motion: reduce) {
