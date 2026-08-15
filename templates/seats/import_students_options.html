@@ -157,6 +157,18 @@
 
                 <div class="student-import-region-panel" id="student-import-region-panel" tabindex="-1" hidden>
                     <p>请最后确认数据区域，红色为无效区域，绿色是您选择的区域，请单击行标来确认开始行和结束行</p>
+                    <div class="student-import-region-truncated" id="student-import-region-truncated" hidden></div>
+                    <div class="student-import-region-manual">
+                        <label>
+                            <span>开始行</span>
+                            <input type="number" id="student-import-region-start" min="1" step="1" aria-label="数据区域开始行">
+                        </label>
+                        <span class="student-import-region-manual-sep" aria-hidden="true">至</span>
+                        <label>
+                            <span>结束行</span>
+                            <input type="number" id="student-import-region-end" min="1" step="1" aria-label="数据区域结束行">
+                        </label>
+                    </div>
                     <div class="student-import-region-status" id="student-import-region-status" role="status" aria-live="polite"></div>
                     <div class="student-import-region-students" aria-label="数据区域首尾学生">
                         <div class="student-import-region-student">
@@ -223,5 +235,5 @@
     </div>
 </div>
 
-<script src="{% static 'js/import_students_options.js' %}?v=9"></script>
+<script src="{% static 'js/import_students_options.js' %}?v=10"></script>
 {% endblock %}

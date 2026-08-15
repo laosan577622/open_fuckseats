@@ -13,6 +13,11 @@
         <button type="button" class="btn btn-secondary" id="togglePreviewBtn" data-layout-preview-toggle="1" aria-pressed="false">打开预览</button>
         <span class="ribbon-group-label">预览</span>
     </div>
+    <div class="ribbon-group">
+        <button type="button" class="btn btn-secondary" id="layoutUndoBtn" title="撤销 (Ctrl+Z)">撤销</button>
+        <button type="button" class="btn btn-secondary" id="layoutRedoBtn" title="重做 (Ctrl+Y)">重做</button>
+        <span class="ribbon-group-label">历史</span>
+    </div>
 </div>
 {% endblock %}
 
@@ -22,7 +27,14 @@
     data-cell-url="{% url 'update_cell_type' classroom.pk %}"
     data-shift-url="{% url 'shift_layout' classroom.pk %}"
     data-row-col-op-url="{% url 'insert_delete_row_col' classroom.pk %}"
+    data-undo-url="{% url 'undo_action' classroom.pk %}"
+    data-redo-url="{% url 'redo_action' classroom.pk %}"
     data-csrf="{{ csrf_token }}">
+
+    <div class="layout-remote-hint" id="layout-remote-hint" hidden>
+        <span>布局已在其他窗口修改，当前画面可能过期。</span>
+        <button type="button" class="btn btn-primary" id="layout-remote-refresh-btn">刷新查看</button>
+    </div>
 
     <div class="zoom-controls">
         <button type="button" class="zoom-btn" id="layoutZoomOutBtn" title="缩小">-</button>
@@ -123,5 +135,5 @@
     </div>
 </div>
 
-<script src="{% static 'js/layout_editor.js' %}?v=1.2"></script>
+<script src="{% static 'js/layout_editor.js' %}?v=1.3"></script>
 {% endblock %}

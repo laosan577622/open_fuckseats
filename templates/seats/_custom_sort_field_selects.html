@@ -1,0 +1,27 @@
+<label>信息字段
+    <select name="field" required>
+        <option value="name">姓名</option>
+        <option value="student_id">学号</option>
+        <option value="gender">性别</option>
+        <option value="score">成绩</option>
+        {% for key in custom_info_keys %}
+        <option value="custom:{{ key }}">自定义信息 · {{ key }}</option>
+        {% endfor %}
+    </select>
+</label>
+<label>识别方式
+    <select name="transform" required>
+        <option value="auto">自动检测（推荐）</option>
+        <option value="natural">手动：自然数字</option>
+        <option value="text">手动：文本</option>
+        <option value="numeric">手动：纯数字</option>
+        <option value="pinyin">手动：姓名拼音</option>
+        <option value="pinyin_initial">手动：姓名首字母</option>
+    </select>
+</label>
+<label>排序方向
+    <select name="direction" required>
+        <option value="asc">升序</option>
+        <option value="desc">降序</option>
+    </select>
+</label>

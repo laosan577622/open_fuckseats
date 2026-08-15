@@ -4,6 +4,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const cellUrl = root.dataset.cellUrl;
     const csrf = root.dataset.csrf;
+    const undoUrl = root.dataset.undoUrl || '';
+    const redoUrl = root.dataset.redoUrl || '';
     const contextMenu = document.getElementById('contextMenu');
     if (contextMenu && contextMenu.parentNode !== document.body) {
         document.body.appendChild(contextMenu);
@@ -268,7 +270,11 @@ document.addEventListener('DOMContentLoaded', () => {
             cell_type: tool
         }))).then(() => {
             window.location.reload();
-        }).catch(() => notify('操作失败'));
+        }).catch(() => {
+            notify('部分格子操作失败，已刷新为服务器最新状态');
+            // 部分成功时也刷新，避免界面与数据库不一致。
+            window.setTimeout(() => window.location.reload(), 900);
+        });
     };
 
     const applyTool = (seat, tool) => {
@@ -288,18 +294,64 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('.tool-btn[data-tool]').forEach(btn => {
         btn.addEventListener('click', () => {
+            // 只切换当前画笔；应用统一走“应用到选中”，避免误触立即改掉整片选区。
             activeTool = btn.dataset.tool;
             document.querySelectorAll('.tool-btn').forEach(el => el.classList.remove('active'));
             btn.classList.add('active');
-            if (selectedSeats.size) {
-                const seats = Array.from(selectedSeats).map(key => document.querySelector(`.seat[data-seat-key="${key}"]`)).filter(Boolean);
-                applyToolToSeats(activeTool, seats);
-            }
         });
     });
 
     const applySelectedBtn = document.getElementById('applySelected');
     const clearSelectedBtn = document.getElementById('clearSelected');
+
+    const postHistoryAction = (url, label) => {
+        if (!url) return;
+        fetch(url, {
+            method: 'POST',
+            headers: { 'X-CSRFToken': csrf, 'X-Requested-With': 'XMLHttpRequest' },
+        }).then(res => res.json()).then(data => {
+            if (data && data.status && data.status !== 'success') {
+                notify(data.message || `${label}失败`);
+                return;
+            }
+            window.location.reload();
+        }).catch(() => notify(`${label}失败`));
+    };
+
+    const layoutUndoBtn = document.getElementById('layoutUndoBtn');
+    const layoutRedoBtn = document.getElementById('layoutRedoBtn');
+    if (layoutUndoBtn) layoutUndoBtn.addEventListener('click', () => postHistoryAction(undoUrl, '撤销'));
+    if (layoutRedoBtn) layoutRedoBtn.addEventListener('click', () => postHistoryAction(redoUrl, '重做'));
+    document.addEventListener('keydown', (event) => {
+        if (event.target.closest('input, textarea, select')) return;
+        if (!(event.ctrlKey || event.metaKey)) return;
+        const key = event.key.toLowerCase();
+        if (key === 'z') { event.preventDefault(); postHistoryAction(undoUrl, '撤销'); }
+        if (key === 'y') { event.preventDefault(); postHistoryAction(redoUrl, '重做'); }
+    });
+
+    // 双开保护：检测到其他窗口改过本班布局时提示刷新，而不是静默覆盖。
+    const remoteHint = document.getElementById('layout-remote-hint');
+    const remoteRefreshBtn = document.getElementById('layout-remote-refresh-btn');
+    const classroomId = root.dataset.classroomId || '';
+    if (remoteHint && classroomId) {
+        let seenSeq = null;
+        const checkRemote = () => {
+            fetch('/api/realtime/', { credentials: 'same-origin', cache: 'no-store' })
+                .then(res => res.ok ? res.json() : null)
+                .then(data => {
+                    const seq = data && data.realtime && data.realtime.classroom_seq
+                        ? data.realtime.classroom_seq[classroomId] : null;
+                    if (typeof seq !== 'number') return;
+                    if (seenSeq === null) { seenSeq = seq; return; }
+                    if (seq !== seenSeq) remoteHint.hidden = false;
+                })
+                .catch(() => {});
+        };
+        checkRemote();
+        window.setInterval(checkRemote, 5000);
+        if (remoteRefreshBtn) remoteRefreshBtn.addEventListener('click', () => window.location.reload());
+    }
 
     if (applySelectedBtn) {
         applySelectedBtn.addEventListener('click', () => {

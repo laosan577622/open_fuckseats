@@ -313,6 +313,15 @@ document.addEventListener('DOMContentLoaded', function () {
         });
     });
 
+    methodForms.forEach(function (form) {
+        form.addEventListener('submit', function () {
+            var btn = form.querySelector('button[type="submit"]');
+            if (!btn) return;
+            btn.disabled = true;
+            window.setTimeout(function () { btn.disabled = false; }, 8000);
+        });
+    });
+
     showStep(1);
 });
 </script>

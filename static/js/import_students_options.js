@@ -12,6 +12,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const confirmBtn = document.getElementById('student-import-confirm-btn');
     const regionPanel = document.getElementById('student-import-region-panel');
     const regionStatus = document.getElementById('student-import-region-status');
+    const regionTruncated = document.getElementById('student-import-region-truncated');
+    const regionStartInput = document.getElementById('student-import-region-start');
+    const regionEndInput = document.getElementById('student-import-region-end');
     const regionBackBtn = document.getElementById('student-import-region-back-btn');
     const finalConfirmBtn = document.getElementById('student-import-final-confirm-btn');
     const regionLegend = document.getElementById('student-import-region-legend');
@@ -145,6 +148,60 @@ document.addEventListener('DOMContentLoaded', () => {
         regionStatus.textContent = `已确认第 ${selectedRegionStart} 至 ${selectedRegionEnd} 行`;
     };
 
+    const syncRegionInputs = () => {
+        if (regionStartInput) regionStartInput.value = String(selectedRegionStart);
+        if (regionEndInput) regionEndInput.value = String(selectedRegionEnd);
+    };
+
+    const updateTruncationNotice = () => {
+        if (!regionTruncated) return;
+        const rowsTruncated = currentTotalRows > currentImportData.length;
+        const colsTruncated = currentTotalCols > currentPreviewCols;
+        if (!rowsTruncated && !colsTruncated) {
+            regionTruncated.hidden = true;
+            regionTruncated.textContent = '';
+            return;
+        }
+        const parts = [];
+        if (rowsTruncated) {
+            parts.push(`文件共 ${currentTotalRows} 行，预览仅显示前 ${currentImportData.length} 行，超出的行可直接在下方输入行号选中`);
+        }
+        if (colsTruncated) {
+            parts.push(`文件共 ${currentTotalCols} 列，预览仅显示前 ${currentPreviewCols} 列`);
+        }
+        regionTruncated.textContent = parts.join('；') + '。';
+        regionTruncated.hidden = false;
+    };
+
+    const applyManualRegion = (which) => {
+        const total = Math.max(currentTotalRows || currentImportData.length || 1, 1);
+        const readInput = (input) => {
+            const parsed = Number.parseInt(String(input.value || ''), 10);
+            if (!Number.isFinite(parsed)) return null;
+            return Math.max(1, Math.min(total, parsed));
+        };
+        const startValue = readInput(regionStartInput);
+        const endValue = readInput(regionEndInput);
+        if (startValue === null && endValue === null) return;
+        if (which === 'start' && startValue !== null) {
+            selectedRegionStart = startValue;
+            selectedRegionEnd = Math.max(startValue, endValue === null ? selectedRegionEnd : endValue);
+        } else if (which === 'end' && endValue !== null) {
+            selectedRegionEnd = endValue;
+            selectedRegionStart = Math.min(endValue, startValue === null ? selectedRegionStart : startValue);
+        } else if (startValue !== null && endValue !== null) {
+            selectedRegionStart = Math.min(startValue, endValue);
+            selectedRegionEnd = Math.max(startValue, endValue);
+        }
+        regionSelectionStage = 'complete';
+        regionSelectionComplete = true;
+        syncRegionInputs();
+        updateFinalConfirmState();
+        updateRegionStatus();
+        renderRegionStudents();
+        renderPreview();
+    };
+
     const findRegionStudentRow = (fromStart) => {
         const firstIndex = Math.max(selectedRegionStart - 1, 0);
         const lastIndex = Math.min(selectedRegionEnd - 1, currentImportData.length - 1);
@@ -167,8 +224,12 @@ document.addEventListener('DOMContentLoaded', () => {
         return null;
     };
 
-    const renderRegionStudent = (target, studentRow) => {
+    const renderRegionStudent = (target, studentRow, rowNumber, beyondPreview) => {
         if (!target) return;
+        if (beyondPreview) {
+            target.innerHTML = `<strong>第 ${rowNumber} 行</strong><small>超出预览显示范围，导入时仍会包含</small>`;
+            return;
+        }
         if (!studentRow) {
             target.innerHTML = '<strong>未识别到学生数据</strong>';
             return;
@@ -192,8 +253,21 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const renderRegionStudents = () => {
-        renderRegionStudent(regionFirstStudent, findRegionStudentRow(true));
-        renderRegionStudent(regionLastStudent, findRegionStudentRow(false));
+        const previewRowCount = currentImportData.length;
+        const firstBeyond = selectedRegionStart > previewRowCount;
+        const lastBeyond = selectedRegionEnd > previewRowCount;
+        renderRegionStudent(
+            regionFirstStudent,
+            firstBeyond ? null : findRegionStudentRow(true),
+            selectedRegionStart,
+            firstBeyond
+        );
+        renderRegionStudent(
+            regionLastStudent,
+            lastBeyond ? null : findRegionStudentRow(false),
+            selectedRegionEnd,
+            lastBeyond
+        );
     };
 
     const updateFinalConfirmState = () => {
@@ -210,17 +284,19 @@ document.addEventListener('DOMContentLoaded', () => {
         if (regionPanel) regionPanel.hidden = !isRegionConfirming;
         if (regionLegend) regionLegend.hidden = !isRegionConfirming;
 
-        if (isRegionConfirming) {
-            activeField = null;
-            selectedRegionStart = getStartRow();
-            selectedRegionEnd = Math.max(
-                selectedRegionStart,
-                Math.min(currentTotalRows || selectedRegionStart, currentImportData.length || selectedRegionStart)
-            );
-            regionSelectionStage = 'complete';
-            regionSelectionComplete = true;
-        }
-        updateFinalConfirmState();
+    if (isRegionConfirming) {
+        activeField = null;
+        selectedRegionStart = getStartRow();
+        selectedRegionEnd = Math.max(
+            selectedRegionStart,
+            Math.min(currentTotalRows || currentImportData.length || selectedRegionStart, currentTotalRows || selectedRegionStart)
+        );
+        regionSelectionStage = 'complete';
+        regionSelectionComplete = true;
+    }
+    syncRegionInputs();
+    updateTruncationNotice();
+    updateFinalConfirmState();
         updateRegionStatus();
         renderRegionStudents();
         renderMappingState();
@@ -255,6 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         updateFinalConfirmState();
         updateRegionStatus();
+        syncRegionInputs();
         renderRegionStudents();
         renderPreview();
     };
@@ -491,8 +568,10 @@ document.addEventListener('DOMContentLoaded', () => {
         previewArea.innerHTML = html;
     };
 
+    let lastSheetOptions = [];
     const renderSheetSelect = (sheetNames, selectedSheet) => {
         if (!sheetSelect) return;
+        lastSheetOptions = (sheetNames || []).slice();
         sheetSelect.innerHTML = (sheetNames || []).map((sheetName) => {
             const selected = sheetName === selectedSheet ? ' selected' : '';
             return `<option value="${escapeHtml(sheetName)}"${selected}>${escapeHtml(sheetName)}</option>`;
@@ -589,7 +668,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (error) {
             setHint('');
             notify(error?.message || '读取失败');
-            renderSheetSelect([currentSheetName], currentSheetName);
+            // 失败时保留下拉原有选项，允许用户重试而不是重新上传文件。
+            renderSheetSelect(lastSheetOptions.length ? lastSheetOptions : [currentSheetName], currentSheetName);
         } finally {
             if (sheetSelect) sheetSelect.disabled = sheetSelect.options.length <= 1;
         }
@@ -802,6 +882,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     regionBackBtn?.addEventListener('click', () => {
         setRegionConfirming(false);
+    });
+
+    [regionStartInput, regionEndInput].forEach((input, index) => {
+        if (!input) return;
+        const which = index === 0 ? 'start' : 'end';
+        input.addEventListener('change', () => applyManualRegion(which));
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                applyManualRegion(which);
+                input.blur();
+            }
+        });
     });
 
     finalConfirmBtn?.addEventListener('click', async () => {

@@ -257,6 +257,21 @@ document.addEventListener('DOMContentLoaded', function () {
         if (sequenceInput) sequenceInput.focus();
     }
 
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && sequenceModal && !sequenceModal.hidden) {
+            closeSequenceModal(true);
+        }
+    });
+
+    document.querySelectorAll('.create-final-form').forEach(function (form) {
+        form.addEventListener('submit', function () {
+            var btn = form.querySelector('button[type="submit"]');
+            if (!btn) return;
+            btn.disabled = true;
+            window.setTimeout(function () { btn.disabled = false; }, 8000);
+        });
+    });
+
     if (sequenceInput && sequenceModal) {
         sequenceInput.addEventListener('keydown', function (event) {
             if (event.key !== 'Enter' || event.shiftKey || sequenceInput.value.includes('\n')) return;

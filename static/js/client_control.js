@@ -17,7 +17,9 @@
     async function fetchJSON(url) {
         const response = await fetch(url, {
             headers: { Accept: 'application/json' },
-            cache: 'no-store'
+            cache: 'no-store',
+            // 接口黑洞时尽快放弃，按加载失败处理，别拖住特性管控和公告检查。
+            signal: AbortSignal.timeout ? AbortSignal.timeout(5000) : undefined
         });
         const payload = await response.json().catch(() => ({}));
         if (!response.ok) throw new Error(payload.message || `请求失败（${response.status}）`);

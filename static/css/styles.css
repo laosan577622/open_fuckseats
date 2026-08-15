@@ -635,14 +635,10 @@ input:focus {
 .cloud-entry-sync-mark {
     width: 64px;
     height: 64px;
-    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #0a59f7;
-    background: rgba(10, 89, 247, 0.1);
-    border: 1px solid rgba(10, 89, 247, 0.16);
-    box-shadow: 0 14px 36px rgba(10, 89, 247, 0.14);
 }
 
 .cloud-entry-sync-copy {
@@ -686,9 +682,6 @@ input:focus {
 .cloud-entry-sync-screen[data-state="offline"] .cloud-entry-sync-mark,
 .cloud-entry-sync-screen[data-state="error"] .cloud-entry-sync-mark {
     color: #b42318;
-    background: rgba(191, 53, 35, 0.08);
-    border-color: rgba(191, 53, 35, 0.16);
-    box-shadow: 0 14px 36px rgba(191, 53, 35, 0.1);
 }
 
 .cloud-entry-sync-screen[data-state="offline"] .cloud-entry-sync-progress,
@@ -861,6 +854,11 @@ input:focus {
     box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.4);
 }
 
+.seat.cell-missing {
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .quick-swap-input {
     position: absolute;
     top: 50%;
@@ -1009,7 +1007,17 @@ input:focus {
     display: flex;
     flex-direction: column;
     align-items: center;
+    justify-content: center;
     gap: 2px;
+    /* 撑满整个格子（小组标签除外），把拖拽热区从中间一小块扩大到全格。 */
+    flex: 1;
+    width: 100%;
+    min-height: 0;
+    cursor: grab;
+}
+
+.seat-content:active {
+    cursor: grabbing;
 }
 
 .seat-name {
@@ -2178,8 +2186,7 @@ input:focus {
 }
 
 .drag-preview-clone {
-    opacity: 0.85;
-    transform: scale(1.05);
+    opacity: 0.92;
     background: #ffffff;
     border-radius: 12px;
     box-shadow: 0 16px 32px rgba(var(--primary-color-rgb, 10, 89, 247), 0.2), 0 0 0 2px rgba(var(--primary-color-rgb, 10, 89, 247), 0.8);
@@ -2210,6 +2217,18 @@ input:focus {
     opacity: 0.94;
     transform: translate3d(-9999px, -9999px, 0);
     will-change: transform;
+}
+
+/* 拖拽时源座位“人被拎走”：内容凹陷半透明，格子保留虚线轮廓指示原位。 */
+.seat-content.is-lifted {
+    opacity: 0.35;
+    transform: scale(0.9);
+    filter: grayscale(0.4);
+}
+
+.seat.has-lifted-content {
+    outline: 2px dashed rgba(var(--primary-color-rgb, 10, 89, 247), 0.35);
+    outline-offset: -4px;
 }
 
 .home-hero {
@@ -6893,6 +6912,59 @@ body.cloud-login-locked {
     line-height: 1.5;
 }
 
+.student-import-region-truncated {
+    margin-top: 10px;
+    padding: 10px 12px;
+    border: 1px solid rgba(217, 119, 6, 0.35);
+    border-radius: 10px;
+    background: rgba(217, 119, 6, 0.07);
+    color: #92610a;
+    font-size: 12px;
+    line-height: 1.55;
+}
+
+.student-import-region-manual {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.student-import-region-manual label {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    min-width: 0;
+}
+
+.student-import-region-manual label span {
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-weight: 650;
+}
+
+.student-import-region-manual input {
+    width: 96px;
+    padding: 7px 10px;
+    border: 1px solid rgba(15, 23, 42, 0.14);
+    border-radius: 9px;
+    font-size: 14px;
+    outline: none;
+    background: #fff;
+    color: var(--text-primary);
+}
+
+.student-import-region-manual input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.12);
+}
+
+.student-import-region-manual-sep {
+    padding-bottom: 9px;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+
 .student-import-region-students {
     display: flex;
     flex-direction: column;
@@ -8679,4 +8751,230 @@ body.cloud-connectivity-locked {
 
 .cloud-server-url-input:focus {
     border-color: var(--primary-color);
+}
+
+.layout-remote-hint {
+    position: fixed;
+    top: 16px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 9000;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    border: 1px solid rgba(217, 119, 6, 0.4);
+    border-radius: 12px;
+    background: rgba(255, 251, 235, 0.96);
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.12);
+    font-size: 13px;
+    color: #92610a;
+}
+
+.layout-remote-hint .btn {
+    padding: 4px 12px;
+    font-size: 12px;
+}
+
+/* ===== 座位动效：FLIP 飞行 / 波纹入场 / 级联点亮 ===== */
+.seat-flip-ghost {
+    position: fixed;
+    z-index: 600;
+    pointer-events: none;
+    box-shadow: 0 12px 28px rgba(var(--primary-color-rgb, 10, 89, 247), 0.22);
+    border-radius: 16px;
+    background: #fff;
+}
+
+.seat-flip-land {
+    animation: seatFlipLand 0.2s var(--spring-fast, ease-out);
+}
+
+@keyframes seatFlipLand {
+    from { box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.5); }
+    to { box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0); }
+}
+
+.seat-wave-in {
+    animation: seatWaveIn 0.45s var(--spring-fast, cubic-bezier(0.2, 0.9, 0.25, 1.15)) both;
+}
+
+@keyframes seatWaveIn {
+    from { opacity: 0; transform: scale(0.55); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+.seat.multi-selected {
+    animation: seatPop 0.25s var(--spring-fast, cubic-bezier(0.2, 0.9, 0.25, 1.15)) both;
+    animation-delay: var(--sel-delay, 0ms);
+}
+
+@keyframes seatPop {
+    from { transform: scale(0.92); }
+    to { transform: scale(1); }
+}
+
+/* 支持跨文档 View Transitions 的浏览器自动获得页面淡入淡出，其余无损降级 */
+@view-transition {
+    navigation: auto;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .seat-flip-ghost,
+    .seat-flip-land,
+    .seat-wave-in,
+    .seat.multi-selected {
+        animation: none !important;
+    }
+}
+
+/* ===== 设计 token：圆角四档 / 间距四档 / 字号三档 / 时长三档 ===== */
+:root {
+    --radius-control: 8px;
+    --radius-card: 12px;
+    --radius-block: 16px;
+    --radius-modal: 20px;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 16px;
+    --space-4: 24px;
+    --fs-caption: 12px;
+    --fs-body: 14px;
+    --fs-title: 17px;
+    --dur-micro: 120ms;
+    --dur-ui: 200ms;
+    --dur-scene: 320ms;
+    --border-hairline: rgba(15, 23, 42, 0.12);
+}
+
+/* 模态框表单控件：收敛全部内联样式 */
+.modal-field-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.modal-field {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 8px 12px;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-control);
+    font-size: var(--fs-body);
+    outline: none;
+    background: #fff;
+    color: var(--text-primary);
+}
+
+.modal-field:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.12);
+}
+
+.modal-field-row + .modal-field-row,
+.modal-field + .modal-field {
+    margin-top: 4px;
+}
+
+/* ===== 首页卡片错位入场 ===== */
+.home-stagger-in {
+    opacity: 0;
+    transform: translateY(20px);
+    animation: homeCardStaggerIn 0.5s var(--spring-fast, cubic-bezier(0.2, 0.9, 0.25, 1.15)) both;
+    animation-delay: calc(var(--stagger-i, 0) * 60ms);
+}
+
+@keyframes homeCardStaggerIn {
+    from { opacity: 0; transform: translateY(20px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-stagger-in {
+        animation: none;
+        opacity: 1;
+        transform: none;
+    }
+}
+
+/* ===== 座位首次落地涟漪入场（左上→右下） ===== */
+.seat-ripple-in {
+    animation: seatRippleIn 0.4s var(--spring-fast, cubic-bezier(0.2, 0.9, 0.25, 1.15)) both;
+}
+
+@keyframes seatRippleIn {
+    from { opacity: 0; transform: translateY(10px) scale(0.88); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .seat-ripple-in { animation: none; opacity: 1; }
+}
+
+/* ===== 云班级加载遮罩 LED 矩阵 ===== */
+.led-matrix {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 5px;
+    width: 44px;
+    height: 44px;
+}
+
+.led-matrix span {
+    border-radius: 3px;
+    background: currentColor;
+    opacity: 0.15;
+    animation: ledMatrixPulse 1.4s ease-in-out infinite;
+}
+
+.led-matrix span:nth-child(1)  { animation-delay: 0ms; }
+.led-matrix span:nth-child(2)  { animation-delay: 70ms; }
+.led-matrix span:nth-child(3)  { animation-delay: 140ms; }
+.led-matrix span:nth-child(4)  { animation-delay: 210ms; }
+.led-matrix span:nth-child(5)  { animation-delay: 280ms; }
+.led-matrix span:nth-child(6)  { animation-delay: 350ms; }
+.led-matrix span:nth-child(7)  { animation-delay: 420ms; }
+.led-matrix span:nth-child(8)  { animation-delay: 490ms; }
+.led-matrix span:nth-child(9)  { animation-delay: 560ms; }
+.led-matrix span:nth-child(10) { animation-delay: 630ms; }
+.led-matrix span:nth-child(11) { animation-delay: 700ms; }
+.led-matrix span:nth-child(12) { animation-delay: 770ms; }
+.led-matrix span:nth-child(13) { animation-delay: 840ms; }
+.led-matrix span:nth-child(14) { animation-delay: 910ms; }
+.led-matrix span:nth-child(15) { animation-delay: 980ms; }
+.led-matrix span:nth-child(16) { animation-delay: 1050ms; }
+
+@keyframes ledMatrixPulse {
+    0%, 100% { opacity: 0.12; }
+    40% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .led-matrix span { animation: none; opacity: 0.4; }
+}
+
+/* ===== 主题切换涟漪扩散 ===== */
+.theme-ripple-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 99999;
+    pointer-events: none;
+}
+
+.theme-ripple-circle {
+    position: fixed;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    animation: themeRippleExpand 0.9s ease-out forwards;
+}
+
+@keyframes themeRippleExpand {
+    0% { width: 0; height: 0; opacity: 1; }
+    55% { width: 300vmax; height: 300vmax; opacity: 1; }
+    100% { width: 300vmax; height: 300vmax; opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .theme-ripple-overlay { display: none; }
 }

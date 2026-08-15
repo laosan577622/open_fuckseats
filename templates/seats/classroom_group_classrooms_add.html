@@ -114,11 +114,10 @@
                 <p>暂无未分组班级</p>
                 {% endfor %}
             </div>
-            <button type="submit" class="btn btn-primary">添加选中班级</button>
+            <button type="submit" class="btn btn-primary" {% if not ungrouped_classrooms %}disabled{% endif %}>添加选中班级</button>
         </form>
     </section>
 </main>
-
 <div class="modal-overlay classroom-sequence-modal" id="classroom-sequence-modal" hidden aria-hidden="true">
     <div class="modal-card classroom-sequence-dialog" role="dialog" aria-modal="true" aria-labelledby="classroom-sequence-title">
         <div data-sequence-question>
@@ -195,6 +194,16 @@ document.addEventListener('DOMContentLoaded', function () {
     var sequenceEnd = document.getElementById('classroom-sequence-end');
     var sequenceState = null;
 
+    var existingForm = document.querySelector('[data-group-add-form="existing"]');
+    if (existingForm) {
+        existingForm.addEventListener('submit', function (event) {
+            if (!existingForm.querySelector('input[name="classroom_ids"]:checked')) {
+                event.preventDefault();
+                if (window.showToast) window.showToast('请至少选择一个班级');
+            }
+        });
+    }
+
     function closeSequenceModal(appendLineBreak) {
         if (!sequenceModal) return;
         sequenceModal.hidden = true;
@@ -206,6 +215,12 @@ document.addEventListener('DOMContentLoaded', function () {
         }
         if (sequenceInput) sequenceInput.focus();
     }
+
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && sequenceModal && !sequenceModal.hidden) {
+            closeSequenceModal(true);
+        }
+    });
 
     if (sequenceInput && sequenceModal) {
         sequenceInput.addEventListener('keydown', function (event) {

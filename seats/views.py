@@ -48,6 +48,7 @@ from .sorting import (
 )
 from io import BytesIO
 from http.cookies import CookieError, SimpleCookie
+from urllib.parse import quote as _url_quote
 import json
 import random
 import os
@@ -1375,9 +1376,18 @@ def classroom_group_action(request, pk):
         else:
             raise ValueError('未知操作')
     except (ValueError, IntegrityError) as exc:
-        return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return JsonResponse({'status': 'error', 'message': str(exc)}, status=400)
+        # 普通表单提交时跳回组详情页并以参数携带错误，避免浏览器整页渲染裸 JSON。
+        return redirect(
+            f"{reverse('classroom_group_detail', kwargs={'pk': classroom_group.pk})}?error={_url_quote(str(exc))}"
+        )
     except CloudAPIError as exc:
-        return _cloud_error_response(exc)
+        if request.headers.get('x-requested-with') == 'XMLHttpRequest':
+            return _cloud_error_response(exc)
+        return redirect(
+            f"{reverse('classroom_group_detail', kwargs={'pk': classroom_group.pk})}?error={_url_quote(str(exc))}"
+        )
     if request.POST.get('next') == 'settings':
         return redirect('classroom_group_settings', pk=classroom_group.pk)
     return redirect('classroom_group_detail', pk=classroom_group.pk)
@@ -15406,10 +15416,15 @@ def _cloud_delete_backed_up_classroom(meta):
 def delete_classroom(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     sync_meta = SyncMeta.objects.filter(classroom=classroom).first()
+    is_ajax = request.headers.get('x-requested-with') == 'XMLHttpRequest'
     try:
         _cloud_delete_backed_up_classroom(sync_meta)
     except Exception as exc:
-        return _cloud_error_response(exc)
+        if is_ajax:
+            return _cloud_error_response(exc)
+        return redirect(
+            f"{reverse('classroom_detail', kwargs={'pk': pk})}?error={_url_quote(str(exc))}"
+        )
 
     with suspend_sync_version_bump(), transaction.atomic():
         classroom.left_guardian = None
@@ -15417,6 +15432,8 @@ def delete_classroom(request, pk):
         classroom.save(update_fields=['left_guardian', 'right_guardian'])
         classroom.groups.update(leader=None)
         classroom.delete()
+    if is_ajax:
+        return JsonResponse({'status': 'success'})
     return redirect('index')
 
 
@@ -17343,7 +17360,7 @@ def mark_onboarding_seen(request):
         defaults={'value': ONBOARDING_SEEN_STORE_VALUE},
     )
     stage = str((body or {}).get('completed_steps') or '').strip()
-    if stage in {'detail_done', 'tour_done'}:
+    if stage in {'detail_done', 'tour_done', 'index_skip'}:
         request.session[_CLEANUP_PENDING_KEY] = True
         request.session.modified = True
     payload = {'ok': True, 'sample_deleted': False}

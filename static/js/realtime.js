@@ -33,12 +33,26 @@
         }
     }
 
+    var dataReloadDeferred = 0;
+
+    function hasBlockingInteraction() {
+        // 勾选中的批量操作或进行中的批量导出被刷新会丢状态，推迟自动 reload。
+        var checked = document.querySelectorAll('[data-group-batch-form] input:checked').length;
+        if (checked > 0) return true;
+        if (document.body.dataset.bulkExportInProgress === '1') return true;
+        return false;
+    }
+
     function applyRealtime(rt) {
         if (!rt) return;
         if (isDataPage && typeof rt.data_seq === 'number') {
             if (seenDataSeq === null) {
                 seenDataSeq = rt.data_seq;
             } else if (rt.data_seq !== seenDataSeq) {
+                if (hasBlockingInteraction()) {
+                    dataReloadDeferred += 1;
+                    return;
+                }
                 window.location.reload();
                 return;
             }

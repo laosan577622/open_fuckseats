@@ -12,6 +12,8 @@
 
     function tryShowNext() {
         if (current !== null) return;
+        // 新手引导进行中不弹任何队列弹窗，引导销毁后由 wake() 重新触发。
+        if (window.FUCKSEATS_ONBOARDING_ACTIVE === true) return;
         for (var i = 0; i < queue.length; i++) {
             var item = queue[i];
             if (forceHiddenIds[item.id]) continue;
@@ -72,6 +74,7 @@
         notifyDismissed: notifyDismissed,
         isShowing: isShowing,
         isAnyShowing: isAnyShowing,
-        setForceHidden: setForceHidden
+        setForceHidden: setForceHidden,
+        wake: tryShowNext
     };
 })();

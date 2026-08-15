@@ -21,7 +21,8 @@
     const DEFAULT_THEME = 'starriver-blue';
 
     function getThemeId() {
-        const saved = localStorage.getItem(THEME_KEY);
+        let saved = '';
+        try { saved = localStorage.getItem(THEME_KEY) || ''; } catch (e) {}
         return (saved && THEMES[saved]) ? saved : DEFAULT_THEME;
     }
 
@@ -47,11 +48,34 @@
             }
         });
 
-        localStorage.setItem(THEME_KEY, theme.id);
+        try { localStorage.setItem(THEME_KEY, theme.id); } catch (e) {}
     }
 
-    function setTheme(themeId) {
-        applyTheme(themeId);
+    function playThemeRipple(originX, originY, color) {
+        if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+        var overlay = document.createElement('div');
+        overlay.className = 'theme-ripple-overlay';
+        var circle = document.createElement('div');
+        circle.className = 'theme-ripple-circle';
+        circle.style.left = originX + 'px';
+        circle.style.top = originY + 'px';
+        circle.style.background = color;
+        overlay.appendChild(circle);
+        document.body.appendChild(overlay);
+        circle.addEventListener('animationend', function () { overlay.remove(); });
+        // 安全兜底：2 秒后强制清除，防止 animationend 未触发残留遮罩。
+        window.setTimeout(function () { if (overlay.parentNode) overlay.remove(); }, 2000);
+    }
+
+    function setTheme(themeId, originX, originY) {
+        var theme = THEMES[themeId] || THEMES[DEFAULT_THEME];
+        if (typeof originX === 'number' && typeof originY === 'number') {
+            playThemeRipple(originX, originY, theme.color);
+            // 涟漪展开 300ms 后再切换主题色，让用户看到旧→新的覆盖过程。
+            window.setTimeout(function () { applyTheme(themeId); }, 300);
+        } else {
+            applyTheme(themeId);
+        }
         window.dispatchEvent(new CustomEvent('themechange', { detail: getTheme() }));
     }
 

@@ -4,11 +4,14 @@
     function createRipple(event, element) {
         const rect = element.getBoundingClientRect();
         const size = Math.max(rect.width, rect.height) * 2;
+        // 键盘触发的 click 坐标是 (0,0)，改用元素中心，避免波纹出现在页面左上角。
+        const originX = event.clientX || (rect.left + rect.width / 2);
+        const originY = event.clientY || (rect.top + rect.height / 2);
         const ripple = document.createElement('span');
         ripple.className = 'ripple';
         ripple.style.width = ripple.style.height = size + 'px';
-        ripple.style.left = (event.clientX - rect.left - size / 2) + 'px';
-        ripple.style.top = (event.clientY - rect.top - size / 2) + 'px';
+        ripple.style.left = (originX - rect.left - size / 2) + 'px';
+        ripple.style.top = (originY - rect.top - size / 2) + 'px';
         element.appendChild(ripple);
         ripple.addEventListener('animationend', () => ripple.remove());
     }
@@ -24,14 +27,22 @@
 
     function initMouseTracking(selector) {
         const target = selector || '.seat';
+        // 触屏设备没有 hover 光晕可谈，跳过全局 mousemove 监听。
+        if (window.matchMedia && window.matchMedia('(hover: none)').matches) return;
+        let pending = null;
         document.addEventListener('mousemove', (e) => {
-            const el = e.target.closest(target);
-            if (!el) return;
-            const rect = el.getBoundingClientRect();
-            const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(1);
-            const y = ((e.clientY - rect.top) / rect.height * 100).toFixed(1);
-            el.style.setProperty('--mouse-x', x + '%');
-            el.style.setProperty('--mouse-y', y + '%');
+            if (pending) return;
+            // rAF 节流：每帧最多计算一次，避免高频 mousemove 引发强制布局。
+            pending = window.requestAnimationFrame(() => {
+                pending = null;
+                const el = e.target.closest(target);
+                if (!el) return;
+                const rect = el.getBoundingClientRect();
+                const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(1);
+                const y = ((e.clientY - rect.top) / rect.height * 100).toFixed(1);
+                el.style.setProperty('--mouse-x', x + '%');
+                el.style.setProperty('--mouse-y', y + '%');
+            });
         });
     }
 

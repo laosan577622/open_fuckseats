@@ -41,6 +41,7 @@
         data-plugin-id="{{ plugin_id }}"
         data-ui-name="{{ ui_name }}"
         data-ui-endpoint="{% url 'plugin_ui_dispatch' plugin_id ui_name %}"
+        data-back-classroom-id="{{ request.GET.classroom_id|default:'' }}"
     ></div>
 </section>
 {% endblock %}
@@ -51,7 +52,9 @@
 (function() {
     var backBtn = document.getElementById('plugin-ui-back-btn');
     if (!backBtn) return;
-    var fallbackUrl = '{% url "extensions_overview" %}{% if request.GET.classroom_id %}?classroom_id={{ request.GET.classroom_id }}{% endif %}';
+    var uiRoot = document.getElementById('plugin-ui-root');
+    var classroomId = uiRoot ? (uiRoot.dataset.backClassroomId || '') : '';
+    var fallbackUrl = '{% url "extensions_overview" %}' + (classroomId ? '?classroom_id=' + encodeURIComponent(classroomId) : '');
     backBtn.addEventListener('click', function() {
         var page = document.querySelector('.plugin-ui-page');
         if (page) page.classList.add('leaving');

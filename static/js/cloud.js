@@ -438,10 +438,15 @@ window.CloudManager = (function () {
                 body: JSON.stringify({ url: target }),
             });
         }
-        const popup = window.open(target, '_blank', 'noopener,noreferrer');
-        if (!popup) {
-            window.location.href = target;
-        }
+        // window.open 带 noopener 时总是返回 null，改用临时 <a target="_blank"> 避免当前页被导航走。
+        const anchor = document.createElement('a');
+        anchor.href = target;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
         return { status: 'success' };
     }
 

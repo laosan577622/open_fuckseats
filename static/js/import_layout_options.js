@@ -280,6 +280,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (confirmBtn) {
         confirmBtn.addEventListener('click', () => {
+            const replaceStudents = document.getElementById('seat-layout-replace-students')?.checked;
+            if (replaceStudents && !window.confirm('已勾选“导入前清空现有学生”，导入后现有学生及其约束将被删除。确定继续吗？')) {
+                return;
+            }
             const originalText = confirmBtn.textContent;
             confirmBtn.textContent = '导入中...';
             confirmBtn.disabled = true;

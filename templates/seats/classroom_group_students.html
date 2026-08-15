@@ -94,7 +94,9 @@
                                 </select>
                                 <button type="submit" class="btn btn-secondary"{% if not classrooms %} disabled{% endif %}>分配</button>
                             </form>
-                            <form method="post" action="{% url 'classroom_group_student_action' classroom_group.pk %}">
+                            <form method="post" action="{% url 'classroom_group_student_action' classroom_group.pk %}"
+                                data-confirm-message="确定从班级组中删除学生「{{ row.student.name }}」吗？此操作不可撤销。"
+                                data-confirm-button="删除学生">
                                 {% csrf_token %}
                                 <input type="hidden" name="action" value="delete_unassigned">
                                 <input type="hidden" name="student_id" value="{{ row.student.pk }}">
@@ -115,4 +117,81 @@
         </table>
     </div>
 </section>
+
+<div class="modal group-delete-modal" id="group-student-delete-modal" role="dialog" aria-modal="true"
+    aria-labelledby="group-student-delete-modal-title">
+    <div class="modal-content group-delete-dialog">
+        <span class="group-delete-dialog-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" fill="none">
+                <path d="M8.5 8.5v8m3.5-8v8m3.5-8v8M5 6h14M9 6V3.8h6V6m2.5 0-.7 15H7.2L6.5 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        </span>
+        <h3 id="group-student-delete-modal-title">删除学生</h3>
+        <p data-group-delete-message></p>
+        <div class="modal-actions">
+            <button type="button" class="btn btn-secondary" data-group-delete-cancel>取消</button>
+            <button type="button" class="btn btn-danger" data-group-delete-confirm>删除</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var deleteModal = document.getElementById('group-student-delete-modal');
+    var deleteMessage = deleteModal ? deleteModal.querySelector('[data-group-delete-message]') : null;
+    var deleteConfirm = deleteModal ? deleteModal.querySelector('[data-group-delete-confirm]') : null;
+    var deleteCancel = deleteModal ? deleteModal.querySelector('[data-group-delete-cancel]') : null;
+    var pendingDeleteForm = null;
+
+    function closeDeleteModal() {
+        if (!deleteModal) return;
+        deleteModal.classList.remove('modal-visible');
+        window.setTimeout(function () {
+            deleteModal.style.display = 'none';
+        }, 220);
+        pendingDeleteForm = null;
+    }
+
+    function openDeleteModal(form) {
+        if (!deleteModal || !deleteMessage || !deleteConfirm) return;
+        pendingDeleteForm = form;
+        deleteMessage.textContent = form.dataset.confirmMessage || '';
+        deleteConfirm.textContent = form.dataset.confirmButton || '删除';
+        deleteModal.style.display = 'flex';
+        window.requestAnimationFrame(function () {
+            deleteModal.classList.add('modal-visible');
+            deleteCancel.focus();
+        });
+    }
+
+    document.querySelectorAll('[data-confirm-message]').forEach(function (form) {
+        form.addEventListener('submit', function (event) {
+            event.preventDefault();
+            openDeleteModal(form);
+        });
+    });
+    if (deleteCancel) deleteCancel.addEventListener('click', closeDeleteModal);
+    if (deleteConfirm) {
+        deleteConfirm.addEventListener('click', function () {
+            if (!pendingDeleteForm) return;
+            var form = pendingDeleteForm;
+            pendingDeleteForm = null;
+            deleteConfirm.disabled = true;
+            form.submit();
+        });
+    }
+    if (deleteModal) {
+        deleteModal.addEventListener('click', function (event) {
+            if (event.target === deleteModal) closeDeleteModal();
+        });
+    }
+    document.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape' && deleteModal && deleteModal.classList.contains('modal-visible')) {
+            closeDeleteModal();
+        }
+    });
+});
+</script>
 {% endblock %}

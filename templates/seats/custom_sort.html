@@ -97,69 +97,15 @@
                         {% endif %}
                     </select>
                 </label>
-                <label class="custom-sort-cross-option">
-                    <input type="checkbox" name="cross_classrooms" value="1" checked data-cross-classroom-toggle>
-                    <span>
-                        <strong>允许跨班级</strong>
-                        <small>按全组座位容量重新分配学生。</small>
-                    </span>
-                </label>
-                <label class="custom-sort-cross-mode" data-cross-classroom-mode>
-                    跨班级处理
-                    <select name="cross_classroom_mode">
-                        <option value="ignore_original">不考虑原班级</option>
-                        <option value="prefer_original">原班级优先</option>
-                        <option value="avoid_original">原班级尽力排除</option>
-                    </select>
-                </label>
+                {% include 'seats/_custom_sort_cross_fields.html' %}
                 <button type="submit" class="btn btn-primary custom-sort-submit">执行自动排序</button>
             </form>
 
             <form method="post" class="custom-sort-card custom-sort-config" data-group-sort-form="field" hidden>
                 {% csrf_token %}
                 <input type="hidden" name="sort_kind" value="field">
-                <label>信息字段
-                    <select name="field" required>
-                        <option value="name">姓名</option>
-                        <option value="student_id">学号</option>
-                        <option value="gender">性别</option>
-                        <option value="score">成绩</option>
-                        {% for key in custom_info_keys %}
-                        <option value="custom:{{ key }}">自定义信息 · {{ key }}</option>
-                        {% endfor %}
-                    </select>
-                </label>
-                <label>识别方式
-                    <select name="transform" required>
-                        <option value="auto">自动检测（推荐）</option>
-                        <option value="natural">手动：自然数字</option>
-                        <option value="text">手动：文本</option>
-                        <option value="numeric">手动：纯数字</option>
-                        <option value="pinyin">手动：姓名拼音</option>
-                        <option value="pinyin_initial">手动：姓名首字母</option>
-                    </select>
-                </label>
-                <label>排序方向
-                    <select name="direction" required>
-                        <option value="asc">升序</option>
-                        <option value="desc">降序</option>
-                    </select>
-                </label>
-                <label class="custom-sort-cross-option">
-                    <input type="checkbox" name="cross_classrooms" value="1" checked data-cross-classroom-toggle>
-                    <span>
-                        <strong>允许跨班级</strong>
-                        <small>按全组座位容量重新分配学生。</small>
-                    </span>
-                </label>
-                <label class="custom-sort-cross-mode" data-cross-classroom-mode>
-                    跨班级处理
-                    <select name="cross_classroom_mode">
-                        <option value="ignore_original">不考虑原班级</option>
-                        <option value="prefer_original">原班级优先</option>
-                        <option value="avoid_original">原班级尽力排除</option>
-                    </select>
-                </label>
+                {% include 'seats/_custom_sort_field_selects.html' %}
+                {% include 'seats/_custom_sort_cross_fields.html' %}
                 <button type="submit" class="btn btn-primary custom-sort-submit">执行排序</button>
             </form>
         </section>
@@ -173,33 +119,7 @@
                 <span class="classroom-group-kicker">按信息排序</span>
                 <h2>选择字段与方向</h2>
             </div>
-            <label>信息字段
-                <select name="field" required>
-                    <option value="name">姓名</option>
-                    <option value="student_id">学号</option>
-                    <option value="gender">性别</option>
-                    <option value="score">成绩</option>
-                    {% for key in custom_info_keys %}
-                    <option value="custom:{{ key }}">自定义信息 · {{ key }}</option>
-                    {% endfor %}
-                </select>
-            </label>
-            <label>识别方式
-                <select name="transform" required>
-                    <option value="auto">自动检测（推荐）</option>
-                    <option value="natural">手动：自然数字</option>
-                    <option value="text">手动：文本</option>
-                    <option value="numeric">手动：纯数字</option>
-                    <option value="pinyin">手动：姓名拼音</option>
-                    <option value="pinyin_initial">手动：姓名首字母</option>
-                </select>
-            </label>
-            <label>排序方向
-                <select name="direction" required>
-                    <option value="asc">升序</option>
-                    <option value="desc">降序</option>
-                </select>
-            </label>
+            {% include 'seats/_custom_sort_field_selects.html' %}
             <button type="submit" class="btn btn-primary custom-sort-submit">执行排序</button>
         </form>
         <section class="panel-card custom-sort-card">
@@ -229,6 +149,16 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    document.querySelectorAll('form.custom-sort-card button[type="submit"], form.custom-sort-strategy-item button[type="submit"]').forEach(function (btn) {
+        btn.closest('form').addEventListener('submit', function () {
+            btn.disabled = true;
+            window.setTimeout(function () { btn.disabled = false; }, 8000);
+        });
+    });
+});
+</script>
 {% if classroom_group %}
 <script>
 document.addEventListener('DOMContentLoaded', function () {

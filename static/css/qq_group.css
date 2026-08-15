@@ -1,0 +1,90 @@
+#qq-group-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 10001;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.qq-group-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,0.35);
+    -webkit-backdrop-filter: blur(6px);
+    backdrop-filter: blur(6px);
+}
+.qq-group-card {
+    position: relative;
+    background: #fff;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18), 0 0 0 1px rgba(0,0,0,0.05);
+    max-width: 380px;
+    width: calc(100% - 32px);
+    padding: 36px 32px 28px;
+    text-align: center;
+    animation: qqGroupIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+}
+@keyframes qqGroupIn {
+    from { opacity: 0; transform: translateY(24px) scale(0.96); }
+    to { opacity: 1; transform: translateY(0) scale(1); }
+}
+.qq-group-close {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--text-secondary, #86868b);
+    padding: 4px;
+    border-radius: 8px;
+    transition: background 0.2s;
+}
+.qq-group-close:hover {
+    background: rgba(0,0,0,0.05);
+}
+.qq-group-icon {
+    margin-bottom: 16px;
+}
+.qq-group-title {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--text-primary, #1a1a1a);
+    margin: 0 0 8px 0;
+    letter-spacing: -0.02em;
+}
+.qq-group-desc {
+    font-size: 14px;
+    color: var(--text-secondary, #6b7280);
+    margin: 0 0 20px 0;
+    line-height: 1.6;
+}
+.qq-group-qr {
+    margin-bottom: 24px;
+}
+.qq-group-qr img {
+    width: 200px;
+    height: 200px;
+    object-fit: contain;
+    border-radius: 12px;
+    border: 1px solid var(--border-color, #d2d2d7);
+}
+.qq-group-btn {
+    width: 100%;
+    padding: 12px 0;
+    font-size: 15px;
+    font-weight: 600;
+    border-radius: 999px;
+    border: none;
+    background: var(--primary-color, #0a59f7);
+    color: #fff;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.qq-group-btn:hover {
+    opacity: 0.9;
+}
+@media (max-width: 480px) {
+    .qq-group-card { padding: 28px 20px 22px; }
+    .qq-group-qr img { width: 160px; height: 160px; }
+}

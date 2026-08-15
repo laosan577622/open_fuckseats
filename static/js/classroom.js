@@ -44,7 +44,35 @@ document.addEventListener('DOMContentLoaded', () => {
         sourceStudentId: null,
     };
 
+    const prefersReducedMotion = window.matchMedia
+        && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
     const seatElements = Array.from(document.querySelectorAll('.seat'));
+    // 首次落地涟漪入场：按座位到左上角的曼哈顿距离计算延迟，左上→右下依次点亮（仅首次）。
+    if (!prefersReducedMotion && seatElements.length) {
+        const grid = document.getElementById('seat-grid-container');
+        const firstRow = Number(seatElements[0].dataset.row) || 1;
+        const firstCol = Number(seatElements[0].dataset.col) || 1;
+        seatElements.forEach(seat => {
+            const r = Number(seat.dataset.row) || firstRow;
+            const c = Number(seat.dataset.col) || firstCol;
+            const dist = (r - firstRow) + (c - firstCol);
+            const delay = Math.min(dist * 28, 600);
+            seat.style.animationDelay = `${delay}ms`;
+            seat.classList.add('seat-ripple-in');
+            window.setTimeout(() => {
+                seat.classList.remove('seat-ripple-in');
+                seat.style.animationDelay = '';
+            }, delay + 500);
+        });
+    }
+    // 为增量更新提供基准：首次 refreshState 之前标记每个座位当前的学生指纹。
+    seatElements.forEach(seat => {
+        const sid = seat.dataset.studentId || '';
+        seat.dataset.studentKey = sid
+            ? `${sid}:${seat.querySelector('.seat-info')?.textContent || ''}:${seat.classList.contains('is-leader') ? 1 : 0}:${seat.classList.contains('is-fixed-seat') ? 1 : 0}`
+            : '';
+    });
     const quickArrangeForm = document.querySelector('.quick-arrange-form');
     const autoArrangeBtn = document.getElementById('btn-auto-arrange');
     const undoBtn = document.getElementById('undoBtn');
@@ -501,6 +529,12 @@ document.addEventListener('DOMContentLoaded', () => {
                     cloudEmpty.textContent = data.status !== 'success'
                         ? (data.message || '加载失败')
                         : '暂无云端工作区';
+                    if (data.status !== 'success') {
+                        // 登录/加载失败退回登录页并复位按钮，避免卡死在“登录中...”。
+                        showStage('login');
+                        btnLoginSubmit.disabled = false;
+                        btnLoginSubmit.textContent = '登录并加载';
+                    }
                     return;
                 }
                 cloudList.style.display = 'block';
@@ -510,8 +544,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     item.className = 'bsce-cloud-item';
                     item.innerHTML =
                         '<div class="bsce-cloud-info">' +
-                            '<div class="bsce-cloud-name">' + (ws.metadata.name || ws.fileId) + '</div>' +
-                            '<div class="bsce-cloud-meta">' + formatTime(ws.metadata.time) + '  ·  ' + formatSize(ws.metadata.size) + '</div>' +
+                            '<div class="bsce-cloud-name">' + escapeHtml(ws.metadata.name || ws.fileId) + '</div>' +
+                            '<div class="bsce-cloud-meta">' + escapeHtml(formatTime(ws.metadata.time)) + '  ·  ' + escapeHtml(formatSize(ws.metadata.size)) + '</div>' +
                         '</div>' +
                         '<button type="button" class="btn btn-primary bsce-cloud-import-btn">导入</button>';
                     const importBtn = item.querySelector('.bsce-cloud-import-btn');
@@ -868,17 +902,19 @@ document.addEventListener('DOMContentLoaded', () => {
     const _cleanupDialog = () => {
         _dialogOk.replaceWith(_dialogOk.cloneNode(true));
         _dialogCancel.replaceWith(_dialogCancel.cloneNode(true));
+        // 输入框一并克隆重建，清掉旧弹窗遗留的 keydown 监听。
+        _dialogInput.replaceWith(_dialogInput.cloneNode(true));
         const ok = document.getElementById('genericDialogOk');
         const cancel = document.getElementById('genericDialogCancel');
-        return { ok, cancel };
+        return { ok, cancel, input: document.getElementById('genericDialogInput') };
     };
 
     const showConfirmModal = (message, { title = '确认操作', okText = '确定', cancelText = '取消' } = {}) => {
         return new Promise((resolve) => {
             _dialogTitle.textContent = title;
             _dialogMessage.textContent = message;
-            _dialogInput.style.display = 'none';
-            const { ok, cancel } = _cleanupDialog();
+            const { ok, cancel, input } = _cleanupDialog();
+            input.style.display = 'none';
             ok.textContent = okText;
             cancel.textContent = cancelText;
             _dialogResolve = resolve;
@@ -892,18 +928,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return new Promise((resolve) => {
             _dialogTitle.textContent = title;
             _dialogMessage.textContent = message;
-            _dialogInput.style.display = '';
-            _dialogInput.value = defaultValue;
-            const { ok, cancel } = _cleanupDialog();
+            const { ok, cancel, input } = _cleanupDialog();
+            input.style.display = '';
+            input.value = defaultValue;
             ok.textContent = okText;
             cancel.textContent = cancelText;
             _dialogResolve = resolve;
-            const submit = () => { closeModal('generic-dialog-modal'); resolve(_dialogInput.value); };
+            const submit = () => { closeModal('generic-dialog-modal'); resolve(input.value); };
             ok.addEventListener('click', submit);
-            _dialogInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
+            input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
             cancel.addEventListener('click', () => { closeModal('generic-dialog-modal'); resolve(null); });
             openModal('generic-dialog-modal');
-            requestAnimationFrame(() => { _dialogInput.focus(); _dialogInput.select(); });
+            requestAnimationFrame(() => { input.focus(); input.select(); });
         });
     };
     window.showConfirmModal = showConfirmModal;
@@ -1589,10 +1625,10 @@ document.addEventListener('DOMContentLoaded', () => {
             row.dataset.commandId = cmd.id;
             row.innerHTML = `
                 <div class="plugin-command-item-main">
-                    <div class="plugin-command-item-title">${cmd.title}</div>
-                    <div class="plugin-command-item-desc">${cmd.description}</div>
+                    <div class="plugin-command-item-title">${escapeHtml(cmd.title)}</div>
+                    <div class="plugin-command-item-desc">${escapeHtml(cmd.description)}</div>
                 </div>
-                <span class="plugin-command-item-kind">${cmd.kind}</span>
+                <span class="plugin-command-item-kind">${escapeHtml(cmd.kind)}</span>
             `;
             pluginCommandList.appendChild(row);
         });
@@ -2554,7 +2590,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 notify(data.message || '操作失败');
                 return;
             }
-            window.location.reload();
+            // 局部刷新：座位变化会以反向 FLIP 呈现“学生飞回原位”。
+            refreshState().catch(() => window.location.reload());
         }).catch((err) => notify(err?.message || '操作失败'));
     };
 
@@ -2598,10 +2635,8 @@ document.addEventListener('DOMContentLoaded', () => {
             }, true);
         }
     }
-    ajaxifyForm('#createGroupForm', {
-        reload: hasEmptyGuide,
-        onSuccess: hasEmptyGuide ? null : () => showInlineToast('小组已创建'),
-    });
+    // createGroupForm 的提交统一由下方手写 handler 处理（含列表追加与下拉同步），
+    // 不再用 ajaxifyForm 重复绑定，避免一次提交发出两个 POST。
 
     if (!hasEmptyGuide && localStorage.getItem('group_guide_pending') === 'true') {
         if (window.FUCKSEATS_ONBOARDING_ACTIVE === true) {
@@ -2904,10 +2939,12 @@ document.addEventListener('DOMContentLoaded', () => {
         selectedSeats.clear();
     };
 
-    const addToMultiSelection = (seat) => {
+    const addToMultiSelection = (seat, index = 0) => {
         const key = seatKey(seat);
         if (!selectedSeats.has(key)) {
             selectedSeats.add(key);
+            // 框选时级联点亮：每格错开 8ms，给批量选择以节奏感。
+            seat.style.setProperty('--sel-delay', `${Math.min(index, 30) * 6}ms`);
             seat.classList.add('multi-selected');
         }
     };
@@ -3016,13 +3053,20 @@ document.addEventListener('DOMContentLoaded', () => {
             <div class="quick-swap-content">
                 <div class="quick-swap-title">选择学生</div>
                 <div class="quick-swap-list">
-                    ${matches.map((m, i) => `<div class="quick-swap-item" data-student-id="${m.id}"><span class="quick-swap-num">${i + 1}</span><span>${m.name}</span>${m.student_id ? `<small>学号 ${m.student_id}</small>` : ''}</div>`).join('')}
+                    ${matches.map((m, i) => `<div class="quick-swap-item" data-student-id="${escapeAttr(String(m.id))}"><span class="quick-swap-num">${i + 1}</span><span>${escapeHtml(m.name)}</span>${m.student_id ? `<small>学号 ${escapeHtml(m.student_id)}</small>` : ''}</div>`).join('')}
                 </div>
             </div>
         `;
         document.body.appendChild(modal);
 
-        const cleanup = () => modal.remove();
+        let keydownHandler = null;
+        const cleanup = () => {
+            modal.remove();
+            if (keydownHandler) {
+                document.removeEventListener('keydown', keydownHandler);
+                keydownHandler = null;
+            }
+        };
         modal.addEventListener('click', (e) => {
             if (e.target === modal) cleanup();
             const item = e.target.closest('.quick-swap-item');
@@ -3032,17 +3076,16 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        document.addEventListener('keydown', function handler(e) {
+        keydownHandler = (e) => {
             const num = parseInt(e.key);
             if (num >= 1 && num <= matches.length) {
                 cleanup();
                 swapStudents(seat, matches[num - 1].id);
-                document.removeEventListener('keydown', handler);
             } else if (e.key === 'Escape') {
                 cleanup();
-                document.removeEventListener('keydown', handler);
             }
-        });
+        };
+        document.addEventListener('keydown', keydownHandler);
     };
 
 
@@ -3131,6 +3174,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const applyDragPreviewForSeat = (seat) => {
         if (!dragState.active || !seat || seat.dataset.cellType !== 'seat') return;
+        // 同一座位上的高频 dragover 不重复计算，多选拖拽时避免 O(选中数×座位数) 的查询风暴。
+        if (dragState.lastPreviewSeat === seat) return;
+        dragState.lastPreviewSeat = seat;
 
         clearDragFeedback();
 
@@ -3212,12 +3258,26 @@ document.addEventListener('DOMContentLoaded', () => {
         setTimeout(() => ghost.remove(), 0);
     };
 
+    // “拎起来”反馈：拖拽期间源座位内容凹陷半透明 + 虚线轮廓指示原位，松手即恢复。
+    const markLifted = (seat) => {
+        const content = seat && seat.querySelector('.seat-content');
+        if (content) content.classList.add('is-lifted');
+        if (seat) seat.classList.add('has-lifted-content');
+    };
+
+    const clearLiftedMarks = () => {
+        document.querySelectorAll('.seat-content.is-lifted').forEach(el => el.classList.remove('is-lifted'));
+        document.querySelectorAll('.seat.has-lifted-content').forEach(el => el.classList.remove('has-lifted-content'));
+    };
+
     const resetDragState = () => {
         dragState.active = false;
         dragState.mode = null;
         dragState.anchorKey = null;
         dragState.sourceKeys = [];
         dragState.sourceStudentId = null;
+        dragState.lastPreviewSeat = null;
+        clearLiftedMarks();
     };
 
     const getSeatFromPoint = (clientX, clientY) => {
@@ -3360,6 +3420,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 notify('当前版本不支持多选拖拽');
                 return;
             }
+            window.__setSeatMotionSkip(plan.moves.map(move => move.student_id));
             handleResponse(postJson(urls.moveBatch, withMovePreferences({ moves: plan.moves })), () => {
                 clearMultiSelection();
             }, () => {
@@ -3378,6 +3439,7 @@ document.addEventListener('DOMContentLoaded', () => {
         clearDragFeedback();
         if (!studentId) return;
         if (sourceSeat && sourceSeat.dataset.seatKey === dropSeat.dataset.seatKey) return;
+        window.__setSeatMotionSkip([studentId]);
         handleResponse(postJson(urls.move, withMovePreferences({
             student_id: studentId,
             row: dropSeat.dataset.row,
@@ -3427,6 +3489,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const updateSeatElement = (seat, data) => {
         if (!seat || !data) return;
+        // 增量更新：学生与格子类型都没变的座位直接跳过，不再无差别重建 DOM。
+        const nextKey = `${data.student ? data.student.id : ''}:${data.student && data.student.score_display ? `${data.student.score_display}分` : ''}:${data.student && data.student.is_leader ? 1 : 0}:${data.student && data.student.is_fixed_seat ? 1 : 0}`;
+        if (seat.dataset.cellType === data.cell_type && (seat.dataset.studentKey || '') === nextKey) {
+            return false;
+        }
+        seat.dataset.studentKey = nextKey;
         const hadSelected = seat.classList.contains('selected');
         const hadMulti = seat.classList.contains('multi-selected');
 
@@ -3502,24 +3570,126 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     };
 
+    // 座位动效：小范围变化逐个 FLIP 飞行（学生被“拎过去”），大范围重排（自动排座）按行波纹入场。
+    // 拖拽落下的学生本人不再飞（拖拽本身就是位移视觉），
+    // 只有被交换/挤走的对方学生连贯滑到新位置，避免“飞回去又飞过来”的乱飞观感。
+    const motionSkipStudentIds = new Set();
+    window.__setSeatMotionSkip = (ids) => {
+        motionSkipStudentIds.clear();
+        (ids || []).forEach(id => motionSkipStudentIds.add(String(id)));
+    };
+
+    const springFastCurve = () => (window.FuckSeatsEffects && window.FuckSeatsEffects.SPRING_CURVES
+        && window.FuckSeatsEffects.SPRING_CURVES.fast) || 'cubic-bezier(0.2, 0.9, 0.25, 1.15)';
+
+    // 本体 FLIP：学生本人先被 invert 摆回旧位置，再连贯滑到新位置。
+    // 全程是同一个元素在移动（而非克隆影子），落位后轻微主色闪烁收尾。
+    const flipSeatStudent = (seat, oldRect) => {
+        const content = seat.querySelector('.seat-content');
+        if (!content || prefersReducedMotion) return;
+        const newRect = seat.getBoundingClientRect();
+        const dx = oldRect.left - newRect.left;
+        const dy = oldRect.top - newRect.top;
+        const distance = Math.hypot(dx, dy);
+        if (distance < 3) return;
+        // 连续操作时取消上一次未完成的动画，避免多个动画叠加打架。
+        if (seat._flipAnim) {
+            try { seat._flipAnim.cancel(); } catch (e) {}
+            seat._flipAnim = null;
+        }
+        // Invert：同一帧内先摆回旧位置并隐藏，强制 reflow 后再启动动画，防止新位置闪现一帧。
+        content.style.visibility = 'hidden';
+        content.style.transform = `translate(${dx}px, ${dy}px)`;
+        content.style.willChange = 'transform';
+        void content.offsetHeight;
+        content.style.visibility = '';
+        // 距离越远飞得越久：相邻格 150ms，跨教室 280ms 封顶。
+        const duration = distance <= 120 ? 140 : (distance > 420 ? 260 : 190);
+        const anim = content.animate(
+            [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }],
+            { duration, easing: springFastCurve() },
+        );
+        seat._flipAnim = anim;
+        anim.onfinish = () => {
+            seat._flipAnim = null;
+            content.style.transform = '';
+            content.style.willChange = '';
+            seat.classList.add('seat-flip-land');
+            window.setTimeout(() => seat.classList.remove('seat-flip-land'), 220);
+        };
+    };
+
+    const playSeatMotion = (changedSeats, oldRects) => {
+        if (prefersReducedMotion || !changedSeats.length) return;
+        const occupiedChanged = changedSeats.filter(seat => seat.dataset.studentId);
+        const changedRatio = oldRects.size ? occupiedChanged.length / oldRects.size : 0;
+        // 大面积重排（自动排座/撤销大动作）：讲台向外按行波次入场。
+        if (occupiedChanged.length >= 6 && changedRatio >= 0.4) {
+            const rowDelay = new Map();
+            changedSeats.forEach(seat => {
+                const row = Number(seat.dataset.row) || 1;
+                if (!rowDelay.has(row)) rowDelay.set(row, (row - 1) * 40);
+                const cell = seat.querySelector('.seat-content') || seat;
+                cell.classList.add('seat-wave-in');
+                cell.style.animationDelay = `${rowDelay.get(row)}ms`;
+                window.setTimeout(() => {
+                    cell.classList.remove('seat-wave-in');
+                    cell.style.animationDelay = '';
+                }, rowDelay.get(row) + 600);
+            });
+            motionSkipStudentIds.clear();
+            return;
+        }
+        // 常规换座：学生从旧位置飞到新位置；拖拽者本人已在拖拽中完成位移，跳过。
+        changedSeats.forEach(seat => {
+            const sid = seat.dataset.studentId;
+            if (!sid) return;
+            if (motionSkipStudentIds.has(String(sid))) return;
+            const oldRect = oldRects.get(String(sid));
+            if (oldRect) flipSeatStudent(seat, oldRect);
+        });
+        motionSkipStudentIds.clear();
+    };
+
+    let refreshInFlight = null;
+    let refreshRequested = false;
     const refreshState = window.refreshState = () => {
         if (!urls.state) return Promise.resolve();
+        // 在途请求复用：连续拖拽/多次撤销只保留一个网络请求，乱序到达时取最新结果。
+        if (refreshInFlight) {
+            refreshRequested = true;
+            return refreshInFlight;
+        }
         const selectedSeatKey = selectedSeat ? seatKey(selectedSeat) : null;
         const selectedUnseatedId = selectedUnseated ? selectedUnseated.dataset.studentId : null;
+        // 增量更新的位置基准：更新前记下每个学生的旧屏幕位置，供 FLIP 动画使用。
+        const oldRects = new Map();
+        seatElements.forEach(seat => {
+            const sid = seat.dataset.studentId;
+            if (sid) oldRects.set(String(sid), seat.getBoundingClientRect());
+        });
 
         const stateUrl = `${urls.state}?t=${Date.now()}`;
-        return fetch(stateUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+        return refreshInFlight = fetch(stateUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(res => res.json())
             .then(data => {
                 const seatMap = new Map();
                 data.seats.forEach(seat => {
                     seatMap.set(`${seat.row}-${seat.col}`, seat);
                 });
+                const changedSeats = [];
                 seatElements.forEach(seat => {
                     const key = seatKey(seat);
                     const info = seatMap.get(key);
-                    if (info) updateSeatElement(seat, info);
+                    if (!info) return;
+                    const beforeKey = seat.dataset.studentKey || '';
+                    const beforeType = seat.dataset.cellType;
+                    updateSeatElement(seat, info);
+                    if (beforeKey !== (seat.dataset.studentKey || '') || beforeType !== seat.dataset.cellType) {
+                        changedSeats.push(seat);
+                    }
                 });
+                if (changedSeats.length) playSeatMotion(changedSeats, oldRects);
 
                 if (unseatedList) {
                     if (data.unseated && data.unseated.length) {
@@ -3570,6 +3740,41 @@ document.addEventListener('DOMContentLoaded', () => {
                             resetConstraintForm();
                         }
                     }
+                }
+
+                // 学生增删后同步约束表单的两个学生下拉，避免新学生选不到、过期学生残留。
+                const allStudents = [];
+                const seenStudentIds = new Set();
+                (Array.isArray(data.seats) ? data.seats : []).forEach(seatInfo => {
+                    const student = seatInfo && seatInfo.student;
+                    if (student && student.id && !seenStudentIds.has(student.id)) {
+                        seenStudentIds.add(student.id);
+                        allStudents.push({ id: student.id, name: student.name });
+                    }
+                });
+                (Array.isArray(data.unseated) ? data.unseated : []).forEach(student => {
+                    if (student && student.id && !seenStudentIds.has(student.id)) {
+                        seenStudentIds.add(student.id);
+                        allStudents.push({ id: student.id, name: student.name });
+                    }
+                });
+                if (allStudents.length) {
+                    [constraintStudentSelect, constraintTargetStudentSelect].forEach(select => {
+                        if (!select) return;
+                        const previousValue = select.value;
+                        select.innerHTML = select.querySelector('option[value=""]')
+                            ? '<option value="">请选择</option>'
+                            : '';
+                        allStudents.forEach(student => {
+                            const option = document.createElement('option');
+                            option.value = String(student.id);
+                            option.textContent = student.name;
+                            select.appendChild(option);
+                        });
+                        if (previousValue && seenStudentIds.has(Number(previousValue))) {
+                            select.value = previousValue;
+                        }
+                    });
                 }
 
                 if (Array.isArray(data.tags)) {
@@ -3689,7 +3894,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 clearDragFeedback();
                 setDragEnabled(!groupMode);
             })
-            .catch(() => notify('刷新失败'));
+            .catch(() => notify('刷新失败'))
+            .finally(() => {
+                refreshInFlight = null;
+                if (refreshRequested) {
+                    refreshRequested = false;
+                    refreshState();
+                }
+            });
     };
 
 
@@ -3754,6 +3966,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     notify('当前版本不支持多选拖拽');
                     return;
                 }
+                // 拖拽者本组学生已在拖拽中完成位移视觉，落座后不再飞。
+                window.__setSeatMotionSkip(plan.moves.map(move => move.student_id));
                 handleResponse(postJson(urls.moveBatch, withMovePreferences({ moves: plan.moves })), () => {
                     clearMultiSelection();
                 }, () => {
@@ -3772,6 +3986,8 @@ document.addEventListener('DOMContentLoaded', () => {
             clearDragFeedback();
             if (!studentId) return;
             if (sourceSeat && sourceSeat.dataset.seatKey === seat.dataset.seatKey) return;
+            // 只有被交换的对方学生连贯飞到旧位置，拖拽者本人直接落座。
+            window.__setSeatMotionSkip([studentId]);
             handleResponse(postJson(urls.move, withMovePreferences({
                 student_id: studentId,
                 row: seat.dataset.row,
@@ -3822,10 +4038,12 @@ document.addEventListener('DOMContentLoaded', () => {
             if (canMultiDrag) {
                 dragState.mode = 'multi';
                 dragState.sourceKeys = selectedMovableSeats.map((seat) => seatKey(seat));
+                selectedMovableSeats.forEach(markLifted);
                 setDragGhost(e, `移动 ${dragState.sourceKeys.length} 人`, sourceSeat);
             } else {
                 dragState.mode = 'single';
                 dragState.sourceKeys = [sourceKey];
+                markLifted(sourceSeat);
                 setDragGhost(e, '移动', sourceSeat);
             }
             e.dataTransfer.effectAllowed = 'move';
@@ -3985,7 +4203,7 @@ document.addEventListener('DOMContentLoaded', () => {
             postForm(quickArrangeForm.action, formData)
                 .then((data) => {
                     return refreshState().finally(() => {
-                        showInlineToast(data?.message || '排座完成');
+                        showInlineToast(data?.message || '排座完成，Ctrl+Z 可撤销');
                     });
                 })
                 .catch((err) => {
@@ -4312,7 +4530,15 @@ document.addEventListener('DOMContentLoaded', () => {
     if (deleteClassroomBtn && deleteClassroomForm) {
         deleteClassroomBtn.addEventListener('click', async () => {
             const ok = await showConfirmModal('确定要删除这个班级吗？此操作不可撤销。', { title: '删除班级' });
-            if (ok) deleteClassroomForm.submit();
+            if (!ok) return;
+            deleteClassroomBtn.disabled = true;
+            try {
+                await postFormData(deleteClassroomForm.action);
+                window.location.href = '/';
+            } catch (err) {
+                deleteClassroomBtn.disabled = false;
+                showInlineToast(err?.message || '删除失败');
+            }
         });
     }
 
@@ -4334,6 +4560,10 @@ document.addEventListener('DOMContentLoaded', () => {
             formData.append('name', nameInput.value.trim());
             postForm(createGroupForm.action, formData)
                 .then((data) => {
+                    if (hasEmptyGuide) {
+                        window.location.reload();
+                        return;
+                    }
                     if (!data?.group) {
                         showInlineToast('小组已创建');
                         return;
@@ -4572,12 +4802,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const y1 = Math.min(selectStart.y, e.clientY);
         const x2 = Math.max(selectStart.x, e.clientX);
         const y2 = Math.max(selectStart.y, e.clientY);
+        let cascadeIndex = 0;
         seatElements.forEach(seat => {
             if (seat.dataset.cellType !== 'seat') return;
             const rect = seat.getBoundingClientRect();
             const intersect = rect.left <= x2 && rect.right >= x1 && rect.top <= y2 && rect.bottom >= y1;
             if (intersect) {
-                addToMultiSelection(seat);
+                cascadeIndex += 1;
+                addToMultiSelection(seat, cascadeIndex);
             }
         });
     });
@@ -4585,33 +4817,49 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('keydown', (e) => {
         if (isEditableTarget()) return;
         const key = (e.key || '').toLowerCase();
+        // macOS 上 Cmd 与 Ctrl 等价，统一判定。
+        const cmdOrCtrl = e.ctrlKey || e.metaKey;
         if (key === 'escape') {
             e.preventDefault();
+            hideContextMenu();
             clearMultiSelection();
+            const genericCancel = document.getElementById('genericDialogCancel');
+            if (genericCancel && document.getElementById('generic-dialog-modal')?.classList.contains('modal-visible')) {
+                genericCancel.click();
+            }
             return;
         }
-        if (e.ctrlKey && key === 'z') {
+        if (cmdOrCtrl && key === 'p') {
+            // Ctrl/Cmd+P 直达“导出 Excel 排座表”，比打印更贴合老师的真实意图。
+            e.preventDefault();
+            const rootEl = document.getElementById('classroom-root');
+            if (rootEl) window.location.href = rootEl.dataset.exportExcelOptionsUrl || '';
+            return;
+        }
+        if (cmdOrCtrl && key === 'z') {
             e.preventDefault();
             handleHistoryResponse(postJson(urls.undo, {}));
             return;
         }
-        if (e.ctrlKey && key === 'y') {
+        if (cmdOrCtrl && key === 'y') {
             e.preventDefault();
             handleHistoryResponse(postJson(urls.redo, {}));
             return;
         }
-        if (e.ctrlKey && key === 'c') {
-            e.preventDefault();
+        if (cmdOrCtrl && key === 'c') {
             const seat = getSeatForAction();
             if (seat && seat.dataset.cellType === 'seat' && seat.dataset.studentId) {
+                // 只在确实命中座位时才拦截复制，否则放行浏览器原生文本复制。
+                e.preventDefault();
                 clipboardStudentId = seat.dataset.studentId;
+                showInlineToast('已复制学生，可点空座位粘贴');
             }
             return;
         }
-        if (e.ctrlKey && key === 'x') {
-            e.preventDefault();
+        if (cmdOrCtrl && key === 'x') {
             const seat = getSeatForAction();
             if (seat && seat.dataset.cellType === 'seat' && seat.dataset.studentId) {
+                e.preventDefault();
                 clipboardStudentId = seat.dataset.studentId;
                 handleResponse(postJson(urls.clear, {
                     row: seat.dataset.row,
@@ -4620,10 +4868,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
-        if (e.ctrlKey && key === 'v') {
-            e.preventDefault();
+        if (cmdOrCtrl && key === 'v') {
             const seat = getSeatForAction();
             if (seat && seat.dataset.cellType === 'seat' && clipboardStudentId) {
+                e.preventDefault();
                 handleResponse(postJson(urls.assign, withMovePreferences({
                     student_id: clipboardStudentId,
                     row: seat.dataset.row,
@@ -4643,10 +4891,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
-        if (e.ctrlKey && key === 'd') {
-            e.preventDefault();
+        if (cmdOrCtrl && key === 'd') {
             const seat = getSeatForAction();
             if (seat && seat.dataset.cellType === 'seat' && seat.dataset.studentId) {
+                e.preventDefault();
                 handleResponse(postJson(urls.clear, {
                     row: seat.dataset.row,
                     col: seat.dataset.col
@@ -4654,10 +4902,10 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             return;
         }
-        if (e.ctrlKey && key === 'u') {
-            e.preventDefault();
+        if (cmdOrCtrl && key === 'u') {
             const seat = getSeatForAction();
             if (seat && seat.dataset.cellType === 'seat' && selectedUnseated) {
+                e.preventDefault();
                 handleResponse(postJson(urls.assign, withMovePreferences({
                     student_id: selectedUnseated.dataset.studentId,
                     row: seat.dataset.row,
@@ -4771,6 +5019,11 @@ document.addEventListener('DOMContentLoaded', () => {
             showSection('occupied');
             const nameEl = seat.querySelector('.seat-name');
             if (ctxStudentName) ctxStudentName.textContent = nameEl ? nameEl.textContent : '学生';
+            // 暂存区学生是 mock 座位，没有 row/col：与座位相关的操作一律隐藏。
+            const isMock = Boolean(seat.dataset.isUnseatedMock);
+            if (ctxClearSeat) ctxClearSeat.style.display = isMock ? 'none' : '';
+            if (ctxCutStudent) ctxCutStudent.style.display = isMock ? 'none' : '';
+            if (ctxMoveToUnseated) ctxMoveToUnseated.style.display = isMock ? 'none' : '';
             if (ctxSetLeader) {
                 ctxSetLeader.textContent = isLeader ? '取消任命' : '任命为组长';
                 ctxSetLeader.style.display = hasGroupTag ? '' : 'none';

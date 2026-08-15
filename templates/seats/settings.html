@@ -21,233 +21,271 @@
 {% endblock %}
 
 {% block content %}
-<section class="settings-container animate-fade-in">
-    <div class="settings-header">
-        <div class="settings-header-icon">
-            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24"><rect width="24" height="24" opacity="0"></rect><g><path d="M12.02 9Q12.84 9 13.52 9.41Q14.21 9.82 14.6 10.51Q15 11.21 15 12.02Q15 12.84 14.6 13.52Q14.21 14.21 13.52 14.6Q12.84 15 12 15Q11.18 15 10.49 14.59Q9.79 14.18 9.4 13.49Q9 12.79 9 11.98Q9 11.16 9.41 10.48Q9.82 9.79 10.51 9.4Q11.21 9 12.02 9ZM12.05 7.51Q10.82 7.51 9.78 8.11Q8.74 8.71 8.12 9.73Q7.51 10.75 7.51 11.98Q7.51 13.2 8.11 14.24Q8.71 15.29 9.74 15.9Q10.78 16.51 12 16.51Q13.22 16.51 14.26 15.91Q15.29 15.31 15.9 14.28Q16.51 13.25 16.51 12.02Q16.51 10.8 15.91 9.77Q15.31 8.74 14.29 8.12Q13.27 7.51 12.05 7.51ZM13.56 22.66Q14.02 22.66 14.4 22.4Q14.78 22.15 14.98 21.74L15.79 19.85L15.98 19.75Q16.42 19.49 16.85 19.22L18.91 19.49Q19.39 19.54 19.8 19.33Q20.21 19.13 20.45 18.72L22.03 15.98Q22.27 15.58 22.24 15.12Q22.2 14.66 21.94 14.28L20.69 12.6L20.69 11.42L21.94 9.74Q22.22 9.36 22.25 8.9Q22.27 8.45 22.03 8.04L20.45 5.28Q20.23 4.9 19.82 4.68Q19.42 4.46 18.94 4.51L16.85 4.78Q16.42 4.46 15.86 4.2L15.02 2.23Q14.83 1.82 14.45 1.56Q14.06 1.3 13.61 1.3L10.44 1.3Q9.98 1.3 9.59 1.56Q9.19 1.82 9 2.23L8.16 4.2L7.92 4.34Q7.73 4.44 7.55 4.54Q7.37 4.63 7.2 4.75L5.09 4.51Q4.63 4.44 4.21 4.64Q3.79 4.85 3.55 5.26L1.97 8.02Q1.73 8.4 1.76 8.87Q1.8 9.34 2.06 9.72L3.34 11.42L3.34 12.53L2.06 14.23Q1.78 14.62 1.75 15.07Q1.73 15.53 1.97 15.94L3.53 18.67Q3.77 19.08 4.18 19.28Q4.58 19.49 5.06 19.44L7.13 19.2Q7.8 19.63 8.14 19.8L8.98 21.72Q9.14 22.15 9.53 22.4Q9.91 22.66 10.39 22.66L13.56 22.66ZM7.08 17.66L4.8 17.9L3.22 15.1L4.58 13.27Q4.8 12.94 4.8 12.6Q4.78 12.31 4.78 11.95Q4.78 11.59 4.8 11.3Q4.8 10.92 4.58 10.61L3.22 8.74L4.85 5.95L7.15 6.24Q7.37 6.26 7.55 6.22Q7.73 6.17 7.87 6.07Q8.3 5.76 8.93 5.47Q9.29 5.28 9.43 4.94L10.39 2.78L13.61 2.81L14.52 4.94Q14.64 5.26 15.02 5.47Q15.55 5.71 16.1 6.1Q16.46 6.34 16.82 6.26L19.13 6.02L20.71 8.83L19.37 10.63Q19.1 10.92 19.15 11.33Q19.18 11.64 19.18 12.01Q19.18 12.38 19.15 12.67Q19.13 13.06 19.37 13.37L20.71 15.19L19.08 17.98L16.85 17.71Q16.66 17.69 16.46 17.72Q16.27 17.76 16.13 17.88Q15.6 18.26 15 18.53Q14.83 18.62 14.69 18.76Q14.54 18.89 14.47 19.06L13.56 21.14L10.34 21.12L9.46 19.03Q9.29 18.67 8.95 18.5Q8.47 18.29 7.85 17.88Q7.58 17.69 7.25 17.69Z" fill="currentColor"></path></g></svg>
-        </div>
-        <h1>设置</h1>
-        <p>管理应用的各项配置和偏好设置</p>
-    </div>
+<section class="settings-app">
+    <aside class="settings-rail">
+        <div class="settings-rail-inner">
+            <button type="button" class="settings-account-chip" data-settings-goto="cloud" aria-label="云服务账户">
+                <span class="settings-account-avatar" id="settings-account-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z" fill="currentColor"/></svg>
+                </span>
+                <span class="settings-account-copy">
+                    <strong id="settings-account-name">未登录云服务</strong>
+                    <small id="settings-account-tier">点击登录老三账户</small>
+                </span>
+            </button>
 
-    <div class="settings-sections">
-        <div class="settings-section">
-            <div class="section-header">
-                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><rect width="24" height="24" opacity="0"></rect><g><path d="M11.83 21.89Q12.82 21.89 13.44 21.38Q14.06 20.88 14.23 20.16Q14.4 19.44 14.14 18.86Q13.94 18.36 13.66 18.05Q13.42 17.69 13.49 17.4Q13.56 17.11 13.88 16.96Q14.21 16.8 14.74 16.82Q16.51 16.94 18 16.45Q19.49 15.96 20.48 14.86Q21.48 13.75 21.79 12.07Q22.08 10.49 21.62 8.86Q21.17 7.22 20.35 6.17Q18.24 3.48 15.5 2.62Q12.77 1.75 10.24 2.27Q7.7 2.78 6.12 4.03Q4.42 5.35 3.26 7.33Q2.11 9.31 2.11 12.6Q2.11 14.57 3.35 16.75Q4.58 18.94 6.82 20.41Q9.05 21.89 11.83 21.89ZM7.03 5.23Q8.4 4.18 10.54 3.73Q12.67 3.29 15 4.02Q17.33 4.75 19.18 7.08Q19.8 7.9 20.16 9.24Q20.52 10.58 20.3 11.81Q19.94 13.75 18.49 14.62Q17.04 15.48 14.81 15.31Q13.46 15.24 12.74 15.86Q12.02 16.49 11.96 17.39Q11.9 18.29 12.46 18.94Q12.62 19.13 12.77 19.46Q12.82 19.56 12.78 19.79Q12.74 20.02 12.52 20.21Q12.29 20.4 11.83 20.4Q9.48 20.4 7.6 19.16Q5.71 17.93 4.66 16.09Q3.6 14.26 3.6 12.6Q3.6 9.77 4.58 8.06Q5.57 6.36 7.03 5.23ZM7.32 8.66Q6.77 8.66 6.37 9.05Q5.98 9.43 5.98 9.98Q5.98 10.54 6.37 10.93Q6.77 11.33 7.32 11.33Q7.87 11.33 8.27 10.93Q8.66 10.54 8.66 9.98Q8.66 9.43 8.27 9.05Q7.87 8.66 7.32 8.66ZM9.98 5.3Q9.43 5.3 9.05 5.7Q8.66 6.1 8.66 6.65Q8.66 7.2 9.05 7.6Q9.43 7.99 9.98 7.99Q10.54 7.99 10.93 7.6Q11.33 7.2 11.33 6.65Q11.33 6.1 10.93 5.7Q10.54 5.3 9.98 5.3ZM14.26 5.3Q13.7 5.3 13.31 5.7Q12.91 6.1 12.91 6.65Q12.91 7.2 13.31 7.6Q13.7 7.99 14.26 7.99Q14.81 7.99 15.19 7.6Q15.58 7.2 15.58 6.65Q15.58 6.1 15.19 5.7Q14.81 5.3 14.26 5.3ZM16.92 8.66Q16.37 8.66 15.97 9.05Q15.58 9.43 15.58 9.98Q15.58 10.54 15.97 10.93Q16.37 11.33 16.92 11.33Q17.47 11.33 17.87 10.93Q18.26 10.54 18.26 9.98Q18.26 9.43 17.87 9.05Q17.47 8.66 16.92 8.66Z" fill="currentColor"></path></g></svg>
-                <div>
-                    <h2>个性化</h2>
-                    <p>选择你喜欢的主题色</p>
-                </div>
-            </div>
-            <div class="section-content">
-                <div class="setting-item setting-item-stack">
-                    <div class="setting-info">
-                        <label>主题色</label>
-                        <span class="setting-description">为应用选择一个主题色，所有界面元素将随之变化。</span>
-                        <span class="setting-value" id="theme-status">星河蓝</span>
-                    </div>
-                    <div class="theme-picker" id="theme-picker"></div>
-                </div>
+            <nav class="settings-nav" aria-label="设置分区">
+                <button type="button" class="settings-nav-item active" data-settings-nav="appearance">
+                    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.7"/><path d="M12 3.8a8.2 8.2 0 0 0 0 16.4c1.4 0 2-1 2-2s-.7-1.7-.7-2.5c0-.9.7-1.5 1.7-1.5h2c1.9 0 3.2-1.4 3.2-3.6C20.2 6.3 16.6 3.8 12 3.8z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><circle cx="8.2" cy="10.4" r="1.15" fill="currentColor"/><circle cx="12" cy="7.8" r="1.15" fill="currentColor"/><circle cx="15.8" cy="10.4" r="1.15" fill="currentColor"/></svg>
+                    <span>外观</span>
+                </button>
+                <button type="button" class="settings-nav-item" data-settings-nav="arrange">
+                    <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="7" height="7" rx="1.8" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="4" width="7" height="7" rx="1.8" stroke="currentColor" stroke-width="1.7"/><rect x="4" y="13" width="7" height="7" rx="1.8" stroke="currentColor" stroke-width="1.7"/><rect x="13" y="13" width="7" height="7" rx="1.8" stroke="currentColor" stroke-width="1.7" stroke-dasharray="2.6 2.2"/></svg>
+                    <span>排座偏好</span>
+                </button>
+                <button type="button" class="settings-nav-item" data-settings-nav="cloud" data-client-feature="cloud_sync">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M7.5 18.5h9.8a4.2 4.2 0 0 0 .7-8.3 6.4 6.4 0 0 0-12.2-1.8 5 5 0 0 0 1.7 10.1z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span>云服务</span>
+                </button>
+                <button type="button" class="settings-nav-item" data-settings-nav="subscription">
+                    <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="6" width="17" height="13" rx="2.6" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 10.5h17" stroke="currentColor" stroke-width="1.7"/><path d="M7 14.8h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                    <span>订阅计划</span>
+                </button>
+                <button type="button" class="settings-nav-item" data-settings-nav="update" data-client-feature="check_update">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 4.5v11m0 0 4-4m-4 4-4-4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19.5h14" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                    <span>软件更新</span>
+                </button>
+                <button type="button" class="settings-nav-item" data-settings-nav="privacy">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5 5 6v6c0 4.4 3 7.4 7 8.5 4-1.1 7-4.1 7-8.5V6l-7-2.5z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="m9 12 2.2 2.2L15.5 10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                    <span>数据与隐私</span>
+                </button>
+                <button type="button" class="settings-nav-item" data-settings-nav="about" data-client-feature="about_page" data-client-feature-mode="hide">
+                    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.4" stroke="currentColor" stroke-width="1.7"/><path d="M12 11v5m0-8.2v.4" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg>
+                    <span>关于</span>
+                </button>
+            </nav>
 
-            </div>
-        </div>
-
-        <div class="settings-section">
-            <div class="section-header">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <rect x="3" y="5" width="18" height="14" rx="4" fill="currentColor" fill-opacity="0.12"/>
-                    <rect x="3.75" y="5.75" width="16.5" height="12.5" rx="3.25" stroke="currentColor" stroke-width="1.5"/>
-                    <path d="M8 12h8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                    <path d="M12 8v8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
-                </svg>
-                <div>
-                    <h2>排座偏好</h2>
-                    <p>控制移动学生与布局轮换时的默认行为</p>
-                </div>
-            </div>
-            <div class="section-content">
-                <div class="setting-item setting-item-stack">
-                    <div class="setting-info">
-                        <label>小组移动模式</label>
-                        <span class="setting-description">控制拖拽换位、快捷调位和批量移动时，小组是固定在座位区域，还是跟随学生一起移动。</span>
-                        <span class="setting-value" id="group-move-mode-status">组定人动</span>
-                    </div>
-                    <div class="settings-segment" id="group-move-mode-segment">
-                        <label class="settings-segment-option">
-                            <input type="radio" name="group_move_mode" value="fixed" checked>
-                            <span class="settings-segment-card">
-                                <strong>组定人动</strong>
-                                <small>小组固定在座位区域，学生换位后会进入目标座位所属小组。</small>
-                            </span>
-                        </label>
-                        <label class="settings-segment-option">
-                            <input type="radio" name="group_move_mode" value="follow">
-                            <span class="settings-segment-card">
-                                <strong>组随人动</strong>
-                                <small>已入座学生换位时，保持原本小组不变，小组会随学生移动。</small>
-                            </span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="setting-divider"></div>
-
-                <div class="setting-item">
-                    <div class="setting-info">
-                        <label>布局轮换默认按大组移动</label>
-                        <span class="setting-description">同步控制"变换"选项卡和高级轮换面板里的"按大组移动"默认值。</span>
-                    </div>
-                    <div class="setting-trail">
-                        <span class="setting-value" id="shift-use-large-groups-status">按大组移动</span>
-                        <label class="settings-switch">
-                            <input type="checkbox" id="settings-shift-use-large-groups-toggle" checked>
-                            <span class="settings-switch-track">
-                                <span class="settings-switch-thumb"></span>
-                            </span>
-                        </label>
-                    </div>
-                </div>
+            <div class="settings-rail-footer">
+                <span>不想排座位</span>
+                <small>v{{ app_runtime.version }}</small>
             </div>
         </div>
+    </aside>
 
-        <div class="settings-section" id="cloud-settings-section" data-client-feature="cloud_sync">
-            <div class="section-header">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" fill="currentColor" fill-opacity="0.12"/>
-                    <path d="M19.35 10.04A7.49 7.49 0 0 0 12 4C9.11 4 6.6 5.64 5.35 8.04A5.994 5.994 0 0 0 0 14c0 3.31 2.69 6 6 6h13c2.76 0 5-2.24 5-5 0-2.64-2.05-4.78-4.65-4.96z" stroke="currentColor" stroke-width="1.2" fill="none"/>
-                </svg>
+    <main class="settings-canvas">
+
+        <section class="settings-panel active" data-settings-panel="appearance">
+            <header class="settings-panel-head">
+                <span class="settings-panel-glyph" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.2" stroke="currentColor" stroke-width="1.6"/><path d="M12 3.8a8.2 8.2 0 0 0 0 16.4c1.4 0 2-1 2-2s-.7-1.7-.7-2.5c0-.9.7-1.5 1.7-1.5h2c1.9 0 3.2-1.4 3.2-3.6C20.2 6.3 16.6 3.8 12 3.8z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+                </span>
                 <div>
-                    <h2>云服务</h2>
-                    <p>登录老三账户，同步班级数据到云端</p>
+                    <h1>外观</h1>
+                    <p>为整个应用选择一种主题色，所有界面元素将随之变化。</p>
+                </div>
+            </header>
+            <div class="settings-list">
+                <div class="settings-list-group">
+                    <div class="settings-row settings-row-stack">
+                        <div class="settings-row-main">
+                            <label>主题色</label>
+                            <span class="settings-row-status" id="theme-status">星河蓝</span>
+                        </div>
+                        <div class="theme-picker" id="theme-picker"></div>
+                    </div>
                 </div>
             </div>
-            <div class="section-content">
+        </section>
+
+        <section class="settings-panel" data-settings-panel="arrange">
+            <header class="settings-panel-head">
+                <span class="settings-panel-glyph" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="7" height="7" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="13" y="4" width="7" height="7" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="4" y="13" width="7" height="7" rx="1.8" stroke="currentColor" stroke-width="1.6"/><rect x="13" y="13" width="7" height="7" rx="1.8" stroke="currentColor" stroke-width="1.6" stroke-dasharray="2.6 2.2"/></svg>
+                </span>
+                <div>
+                    <h1>排座偏好</h1>
+                    <p>控制移动学生与布局轮换时的默认行为。</p>
+                </div>
+            </header>
+            <div class="settings-list">
+                <div class="settings-list-group">
+                    <div class="settings-row settings-row-stack">
+                        <div class="settings-row-main">
+                            <label>小组移动模式</label>
+                            <span class="settings-row-status" id="group-move-mode-status">组定人动</span>
+                        </div>
+                        <div class="settings-segment" id="group-move-mode-segment">
+                            <label class="settings-segment-option">
+                                <input type="radio" name="group_move_mode" value="fixed" checked>
+                                <span class="settings-segment-card">
+                                    <strong>组定人动</strong>
+                                    <small>小组固定在座位区域，学生换位后进入目标座位所属小组。</small>
+                                </span>
+                            </label>
+                            <label class="settings-segment-option">
+                                <input type="radio" name="group_move_mode" value="follow">
+                                <span class="settings-segment-card">
+                                    <strong>组随人动</strong>
+                                    <small>学生换位时保持原本小组，小组随学生移动。</small>
+                                </span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-main">
+                            <label>布局轮换默认按大组移动</label>
+                            <span class="settings-row-desc">同步控制“变换”选项卡和高级轮换面板的默认值。</span>
+                            <span class="settings-row-status" id="shift-use-large-groups-status">按大组移动</span>
+                        </div>
+                        <div class="settings-row-trail">
+                            <label class="settings-switch">
+                                <input type="checkbox" id="settings-shift-use-large-groups-toggle" checked>
+                                <span class="settings-switch-track"><span class="settings-switch-thumb"></span></span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="settings-panel" data-settings-panel="cloud" data-client-feature="cloud_sync">
+            <header class="settings-panel-head">
+                <span class="settings-panel-glyph" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M7.5 18.5h9.8a4.2 4.2 0 0 0 .7-8.3 6.4 6.4 0 0 0-12.2-1.8 5 5 0 0 0 1.7 10.1z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
+                <div>
+                    <h1>云服务</h1>
+                    <p>登录老三账户，在多台设备间同步班级数据。</p>
+                </div>
+            </header>
+
+            <div class="settings-list">
                 <div id="cloud-not-logged-in" style="display:none">
-                    <div class="setting-item setting-item-stack">
-                        <div class="setting-info">
-                            <label>登录老三账户</label>
-                            <span class="setting-description">登录后可将班级数据同步到云端，多设备共享。</span>
+                    <div class="settings-list-group">
+                        <div class="settings-row">
+                            <div class="settings-row-main">
+                                <label>登录老三账户</label>
+                                <span class="settings-row-desc">登录后可将班级数据同步到云端，多设备共享。</span>
+                                <span class="settings-row-status settings-row-status-error" id="cloud-connection-error-text" hidden>云端连接异常，请检查网络后重试。</span>
+                            </div>
+                            <div class="settings-row-trail">
+                                <button type="button" class="btn btn-primary" id="cloud-login-btn">
+                                    <span class="cloud-settings-login-icon" data-cloud-settings-login-icon aria-hidden="true"></span>
+                                    <span>登录</span>
+                                </button>
+                            </div>
                         </div>
-                        <button type="button" class="btn btn-primary" id="cloud-login-btn" style="align-self:flex-start;margin-top:8px">
-                            <span class="cloud-settings-login-icon" data-cloud-settings-login-icon aria-hidden="true"></span>
-                            <span>登录</span>
-                        </button>
                     </div>
                 </div>
+
                 <div id="cloud-logged-in" style="display:none">
-                    <div class="setting-item cloud-account-row">
-                        <div class="cloud-account-info">
-                            <div class="cloud-avatar-wrap" id="cloud-avatar-wrap"></div>
-                            <div class="cloud-account-detail">
-                                <div class="cloud-nickname" id="cloud-nickname"></div>
-                                <div class="cloud-email" id="cloud-email"></div>
+                    <div class="settings-list-group">
+                        <div class="settings-row settings-account-row">
+                            <div class="cloud-account-info">
+                                <div class="cloud-avatar-wrap" id="cloud-avatar-wrap"></div>
+                                <div class="cloud-account-detail">
+                                    <div class="cloud-nickname" id="cloud-nickname"></div>
+                                    <div class="cloud-email" id="cloud-email"></div>
+                                </div>
+                            </div>
+                            <div class="cloud-tier-area">
+                                <span class="cloud-tier-badge" id="cloud-tier-badge"></span>
                             </div>
                         </div>
-                        <div class="cloud-tier-area">
-                            <span class="cloud-tier-badge" id="cloud-tier-badge"></span>
+                        <div class="settings-row">
+                            <div class="settings-row-main">
+                                <label>订阅到期</label>
+                                <span class="settings-row-status" id="cloud-expires-text">--</span>
+                            </div>
+                            <div class="settings-row-trail">
+                                <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-refresh-sub-btn">刷新订阅</button>
+                            </div>
                         </div>
                     </div>
 
-                    <div class="setting-divider"></div>
-
-                    <div class="setting-item setting-item-stack cloud-classroom-manager">
-                        <div class="cloud-manager-heading">
-                            <div class="setting-info">
-                                <label>云班级管理</label>
-                                <span class="setting-description">查看云端班级，上传本地班级或将云端班级下载到本机。</span>
-                                <span class="setting-value" id="cloud-classroom-usage">正在读取云端班级...</span>
+                    <div class="settings-list-group">
+                        <div class="settings-row settings-row-stack cloud-classroom-manager">
+                            <div class="cloud-manager-heading">
+                                <div class="settings-row-main">
+                                    <label>云班级管理</label>
+                                    <span class="settings-row-desc">查看云端班级，上传本地班级或将云端班级下载到本机。</span>
+                                    <span class="settings-row-status" id="cloud-classroom-usage">正在读取云端班级...</span>
+                                </div>
+                                <div class="cloud-manager-toolbar">
+                                    <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-classroom-refresh-btn">刷新</button>
+                                    <button type="button" class="btn btn-primary cloud-small-btn" id="cloud-classroom-add-btn" disabled>添加班级</button>
+                                </div>
                             </div>
-                            <div class="cloud-manager-toolbar">
-                                <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-classroom-refresh-btn">刷新</button>
-                                <button type="button" class="btn btn-primary cloud-small-btn" id="cloud-classroom-add-btn" disabled>添加班级</button>
+                            <div class="cloud-classroom-list" id="cloud-classroom-list" aria-live="polite">
+                                <div class="cloud-classroom-loading"><span class="cloud-login-spinner"></span><span>正在读取云端班级...</span></div>
                             </div>
-                        </div>
-                        <div class="cloud-classroom-list" id="cloud-classroom-list" aria-live="polite">
-                            <div class="cloud-classroom-loading"><span class="cloud-login-spinner"></span><span>正在读取云端班级...</span></div>
                         </div>
                     </div>
 
-                    <div class="setting-divider"></div>
-
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <label>订阅到期</label>
-                            <span class="setting-description" id="cloud-expires-text">--</span>
+                    <div class="settings-list-group" id="local-open-api-setting">
+                        <div class="settings-row settings-row-stack local-open-api-setting-inner">
+                            <div class="local-open-api-heading">
+                                <div class="settings-row-main">
+                                    <label>云服务本机 API</label>
+                                    <span class="settings-row-desc">生成 Key 后，服务器本机程序可通过 127.0.0.1 操作你的云班级，不能访问其他用户数据。</span>
+                                    <span class="settings-row-status" id="local-open-api-status">正在读取授权状态...</span>
+                                </div>
+                                <div class="local-open-api-actions">
+                                    <button type="button" class="btn btn-primary cloud-small-btn" id="local-open-api-generate-btn">生成 Key</button>
+                                    <button type="button" class="btn btn-secondary cloud-small-btn" id="local-open-api-revoke-btn" hidden>撤销授权</button>
+                                </div>
+                            </div>
+                            <div class="local-open-api-endpoint" id="local-open-api-endpoint" hidden></div>
+                            <div class="local-open-api-key-panel" id="local-open-api-key-panel" hidden>
+                                <span>Key 只显示这一次，请立即复制并妥善保存。</span>
+                                <div class="local-open-api-key-row">
+                                    <input type="text" id="local-open-api-key-value" readonly autocomplete="off" spellcheck="false" aria-label="云服务本机 API Key" />
+                                    <button type="button" class="btn btn-primary cloud-small-btn" id="local-open-api-copy-btn">复制 Key</button>
+                                </div>
+                            </div>
                         </div>
-                        <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-refresh-sub-btn">刷新订阅</button>
                     </div>
 
-                    <div class="setting-divider"></div>
-
-                    <!-- 此部分代码未被披露至开源版本 -->
-
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <label>退出登录</label>
-                            <span class="setting-description">退出后云同步将暂停</span>
+                    <div class="settings-list-group settings-list-group-danger">
+                        <div class="settings-row">
+                            <div class="settings-row-main">
+                                <label>退出登录</label>
+                                <span class="settings-row-desc">退出后云同步将暂停。</span>
+                            </div>
+                            <div class="settings-row-trail">
+                                <button type="button" class="btn btn-secondary" id="cloud-logout-btn">退出登录</button>
+                            </div>
                         </div>
-                        <button type="button" class="btn btn-secondary" id="cloud-logout-btn">退出登录</button>
                     </div>
                 </div>
 
-                <div class="setting-divider"></div>
-
-                <div class="setting-item setting-item-stack">
-                    <div class="setting-info">
-                        <label>云服务器地址</label>
-                        <span class="setting-description">自建用户可修改为自己的云端地址，修改后需重新登录</span>
-                    </div>
-                    <div class="cloud-server-url-row">
-                        <input type="text" id="cloud-server-url-input" class="cloud-server-url-input" placeholder="https://fuckseatsapi.577622.xyz" />
-                        <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-save-url-btn">保存</button>
-                        <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-reset-url-btn" title="恢复默认">重置</button>
+                <div class="settings-list-group">
+                    <div class="settings-row settings-row-stack">
+                        <div class="settings-row-main">
+                            <label>云服务器地址</label>
+                            <span class="settings-row-desc">自建服务器用户可修改为自己的云端地址，修改后需重新登录。</span>
+                        </div>
+                        <div class="cloud-server-url-row">
+                            <input type="text" id="cloud-server-url-input" class="cloud-server-url-input" placeholder="https://fuckseatsapi.577622.xyz" aria-label="云服务器地址" />
+                            <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-save-url-btn">保存</button>
+                            <button type="button" class="btn btn-secondary cloud-small-btn" id="cloud-reset-url-btn" title="恢复默认">重置</button>
+                        </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div id="cloud-classroom-add-modal" class="modal-overlay cloud-manager-modal-overlay" style="display:none" aria-hidden="true">
-            <div class="modal-content cloud-manager-modal" role="dialog" aria-modal="true" aria-labelledby="cloud-classroom-add-title">
-                <div class="modal-header">
-                    <div>
-                        <h3 id="cloud-classroom-add-title">添加云班级</h3>
-                        <p>选择尚未上云的本地班级，可一次上传多个。</p>
-                    </div>
-                    <button type="button" class="modal-close-btn" data-cloud-manager-add-close aria-label="关闭">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6.7 6.7a1 1 0 0 1 1.4 0L12 10.6l3.9-3.9a1 1 0 1 1 1.4 1.4L13.4 12l3.9 3.9a1 1 0 0 1-1.4 1.4L12 13.4l-3.9 3.9a1 1 0 0 1-1.4-1.4L10.6 12 6.7 8.1a1 1 0 0 1 0-1.4z" fill="currentColor"/></svg>
-                    </button>
-                </div>
-                <div class="cloud-manager-local-list" id="cloud-manager-local-list"></div>
-                <div class="modal-actions cloud-manager-modal-actions">
-                    <button type="button" class="btn btn-secondary" data-cloud-manager-add-close>取消</button>
-                    <button type="button" class="btn btn-primary" id="cloud-manager-add-confirm">上传所选班级</button>
-                </div>
-            </div>
-        </div>
-
-        <div id="cloud-classroom-delete-modal" class="modal-overlay cloud-manager-modal-overlay" style="display:none" aria-hidden="true">
-            <div class="modal-content cloud-manager-modal cloud-manager-delete-modal" role="dialog" aria-modal="true" aria-labelledby="cloud-classroom-delete-title">
-                <h3 id="cloud-classroom-delete-title">删除云端副本</h3>
-                <p id="cloud-classroom-delete-message"></p>
-                <div class="modal-actions cloud-manager-modal-actions">
-                    <button type="button" class="btn btn-secondary" data-cloud-manager-delete-cancel>取消</button>
-                    <button type="button" class="btn btn-danger" id="cloud-manager-delete-confirm">删除云端副本</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="settings-section" id="subscription-plans-section">
-            <div class="section-header">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2z" fill="currentColor" fill-opacity="0.12" stroke="currentColor" stroke-width="1.5" rx="3"/>
-                    <path d="M12 11l4-4M12 11l-4-4M12 11v6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                </svg>
+        <section class="settings-panel" data-settings-panel="subscription">
+            <header class="settings-panel-head">
+                <span class="settings-panel-glyph" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><rect x="3.5" y="6" width="17" height="13" rx="2.6" stroke="currentColor" stroke-width="1.6"/><path d="M3.5 10.5h17" stroke="currentColor" stroke-width="1.6"/><path d="M7 14.8h5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                </span>
                 <div>
-                    <h2>订阅计划</h2>
-                    <p>对比不同订阅的功能权限，选择适合你的方案</p>
+                    <h1>订阅计划</h1>
+                    <p>对比不同订阅的功能权限，选择适合你的方案。</p>
                 </div>
-            </div>
-            <div class="section-content">
+            </header>
+            <div class="settings-list">
                 <div class="subscription-plans-wrap" id="subscription-plans-wrap">
                     <div class="subscription-plans-loading" id="subscription-plans-loading">
                         <div class="plans-loading-spinner"></div>
@@ -255,148 +293,142 @@
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div class="settings-section" data-client-feature="check_update">
-            <div class="section-header">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/>
-                    <path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/>
-                </svg>
+        <section class="settings-panel" data-settings-panel="update" data-client-feature="check_update">
+            <header class="settings-panel-head">
+                <span class="settings-panel-glyph" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 4.5v11m0 0 4-4m-4 4-4-4" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M5 19.5h14" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+                </span>
                 <div>
-                    <h2>软件更新</h2>
-                    <p>{% if app_runtime.platform == 'macos' %}使用本地升级包安全更新{% else %}检查并安装应用更新{% endif %}</p>
+                    <h1>软件更新</h1>
+                    <p>{% if app_runtime.platform == 'macos' %}使用本地升级包安全更新应用{% else %}检查并安装应用更新{% endif %}。</p>
+                </div>
+            </header>
+            <div class="settings-list">
+                <div class="settings-list-group">
+                    <div class="settings-row">
+                        <div class="settings-row-main">
+                            <label>当前版本</label>
+                            <span class="settings-row-status">正在运行的版本</span>
+                        </div>
+                        <div class="settings-row-trail">
+                            <span class="setting-version-badge" id="current-version-display">{{ app_runtime.version }}</span>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-main">
+                            <label>{% if app_runtime.platform == 'macos' %}本地升级{% else %}检查更新{% endif %}</label>
+                            <span class="settings-row-desc">{% if app_runtime.platform == 'macos' %}选择自行准备的官方 PKG，应用不会从服务器下载{% else %}手动检查是否有新版本可用{% endif %}</span>
+                        </div>
+                        <div class="settings-row-trail">
+                            <button id="manual-check-update-btn" class="btn btn-primary" type="button">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                    <path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/>
+                                    <path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/>
+                                </svg>
+                                {% if app_runtime.platform == 'macos' %}选择升级包{% else %}检查更新{% endif %}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
-            <div class="section-content">
-                <div class="setting-item">
-                    <div class="setting-info">
-                        <label>当前版本</label>
-                        <span class="setting-description">正在运行的版本</span>
-                    </div>
-                    <div class="setting-trail">
-                        <span class="setting-version-badge" id="current-version-display">{{ app_runtime.version }}</span>
-                    </div>
-                </div>
+        </section>
 
-                <div class="setting-divider"></div>
-
-                <div class="setting-item">
-                    <div class="setting-info">
-                        <label>{% if app_runtime.platform == 'macos' %}本地升级{% else %}检查更新{% endif %}</label>
-                        <span class="setting-description">{% if app_runtime.platform == 'macos' %}选择自行准备的官方 PKG，应用不会从服务器下载{% else %}手动检查是否有新版本可用{% endif %}</span>
-                    </div>
-                    <button id="manual-check-update-btn" class="btn btn-primary" type="button">
-                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                            <path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/>
-                            <path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/>
-                        </svg>
-                        {% if app_runtime.platform == 'macos' %}选择升级包{% else %}检查更新{% endif %}
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <div class="settings-section" id="data-sharing-section">
-            <div class="section-header">
-                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" fill="currentColor" fill-opacity="0.12"/>
-                    <path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z" stroke="currentColor" stroke-width="0.8" fill="none"/>
-                </svg>
+        <section class="settings-panel" data-settings-panel="privacy">
+            <header class="settings-panel-head">
+                <span class="settings-panel-glyph" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M12 3.5 5 6v6c0 4.4 3 7.4 7 8.5 4-1.1 7-4.1 7-8.5V6l-7-2.5z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="m9 12 2.2 2.2L15.5 10" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </span>
                 <div>
-                    <h2>帮助我们改进</h2>
-                    <p>发送使用统计、登录 UID 和脱敏日志以帮助改进不想排座位</p>
+                    <h1>数据与隐私</h1>
+                    <p>你的数据属于你。这里声明我们收集什么、以及更重要的——不收集什么。</p>
                 </div>
-            </div>
-            <div class="section-content">
-                <div class="setting-item">
-                    <div class="setting-info">
-                        <label>数据共享</label>
-                        <span class="setting-description">开启后，将发送功能使用频率、耗时、登录账号 UID 和脱敏日志到官方服务器。不会收集学生、班级、座位表、邮箱、密钥或 Token。</span>
-                        <span class="setting-value" id="data-sharing-status">加载中...</span>
+            </header>
+            <div class="settings-list">
+                <div class="settings-list-group">
+                    <div class="settings-row">
+                        <div class="settings-row-main">
+                            <label>数据共享</label>
+                            <span class="settings-row-desc">开启后仅发送功能使用频率、耗时和脱敏日志。</span>
+                            <span class="settings-row-status" id="data-sharing-status">加载中...</span>
+                        </div>
+                        <div class="settings-row-trail">
+                            <label class="settings-switch">
+                                <input type="checkbox" id="data-sharing-toggle">
+                                <span class="settings-switch-track"><span class="settings-switch-thumb"></span></span>
+                            </label>
+                        </div>
                     </div>
-                    <div class="setting-trail">
-                        <label class="settings-switch">
-                            <input type="checkbox" id="data-sharing-toggle">
-                            <span class="settings-switch-track">
-                                <span class="settings-switch-thumb"></span>
-                            </span>
-                        </label>
-                    </div>
-                </div>
-
-                <div class="setting-divider"></div>
-
-                <div class="setting-item">
-                    <div class="setting-info">
-                        <label>本地日志保存天数</label>
-                        <span class="setting-description">仅修改本机记录的日志保存偏好，不会影响官方服务器上的日志保存天数</span>
-                    </div>
-                    <div class="setting-trail">
-                        <select id="data-sharing-retention" class="data-sharing-retention-select">
-                            <option value="7">7 天</option>
-                            <option value="14">14 天</option>
-                            <option value="30" selected>30 天</option>
-                            <option value="60">60 天</option>
-                            <option value="90">90 天</option>
-                            <option value="180">180 天</option>
-                            <option value="365">365 天</option>
-                        </select>
+                    <div class="settings-row">
+                        <div class="settings-row-main">
+                            <label>本地日志保存天数</label>
+                            <span class="settings-row-desc">仅影响本机日志，不改变服务器保存策略。</span>
+                        </div>
+                        <div class="settings-row-trail">
+                            <select id="data-sharing-retention" class="data-sharing-retention-select" aria-label="本地日志保存天数">
+                                <option value="7">7 天</option>
+                                <option value="14">14 天</option>
+                                <option value="30" selected>30 天</option>
+                                <option value="60">60 天</option>
+                                <option value="90">90 天</option>
+                                <option value="180">180 天</option>
+                                <option value="365">365 天</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
-                <div class="setting-divider"></div>
-
-                <div class="setting-item setting-item-stack data-sharing-privacy-note">
-                    <div class="setting-info">
-                        <label>隐私承诺</label>
-                    </div>
+                <div class="privacy-card">
+                    <div class="privacy-card-title">隐私承诺</div>
                     <div class="data-sharing-privacy-list">
                         <div class="data-sharing-privacy-item data-sharing-privacy-collect">
-                            <span class="data-sharing-privacy-icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>
-                            </span>
+                            <span class="data-sharing-privacy-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg></span>
                             <span>功能使用次数、频率和耗时</span>
                         </div>
                         <div class="data-sharing-privacy-item data-sharing-privacy-collect">
-                            <span class="data-sharing-privacy-icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>
-                            </span>
+                            <span class="data-sharing-privacy-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg></span>
                             <span>已登录账号的 UID</span>
                         </div>
                         <div class="data-sharing-privacy-item data-sharing-privacy-collect">
-                            <span class="data-sharing-privacy-icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg>
-                            </span>
+                            <span class="data-sharing-privacy-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41L9 16.17z" fill="currentColor"/></svg></span>
                             <span>脱敏后的错误日志和错误码</span>
                         </div>
                         <div class="data-sharing-privacy-item data-sharing-privacy-no">
-                            <span class="data-sharing-privacy-icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>
-                            </span>
+                            <span class="data-sharing-privacy-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg></span>
                             <span>不会收集学生姓名、班级、座位表</span>
                         </div>
                         <div class="data-sharing-privacy-item data-sharing-privacy-no">
-                            <span class="data-sharing-privacy-icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>
-                            </span>
+                            <span class="data-sharing-privacy-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg></span>
                             <span>不会收集邮箱、密钥或 Token</span>
                         </div>
                         <div class="data-sharing-privacy-item data-sharing-privacy-no">
-                            <span class="data-sharing-privacy-icon">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg>
-                            </span>
+                            <span class="data-sharing-privacy-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41z" fill="currentColor"/></svg></span>
                             <span>不会收集请求 IP 或原始 User-Agent</span>
                         </div>
                     </div>
                 </div>
             </div>
-        </div>
+        </section>
 
-        <div class="settings-section settings-about-section" data-client-feature="about_page" data-client-feature-mode="hide">
-            <a href="{% url 'about' %}" class="settings-about-card">
-                <div class="settings-about-icon" style="color: var(--primary-color)">
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+        <section class="settings-panel" data-settings-panel="about" data-client-feature="about_page" data-client-feature-mode="hide">
+            <header class="settings-panel-head">
+                <span class="settings-panel-glyph settings-about-icon-lg" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
+                        <rect x="3" y="3" width="7" height="7" rx="2" fill="currentColor"/>
+                        <rect x="14" y="3" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.7"/>
+                        <rect x="3" y="14" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.7"/>
+                        <rect x="14" y="14" width="7" height="7" rx="2" fill="currentColor"/>
+                    </svg>
+                </span>
+                <div>
+                    <h1>关于</h1>
+                    <p>不想排座位 · 教室排座工作区</p>
+                </div>
+            </header>
+            <div class="settings-about-hero">
+                <div class="settings-about-logo" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none">
                         <rect x="3" y="3" width="7" height="7" rx="2" fill="currentColor"/>
                         <rect x="14" y="3" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.7"/>
                         <rect x="3" y="14" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.7"/>
@@ -405,129 +437,521 @@
                 </div>
                 <div class="settings-about-name">不想排座位</div>
                 <div class="settings-about-meta">
-                    <span>老三</span>
+                    <span>开发者 老三</span>
                     <span class="settings-about-dot"></span>
-                    <span class="settings-about-link">查看关于应用</span>
+                    <a class="settings-about-link" href="https://www.577622.xyz" target="_blank" rel="noopener noreferrer" data-open-external>www.577622.xyz</a>
                 </div>
-                <svg class="settings-about-chevron" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="m8 5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
-            </a>
-        </div>
-    </div>
+                <a href="{% url 'about' %}" class="btn btn-primary settings-about-action">查看关于应用</a>
+            </div>
+        </section>
+
+    </main>
 </section>
 
+<div id="cloud-classroom-add-modal" class="modal-overlay cloud-manager-modal-overlay" style="display:none" aria-hidden="true">
+    <div class="modal-content cloud-manager-modal" role="dialog" aria-modal="true" aria-labelledby="cloud-classroom-add-title">
+        <div class="modal-header">
+            <div>
+                <h3 id="cloud-classroom-add-title">添加云班级</h3>
+                <p>选择尚未上云的本地班级，可一次上传多个。</p>
+            </div>
+            <button type="button" class="modal-close-btn" data-cloud-manager-add-close aria-label="关闭">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M6.7 6.7a1 1 0 0 1 1.4 0L12 10.6l3.9-3.9a1 1 0 1 1 1.4 1.4L13.4 12l3.9 3.9a1 1 0 0 1-1.4 1.4L12 13.4l-3.9 3.9a1 1 0 0 1-1.4-1.4L10.6 12 6.7 8.1a1 1 0 0 1 0-1.4z" fill="currentColor"/></svg>
+            </button>
+        </div>
+        <div class="cloud-manager-local-list" id="cloud-manager-local-list"></div>
+        <div class="modal-actions cloud-manager-modal-actions">
+            <button type="button" class="btn btn-secondary" data-cloud-manager-add-close>取消</button>
+            <button type="button" class="btn btn-primary" id="cloud-manager-add-confirm">上传所选班级</button>
+        </div>
+    </div>
+</div>
+
+<div id="cloud-classroom-delete-modal" class="modal-overlay cloud-manager-modal-overlay" style="display:none" aria-hidden="true">
+    <div class="modal-content cloud-manager-modal cloud-manager-delete-modal" role="dialog" aria-modal="true" aria-labelledby="cloud-classroom-delete-title">
+        <h3 id="cloud-classroom-delete-title">删除云端副本</h3>
+        <p id="cloud-classroom-delete-message"></p>
+        <div class="modal-actions cloud-manager-modal-actions">
+            <button type="button" class="btn btn-secondary" data-cloud-manager-delete-cancel>取消</button>
+            <button type="button" class="btn btn-danger" id="cloud-manager-delete-confirm">删除云端副本</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
 <style>
-.settings-container {
-    max-width: 680px;
-    margin: 0 auto;
-    padding: 48px 20px 64px;
+/* ===== 设置页 v2：侧栏导航 + 内容面板 ===== */
+.settings-app {
+    display: grid;
+    grid-template-columns: 248px minmax(0, 1fr);
+    height: calc(100vh - var(--header-height));
+    background: #f5f5f7;
 }
 
-.settings-header {
-    text-align: center;
-    margin-bottom: 36px;
+.settings-rail {
+    border-right: 1px solid rgba(0, 0, 0, 0.06);
+    background: rgba(255, 255, 255, 0.72);
+    -webkit-backdrop-filter: blur(20px);
+    backdrop-filter: blur(20px);
+    overflow-y: auto;
 }
 
-.settings-header-icon {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 64px;
-    height: 64px;
-    border-radius: 20px;
-    background: linear-gradient(135deg, rgba(var(--primary-color-rgb, 10, 89, 247), 0.12) 0%, rgba(var(--primary-color-rgb, 10, 89, 247), 0.06) 100%);
-    margin-bottom: 16px;
-    color: var(--primary-color);
-}
-
-.settings-header h1 {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--text-primary);
-    margin: 0 0 6px 0;
-    letter-spacing: -0.02em;
-}
-
-.settings-header p {
-    color: var(--text-secondary);
-    font-size: 15px;
-    margin: 0;
-}
-
-.settings-sections {
+.settings-rail-inner {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 18px;
+    padding: 20px 14px;
+    min-height: 100%;
 }
 
-.settings-section {
-    background: white;
-    border-radius: 14px;
-    overflow: hidden;
+.settings-account-chip {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding: 10px 12px;
     border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 14px;
+    background: #fff;
+    cursor: pointer;
+    text-align: left;
     box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
-.section-header {
+.settings-account-avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 16px 20px;
-    background: rgba(0, 0, 0, 0.015);
-    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-}
-
-.section-header svg {
+    justify-content: center;
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
     color: var(--primary-color);
-    flex-shrink: 0;
+    overflow: hidden;
 }
 
-.section-header h2 {
-    font-size: 15px;
-    font-weight: 600;
+.settings-account-avatar svg { width: 18px; height: 18px; }
+
+.settings-account-avatar.has-image { background: transparent; }
+.settings-account-avatar.has-image img { width: 100%; height: 100%; object-fit: cover; }
+
+.settings-account-copy {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    min-width: 0;
+}
+
+.settings-account-copy strong {
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-account-copy small {
+    font-size: 11.5px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.settings-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.settings-nav-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    height: 40px;
+    padding: 0 12px;
+    border: none;
+    border-radius: 10px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13.5px;
+    font-weight: 550;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+    text-align: left;
+}
+
+.settings-nav-item svg {
+    width: 19px;
+    height: 19px;
+    flex-shrink: 0;
+    color: var(--text-secondary);
+    transition: color 0.15s ease;
+}
+
+.settings-nav-item:hover { background: rgba(0, 0, 0, 0.045); }
+
+.settings-nav-item.active {
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+    color: var(--primary-color);
+}
+
+.settings-nav-item.active svg { color: var(--primary-color); }
+
+.settings-rail-footer {
+    margin-top: auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 10px 0 4px;
+    color: var(--text-secondary);
+    font-size: 12px;
+}
+
+.settings-rail-footer small { font-size: 11px; opacity: 0.75; }
+
+/* ===== 内容画布 ===== */
+.settings-canvas {
+    overflow-y: auto;
+    padding: 36px 44px 72px;
+    scroll-behavior: smooth;
+}
+
+.settings-panel {
+    display: none;
+    max-width: 660px;
+    margin: 0 auto;
+}
+
+.settings-panel.active {
+    display: block;
+    animation: settingsPanelIn 0.24s var(--spring-fast, cubic-bezier(0.2, 0.9, 0.25, 1.15));
+}
+
+@keyframes settingsPanelIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.settings-panel-head {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 22px;
+}
+
+.settings-panel-glyph {
+    flex-shrink: 0;
+    width: 46px;
+    height: 46px;
+    border-radius: 13px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+    color: var(--primary-color);
+}
+
+.settings-panel-glyph svg { width: 24px; height: 24px; }
+
+.settings-panel-head h1 {
     margin: 0;
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: -0.02em;
     color: var(--text-primary);
 }
 
-.section-header p {
-    font-size: 12px;
+.settings-panel-head p {
+    margin: 3px 0 0;
+    font-size: 13px;
     color: var(--text-secondary);
-    margin: 2px 0 0 0;
+    line-height: 1.45;
 }
 
-.section-content {
-    padding: 0;
+/* ===== iOS 式分组列表 ===== */
+.settings-list {
     display: flex;
     flex-direction: column;
+    gap: 18px;
 }
 
-.setting-item {
+.settings-list-group {
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 14px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+    overflow: hidden;
+}
+
+.settings-row {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    gap: 16px;
-    padding: 14px 20px;
+    gap: 18px;
+    padding: 15px 18px;
 }
 
-.setting-item-stack {
+.settings-row + .settings-row,
+.settings-row + .settings-row-stack,
+.settings-row-stack + .settings-row,
+.settings-row-stack + .settings-row-stack {
+    border-top: 1px solid rgba(0, 0, 0, 0.05);
+}
+
+.settings-row-stack {
+    display: flex;
     flex-direction: column;
-    align-items: stretch;
-}
-
-.cloud-settings-login-icon,
-.cloud-settings-login-icon svg {
-    display: block;
-    width: 18px;
-    height: 18px;
-}
-
-.cloud-classroom-manager {
-    gap: 14px;
-}
-
-.local-open-api-setting {
     gap: 12px;
+    padding: 16px 18px;
 }
 
+.settings-row-main {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.settings-row-main label {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.3;
+}
+
+.settings-row-desc {
+    font-size: 12.5px;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.settings-row-status {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 3px;
+}
+
+.settings-row-status-error { color: #b42318; }
+
+.settings-row-trail {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.settings-list-group-danger .settings-row-main label { color: #b42318; }
+
+/* ===== 开关 / 分段卡 / 主题卡（沿用 v1 精华） ===== */
+.settings-switch {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.settings-switch input[type="checkbox"] {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+.settings-switch-track {
+    width: 51px;
+    height: 31px;
+    border-radius: 999px;
+    background: rgba(15, 23, 42, 0.14);
+    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
+    padding: 2px;
+    transition: background 0.24s ease;
+    display: flex;
+    align-items: center;
+}
+
+.settings-switch-thumb {
+    width: 27px;
+    height: 27px;
+    border-radius: 50%;
+    background: #fff;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
+    transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.settings-switch input[type="checkbox"]:checked + .settings-switch-track { background: var(--primary-color); }
+.settings-switch input[type="checkbox"]:checked + .settings-switch-track .settings-switch-thumb { transform: translateX(20px); }
+.settings-switch input[type="checkbox"]:focus-visible + .settings-switch-track {
+    outline: 3px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
+    outline-offset: 3px;
+}
+
+.settings-segment {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+}
+
+.settings-segment-option { position: relative; display: block; cursor: pointer; }
+.settings-segment-option input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+
+.settings-segment-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 92px;
+    padding: 13px 15px;
+    border-radius: 12px;
+    border: 1.5px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.015);
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.settings-segment-card strong { font-size: 13.5px; font-weight: 600; color: var(--text-primary); }
+.settings-segment-card small { font-size: 12px; line-height: 1.55; color: var(--text-secondary); }
+.settings-segment-option:hover .settings-segment-card {
+    border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.2);
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.03);
+}
+.settings-segment-option input[type="radio"]:checked + .settings-segment-card {
+    border-color: var(--primary-color);
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.06);
+    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+}
+.settings-segment-option input[type="radio"]:checked + .settings-segment-card strong { color: var(--primary-color); }
+.settings-segment-option input[type="radio"]:focus-visible + .settings-segment-card {
+    outline: 3px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
+    outline-offset: 3px;
+}
+
+.theme-picker {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    width: 100%;
+}
+
+.theme-card {
+    position: relative;
+    cursor: pointer;
+    border-radius: 12px;
+    border: 1.5px solid rgba(0, 0, 0, 0.08);
+    background: rgba(0, 0, 0, 0.02);
+    padding: 13px 15px;
+    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.theme-card:hover {
+    border-color: rgba(0, 0, 0, 0.16);
+    background: rgba(0, 0, 0, 0.03);
+}
+
+.theme-card.active {
+    border-color: var(--tc-color);
+    background: rgba(0, 0, 0, 0.02);
+    box-shadow: 0 0 0 3px rgba(var(--tc-color-rgb), 0.12);
+}
+
+.theme-card-header { display: flex; align-items: center; gap: 10px; }
+
+.theme-card-swatch {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--tc-color);
+    flex-shrink: 0;
+    position: relative;
+    box-shadow: 0 2px 8px rgba(var(--tc-color-rgb), 0.3);
+}
+
+.theme-card.active .theme-card-swatch::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 14px;
+    height: 14px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+}
+
+.theme-card-title { font-size: 14px; font-weight: 600; color: var(--text-primary); }
+.theme-card.active .theme-card-title { color: var(--tc-color); }
+.theme-card-desc { font-size: 12px; line-height: 1.5; color: var(--text-secondary); font-style: italic; }
+
+/* 登录/未登录容器内的分组与 .settings-list 保持同款 18px 间距 */
+#cloud-logged-in .settings-list-group + .settings-list-group,
+#cloud-not-logged-in .settings-list-group + .settings-list-group {
+    margin-top: 18px;
+}
+
+/* ===== 云服务 ===== */
+.cloud-settings-login-icon,
+.cloud-settings-login-icon svg { display: block; width: 18px; height: 18px; }
+
+.cloud-account-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+}
+
+.cloud-avatar-wrap { flex-shrink: 0; }
+.cloud-settings-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+.cloud-settings-avatar-placeholder {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+    color: var(--primary-color);
+}
+
+.cloud-settings-avatar-placeholder svg { width: 22px; height: 22px; }
+
+.cloud-account-detail { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cloud-nickname { font-size: 15px; font-weight: 650; color: var(--text-primary); }
+.cloud-email { font-size: 12.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cloud-tier-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 650;
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+    color: var(--primary-color);
+    white-space: nowrap;
+}
+
+.cloud-tier-badge.cloud-tier-pro { background: rgba(173, 116, 14, 0.12); color: #8a5a00; }
+.cloud-tier-badge.cloud-tier-max { background: rgba(88, 86, 214, 0.12); color: #4b49b8; }
+
+.cloud-small-btn { padding: 6px 14px; font-size: 12.5px; }
+
+.cloud-manager-heading,
 .local-open-api-heading {
     display: flex;
     align-items: flex-start;
@@ -536,77 +960,7 @@
     width: 100%;
 }
 
-.local-open-api-actions,
-.local-open-api-key-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.local-open-api-actions {
-    flex-shrink: 0;
-}
-
-.local-open-api-endpoint {
-    width: 100%;
-    color: var(--text-secondary);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px;
-    line-height: 1.45;
-    overflow-wrap: anywhere;
-}
-
-.local-open-api-key-panel {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
-    border-radius: 13px;
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.055);
-}
-
-.local-open-api-key-panel > span {
-    display: block;
-    margin-bottom: 8px;
-    color: var(--text-secondary);
-    font-size: 12px;
-    line-height: 1.45;
-}
-
-.local-open-api-key-row input {
-    flex: 1;
-    min-width: 0;
-    height: 34px;
-    padding: 0 11px;
-    border: 1px solid rgba(0, 0, 0, 0.1);
-    border-radius: 10px;
-    outline: none;
-    background: rgba(255, 255, 255, 0.9);
-    color: var(--text-primary);
-    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-    font-size: 12px;
-}
-
-.local-open-api-key-row input:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
-}
-
-.cloud-manager-heading {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 16px;
-    width: 100%;
-}
-
-.cloud-manager-toolbar,
-.cloud-classroom-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    flex-wrap: wrap;
-}
+.cloud-manager-toolbar { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
 
 .cloud-classroom-list {
     display: flex;
@@ -626,20 +980,8 @@
     background: rgba(248, 249, 251, 0.82);
 }
 
-.cloud-classroom-main {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
-    min-width: 0;
-}
-
-.cloud-classroom-title-line {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-
+.cloud-classroom-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.cloud-classroom-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .cloud-classroom-title-line strong {
     overflow: hidden;
     color: var(--text-primary);
@@ -659,15 +1001,8 @@
     font-weight: 600;
 }
 
-.cloud-classroom-state.is-local {
-    background: rgba(52, 199, 89, 0.11);
-    color: #248a3d;
-}
-
-.cloud-classroom-state.is-remote {
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
-    color: var(--primary-color);
-}
+.cloud-classroom-state.is-local { background: rgba(52, 199, 89, 0.11); color: #248a3d; }
+.cloud-classroom-state.is-remote { background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1); color: var(--primary-color); }
 
 .cloud-classroom-meta {
     overflow: hidden;
@@ -678,13 +1013,8 @@
     white-space: nowrap;
 }
 
-.cloud-classroom-actions {
-    flex-shrink: 0;
-}
-
-.cloud-classroom-delete-btn {
-    color: #c9342f;
-}
+.cloud-classroom-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.cloud-classroom-delete-btn { color: #c9342f; }
 
 .cloud-classroom-loading,
 .cloud-classroom-empty {
@@ -701,18 +1031,23 @@
     text-align: center;
 }
 
-.cloud-classroom-empty {
-    flex-direction: column;
+.cloud-classroom-empty { flex-direction: column; }
+.cloud-classroom-empty strong { color: var(--text-primary); font-size: 14px; }
+.cloud-classroom-error { border-color: rgba(201, 52, 47, 0.22); background: rgba(201, 52, 47, 0.025); }
+
+.cloud-login-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: settingsSpin 0.8s linear infinite;
+    display: inline-block;
 }
 
-.cloud-classroom-empty strong {
-    color: var(--text-primary);
-    font-size: 14px;
-}
-
-.cloud-classroom-error {
-    border-color: rgba(201, 52, 47, 0.22);
-    background: rgba(201, 52, 47, 0.025);
+@keyframes settingsSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
 }
 
 .cloud-manager-modal-overlay {
@@ -733,26 +1068,11 @@
     overflow: auto;
 }
 
-.cloud-manager-modal .modal-header {
-    align-items: flex-start;
-    margin-bottom: 16px;
-}
-
+.cloud-manager-modal .modal-header { align-items: flex-start; margin-bottom: 16px; }
 .cloud-manager-modal .modal-header h3,
-.cloud-manager-delete-modal h3 {
-    margin: 0;
-    color: var(--text-primary);
-    font-size: 20px;
-    letter-spacing: -0.02em;
-}
-
+.cloud-manager-delete-modal h3 { margin: 0; color: var(--text-primary); font-size: 20px; letter-spacing: -0.02em; }
 .cloud-manager-modal .modal-header p,
-.cloud-manager-delete-modal p {
-    margin: 5px 0 0;
-    color: var(--text-secondary);
-    font-size: 13px;
-    line-height: 1.55;
-}
+.cloud-manager-delete-modal p { margin: 5px 0 0; color: var(--text-secondary); font-size: 13px; line-height: 1.55; }
 
 .cloud-manager-local-list {
     display: flex;
@@ -778,31 +1098,11 @@
     background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.055);
 }
 
-.cloud-manager-local-option input {
-    width: 18px;
-    height: 18px;
-    accent-color: var(--primary-color);
-}
+.cloud-manager-local-option input { width: 18px; height: 18px; accent-color: var(--primary-color); }
 
-.cloud-manager-local-copy {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 0;
-}
-
-.cloud-manager-local-copy strong {
-    overflow: hidden;
-    color: var(--text-primary);
-    font-size: 14px;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.cloud-manager-local-copy span {
-    color: var(--text-secondary);
-    font-size: 12px;
-}
+.cloud-manager-local-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cloud-manager-local-copy strong { overflow: hidden; color: var(--text-primary); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.cloud-manager-local-copy span { color: var(--text-secondary); font-size: 12px; }
 
 .cloud-manager-upload-result {
     display: flex;
@@ -815,477 +1115,83 @@
     background: rgba(248, 249, 251, 0.84);
 }
 
-.cloud-manager-upload-result > span:first-child {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-}
+.cloud-manager-upload-result > span:first-child { display: flex; flex-direction: column; gap: 3px; }
+.cloud-manager-upload-result strong { color: var(--text-primary); font-size: 14px; }
+.cloud-manager-upload-result small { color: var(--text-secondary); font-size: 12px; }
 
-.cloud-manager-upload-result strong {
-    color: var(--text-primary);
-    font-size: 14px;
-}
+.cloud-manager-result-badge { flex-shrink: 0; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 650; }
+.cloud-manager-upload-result.is-success .cloud-manager-result-badge { background: rgba(52, 199, 89, 0.11); color: #248a3d; }
+.cloud-manager-upload-result.is-error .cloud-manager-result-badge { background: rgba(201, 52, 47, 0.1); color: #c9342f; }
 
-.cloud-manager-upload-result small {
-    color: var(--text-secondary);
-    font-size: 12px;
-}
+.cloud-manager-modal-actions { margin-top: 18px; }
+.cloud-manager-delete-modal { width: min(420px, 100%); text-align: left; }
+.cloud-manager-delete-modal p { margin-top: 10px; }
 
-.cloud-manager-result-badge {
-    flex-shrink: 0;
-    padding: 3px 9px;
-    border-radius: 999px;
-    font-size: 11px;
-    font-weight: 650;
-}
+.cloud-server-url-row { display: flex; gap: 8px; width: 100%; flex-wrap: wrap; }
 
-.cloud-manager-upload-result.is-success .cloud-manager-result-badge {
-    background: rgba(52, 199, 89, 0.11);
-    color: #248a3d;
-}
-
-.cloud-manager-upload-result.is-error .cloud-manager-result-badge {
-    background: rgba(201, 52, 47, 0.1);
-    color: #c9342f;
-}
-
-.cloud-manager-modal-actions {
-    margin-top: 18px;
-}
-
-.cloud-manager-delete-modal {
-    width: min(420px, 100%);
-    text-align: left;
-}
-
-.cloud-manager-delete-modal p {
-    margin-top: 10px;
-}
-
-.setting-divider {
-    height: 1px;
-    background: rgba(0, 0, 0, 0.05);
-    margin: 0 20px;
-}
-
-.setting-info {
+.cloud-server-url-input {
     flex: 1;
-    min-width: 0;
-}
-
-.setting-info label {
-    display: block;
-    font-weight: 500;
-    font-size: 15px;
-    color: var(--text-primary);
-    margin-bottom: 2px;
-}
-
-.setting-description {
-    display: block;
-    font-size: 13px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-}
-
-.setting-value {
-    display: block;
-    color: var(--text-secondary);
-    font-size: 13px;
-    margin-top: 4px;
-}
-
-.setting-trail {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex-shrink: 0;
-}
-
-.setting-trail .setting-value {
-    margin-top: 0;
-    text-align: right;
-    white-space: nowrap;
-}
-
-.setting-version-badge {
-    display: inline-flex;
-    align-items: center;
-    padding: 4px 12px;
-    border-radius: 999px;
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.08);
-    color: var(--primary-color);
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.02em;
-}
-
-.setting-link {
-    color: var(--primary-color);
-    text-decoration: none;
-    font-size: 14px;
-}
-
-.setting-link:hover {
-    text-decoration: underline;
-}
-
-#manual-check-update-btn {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    white-space: nowrap;
-    flex-shrink: 0;
-}
-
-.settings-switch {
-    position: relative;
-    display: inline-flex;
-    align-items: center;
-    cursor: pointer;
-    user-select: none;
-    flex-shrink: 0;
-}
-
-.settings-switch input[type="checkbox"] {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-}
-
-.settings-switch-track {
-    width: 51px;
-    height: 31px;
-    border-radius: 999px;
-    background: rgba(15, 23, 42, 0.14);
-    box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.08);
-    padding: 2px;
-    transition: background 0.24s ease, box-shadow 0.24s ease;
-    display: flex;
-    align-items: center;
-}
-
-.settings-switch-thumb {
-    width: 27px;
-    height: 27px;
-    border-radius: 50%;
+    min-width: 200px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    outline: none;
     background: #fff;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.15), 0 0 0 0.5px rgba(0, 0, 0, 0.04);
-    transition: transform 0.24s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-.settings-switch input[type="checkbox"]:checked + .settings-switch-track {
-    background: var(--primary-color);
-}
-
-.settings-switch input[type="checkbox"]:checked + .settings-switch-track .settings-switch-thumb {
-    transform: translateX(20px);
-}
-
-.settings-switch input[type="checkbox"]:focus-visible + .settings-switch-track {
-    outline: 3px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
-    outline-offset: 3px;
-}
-
-.settings-segment {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-    width: 100%;
-    margin-top: 4px;
-}
-
-.settings-segment-option {
-    position: relative;
-    display: block;
-    cursor: pointer;
-}
-
-.settings-segment-option input[type="radio"] {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-}
-
-.settings-segment-card {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    min-height: 96px;
-    padding: 14px 16px;
-    border-radius: 12px;
-    border: 1.5px solid rgba(0, 0, 0, 0.08);
-    background: rgba(0, 0, 0, 0.02);
-    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-}
-
-.settings-segment-card strong {
-    font-size: 14px;
-    font-weight: 600;
     color: var(--text-primary);
+    font-size: 13px;
 }
 
-.settings-segment-card small {
-    font-size: 12px;
-    line-height: 1.6;
-    color: var(--text-secondary);
-}
-
-.settings-segment-option:hover .settings-segment-card {
-    border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.2);
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.03);
-}
-
-.settings-segment-option input[type="radio"]:checked + .settings-segment-card {
+.cloud-server-url-input:focus {
     border-color: var(--primary-color);
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.06);
     box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
 }
 
-.settings-segment-option input[type="radio"]:checked + .settings-segment-card strong {
-    color: var(--primary-color);
-}
+/* ===== 本机 API ===== */
+.local-open-api-setting-inner { gap: 12px; }
+.local-open-api-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 
-.settings-segment-option input[type="radio"]:focus-visible + .settings-segment-card {
-    outline: 3px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
-    outline-offset: 3px;
-}
-
-.settings-about-section {
-    border: none;
-    box-shadow: none;
-    background: transparent;
-}
-
-.settings-about-card {
-    position: relative;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    padding: 32px 20px 28px;
-    gap: 8px;
-    border-radius: 16px;
-    color: inherit;
-    text-decoration: none;
-    transition: background 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
-}
-
-.settings-about-card:hover {
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.035);
-    box-shadow: inset 0 0 0 1px rgba(var(--primary-color-rgb, 10, 89, 247), 0.08);
-    transform: translateY(-1px);
-}
-
-.settings-about-icon {
-    width: 72px;
-    height: 72px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 20px;
-    background: white;
-    border: 1px solid rgba(0, 0, 0, 0.06);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
-    margin-bottom: 4px;
-}
-
-.settings-about-name {
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--text-primary);
-    letter-spacing: -0.01em;
-}
-
-.settings-about-meta {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--text-secondary);
-}
-
-.settings-about-dot {
-    width: 3px;
-    height: 3px;
-    border-radius: 50%;
-    background: var(--text-secondary);
-    opacity: 0.5;
-}
-
-.settings-about-link {
-    color: var(--primary-color);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.settings-about-link:hover {
-    text-decoration: underline;
-}
-
-.settings-about-chevron {
-    position: absolute;
-    right: 22px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: var(--text-secondary);
-    opacity: 0.65;
-}
-
-@media (max-width: 720px) {
-    .settings-container {
-        padding: 24px 16px 48px;
-    }
-
-    .settings-header {
-        margin-bottom: 24px;
-    }
-
-    .settings-header h1 {
-        font-size: 24px;
-    }
-
-    .settings-segment {
-        grid-template-columns: 1fr;
-    }
-
-    .setting-item {
-        padding: 12px 16px;
-    }
-
-    .setting-divider {
-        margin: 0 16px;
-    }
-
-    .section-header {
-        padding: 14px 16px;
-    }
-
-    .cloud-manager-heading,
-    .cloud-classroom-row,
-    .local-open-api-heading {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .cloud-manager-toolbar,
-    .cloud-classroom-actions {
-        justify-content: flex-start;
-    }
-
-    .cloud-classroom-actions .btn {
-        flex: 1 1 auto;
-        justify-content: center;
-    }
-
-    .cloud-classroom-meta {
-        white-space: normal;
-    }
-
-    .local-open-api-actions,
-    .local-open-api-key-row {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .local-open-api-actions .btn,
-    .local-open-api-key-row .btn {
-        justify-content: center;
-        width: 100%;
-    }
-
-    .cloud-manager-modal {
-        padding: 18px;
-        border-radius: 18px;
-    }
-}
-
-.theme-picker {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+.local-open-api-endpoint {
     width: 100%;
-    margin-top: 4px;
-}
-
-.theme-card {
-    position: relative;
-    cursor: pointer;
-    border-radius: 12px;
-    border: 1.5px solid rgba(0, 0, 0, 0.08);
-    background: rgba(0, 0, 0, 0.02);
-    padding: 14px 16px;
-    transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
-    display: flex;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.theme-card:hover {
-    border-color: rgba(0, 0, 0, 0.16);
-    background: rgba(0, 0, 0, 0.03);
-}
-
-.theme-card.active {
-    border-color: var(--tc-color);
-    background: rgba(0, 0, 0, 0.02);
-    box-shadow: 0 0 0 3px rgba(var(--tc-color-rgb), 0.12);
-}
-
-.theme-card-header {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.theme-card-swatch {
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: var(--tc-color);
-    flex-shrink: 0;
-    position: relative;
-    box-shadow: 0 2px 8px rgba(var(--tc-color-rgb), 0.3);
-}
-
-.theme-card.active .theme-card-swatch::after {
-    content: '';
-    position: absolute;
-    top: 50%;
-    left: 50%;
-    transform: translate(-50%, -50%);
-    width: 14px;
-    height: 14px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E");
-    background-size: contain;
-    background-repeat: no-repeat;
-}
-
-.theme-card-title {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-}
-
-.theme-card.active .theme-card-title {
-    color: var(--tc-color);
-}
-
-.theme-card-desc {
-    font-size: 12px;
-    line-height: 1.5;
     color: var(--text-secondary);
-    font-style: italic;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
 }
 
-@media (max-width: 720px) {
-    .theme-picker {
-        grid-template-columns: 1fr;
-    }
+.local-open-api-key-panel {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
+    border-radius: 13px;
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.055);
 }
 
-.subscription-plans-wrap {
-    padding: 16px 20px 20px;
+.local-open-api-key-panel > span { display: block; margin-bottom: 8px; color: var(--text-secondary); font-size: 12px; line-height: 1.45; }
+.local-open-api-key-row { display: flex; align-items: center; gap: 8px; }
+
+.local-open-api-key-row input {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    padding: 0 11px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    outline: none;
+    background: rgba(255, 255, 255, 0.9);
+    color: var(--text-primary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
 }
+
+.local-open-api-key-row input:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+}
+
+/* ===== 订阅计划 ===== */
+.subscription-plans-wrap { padding: 0; }
 
 .subscription-plans-loading {
     display: flex;
@@ -1304,38 +1210,29 @@
     border: 3px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.15);
     border-top-color: var(--primary-color);
     border-radius: 50%;
-    animation: spin 0.8s linear infinite;
+    animation: settingsSpin 0.8s linear infinite;
 }
 
-.subscription-plans-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 14px;
-}
+.subscription-plans-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
 
 .plan-card {
     position: relative;
     display: flex;
     flex-direction: column;
     border-radius: 14px;
-    border: 1.5px solid rgba(0, 0, 0, 0.08);
-    background: rgba(0, 0, 0, 0.015);
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    background: #fff;
     overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
     transition: border-color 0.2s ease, box-shadow 0.2s ease;
 }
 
 .plan-card:hover {
-    border-color: rgba(0, 0, 0, 0.14);
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.07);
 }
-
-.plan-card.plan-card-current {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
-}
-
-.plan-card.plan-card-recommended {
-    border-color: var(--primary-color);
-}
+.plan-card.plan-card-current { border-color: var(--primary-color); box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1); }
+.plan-card.plan-card-recommended { border-color: var(--primary-color); }
 
 .plan-card-badge {
     position: absolute;
@@ -1348,85 +1245,23 @@
     line-height: 1.6;
 }
 
-.plan-card-badge-current {
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
-    color: var(--primary-color);
-}
+.plan-card-badge-current { background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1); color: var(--primary-color); }
 
-.plan-card-header {
-    padding: 18px 16px 12px;
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-}
+.plan-card-header { padding: 18px 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+.plan-card-name { font-size: 17px; font-weight: 700; color: var(--text-primary); }
+.plan-card-current .plan-card-name { color: var(--primary-color); }
+.plan-card-desc { font-size: 12px; color: var(--text-secondary); line-height: 1.5; }
+.plan-card-price { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-top: 4px; }
 
-.plan-card-name {
-    font-size: 17px;
-    font-weight: 700;
-    color: var(--text-primary);
-}
+.plan-card-limits { padding: 0 16px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
 
-.plan-card-current .plan-card-name {
-    color: var(--primary-color);
-}
+.plan-limit-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); line-height: 1.4; }
+.plan-limit-icon { flex-shrink: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+.plan-limit-icon-check { color: #34c759; }
+.plan-limit-icon-cross { color: #c7c7cc; }
 
-.plan-card-desc {
-    font-size: 12px;
-    color: var(--text-secondary);
-    line-height: 1.5;
-}
-
-.plan-card-price {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-top: 4px;
-}
-
-.plan-card-limits {
-    padding: 0 16px 14px;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    flex: 1;
-}
-
-.plan-limit-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-size: 13px;
-    color: var(--text-primary);
-    line-height: 1.4;
-}
-
-.plan-limit-icon {
-    flex-shrink: 0;
-    width: 18px;
-    height: 18px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-
-.plan-limit-icon-check {
-    color: #34c759;
-}
-
-.plan-limit-icon-cross {
-    color: #c7c7cc;
-}
-
-.plan-card-footer {
-    padding: 0 16px 16px;
-    margin-top: auto;
-}
-
-.plan-card-footer .btn {
-    width: 100%;
-    justify-content: center;
-    font-size: 14px;
-}
+.plan-card-footer { padding: 0 16px 16px; margin-top: auto; }
+.plan-card-footer .btn { width: 100%; justify-content: center; font-size: 14px; }
 
 .plan-card-footer .btn-plan-current {
     background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.08);
@@ -1436,44 +1271,58 @@
     border: none;
 }
 
-@media (max-width: 720px) {
-    .subscription-plans-grid {
-        grid-template-columns: 1fr;
-    }
-    .subscription-plans-wrap {
-        padding: 12px 16px 16px;
-    }
+/* ===== 更新 ===== */
+.setting-version-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.08);
+    color: var(--primary-color);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
 }
 
+#manual-check-update-btn { display: flex; align-items: center; gap: 8px; white-space: nowrap; flex-shrink: 0; }
+
+/* ===== 数据与隐私 ===== */
 .data-sharing-retention-select {
     appearance: none;
     -webkit-appearance: none;
-    padding: 6px 32px 6px 12px;
-    border-radius: 8px;
+    padding: 7px 32px 7px 12px;
+    border-radius: 9px;
     border: 1.5px solid rgba(0, 0, 0, 0.1);
-    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
-    font-size: 14px;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+    font-size: 13px;
     color: var(--text-primary);
     cursor: pointer;
     transition: border-color 0.2s ease;
 }
 
-.data-sharing-retention-select:hover {
-    border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.3);
-}
-
+.data-sharing-retention-select:hover { border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.3); }
 .data-sharing-retention-select:focus {
     outline: none;
     border-color: var(--primary-color);
     box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
 }
 
-.data-sharing-privacy-list {
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-    margin-top: 4px;
+.privacy-card {
+    padding: 16px 18px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
 }
+
+.privacy-card-title {
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--text-primary);
+    margin-bottom: 12px;
+}
+
+.data-sharing-privacy-list { display: flex; flex-direction: column; gap: 8px; }
 
 .data-sharing-privacy-item {
     display: flex;
@@ -1484,25 +1333,133 @@
     color: var(--text-primary);
 }
 
-.data-sharing-privacy-icon {
-    flex-shrink: 0;
-    width: 18px;
-    height: 18px;
+.data-sharing-privacy-icon { flex-shrink: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+.data-sharing-privacy-collect .data-sharing-privacy-icon { color: #34c759; }
+.data-sharing-privacy-no .data-sharing-privacy-icon { color: #c7c7cc; }
+.data-sharing-privacy-no span:last-child { color: var(--text-secondary); }
+
+/* ===== 关于 ===== */
+.settings-about-icon-lg svg { width: 26px; height: 26px; }
+
+.settings-about-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 44px 24px 36px;
+    border-radius: 16px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.settings-about-logo {
+    width: 76px;
+    height: 76px;
     display: flex;
     align-items: center;
     justify-content: center;
+    border-radius: 20px;
+    background: #fff;
+    border: 1px solid rgba(0, 0, 0, 0.06);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+    color: var(--primary-color);
+    margin-bottom: 4px;
 }
 
-.data-sharing-privacy-collect .data-sharing-privacy-icon {
-    color: #34c759;
+.settings-about-logo svg { width: 44px; height: 44px; }
+
+.settings-about-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-primary);
+    letter-spacing: -0.01em;
 }
 
-.data-sharing-privacy-no .data-sharing-privacy-icon {
-    color: #c7c7cc;
-}
-
-.data-sharing-privacy-no span:last-child {
+.settings-about-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
     color: var(--text-secondary);
+}
+
+.settings-about-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--text-secondary); opacity: 0.5; }
+
+.settings-about-link {
+    color: var(--primary-color);
+    text-decoration: none;
+    font-weight: 550;
+}
+
+.settings-about-link:hover { text-decoration: underline; }
+.settings-about-action { margin-top: 10px; min-width: 160px; justify-content: center; }
+
+/* ===== 响应式 ===== */
+@media (max-width: 920px) {
+    .settings-app {
+        grid-template-columns: 1fr;
+        height: auto;
+    }
+
+    .settings-rail {
+        position: sticky;
+        top: var(--header-height);
+        z-index: 30;
+        border-right: none;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+        overflow: visible;
+    }
+
+    .settings-rail-inner {
+        flex-direction: column;
+        gap: 10px;
+        padding: 12px 16px;
+    }
+
+    .settings-account-chip { align-self: flex-start; max-width: 300px; }
+
+    .settings-nav {
+        flex-direction: row;
+        overflow-x: auto;
+        padding-bottom: 2px;
+        scrollbar-width: none;
+    }
+
+    .settings-nav::-webkit-scrollbar { display: none; }
+
+    .settings-nav-item { flex-shrink: 0; height: 36px; padding: 0 14px; }
+    .settings-nav-item svg { display: none; }
+    .settings-rail-footer { display: none; }
+
+    .settings-canvas { padding: 22px 16px 56px; }
+
+    .settings-segment,
+    .theme-picker { grid-template-columns: 1fr; }
+
+    .cloud-manager-heading,
+    .local-open-api-heading {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .cloud-manager-toolbar,
+    .cloud-classroom-actions { justify-content: flex-start; }
+    .cloud-classroom-actions .btn { flex: 1 1 auto; justify-content: center; }
+    .cloud-classroom-meta { white-space: normal; }
+
+    .local-open-api-actions,
+    .local-open-api-key-row { flex-direction: column; align-items: stretch; }
+    .local-open-api-actions .btn,
+    .local-open-api-key-row .btn { justify-content: center; width: 100%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-panel.active { animation: none; }
+    .settings-switch-track,
+    .settings-switch-thumb,
+    .settings-segment-card,
+    .theme-card { transition: none; }
 }
 </style>
 
@@ -1515,10 +1472,32 @@ document.addEventListener('DOMContentLoaded', () => {
         const themes = ThemeManager.THEMES;
         const currentId = ThemeManager.getThemeId();
 
-        Object.values(themes).forEach((theme) => {
+        themePicker.setAttribute('role', 'radiogroup');
+        themePicker.setAttribute('aria-label', '主题色');
+
+        const selectTheme = (theme, originX, originY) => {
+            ThemeManager.setTheme(theme.id, originX, originY);
+            const cards = themePicker.querySelectorAll('.theme-card');
+            cards.forEach((c) => {
+                const isActive = c.getAttribute('data-theme-id') === theme.id;
+                c.classList.toggle('active', isActive);
+                c.setAttribute('aria-checked', isActive ? 'true' : 'false');
+                c.tabIndex = isActive ? 0 : -1;
+            });
+            if (themeStatus) themeStatus.textContent = theme.name;
+            if (typeof showToast === 'function') {
+                showToast('已切换为「' + theme.name + '」');
+            }
+        };
+
+        const themeList = Object.values(themes);
+        themeList.forEach((theme) => {
             const card = document.createElement('div');
             card.className = 'theme-card' + (theme.id === currentId ? ' active' : '');
             card.setAttribute('data-theme-id', theme.id);
+            card.setAttribute('role', 'radio');
+            card.setAttribute('aria-checked', theme.id === currentId ? 'true' : 'false');
+            card.tabIndex = theme.id === currentId ? 0 : -1;
             card.style.setProperty('--tc-color', theme.color);
             card.style.setProperty('--tc-color-rgb', theme.colorRgb);
             card.innerHTML =
@@ -1527,14 +1506,22 @@ document.addEventListener('DOMContentLoaded', () => {
                     '<span class="theme-card-title">' + theme.name + '</span>' +
                 '</div>' +
                 '<span class="theme-card-desc">' + theme.description + '</span>';
-            card.addEventListener('click', () => {
-                ThemeManager.setTheme(theme.id);
-                themePicker.querySelectorAll('.theme-card').forEach((c) => {
-                    c.classList.toggle('active', c.getAttribute('data-theme-id') === theme.id);
-                });
-                if (themeStatus) themeStatus.textContent = theme.name;
-                if (typeof showToast === 'function') {
-                    showToast('已切换为「' + theme.name + '」');
+            card.addEventListener('click', (event) => {
+                const rect = card.getBoundingClientRect();
+                selectTheme(theme, rect.left + rect.width / 2, rect.top + rect.height / 2);
+            });
+            card.addEventListener('keydown', (event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                    event.preventDefault();
+                    const rect = card.getBoundingClientRect();
+                    selectTheme(theme, rect.left + rect.width / 2, rect.top + rect.height / 2);
+                } else if (event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+                    event.preventDefault();
+                    const cards = Array.from(themePicker.querySelectorAll('.theme-card'));
+                    const currentIndex = cards.indexOf(card);
+                    const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown';
+                    const nextIndex = (currentIndex + (forward ? 1 : -1) + cards.length) % cards.length;
+                    cards[nextIndex].focus();
                 }
             });
             themePicker.appendChild(card);
@@ -1546,6 +1533,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const SHIFT_USE_LARGE_GROUPS_KEY = 'seats_shift_use_large_groups';
     const GROUP_MOVE_MODE_KEY = 'seats_group_move_mode';
     const checkBtn = document.getElementById('manual-check-update-btn');
+    const checkBtnOriginalHtml = checkBtn ? checkBtn.innerHTML : '';
+    const checkBtnSpinnerHtml = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation: spin 1s linear infinite;"><path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/><path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/></svg>检查中...';
     const groupMoveModeInputs = Array.from(document.querySelectorAll('input[name="group_move_mode"]'));
     const groupMoveModeStatus = document.getElementById('group-move-mode-status');
     const shiftUseLargeGroupsToggle = document.getElementById('settings-shift-use-large-groups-toggle');
@@ -1604,7 +1593,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    checkBtn.addEventListener('click', async () => {
+    if (checkBtn) checkBtn.addEventListener('click', async () => {
         const isMacosLocalUpdate = document.body && document.body.dataset.appPlatform === 'macos';
         if (isMacosLocalUpdate) {
             checkBtn.disabled = true;
@@ -1621,7 +1610,7 @@ document.addEventListener('DOMContentLoaded', () => {
             return;
         }
         checkBtn.disabled = true;
-        checkBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation: spin 1s linear infinite;"><path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/><path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/></svg>检查中...';
+        checkBtn.innerHTML = checkBtnSpinnerHtml;
 
         try {
             const response = await fetch('/api/update/check/');
@@ -1644,13 +1633,15 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error('Update check error:', error);
         } finally {
             checkBtn.disabled = false;
-            checkBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/><path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/></svg>检查更新';
+            checkBtn.innerHTML = checkBtnOriginalHtml;
         }
     });
 
+    var cloudSettingsWaitStart = Date.now();
     (function initCloudSettings() {
         if (!window.CloudManager) {
-            setTimeout(initCloudSettings, 80);
+            // 等待超过 15 秒说明 cloud.js 加载失败，放弃初始化，避免无限空转。
+            if (Date.now() - cloudSettingsWaitStart < 15000) setTimeout(initCloudSettings, 80);
             return;
         }
         const notLoggedIn = document.getElementById('cloud-not-logged-in');
@@ -1705,6 +1696,8 @@ document.addEventListener('DOMContentLoaded', () => {
             var show = function() {
                 modal.style.display = 'flex';
                 modal.setAttribute('aria-hidden', 'false');
+                var focusTarget = modal.querySelector('button');
+                if (focusTarget) focusTarget.focus();
             };
             if (window.PopupManager) PopupManager.request(popupId, show);
             else show();
@@ -1716,6 +1709,22 @@ document.addEventListener('DOMContentLoaded', () => {
             modal.setAttribute('aria-hidden', 'true');
             if (window.PopupManager) PopupManager.notifyDismissed(popupId);
         }
+
+        [addModal, deleteModal].forEach(function(modal) {
+            if (!modal) return;
+            var popupId = modal === deleteModal ? 'cloud-classroom-delete' : 'cloud-classroom-add';
+            modal.addEventListener('click', function(event) {
+                if (event.target === modal) hideManagerModal(modal, popupId);
+            });
+        });
+        document.addEventListener('keydown', function(event) {
+            if (event.key !== 'Escape') return;
+            [addModal, deleteModal].forEach(function(modal) {
+                if (modal && modal.style.display !== 'none' && modal.getAttribute('aria-hidden') === 'false') {
+                    hideManagerModal(modal, modal === deleteModal ? 'cloud-classroom-delete' : 'cloud-classroom-add');
+                }
+            });
+        });
 
         function buildCloudClassroomButton(text, className, handler) {
             var button = document.createElement('button');
@@ -1748,6 +1757,12 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (error) {
                 localOpenAPIStatus.textContent = '授权状态读取失败';
             }
+        }
+
+        var classroomDetailUrlTemplate = '{% url "classroom_detail" 0 %}';
+        function localClassroomDetailUrl(row) {
+            if (row.local_detail_url) return row.local_detail_url;
+            return classroomDetailUrlTemplate.replace('/0/', '/' + row.local_classroom_id + '/');
         }
 
         function renderCloudClassrooms(status) {
@@ -1797,7 +1812,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 actions.className = 'cloud-classroom-actions';
                 if (row.local_classroom_id) {
                     actions.appendChild(buildCloudClassroomButton('查看本地', 'btn-secondary', function() {
-                        window.location.href = row.local_detail_url || ('/classroom/' + row.local_classroom_id + '/');
+                        window.location.href = localClassroomDetailUrl(row);
                     }));
                 } else {
                     actions.appendChild(buildCloudClassroomButton('下载到本地', 'btn-primary', async function(event) {
@@ -1915,12 +1930,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         function renderCloudUI(data) {
             currentCloudUser = data || { logged_in: false };
+            var connectionErrorText = document.getElementById('cloud-connection-error-text');
+            if (connectionErrorText) connectionErrorText.hidden = !(data && data.connection_error);
             if (data.logged_in) {
                 notLoggedIn.style.display = 'none';
                 loggedIn.style.display = 'block';
                 var avatarWrap = document.getElementById('cloud-avatar-wrap');
+                avatarWrap.innerHTML = '';
                 if (data.avatar_url) {
-                    avatarWrap.innerHTML = '<img src="' + data.avatar_url + '" class="cloud-settings-avatar" alt="" />';
+                    var avatarImg = document.createElement('img');
+                    avatarImg.src = data.avatar_url;
+                    avatarImg.className = 'cloud-settings-avatar';
+                    avatarImg.alt = '';
+                    avatarWrap.appendChild(avatarImg);
                 } else {
                     avatarWrap.innerHTML = '<div class="cloud-settings-avatar cloud-settings-avatar-placeholder"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z" fill="currentColor"/></svg></div>';
                 }
@@ -1973,10 +1995,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (logoutBtn) logoutBtn.addEventListener('click', async function() {
             logoutBtn.disabled = true;
-            await CloudManager.logout();
-            if (typeof showToast === 'function') showToast('已退出云服务');
-            renderCloudUI({ logged_in: false });
-            logoutBtn.disabled = false;
+            try {
+                await CloudManager.logout();
+                if (typeof showToast === 'function') showToast('已退出云服务');
+                renderCloudUI({ logged_in: false });
+            } catch (error) {
+                if (typeof showToast === 'function') showToast('退出失败：' + ((error && error.message) || '网络错误'));
+            } finally {
+                logoutBtn.disabled = false;
+            }
         });
 
         if (localOpenAPIGenerateBtn) localOpenAPIGenerateBtn.addEventListener('click', async function() {
@@ -2136,6 +2163,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (saveUrlBtn) saveUrlBtn.addEventListener('click', async function() {
             var url = (urlInput.value || '').trim();
             if (!url) { showToast('请输入云服务器地址'); return; }
+            if (!/^https?:\/\//i.test(url)) { showToast('地址需以 http:// 或 https:// 开头'); return; }
             saveUrlBtn.disabled = true;
             try {
                 await CloudManager.setCloudServerUrl(url);
@@ -2143,7 +2171,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 await CloudManager.logout();
                 renderCloudUI({ logged_in: false });
             } catch(e) {
-                showToast('保存失败');
+                showToast('保存失败：' + ((e && e.message) || '网络错误'));
             } finally {
                 saveUrlBtn.disabled = false;
             }
@@ -2232,12 +2260,35 @@ document.addEventListener('DOMContentLoaded', () => {
                 var card = document.createElement('div');
                 card.className = 'plan-card' + (isCurrent ? ' plan-card-current' : '');
 
-                var badgeHtml = '';
                 if (isCurrent) {
-                    badgeHtml = '<span class="plan-card-badge plan-card-badge-current">当前</span>';
+                    var badge = document.createElement('span');
+                    badge.className = 'plan-card-badge plan-card-badge-current';
+                    badge.textContent = '当前';
+                    card.appendChild(badge);
                 }
 
-                var limitsHtml = '';
+                var header = document.createElement('div');
+                header.className = 'plan-card-header';
+                var planName = document.createElement('div');
+                planName.className = 'plan-card-name';
+                planName.textContent = plan.display_name || plan.key;
+                header.appendChild(planName);
+                if (plan.description) {
+                    var planDesc = document.createElement('div');
+                    planDesc.className = 'plan-card-desc';
+                    planDesc.textContent = plan.description;
+                    header.appendChild(planDesc);
+                }
+                if (plan.price) {
+                    var planPrice = document.createElement('div');
+                    planPrice.className = 'plan-card-price';
+                    planPrice.textContent = plan.price;
+                    header.appendChild(planPrice);
+                }
+                card.appendChild(header);
+
+                var limitsWrap = document.createElement('div');
+                limitsWrap.className = 'plan-card-limits';
                 allLimitKeys.forEach(function(key) {
                     var val = plan.limits[key];
                     var label = LIMIT_LABELS[key] || key;
@@ -2254,24 +2305,39 @@ document.addEventListener('DOMContentLoaded', () => {
                         iconHtml = isNone ? crossSvg() : checkSvg();
                         text = label + '：' + formatted;
                     }
-                    limitsHtml += '<div class="plan-limit-row"><span class="plan-limit-icon ' + iconClass + '">' + iconHtml + '</span><span>' + text + '</span></div>';
+                    var limitRow = document.createElement('div');
+                    limitRow.className = 'plan-limit-row';
+                    var limitIcon = document.createElement('span');
+                    limitIcon.className = 'plan-limit-icon ' + iconClass;
+                    limitIcon.innerHTML = iconHtml;
+                    var limitText = document.createElement('span');
+                    limitText.textContent = text;
+                    limitRow.appendChild(limitIcon);
+                    limitRow.appendChild(limitText);
+                    limitsWrap.appendChild(limitRow);
                 });
+                card.appendChild(limitsWrap);
 
-                var footerHtml = '';
                 if (isCurrent) {
-                    footerHtml = '<div class="plan-card-footer"><button class="btn btn-plan-current" type="button">当前方案</button></div>';
+                    var currentFooter = document.createElement('div');
+                    currentFooter.className = 'plan-card-footer';
+                    var currentBtn = document.createElement('button');
+                    currentBtn.className = 'btn btn-plan-current';
+                    currentBtn.type = 'button';
+                    currentBtn.textContent = '当前方案';
+                    currentFooter.appendChild(currentBtn);
+                    card.appendChild(currentFooter);
                 } else if (plan.key !== 'free') {
-                    footerHtml = '<div class="plan-card-footer"><button class="btn btn-primary plan-purchase-btn" type="button" data-tier="' + plan.key + '">订阅</button></div>';
+                    var footer = document.createElement('div');
+                    footer.className = 'plan-card-footer';
+                    var purchaseBtn = document.createElement('button');
+                    purchaseBtn.className = 'btn btn-primary plan-purchase-btn';
+                    purchaseBtn.type = 'button';
+                    purchaseBtn.setAttribute('data-tier', plan.key);
+                    purchaseBtn.textContent = '订阅';
+                    footer.appendChild(purchaseBtn);
+                    card.appendChild(footer);
                 }
-
-                card.innerHTML = badgeHtml +
-                    '<div class="plan-card-header">' +
-                        '<div class="plan-card-name">' + (plan.display_name || plan.key) + '</div>' +
-                        (plan.description ? '<div class="plan-card-desc">' + plan.description + '</div>' : '') +
-                        (plan.price ? '<div class="plan-card-price">' + plan.price + '</div>' : '') +
-                    '</div>' +
-                    '<div class="plan-card-limits">' + limitsHtml + '</div>' +
-                    footerHtml;
 
                 grid.appendChild(card);
             });
@@ -2305,6 +2371,7 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         }
 
+        var plansWaitStart = Date.now();
         function loadPlans() {
             if (window.CloudManager && CloudManager.getSubscriptionPlans) {
                 CloudManager.getSubscriptionPlans().then(function(data) {
@@ -2313,6 +2380,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     wrap.innerHTML = '<div class="subscription-plans-loading"><span>加载订阅计划失败，请检查网络连接</span></div>';
                 });
             } else {
+                // 等待超过 15 秒说明依赖脚本加载失败，显示失败提示而不是无限轮询。
+                if (Date.now() - plansWaitStart >= 15000) {
+                    wrap.innerHTML = '<div class="subscription-plans-loading"><span>加载订阅计划失败，请检查网络连接</span></div>';
+                    return;
+                }
                 setTimeout(loadPlans, 100);
             }
         }
@@ -2342,13 +2414,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     }
                 }
                 if (!found) retentionSelect.value = '30';
+                retentionSelect.dataset.lastSavedValue = retentionSelect.value;
             }
         }
 
+        toggle.disabled = true;
         fetch('/cloud/config')
             .then(function(r) { return r.json(); })
             .then(function(data) { updateUI(data.data_sharing || {}); })
-            .catch(function() { statusEl.textContent = '加载失败'; });
+            .catch(function() { statusEl.textContent = '加载失败'; })
+            .finally(function() { toggle.disabled = false; });
 
         toggle.addEventListener('change', function() {
             var enabled = toggle.checked;
@@ -2387,17 +2462,27 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
+        function updateRetentionFailed() {
+            if (typeof showToast === 'function') showToast('保存失败，请稍后重试');
+        }
+
         if (retentionSelect) {
             retentionSelect.addEventListener('change', function() {
                 var days = parseInt(retentionSelect.value) || 30;
                 var successMessage = '本地日志保存天数已更新，不会影响服务端保存天数';
+                var previousDays = retentionSelect.dataset.lastSavedValue || '30';
+                var restoreSelection = function() { retentionSelect.value = previousDays; };
                 var saveLocalRetention = window.DataSharing && (
                     DataSharing.setLocalLogRetentionDays || DataSharing.setLogRetentionDays
                 );
                 if (saveLocalRetention) {
                     (DataSharing.setLocalLogRetentionDays || DataSharing.setLogRetentionDays)(days).then(function(config) {
                         updateUI(config);
+                        retentionSelect.dataset.lastSavedValue = String(days);
                         if (typeof showToast === 'function') showToast(successMessage);
+                    }).catch(function() {
+                        restoreSelection();
+                        updateRetentionFailed();
                     });
                 } else {
                     fetch('/cloud/config', {
@@ -2408,7 +2493,12 @@ document.addEventListener('DOMContentLoaded', () => {
                         .then(function(r) { return r.json(); })
                         .then(function(data) {
                             updateUI(data.data_sharing || {});
+                            retentionSelect.dataset.lastSavedValue = String(days);
                             if (typeof showToast === 'function') showToast(successMessage);
+                        })
+                        .catch(function() {
+                            restoreSelection();
+                            updateRetentionFailed();
                         });
                 }
             });
@@ -2417,10 +2507,98 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 </script>
 
-<style>
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
-}
-</style>
+<script>
+document.addEventListener('DOMContentLoaded', function () {
+    var navItems = Array.from(document.querySelectorAll('[data-settings-nav]'));
+    var panels = Array.from(document.querySelectorAll('[data-settings-panel]'));
+    var gotoButtons = Array.from(document.querySelectorAll('[data-settings-goto]'));
+
+    function activatePanel(key, updateHash) {
+        var matched = false;
+        panels.forEach(function (panel) {
+            var isTarget = panel.dataset.settingsPanel === key && !panel.hidden;
+            panel.classList.toggle('active', isTarget);
+            if (isTarget) matched = true;
+        });
+        if (!matched) {
+            // 目标面板被云控隐藏时回落到第一个可用面板
+            var firstVisible = panels.find(function (p) { return !p.hidden; });
+            if (firstVisible) firstVisible.classList.add('active');
+            key = firstVisible ? firstVisible.dataset.settingsPanel : key;
+        }
+        navItems.forEach(function (item) {
+            var usable = !item.hidden;
+            item.classList.toggle('active', usable && item.dataset.settingsNav === key);
+            item.setAttribute('aria-current', item.classList.contains('active') ? 'page' : 'false');
+        });
+        if (updateHash !== false) {
+            try { history.replaceState(null, '', '#' + key); } catch (e) {}
+        }
+        var canvas = document.querySelector('.settings-canvas');
+        if (canvas) canvas.scrollTop = 0;
+    }
+
+    navItems.forEach(function (item) {
+        item.addEventListener('click', function () {
+            activatePanel(item.dataset.settingsNav, true);
+        });
+    });
+    gotoButtons.forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            activatePanel(btn.dataset.settingsGoto, true);
+        });
+    });
+
+    var initialHash = (location.hash || '').replace('#', '');
+    var validKeys = navItems.map(function (i) { return i.dataset.settingsNav; });
+    activatePanel(validKeys.indexOf(initialHash) !== -1 ? initialHash : 'appearance', false);
+
+    // 侧栏账户卡与云登录状态同步
+    var accountChip = document.querySelector('.settings-account-chip');
+    var accountName = document.getElementById('settings-account-name');
+    var accountTier = document.getElementById('settings-account-tier');
+    var accountAvatar = document.getElementById('settings-account-avatar');
+    var notLoggedIn = document.getElementById('cloud-not-logged-in');
+    var loggedIn = document.getElementById('cloud-logged-in');
+
+    function syncAccountChip() {
+        if (!accountChip || !notLoggedIn || !loggedIn) return;
+        var isLogged = loggedIn.style.display !== 'none';
+        if (isLogged) {
+            var nick = document.getElementById('cloud-nickname');
+            var tier = document.getElementById('cloud-tier-badge');
+            var avatarWrap = document.getElementById('cloud-avatar-wrap');
+            if (accountName) accountName.textContent = (nick && nick.textContent) || '已登录';
+            if (accountTier) accountTier.textContent = (tier && tier.textContent) || '云服务';
+            if (accountAvatar && avatarWrap) {
+                var img = avatarWrap.querySelector('img');
+                if (img && img.src) {
+                    accountAvatar.innerHTML = '';
+                    var chipImg = document.createElement('img');
+                    chipImg.src = img.src;
+                    chipImg.alt = '';
+                    accountAvatar.appendChild(chipImg);
+                    accountAvatar.classList.add('has-image');
+                } else {
+                    accountAvatar.classList.remove('has-image');
+                }
+            }
+        } else {
+            if (accountName) accountName.textContent = '未登录云服务';
+            if (accountTier) accountTier.textContent = '点击登录老三账户';
+            if (accountAvatar) {
+                accountAvatar.classList.remove('has-image');
+                accountAvatar.innerHTML = '';
+            }
+        }
+    }
+    if (notLoggedIn && window.MutationObserver) {
+        var observer = new MutationObserver(syncAccountChip);
+        observer.observe(notLoggedIn, { attributes: true, attributeFilter: ['style'] });
+        observer.observe(loggedIn, { attributes: true, attributeFilter: ['style'] });
+    }
+    syncAccountChip();
+    window.setInterval(syncAccountChip, 2000);
+});
+</script>
 {% endblock %}

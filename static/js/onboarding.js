@@ -1,6 +1,9 @@
 (function () {
     if (window.startOnboarding) return;
 
+    // 引导期间禁用“点击遮罩空白处关闭”（易误触）；跳过只走右上角 X 或 Esc。
+    window.DRIVER_ALLOW_OVERLAY_CLOSE = false;
+
     var SEEN_URL = '/onboarding/seen';
     var SEEN_KEY = 'fuckseats_onboarding_seen';
     var STEP_KEY = 'onboarding_detail_step';
@@ -41,6 +44,20 @@
         try { sessionStorage.setItem(DATA_SHARING_AFTER_ONBOARDING_KEY, '1'); } catch (e) {}
     }
 
+    var SEEN_RETRY_KEY = 'fuckseats_onboarding_seen_retry';
+
+    function postSeenRequest(stage, classroomId) {
+        return fetch(SEEN_URL, {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
+            body: JSON.stringify({
+                completed_steps: stage || '',
+                current_classroom_id: classroomId || ''
+            })
+        });
+    }
+
     function markSeenOnServer(stage) {
         rememberSeenLocally();
         queueDataSharingPromptAfterOnboarding(stage);
@@ -48,32 +65,38 @@
             window.ONBOARDING_SHOULD_SHOW = false;
             window.FUCKSEATS_ONBOARDING_ACTIVE = false;
         }
+        var navigateHome = function (data) {
+            if (!isCompletionStage(stage)) return;
+            var homeUrl = (data && data.redirect_url) ? data.redirect_url : '';
+            if (!homeUrl) {
+                var logo = document.querySelector('a.logo[href]');
+                homeUrl = logo ? logo.getAttribute('href') : '/';
+            }
+            window.setTimeout(function () {
+                window.location.href = homeUrl;
+            }, 420);
+        };
         try {
-            fetch(SEEN_URL, {
-                method: 'POST',
-                credentials: 'same-origin',
-                keepalive: true,
-                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': getCsrfToken() },
-                body: JSON.stringify({
-                    completed_steps: stage || '',
-                    current_classroom_id: currentOnboardingClassroomPk() || ''
+            postSeenRequest(stage, currentOnboardingClassroomPk())
+                .then(function (res) {
+                    return res && res.ok ? res.json().catch(function () { return null; }) : null;
                 })
-            }).then(function (res) {
-                return res && res.ok ? res.json() : null;
-            }).then(function (data) {
-                if (isCompletionStage(stage)) {
-                    var homeUrl = (data && data.redirect_url) ? data.redirect_url : '';
-                    if (!homeUrl) {
-                        var logo = document.querySelector('a.logo[href]');
-                        homeUrl = logo ? logo.getAttribute('href') : '/';
-                    }
-                    window.setTimeout(function () {
-                        window.location.href = homeUrl;
-                    }, 420);
-                    return;
-                }
-            }).catch(function () {});
-        } catch (e) {}
+                .then(function (data) {
+                    navigateHome(data);
+                })
+                .catch(function () {
+                    // 网络失败也要放用户走：先跳转，seen 请求留给下次页面加载重试。
+                    try {
+                        sessionStorage.setItem(SEEN_RETRY_KEY, JSON.stringify({
+                            stage: stage || '',
+                            classroom_id: currentOnboardingClassroomPk() || ''
+                        }));
+                    } catch (e) {}
+                    navigateHome(null);
+                });
+        } catch (e) {
+            navigateHome(null);
+        }
     }
 
     function readStep(key, len) {
@@ -150,6 +173,7 @@
         var stepKey = opts.stepKey;
         var startStep = opts.startStep != null ? opts.startStep : readStep(stepKey, steps.length);
         var onComplete = opts.onComplete || function () {};
+        var onSkip = opts.onSkip || onComplete;
         var exitByClose = false;
         var boundListeners = [];
 
@@ -212,7 +236,7 @@
         var d = lib.driver({
             showProgress: true,
             animate: true,
-            allowClose: false,
+            allowClose: true,
             disableActiveInteraction: false,
             doneBtnText: opts.doneBtnText || '完成引导',
             nextBtnText: '下一步',
@@ -238,14 +262,18 @@
             onDestroyStarted: function () {
                 unbindAdvanceListeners();
                 window.FUCKSEATS_ONBOARDING_ACTIVE = false;
-                if (exitByClose) {
-                    exitByClose = false;
-                    d.destroy();
-                    return;
-                }
+                var skipped = exitByClose;
+                exitByClose = false;
                 d.destroy();
                 try { sessionStorage.removeItem(stepKey); } catch (e) {}
-                onComplete();
+                if (skipped) {
+                    onSkip();
+                } else {
+                    onComplete();
+                }
+                if (window.PopupManager && typeof window.PopupManager.wake === 'function') {
+                    window.PopupManager.wake();
+                }
             }
         });
 
@@ -264,7 +292,7 @@
         var d = lib.driver({
             animate: true,
             showProgress: false,
-            allowClose: false,
+            allowClose: true,
             disableActiveInteraction: false,
             steps: [
                 {
@@ -511,6 +539,10 @@
             onComplete: function () {
                 markSeenOnServer('detail_done');
                 try { sessionStorage.removeItem(LAYOUT_DONE_KEY); } catch (e) {}
+            },
+            onSkip: function () {
+                markSeenOnServer('detail_done');
+                try { sessionStorage.removeItem(LAYOUT_DONE_KEY); } catch (e) {}
             }
         });
     }
@@ -652,9 +684,21 @@
 
     window.startOnboarding = startOnboarding;
 
+    function flushSeenRetry() {
+        var raw = '';
+        try { raw = sessionStorage.getItem(SEEN_RETRY_KEY) || ''; } catch (e) { return; }
+        if (!raw) return;
+        try { sessionStorage.removeItem(SEEN_RETRY_KEY); } catch (e) {}
+        var payload = null;
+        try { payload = JSON.parse(raw); } catch (e) {}
+        if (!payload || !payload.stage) return;
+        postSeenRequest(payload.stage, payload.classroom_id).catch(function () {});
+    }
+
     if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', maybeAutoStart);
+        document.addEventListener('DOMContentLoaded', function () { flushSeenRetry(); maybeAutoStart(); });
     } else {
+        flushSeenRetry();
         maybeAutoStart();
     }
 })();

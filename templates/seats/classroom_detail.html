@@ -8,9 +8,18 @@
 <button type="button" class="ribbon-tab" data-ribbon-tab="view">视图</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="file">文件</button>
 <button type="button" class="ribbon-tab" data-ribbon-tab="transform">变换</button>
-<button type="button" class="ribbon-tab" data-ribbon-tab="plugins">插件</button>
-<button type="button" class="ribbon-tab" data-ribbon-tab="help">帮助</button>
-<button type="button" class="ribbon-tab" data-ribbon-tab="class">班级</button>
+{% endblock %}
+
+{% block titlebar_actions %}
+<button type="button" class="btn btn-secondary" id="btn-open-tour-titlebar" title="新手引导"
+    onclick="startOnboarding(true)" style="padding: 6px 12px;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="1.7"/>
+        <path d="M9.6 9.2a2.5 2.5 0 1 1 3.6 2.24c-.8.42-1.2.96-1.2 1.96" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+        <circle cx="12" cy="16.6" r="1" fill="currentColor"/>
+    </svg>
+    帮助
+</button>
 {% endblock %}
 
 {% block actions %}
@@ -34,6 +43,23 @@
             </form>
             <span class="ribbon-group-label">排座</span>
         </div>
+        <div class="ribbon-group">
+            <a href="{{ wendao_ai_url }}" class="btn btn-primary" id="btn-open-future-mode"
+                target="_blank" rel="noopener noreferrer" data-open-external>打开闻道智能</a>
+            <span class="ribbon-group-label">AI</span>
+        </div>
+        <div class="ribbon-group">
+            <button type="button" class="btn btn-secondary" id="btn-open-plugin-hub" data-open-modal="plugin-hub-modal">插件中心</button>
+            <button type="button" class="btn btn-secondary" id="btn-open-plugin-command" data-open-modal="plugin-command-modal">命令面板</button>
+            <a href="{% url 'extensions_overview' %}?classroom_id={{ classroom.pk }}" class="btn btn-secondary">扩展清单</a>
+            <span class="ribbon-group-label">插件</span>
+        </div>
+        <div class="ribbon-group plugin-ribbon-quick-group">
+            <div id="pluginQuickLaunch" class="plugin-quick-launch-inline">
+                <span class="plugin-quick-launch-empty">正在加载插件快捷入口...</span>
+            </div>
+            <span class="ribbon-group-label">快捷入口</span>
+        </div>
     </div>
 
     <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="view">
@@ -47,7 +73,7 @@
     <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="transform">
         <div class="ribbon-group">
             <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
-                <input type="number" id="shiftLayoutSteps" value="1" min="1" style="width: 54px; padding: 4px 8px; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 6px; font-size: 12px; outline: none;" title="移动步数">
+                <input type="number" id="shiftLayoutSteps" value="1" min="1" aria-label="移动步数" style="width: 54px; padding: 4px 8px; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 6px; font-size: 12px; outline: none;" title="移动步数">
                 <button type="button" class="btn btn-secondary" id="btn-shift-layout-left">左移</button>
                 <button type="button" class="btn btn-secondary" id="btn-shift-layout-right">右移</button>
             </div>
@@ -200,42 +226,6 @@
             <span class="ribbon-group-label">导出</span>
         </div>
     </div>
-
-    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="plugins">
-        <div class="ribbon-group">
-            <button type="button" class="btn btn-primary" id="btn-open-plugin-hub" data-open-modal="plugin-hub-modal">插件中心</button>
-            <button type="button" class="btn btn-secondary" id="btn-open-plugin-command" data-open-modal="plugin-command-modal">命令面板</button>
-            <a href="{% url 'extensions_overview' %}?classroom_id={{ classroom.pk }}" class="btn btn-secondary">扩展清单</a>
-            <span class="ribbon-group-label">插件</span>
-        </div>
-        <div class="ribbon-group plugin-ribbon-quick-group">
-            <div id="pluginQuickLaunch" class="plugin-quick-launch-inline">
-                <span class="plugin-quick-launch-empty">正在加载插件快捷入口...</span>
-            </div>
-            <span class="ribbon-group-label">快捷入口</span>
-        </div>
-    </div>
-
-    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="help">
-        <div class="ribbon-group">
-            <button type="button" class="btn btn-secondary" onclick="startOnboarding(true)" id="btn-tour">新手引导</button>
-            <span class="ribbon-group-label">帮助</span>
-        </div>
-    </div>
-
-    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="class">
-        <div class="ribbon-group">
-            <button type="button" class="btn btn-secondary" id="btn-rename-classroom">修改班级名称</button>
-            <span class="ribbon-group-label">班级信息</span>
-        </div>
-        <div class="ribbon-group ribbon-group-danger">
-            <form id="delete-classroom-form" method="post" action="{% url 'delete_classroom' classroom.pk %}" class="danger-inline-form">
-                {% csrf_token %}
-                <button type="button" class="btn btn-danger" id="btn-delete-classroom">删除班级</button>
-            </form>
-            <span class="ribbon-group-label">危险操作</span>
-        </div>
-    </div>
 </div>
 {% endblock %}
 
@@ -243,10 +233,12 @@
 {% if sync_meta_payload.backed_up %}
 <div id="cloud-entry-sync-screen" class="cloud-entry-sync-screen" data-state="syncing" role="status" aria-live="polite">
     <div class="cloud-entry-sync-mark" aria-hidden="true">
-        <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-            <path d="M10.2 22.7H23a5.2 5.2 0 0 0 .9-10.3 8 8 0 0 0-15.2-2.2A6.3 6.3 0 0 0 10.2 22.7Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M16 13v8m0 0 3-3m-3 3-3-3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-        </svg>
+        <div class="led-matrix">
+            <span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+            <span></span><span></span><span></span><span></span>
+        </div>
     </div>
     <div class="cloud-entry-sync-copy">
         <div class="cloud-entry-sync-title" data-cloud-entry-title>正在检查云端数据</div>
@@ -280,12 +272,15 @@
     data-tags-assign-url="{% url 'assign_student_tags' classroom.pk %}"
     data-tag-rules-create-url="{% url 'create_tag_rule' classroom.pk %}"
     data-command-url="{% url 'classroom_command' classroom.pk %}"
+    data-import-options-path="{% url 'import_students_options_page' classroom.pk %}"
+    data-import-layout-path="{% url 'import_layout_excel_options_page' classroom.pk %}"
+    data-export-excel-options-url="{% url 'export_students_options_page' classroom.pk %}"
     data-csrf="{{ csrf_token }}">
 
     <div class="zoom-controls">
-        <button type="button" class="zoom-btn" onclick="zoomOut()" title="缩小">-</button>
+        <button type="button" class="zoom-btn" onclick="zoomOut()" title="缩小" aria-label="缩小">-</button>
         <span id="zoom-level">100%</span>
-        <button type="button" class="zoom-btn" onclick="zoomIn()" title="放大">+</button>
+        <button type="button" class="zoom-btn" onclick="zoomIn()" title="放大" aria-label="放大">+</button>
     </div>
 
     <section class="seat-stage">
@@ -314,7 +309,7 @@
                             {% endif %}
                         </div>
                         {% endif %}
-                        {% if seat.student.score > 0 %}
+                        {% if seat.student.score %}
                         <div class="seat-info">{{ seat.student.display_score }}分</div>
                         {% endif %}
                     </div>
@@ -328,6 +323,8 @@
                     <div class="seat-placeholder">{{ seat.get_cell_type_display }}</div>
                     {% endif %}
                 </div>
+                {% else %}
+                <div class="seat cell-missing" aria-hidden="true"></div>
                 {% endif %}
                 {% endfor %}
             </div>
@@ -343,6 +340,13 @@
                     <button type="button" class="btn btn-secondary" id="undoBtn">撤销</button>
                     <button type="button" class="btn btn-secondary" id="redoBtn">重做</button>
                 </div>
+            </div>
+            <div class="tool-row">
+                <button type="button" class="btn btn-secondary" id="btn-rename-classroom">修改班级名称</button>
+                <form id="delete-classroom-form" method="post" action="{% url 'delete_classroom' classroom.pk %}" class="danger-inline-form">
+                    {% csrf_token %}
+                    <button type="button" class="btn btn-danger" id="btn-delete-classroom">删除班级</button>
+                </form>
             </div>
             <div class="panel-note">快捷键：Ctrl+Z 撤销，Ctrl+Y 重做，Ctrl+C 复制，Ctrl+X 剪切，Ctrl+V 粘贴，Delete 删除，Ctrl+D
                 移入暂存区，Ctrl+U 从暂存区取出。按 Ctrl/Shift 点击可多选，拖拽任一选中座位可批量移动。</div>
@@ -366,7 +370,7 @@
                             <button type="button" class="icon-btn" id="btn-add-student" title="添加学生" style="width:24px;height:24px;font-size:16px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;">+</button>
                         </div>
                     </div>
-                    <input type="text" id="unseatedSearch" placeholder="搜索未入座学生（姓名）">
+                    <input type="text" id="unseatedSearch" placeholder="搜索未入座学生（姓名）" aria-label="搜索未入座学生">
                     <div class="unseated-list">
                         {% for student in unseated_students %}
                         <div class="unseated-item" draggable="true" data-student-id="{{ student.pk }}"
@@ -742,8 +746,9 @@
                             <span>{{ snap.name }}</span>
                             <div class="snapshot-actions">
                                 <a href="{% url 'load_layout_snapshot' classroom.pk snap.pk %}"
-                                    class="btn btn-primary">加载</a>
-                                <form method="post" action="{% url 'delete_layout_snapshot' classroom.pk snap.pk %}">
+                                    class="btn btn-primary" data-snapshot-load="1">加载</a>
+                                <form method="post" action="{% url 'delete_layout_snapshot' classroom.pk snap.pk %}"
+                                    data-snapshot-delete="1">
                                     {% csrf_token %}
                                     <button type="submit" class="btn btn-primary">删除</button>
                                 </form>
@@ -759,25 +764,25 @@
         </div>
     </aside>
 
-    <div id="plugin-command-modal" class="modal">
+    <div id="plugin-command-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pluginCommandTitle">
         <div class="modal-content plugin-command-modal-content">
             <div class="plugin-command-header">
-                <h3>插件命令面板</h3>
+                <h3 id="pluginCommandTitle">插件命令面板</h3>
                 <button type="button" class="btn btn-secondary" data-close-modal="plugin-command-modal">关闭</button>
             </div>
             <p class="plugin-command-tip">快捷键：Ctrl+K 打开，Enter 执行第一项，Esc 关闭。</p>
-            <input type="text" id="pluginCommandInput" placeholder="搜索插件、动作、UI（如：health / dashboard）" autocomplete="off">
+            <input type="text" id="pluginCommandInput" placeholder="搜索插件、动作、UI（如：health / dashboard）" aria-label="搜索插件命令" autocomplete="off">
             <div id="pluginCommandList" class="plugin-command-list">
                 <div class="empty-hint">正在加载命令...</div>
             </div>
         </div>
     </div>
 
-    <div id="generic-dialog-modal" class="modal">
+    <div id="generic-dialog-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="genericDialogTitle">
         <div class="modal-content" style="max-width: 400px;">
             <h3 id="genericDialogTitle" style="margin: 0 0 12px; font-size: 16px; font-weight: 600;"></h3>
             <p id="genericDialogMessage" style="margin: 0 0 16px; font-size: 14px; color: var(--text-secondary); line-height: 1.5;"></p>
-            <input type="text" id="genericDialogInput" style="display:none; width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-bottom:16px;">
+            <input type="text" id="genericDialogInput" class="modal-field" style="display:none">
             <div class="modal-actions">
                 <button type="button" class="btn btn-secondary" id="genericDialogCancel">取消</button>
                 <button type="button" class="btn btn-primary" id="genericDialogOk">确定</button>
@@ -785,33 +790,33 @@
         </div>
     </div>
 
-    <div id="student-form-modal" class="modal">
+    <div id="student-form-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="studentFormTitle">
         <div class="modal-content" style="max-width: 420px;">
             <h3 id="studentFormTitle" style="margin: 0 0 16px; font-size: 16px; font-weight: 600;">添加学生</h3>
             <div style="display: flex; flex-direction: column; gap: 12px;">
                 <div>
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">姓名 *</label>
-                    <input type="text" id="studentFormName" placeholder="请输入姓名" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                    <label for="studentFormName" class="modal-field-label">姓名 *</label>
+                    <input type="text" id="studentFormName" placeholder="请输入姓名" class="modal-field">
                 </div>
                 <div>
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">学号</label>
-                    <input type="text" id="studentFormStudentId" placeholder="选填" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                    <label for="studentFormStudentId" class="modal-field-label">学号</label>
+                    <input type="text" id="studentFormStudentId" placeholder="选填" class="modal-field">
                 </div>
                 <div>
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">性别</label>
-                    <select id="studentFormGender" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px; background:#fff;">
+                    <label for="studentFormGender" class="modal-field-label">性别</label>
+                    <select id="studentFormGender" class="modal-field">
                         <option value="">未指定</option>
                         <option value="M">男</option>
                         <option value="F">女</option>
                     </select>
                 </div>
                 <div>
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">成绩</label>
-                    <input type="number" id="studentFormScore" step="any" placeholder="选填" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                    <label for="studentFormScore" class="modal-field-label">成绩</label>
+                    <input type="number" id="studentFormScore" step="any" placeholder="选填" class="modal-field">
                 </div>
             </div>
             <div id="studentFormTagsWrap">
-                <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">标签</label>
+                <label for="studentFormTags" class="modal-field-label">标签</label>
                 <div id="studentFormTags" class="tag-picker" style="margin-top:4px;"></div>
             </div>
             <div class="modal-actions" style="margin-top: 20px;">
@@ -821,21 +826,21 @@
         </div>
     </div>
 
-    <div id="tag-form-modal" class="modal">
+    <div id="tag-form-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tagFormTitle">
         <div class="modal-content" style="max-width: 400px;">
             <h3 id="tagFormTitle" style="margin: 0 0 16px; font-size: 16px; font-weight: 600;">创建标签</h3>
             <div style="display: flex; flex-direction: column; gap: 12px;">
                 <div>
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">标签名称 *</label>
-                    <input type="text" id="tagFormName" placeholder="如：近视、班干部" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                    <label for="tagFormName" class="modal-field-label">标签名称 *</label>
+                    <input type="text" id="tagFormName" placeholder="如：近视、班干部" class="modal-field">
                 </div>
                 <div>
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">颜色</label>
-                    <input type="color" id="tagFormColor" value="#0a59f7" style="width:100%; height:36px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; padding:2px; cursor:pointer; margin-top:4px;">
+                    <label for="tagFormColor" class="modal-field-label">颜色</label>
+                    <input type="color" id="tagFormColor" value="#0a59f7" class="modal-field" style="height:36px; padding:2px; cursor:pointer;">
                 </div>
                 <div>
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">描述</label>
-                    <input type="text" id="tagFormDesc" placeholder="选填" style="width:100%; box-sizing:border-box; padding:8px 12px; border:1px solid rgba(15,23,42,0.12); border-radius:8px; font-size:14px; outline:none; margin-top:4px;">
+                    <label for="tagFormDesc" class="modal-field-label">描述</label>
+                    <input type="text" id="tagFormDesc" placeholder="选填" class="modal-field">
                 </div>
             </div>
             <div class="modal-actions" style="margin-top: 20px;">
@@ -845,13 +850,13 @@
         </div>
     </div>
 
-    <div id="shift-options-modal" class="modal">
+    <div id="shift-options-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="shiftOptionsTitle">
         <div class="modal-content" style="max-width: 460px;">
-            <h3 style="margin: 0 0 20px; font-size: 17px; font-weight: 600;">高级布局轮换</h3>
+            <h3 id="shiftOptionsTitle" style="margin: 0 0 20px; font-size: 17px; font-weight: 600;">高级布局轮换</h3>
             <form id="shiftOptionsForm">
                 {% csrf_token %}
                 <div class="modal-block">
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">轮换方向</label>
+                    <label class="modal-field-label">轮换方向</label>
                     <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; margin-top: 8px;">
                         <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
                             <input type="radio" name="shift_direction" value="left" checked> 左移
@@ -871,7 +876,7 @@
                 </div>
                 <div class="modal-divider"></div>
                 <div class="modal-block">
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">左右移动分组</label>
+                    <label class="modal-field-label">左右移动分组</label>
                     <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--text-primary); margin-top: 8px;">
                         <input type="checkbox" id="shiftOptionsUseLargeGroups" name="use_large_groups" checked>
                         按大组移动
@@ -880,8 +885,8 @@
                 </div>
                 <div class="modal-divider"></div>
                 <div class="modal-block">
-                    <label for="shiftOptionsSteps" style="font-size: 13px; font-weight: 500; color: var(--text-secondary);">移动步数</label>
-                    <input type="number" id="shiftOptionsSteps" name="shift_steps" min="1" value="1" style="margin-top: 4px; padding: 8px 12px; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; font-size: 14px; outline: none; width: 100%; box-sizing: border-box;">
+                    <label for="shiftOptionsSteps" class="modal-field-label">移动步数</label>
+                    <input type="number" id="shiftOptionsSteps" name="shift_steps" min="1" value="1" class="modal-field">
                 </div>
                 <div class="modal-actions">
                     <button type="button" class="btn btn-secondary" data-close-modal="shift-options-modal">取消</button>
@@ -891,11 +896,11 @@
         </div>
     </div>
 
-    <div id="plugin-hub-modal" class="modal">
+    <div id="plugin-hub-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pluginHubTitle">
         <div class="modal-content plugin-hub-modal-content">
             <div class="plugin-hub-header">
                 <div>
-                    <h3>插件中心</h3>
+                    <h3 id="pluginHubTitle">插件中心</h3>
                     <p>支持 chrome.runtime.sendMessage 风格调用，快速运行插件动作、界面与页面增强脚本（需授权）。</p>
                 </div>
                 <div class="plugin-hub-header-actions">
@@ -919,10 +924,10 @@
                 <section class="plugin-hub-section plugin-hub-dev-only">
                     <div class="plugin-hub-section-title">Runtime 调用</div>
                     <div class="plugin-hub-runtime-form">
-                        <label>扩展 ID</label>
+                        <label for="pluginRuntimeExtension">扩展 ID</label>
                         <select id="pluginRuntimeExtension"></select>
 
-                        <label>消息类型</label>
+                        <label for="pluginRuntimeType">消息类型</label>
                         <select id="pluginRuntimeType">
                             <option value="action">action</option>
                             <option value="ui">ui</option>
@@ -930,16 +935,16 @@
                             <option value="manifest">manifest</option>
                         </select>
 
-                        <label>名称（action/ui）</label>
+                        <label for="pluginRuntimeName">名称（action/ui）</label>
                         <input type="text" id="pluginRuntimeName" placeholder="例如：health / dashboard">
 
-                        <label>method</label>
+                        <label for="pluginRuntimeMethod">method</label>
                         <select id="pluginRuntimeMethod">
                             <option value="POST">POST</option>
                             <option value="GET">GET</option>
                         </select>
 
-                        <label>payload（JSON）</label>
+                        <label for="pluginRuntimePayload">payload（JSON）</label>
                         <textarea id="pluginRuntimePayload" rows="6">{}</textarea>
 
                         <button type="button" class="btn btn-primary" id="pluginRuntimeSendBtn">发送消息</button>
@@ -950,13 +955,13 @@
         </div>
     </div>
 
-    <div id="group-auto-config-modal" class="modal">
+    <div id="group-auto-config-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="groupAutoConfigTitle">
         <div class="modal-content">
-            <h3 style="margin-bottom: 8px;">自动编组配置</h3>
+            <h3 id="groupAutoConfigTitle" style="margin-bottom: 8px;">自动编组配置</h3>
             <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 14px;">
                 请选择参考小组和“无法整除”时的处理策略。</p>
             <div class="form-group" style="margin-bottom: 10px;">
-                <label>参考小组</label>
+                <label for="groupAutoReferenceSelect">参考小组</label>
                 <select id="groupAutoReferenceSelect" class="group-select-control">
                     <option value="">请选择参考小组</option>
                     {% for group in groups %}
@@ -992,9 +997,9 @@
         </div>
     </div>
 
-    <div id="bsce-import-modal" class="modal">
+    <div id="bsce-import-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="bsceImportTitle">
         <div class="modal-content" style="max-width: 480px;">
-            <h3 style="margin: 0 0 8px; font-size: 17px; font-weight: 600;">BSCE 导入</h3>
+            <h3 id="bsceImportTitle" style="margin: 0 0 8px; font-size: 17px; font-weight: 600;">BSCE 导入</h3>
             <p style="margin: 0 0 20px; font-size: 13px; color: var(--text-secondary);">选择从本地文件或云端工作区导入座位数据。</p>
             <div id="bsce-import-stage-choose" style="display: flex; gap: 12px; justify-content: center;">
                 <button type="button" class="btn btn-primary" id="bsce-choose-local">本地导入</button>
@@ -1002,12 +1007,12 @@
             </div>
             <div id="bsce-import-stage-login" style="display: none;">
                 <div style="margin-bottom: 12px;">
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px;">BSCE 账号</label>
-                    <input type="text" id="bsce-cloud-username" placeholder="请输入 BSCE 账号" autocomplete="username" style="width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; font-size: 14px; outline: none;">
+                    <label for="bsce-cloud-username" style="font-size: 13px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px;">BSCE 账号</label>
+                    <input type="text" id="bsce-cloud-username" placeholder="请输入 BSCE 账号" autocomplete="username" class="modal-field">
                 </div>
                 <div style="margin-bottom: 16px;">
-                    <label style="font-size: 13px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px;">BSCE 密码</label>
-                    <input type="password" id="bsce-cloud-password" placeholder="请输入 BSCE 密码" autocomplete="current-password" style="width: 100%; box-sizing: border-box; padding: 8px 12px; border: 1px solid rgba(15,23,42,0.12); border-radius: 8px; font-size: 14px; outline: none;">
+                    <label for="bsce-cloud-password" style="font-size: 13px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px;">BSCE 密码</label>
+                    <input type="password" id="bsce-cloud-password" placeholder="请输入 BSCE 密码" autocomplete="current-password" class="modal-field">
                 </div>
                 <div style="display: flex; gap: 8px;">
                     <button type="button" class="btn btn-secondary" id="bsce-login-back">返回</button>
@@ -1116,7 +1121,7 @@
     </div>
 </div>
 
-<script src="{% static 'js/classroom.js' %}?v={{ request.session.session_key|default:'dev' }}"></script>
+<script src="{% static 'js/classroom.js' %}?v=2026081510"></script>
 <script>
     function toggleFullScreen() {
         const doc = document;
@@ -1168,6 +1173,30 @@
             }
         });
     }
+
+    (function () {
+
+        var snapshotList = document.querySelector('.snapshot-list');
+        if (snapshotList) snapshotList.addEventListener('click', function (e) {
+            var loadLink = e.target.closest('[data-snapshot-load]');
+            if (loadLink) {
+                e.preventDefault();
+                window.showConfirmModal('加载快照会用该快照覆盖当前全部排座，确定继续？', { title: '加载快照' })
+                    .then(function (confirmed) { if (confirmed) window.location.href = loadLink.href; });
+                return;
+            }
+            var deleteForm = e.target.closest('form[data-snapshot-delete]');
+            if (deleteForm) {
+                e.preventDefault();
+                window.showConfirmModal('删除后无法恢复，确定删除该快照？', { title: '删除快照' })
+                    .then(function (confirmed) {
+                        if (!confirmed) return;
+                        // programmatic submit() 不触发 submit 事件，改为派发让 ajaxifyForm 接管。
+                        deleteForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
+                    });
+            }
+        });
+    })();
 </script>
 
 {{ constraint_items|json_script:"constraint-initial-data" }}
@@ -1176,6 +1205,7 @@
 
 <script>
 (function () {
+    var showToast = window.showToast || function () {};
     var headerArea = document.getElementById('cloud-header-area');
     if (!headerArea) return;
     headerArea.dataset.cloudHeaderManaged = 'classroom';
@@ -1228,12 +1258,13 @@
         } catch (error) {}
         try {
             var referrerUrl = new URL(document.referrer);
-            var classroomPath = '/classroom/' + classroomId + '/';
+            var importOptionsPath = classroomRoot ? (classroomRoot.dataset.importOptionsPath || '') : '';
+            var importLayoutPath = classroomRoot ? (classroomRoot.dataset.importLayoutPath || '') : '';
             if (
                 referrerUrl.origin === window.location.origin
                 && (
-                    referrerUrl.pathname === classroomPath + 'import/options/'
-                    || referrerUrl.pathname === classroomPath + 'layout/import/excel/options/'
+                    referrerUrl.pathname === importOptionsPath
+                    || referrerUrl.pathname === importLayoutPath
                 )
             ) {
                 shouldSkip = true;
@@ -1361,13 +1392,22 @@
     }
 
     function buildAvatarHtml(user) {
-        if (user && user.logged_in && user.avatar_url) {
-            return '<img src="' + user.avatar_url + '" class="cloud-header-avatar" alt="" />';
-        }
         if (!user || !user.logged_in) {
             return '<div class="cloud-header-avatar cloud-header-avatar-login" aria-hidden="true">' + CloudManager.getLoginIconMarkup() + '</div>';
         }
         return '<div class="cloud-header-avatar cloud-header-avatar-placeholder"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z" fill="currentColor"/></svg></div>';
+    }
+
+    function appendAvatar(target, user) {
+        if (user && user.logged_in && user.avatar_url) {
+            var img = document.createElement('img');
+            img.src = user.avatar_url;
+            img.className = 'cloud-header-avatar';
+            img.alt = '';
+            target.appendChild(img);
+            return;
+        }
+        target.innerHTML = buildAvatarHtml(user);
     }
 
     function buildCloudHeader(user) {
@@ -1390,7 +1430,7 @@
         var trigger = document.createElement('button');
         trigger.type = 'button';
         trigger.className = 'cloud-header-trigger';
-        trigger.innerHTML = buildAvatarHtml(currentUser);
+        appendAvatar(trigger, currentUser);
         trigger.title = currentUser.logged_in ? (currentUser.nickname || '云服务') + ' (' + (currentUser.tier_display || '') + ')' : '云服务';
 
         var panel = document.createElement('div');
@@ -1576,8 +1616,16 @@
         },
     };
 
+    var cloudManagerWaitStartedAt = Date.now();
+    var CLOUD_MANAGER_WAIT_LIMIT_MS = 15000;
+
     function startCloudHeader() {
         if (!window.CloudManager) {
+            // 等待超过 15 秒说明 cloud.js 加载失败，放行本地数据，避免云班级永久停留在遮罩。
+            if (Date.now() - cloudManagerWaitStartedAt >= CLOUD_MANAGER_WAIT_LIMIT_MS) {
+                revealClassroomContent();
+                return;
+            }
             setTimeout(startCloudHeader, 50);
             return;
         }

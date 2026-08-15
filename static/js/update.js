@@ -204,16 +204,27 @@
         if (pollingInterval) {
             clearInterval(pollingInterval);
         }
+        let consecutiveFailures = 0;
         pollingInterval = setInterval(async () => {
             try {
                 const response = await fetch('/api/update/status/');
                 const data = await response.json();
 
                 if (data.status === 'success') {
+                    consecutiveFailures = 0;
                     updateProgress(data);
                 }
             } catch (error) {
-                console.error('Status polling error:', error);
+                consecutiveFailures += 1;
+                // 连续失败视为下载停滞：恢复关闭按钮并释放弹窗队列，避免更新模态困死用户。
+                if (consecutiveFailures >= 5) {
+                    if (pollingInterval) {
+                        clearInterval(pollingInterval);
+                        pollingInterval = null;
+                    }
+                    showUpdateError('下载状态获取失败，可能是网络中断。稍后可重新检查更新。');
+                    if (window.PopupManager) PopupManager.notifyDismissed('update');
+                }
             }
         }, 1000);
     }
@@ -278,7 +289,7 @@
         if (data.state === 'downloading') {
             setInstallActionVisible(false);
             statusEl.textContent = '正在下载更新安装包...';
-            closeBtn.style.display = 'none';
+            closeBtn.style.display = '';
             if (data.progress && data.progress.percent !== null) {
                 progressFill.style.width = data.progress.percent + '%';
                 const receivedMB = (data.progress.received_bytes / 1024 / 1024).toFixed(1);

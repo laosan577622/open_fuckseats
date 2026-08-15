@@ -211,6 +211,26 @@
 {{ bulk_export_items|json_script:"classroom-group-bulk-export-items" }}
 <script>
 document.addEventListener('DOMContentLoaded', function () {
+    // 卡片“更多操作”details 菜单：外点/Esc 收起，且同时只开一个。
+    var memberMenus = Array.from(document.querySelectorAll('details.group-member-menu'));
+    document.addEventListener('click', function (event) {
+        memberMenus.forEach(function (menu) {
+            if (menu.open && !menu.contains(event.target)) menu.open = false;
+        });
+    });
+    memberMenus.forEach(function (menu) {
+        menu.addEventListener('toggle', function () {
+            if (!menu.open) return;
+            memberMenus.forEach(function (other) {
+                if (other !== menu && other.open) other.open = false;
+            });
+        });
+    });
+    document.addEventListener('keydown', function (event) {
+        if (event.key !== 'Escape') return;
+        memberMenus.forEach(function (menu) { menu.open = false; });
+    });
+
     var batchForm = document.querySelector('[data-group-batch-form]');
     var exportMenuRoot = document.querySelector('[data-group-export-menu-root]');
     var exportSelectionModal = document.getElementById('group-export-selection-modal');
@@ -368,6 +388,7 @@ document.addEventListener('DOMContentLoaded', function () {
         anchor.dataset.prevText = anchor.textContent || '';
         anchor.textContent = '导出中...';
         anchor.style.pointerEvents = 'none';
+        document.body.dataset.bulkExportInProgress = '1';
         try {
             var result = await bridge.saveExportsToDirectory(selected.items, {
                 suggestedDirectoryName: '{{ classroom_group.name|escapejs }}',
@@ -388,6 +409,7 @@ document.addEventListener('DOMContentLoaded', function () {
         } catch (error) {
             notifyExport(error && error.message ? error.message : '批量导出失败');
         } finally {
+            document.body.dataset.bulkExportInProgress = '';
             anchor.style.pointerEvents = '';
             anchor.textContent = anchor.dataset.prevText || '导出';
             anchor.dataset.prevText = '';

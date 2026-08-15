@@ -74,6 +74,19 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    // window.open 带 noopener 时按规范总是返回 null，不能据此判断是否被拦截；
+    // 用临时 <a target="_blank"> 模拟原生点击，保证当前页面不会被导航走。
+    const openInNewTab = (url) => {
+        const anchor = document.createElement('a');
+        anchor.href = url;
+        anchor.target = '_blank';
+        anchor.rel = 'noopener noreferrer';
+        anchor.style.display = 'none';
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+    };
+
     const initExternalLinks = () => {
         document.addEventListener('click', async (event) => {
             const link = event.target.closest('a[data-open-external]');
@@ -92,8 +105,7 @@ document.addEventListener('DOMContentLoaded', () => {
             } catch (_) {
             }
 
-            const popup = window.open(url, '_blank', 'noopener,noreferrer');
-            if (!popup) window.location.href = url;
+            openInNewTab(url);
         });
     };
 
