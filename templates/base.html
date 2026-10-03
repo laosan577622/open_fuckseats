@@ -7,9 +7,10 @@
     <title>{% block title %}不想排座位{% endblock %}</title>
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4.20">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4.75">
+    <link rel="stylesheet" href="{% static 'css/wendao-dock.css' %}?v=20">
     <link rel="stylesheet" href="{% static 'css/vendor/driver.css' %}?v=1.0.1">
-    <link rel="stylesheet" href="{% static 'css/welcome_finale.css' %}?v=1.0">
+    <link rel="stylesheet" href="{% static 'css/welcome_finale.css' %}?v=4.13">
     <link rel="stylesheet" href="{% static 'css/data_sharing_prompt.css' %}?v=1.0">
     <link rel="stylesheet" href="{% static 'css/qq_group.css' %}?v=1.0">
     {% if app_runtime.shell != 'webview' %}
@@ -20,14 +21,22 @@
     </style>
     {% endif %}
     {% block extra_head %}{% endblock %}
+    {% if app_runtime.shell == 'webview' %}
+    <link rel="stylesheet" href="{% static 'css/desktop-frame.css' %}?v=1.2">
+    <script src="{% static 'js/desktop-frame.js' %}?v=1.2" defer></script>
+    {% endif %}
     <meta name="csrf-token" content="{{ csrf_token }}">
-    <script src="{% static 'js/theme.js' %}?v=1.2"></script>
-    <script src="{% url 'frontend_store_js' %}?v=1.0"></script>
+    <link rel="stylesheet" href="{% static 'css/welcome-transitions.css' %}?v=5">
+    <script src="{% static 'js/welcome-transitions.js' %}?v=5"></script>
+    {{ onboarding_bootstrap|json_script:"onboarding-bootstrap" }}
+    <script src="{% static 'js/onboarding.js' %}?v=4.7"></script>
+    {% if not is_onboarding %}<script src="{% static 'js/theme.js' %}?v=1.2"></script>
+    <script src="{% url 'frontend_store_js' %}?v=1.0"></script>{% endif %}
 </head>
 
 <body class="{% block body_class %}{% endblock %}" data-app-shell="{{ app_runtime.shell }}" data-app-platform="{{ app_runtime.platform }}" data-app-version="{{ app_runtime.version }}">
     <header class="app-header">
-        <div class="header-content" data-ribbon-host>
+        <div class="header-content" data-header-host>
             <div class="header-titlebar">
                 <div style="display: flex; align-items: center; gap: 16px;">
                     <a href="{% url 'index' %}" class="logo">
@@ -42,17 +51,30 @@
                             <small>教室排座工作区</small>
                         </div>
                     </a>
-                    <div class="ribbon-tab-strip">
-                        {% block ribbon_tabs %}
-                        <button type="button" class="ribbon-tab active" data-ribbon-tab="home">开始</button>
-                        {% endblock %}
-                    </div>
                 </div>
-                {% block titlebar_actions %}{% endblock %}
+                {% block global_back_button %}{% if request.path != '/' %}
+                <a href="{% url 'index' %}" class="global-back-button" aria-label="返回首页">返回首页</a>
+                {% endif %}{% endblock %}
+                {% block ai_titlebar_link %}<a href="{% if classroom %}{% url 'ai_workspace' classroom.pk %}{% elif ai_context_classroom %}{% url 'ai_workspace' ai_context_classroom.pk %}{% else %}{% url 'wendao_workspace' %}{% endif %}" class="btn wd-spectrum wd-global-link"><span class="wd-brand-text">闻道智能</span></a>{% endblock %}
+                {% block titlebar_actions %}<button type="button" class="btn btn-secondary" id="btn-open-tour-titlebar" onclick="startOnboarding(true)">使用帮助</button>{% endblock %}
+                {% block titlebar_menu %}{% if app_runtime.shell == 'webview' and app_runtime.platform == 'windows' %}{% include 'partials/native_menu.html' %}{% endif %}{% endblock %}
                 <div class="cloud-header-area" id="cloud-header-area" data-settings-url="{% url 'settings' %}"></div>
-                <div class="titlebar-badge">开始</div>
+                {% if app_runtime.shell == 'webview' %}
+                <section class="desktop-window-controls" aria-label="窗口控制">
+                    <button type="button" class="desktop-window-button" data-window-action="minimize" aria-label="最小化" title="最小化"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1 6h10"/></svg></button>
+                    <button type="button" class="desktop-window-button" data-window-action="maximize" aria-label="最大化" title="最大化"><svg viewBox="0 0 12 12" aria-hidden="true"><path class="window-maximize-icon" d="M1.5 1.5h9v9h-9z"/><path class="window-restore-icon" d="M3.5 1.5h7v7M1.5 3.5h7v7h-7z"/></svg></button>
+                    <button type="button" class="desktop-window-button" data-window-action="close" aria-label="关闭窗口" title="关闭窗口"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m2 2 8 8M10 2l-8 8"/></svg></button>
+                </section>
+                {% else %}
+                <div class="browser-window-controls" aria-hidden="true">
+                    <span class="browser-window-control browser-window-minimize"></span>
+                    <span class="browser-window-control browser-window-maximize"></span>
+                    <span class="browser-window-control browser-window-close"></span>
+                </div>
+                {% endif %}
             </div>
-            <div class="header-ribbon">
+            {% block native_menu %}{% if app_runtime.shell != 'webview' or app_runtime.platform != 'windows' %}{% include 'partials/native_menu.html' %}{% endif %}{% endblock %}
+            <div class="context-toolbar-shell">
                 <div class="header-actions">
                     {% block actions %}{% endblock %}
                 </div>
@@ -64,6 +86,7 @@
         {% block content %}{% endblock %}
     </main>
 
+    <a id="native-menu-about" href="{% url 'about' %}" data-about-window="1" hidden>关于</a>
     <div id="toast-container"></div>
 
     <div id="update-modal" class="modal-overlay" style="display: none;">
@@ -135,61 +158,21 @@
 
     <template id="cloud-login-icon-template">{% include "login.svg" %}</template>
     <template id="cloud-offline-icon-template">{% include "wifi.exclamationmark.circle.fill.svg" %}</template>
+    <script src="{% static 'js/seat-interactions.js' %}?v=1.0"></script>
+    <script src="{% static 'js/welcome-finale.js' %}?v=4.13"></script>
+    {% block app_scripts %}
     <script src="{% static 'js/vendor/driver.js' %}?v=1.0.2"></script>
     <script src="{% static 'js/popup_manager.js' %}?v=1.1"></script>
     <script src="{% static 'js/dialog.js' %}?v=1.0"></script>
     <script src="{% static 'js/cloud.js' %}?v=2.1"></script>
     <script src="{% static 'js/data_sharing.js' %}?v=1.0"></script>
     <script src="{% static 'js/toast.js' %}?v=2.0"></script>
-    <script src="{% static 'js/update.js' %}?v=3.2"></script>
+    <script src="{% static 'js/update.js' %}?v=3.3"></script>
     <script src="{% static 'js/client_control.js' %}?v=1.1"></script>
     <script src="{% static 'js/effects.js' %}?v=2.1"></script>
     <script src="{% static 'js/desktop_bridge.js' %}?v=20260810"></script>
-    <script src="{% static 'js/main.js' %}?v=1.3"></script>
+    <script src="{% static 'js/main.js' %}?v=1.12"></script>
     <script src="{% static 'js/realtime.js' %}?v=1.1"></script>
-
-    <div id="welcome-finale-overlay" style="display:none" aria-hidden="true">
-        <div class="wf-backdrop"></div>
-        <div class="wf-scene">
-            <div class="wf-orbs" aria-hidden="true">
-                <span class="wf-orb wf-orb-1"></span>
-                <span class="wf-orb wf-orb-2"></span>
-                <span class="wf-orb wf-orb-3"></span>
-            </div>
-            <div class="wf-card">
-                <div class="wf-emblem" aria-hidden="true">
-                    <span class="wf-emblem-glow"></span>
-                    <svg width="84" height="84" viewBox="0 0 84 84" fill="none" xmlns="http://www.w3.org/2000/svg">
-                        <circle class="wf-emblem-ring" cx="42" cy="42" r="40"/>
-                        <path class="wf-emblem-seat" d="M20 56h44M24 56V36a4 4 0 0 1 4-4h28a4 4 0 0 1 4 4v20M30 56v6M54 56v6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
-                        <defs>
-                            <linearGradient id="wfGrad" x1="0" y1="0" x2="84" y2="84" gradientUnits="userSpaceOnUse">
-                                <stop stop-color="#0a59f7"/>
-                                <stop offset="1" stop-color="#7db1ff"/>
-                            </linearGradient>
-                        </defs>
-                    </svg>
-                </div>
-                <div class="wf-lines">
-                    <p class="wf-line">挺好，基本操作你都摸过一遍了</p>
-                    <p class="wf-line">排座、换座、分组、右键菜单，也都试过了</p>
-                    <p class="wf-line">示例班级待会儿会自己清掉，不用管它</p>
-                    <p class="wf-line">接下来建一个你自己的班级就行</p>
-                    <p class="wf-line">名字、名单随便填，排错了随时能撤销</p>
-                    <p class="wf-line">哪步忘了，随时点右上角「帮助」再看一遍</p>
-                </div>
-                <h2 class="wf-title">这就上手啦，欢迎使用 <span class="wf-brand">不想排座位</span></h2>
-                <div class="wf-progress" aria-hidden="true"><span class="wf-progress-bar"></span></div>
-            </div>
-            <div class="wf-confetti" aria-hidden="true">
-                <span class="wf-conf"></span><span class="wf-conf"></span><span class="wf-conf"></span>
-                <span class="wf-conf"></span><span class="wf-conf"></span><span class="wf-conf"></span>
-                <span class="wf-conf"></span><span class="wf-conf"></span><span class="wf-conf"></span>
-                <span class="wf-conf"></span><span class="wf-conf"></span><span class="wf-conf"></span>
-            </div>
-        </div>
-        <button type="button" id="wf-skip" class="wf-skip">跳过</button>
-    </div>
 
     <div id="data-sharing-prompt-overlay" style="display:none">
         <div class="ds-prompt-backdrop"></div>
@@ -224,7 +207,7 @@
             <p class="ds-prompt-footnote">你随时可以在「设置」中更改此选项</p>
         </div>
     </div>
-    <script src="{% static 'js/data_sharing_prompt.js' %}?v=1.0"></script>
+    <script src="{% static 'js/data_sharing_prompt.js' %}?v=4.6"></script>
     <script src="{% static 'js/cloud_header.js' %}?v=1.0"></script>
     <div id="qq-group-overlay" style="display:none">
         <div class="qq-group-backdrop"></div>
@@ -251,13 +234,9 @@
     </div>
     <script src="{% static 'js/qq_group.js' %}?v=1.0"></script>
 
+    {% endblock %}
     {% block extra_scripts %}{% endblock %}
 
-    <script>
-        window.ONBOARDING_SHOULD_SHOW = {% if onboarding_should_show %}true{% else %}false{% endif %};
-        window.ONBOARDING_SAMPLE_PK = {{ onboarding_sample_pk|default_if_none:'null' }};
-    </script>
-    <script src="{% static 'js/onboarding.js' %}?v=1.13"></script>
 </body>
 
 </html>

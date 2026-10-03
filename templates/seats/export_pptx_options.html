@@ -2,17 +2,15 @@
 {% load static %}
 
 {% block title %}{{ classroom.name }} - 导出 PPTX{% endblock %}
-
-{% block ribbon_tabs %}
-<button type="button" class="ribbon-tab active" data-ribbon-tab="export">导出配置</button>
-{% endblock %}
+{% block body_class %}workflow-page-body export-options-body{% endblock %}
+{% block global_back_button %}{% endblock %}
 
 {% block actions %}
-<div class="ribbon-panels">
-    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="export">
-        <div class="ribbon-group">
-            <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回班级</a>
-            <span class="ribbon-group-label">导航</span>
+<div class="context-toolbar-panels">
+    <div class="context-toolbar-row context-toolbar-panel active" data-toolbar-panel="export">
+        <div class="toolbar-group">
+            <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return" class="btn btn-secondary">返回班级</a>
+            <span class="toolbar-group-label">导航</span>
         </div>
     </div>
 </div>
@@ -24,7 +22,7 @@
         data-kind="pptx"
         data-export-url="{% url 'export_students_pptx' classroom.pk %}"
         data-preview-student-url="{% url 'export_students_svg_preview_student' classroom.pk %}"
-        data-back-url="{% if batch_export %}{{ batch_export_back_url }}{% else %}{% url 'classroom_detail' classroom.pk %}{% endif %}"
+        data-back-url="{% if batch_export %}{{ batch_export_back_url }}{% else %}{% url 'classroom_detail' classroom.pk %}?cloud_sync=return{% endif %}"
         data-batch-export="{% if batch_export %}1{% else %}0{% endif %}"
         data-batch-directory-name="{{ batch_export_directory_name|default:'批量导出' }}"
         data-default-filename="{{ classroom.name }}_座次图.pptx"

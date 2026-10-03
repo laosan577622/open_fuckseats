@@ -1,0 +1,61 @@
+/* 班级选择页：各平台共享内容布局，窗口控件继续使用平台样式。 */
+body.wendao-picker-body {
+    --header-base-height: 52px;
+    --header-height: 52px;
+    padding-top: var(--header-height);
+}
+body.wendao-picker-body .app-header {
+    min-height: 52px;
+    background: rgba(255, 255, 255, .86);
+    box-shadow: 0 1px 0 rgba(20, 30, 50, .04);
+}
+body.wendao-picker-body .header-content { display: block; }
+body.wendao-picker-body .header-titlebar { min-height: 39px; justify-content: flex-start; }
+body.wendao-picker-body .context-toolbar-shell { display: none; }
+body.wendao-picker-body .cloud-header-area { margin-left: auto; }
+body.wendao-picker-body .desktop-window-controls,
+body.wendao-picker-body .browser-window-controls { margin-left: 12px; }
+body.wendao-picker-body main {
+    width: 100%;
+    max-width: none;
+    margin: 0;
+    padding: 32px 24px;
+    min-height: calc(100vh - var(--header-height));
+}
+.wendao-picker-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 32px; }
+.wendao-picker-heading h1 { font-size: 32px; line-height: 1.25; letter-spacing: -.7px; }
+.wendao-picker-heading .btn { flex-shrink: 0; }
+.wendao-picker-section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+.wendao-picker-section-head h2 { font-size: 16px; font-weight: 600; }
+.wendao-picker-section-head > span { font-size: 13px; color: var(--text-secondary); }
+.wendao-classroom-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; }
+.wendao-classroom-card {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 0;
+    padding: 24px;
+    border: 1px solid #e3e6ed;
+    border-radius: 16px;
+    background: var(--card-bg);
+    color: var(--text-primary);
+    text-decoration: none;
+    transition: border-color .18s ease, box-shadow .18s ease, background-color .18s ease;
+}
+.wendao-classroom-card:hover { border-color: #a7c0fc; box-shadow: 0 4px 16px rgba(10, 89, 247, .07); }
+.wendao-classroom-card:active { background: #f7faff; }
+.wendao-classroom-card:focus-visible { outline: 2px solid #0a59f7; outline-offset: 3px; }
+.wendao-classroom-icon { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 12px; background: #eef4ff; color: #0a59f7; margin-bottom: 20px; }
+.wendao-classroom-card h3 { font-size: 16px; line-height: 1.5; font-weight: 600; overflow-wrap: anywhere; }
+.wendao-classroom-card p { font-size: 13px; color: var(--text-secondary); margin-top: 6px; }
+.wendao-classroom-enter { display: flex; align-items: center; justify-content: space-between; width: 100%; margin-top: auto; padding-top: 24px; font-size: 14px; font-weight: 500; color: #0a59f7; }
+.wendao-picker-empty { grid-column: 1 / -1; padding: 64px 24px; text-align: center; border: 1px dashed var(--border-color); border-radius: 16px; }
+.wendao-picker-empty h3 { font-size: 16px; }
+.wendao-picker-empty p { margin: 12px 0 24px; color: var(--text-secondary); font-size: 14px; }
+@media (max-width: 760px) {
+    body.wendao-picker-body main { padding: 24px 16px; }
+    .wendao-picker-heading { align-items: flex-start; flex-direction: column; gap: 16px; margin-bottom: 24px; }
+    .wendao-classroom-grid { grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); }
+    body.wendao-picker-body .browser-window-controls { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { .wendao-classroom-card { transition: none; } }

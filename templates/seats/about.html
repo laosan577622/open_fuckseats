@@ -3,17 +3,14 @@
 
 {% block title %}{{ about.page_title }}{% endblock %}
 {% block body_class %}about-page-body{% endblock %}
+{% block global_back_button %}{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/about.css' %}?v=1.0">
 {% endblock %}
 
-{% block ribbon_tabs %}
-<button type="button" class="ribbon-tab active" data-ribbon-tab="about">关于应用</button>
-{% endblock %}
-
 {% block actions %}
-<a href="{% url 'settings' %}" class="btn btn-secondary about-ribbon-back">
+<a href="{% url 'settings' %}" class="btn btn-secondary about-toolbar-back">
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 6-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     返回设置
 </a>

@@ -2,11 +2,13 @@ import copy
 import json
 import uuid
 
+from django.db import transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from .config import get_data_limit, get_effective_subscription_tier, get_tier_limits
-from .models import CloudAIConversation, CloudClassroom, CloudHistoryEntry
+from .delta import DELTA_PROTOCOL, apply_delta, build_delta, snapshot_hash
+from .models import CloudAIConversation, CloudClassroom, CloudClassroomCommit, CloudHistoryEntry
 
 
 FUCKSEATS_APP_MARKERS = {'fuckseats', '不想排座位'}
@@ -28,6 +30,7 @@ CLASSROOM_KEYS = {
     'name',
     'rows',
     'cols',
+    'doors',
     'left_guardian_student_pk',
     'left_guardian_student_id',
     'left_guardian_student_name',
@@ -46,7 +49,10 @@ CURRENT_STATE_KEYS = {
     'student_tag_rules',
     'layout_snapshots',
 }
-STATE_CLASSROOM_KEYS = {'pk', 'name', 'rows', 'cols', 'left_guardian_student_pk', 'right_guardian_student_pk', 'created_at'}
+STATE_CLASSROOM_KEYS = {'pk', 'name', 'rows', 'cols', 'doors', 'left_guardian_student_pk', 'right_guardian_student_pk', 'created_at'}
+DOOR_KEYS = {'id', 'name', 'corner', 'offset'}
+DOOR_CORNERS = {'front_left', 'front_right', 'back_left', 'back_right'}
+MAX_DOORS = 1000
 STUDENT_COMMON_KEYS = {'name', 'student_id', 'gender', 'score', 'custom_data'}
 STUDENT_KEYS = set(STUDENT_COMMON_KEYS)
 STATE_STUDENT_KEYS = {'pk', *STUDENT_COMMON_KEYS}
@@ -362,6 +368,30 @@ def _validate_student_tag_rule_payload(item, path, allowed_keys, rows, cols):
         raise ValueError(f'{_format_path(path)} enabled 必须是布尔值')
 
 
+def _validate_doors(doors, path):
+    """教室门与客户端 validate_doors 同一格式；旧客户端不带该字段时保持兼容。"""
+    doors = _ensure_list(doors, path)
+    if len(doors) > MAX_DOORS:
+        raise ValueError(f'{_format_path(path)} 最多 {MAX_DOORS} 扇门')
+    ids = set()
+    for index, door in enumerate(doors):
+        item_path = f'{path}[{index}]'
+        door = _ensure_dict(door, item_path)
+        _reject_unknown_keys(door, DOOR_KEYS, item_path)
+        if door.get('corner') not in DOOR_CORNERS:
+            raise ValueError(f'{_format_path(item_path)}.corner 必须位于教室四角')
+        key = str(door.get('id', '')).strip()
+        if not key or key in ids:
+            raise ValueError(f'{_format_path(item_path)}.id 不能为空或重复')
+        ids.add(key)
+        if 'name' in door and (not isinstance(door['name'], str) or len(door['name']) > 80):
+            raise ValueError(f'{_format_path(item_path)}.name 须为不超过 80 字的文本')
+        if 'offset' in door:
+            offset = door['offset']
+            if isinstance(offset, bool) or not isinstance(offset, int) or offset < 0:
+                raise ValueError(f'{_format_path(item_path)}.offset 必须是非负整数')
+
+
 def _validate_classroom_payload(classroom, path, allowed_keys=CLASSROOM_KEYS):
     classroom = _ensure_dict(classroom, path)
     _reject_unknown_keys(classroom, allowed_keys, path)
@@ -371,6 +401,8 @@ def _validate_classroom_payload(classroom, path, allowed_keys=CLASSROOM_KEYS):
         raise ValueError(f'{_format_path(path)} 缺少班级名称')
     rows = _to_int(classroom.get('rows'), f'{path}.rows', minimum=1)
     cols = _to_int(classroom.get('cols'), f'{path}.cols', minimum=1)
+    if 'doors' in classroom:
+        _validate_doors(classroom['doors'], f'{path}.doors')
     return rows, cols
 
 
@@ -400,8 +432,12 @@ def _validate_layout_payload_data(data, path):
         'student_tags',
         'student_tag_memberships',
         'student_tag_rules',
+        'exam',
     }
     _reject_unknown_keys(data, allowed, path)
+    # 考场方案快照附带搬运规划，由客户端生成和读取，这里只要求是对象，大小受整体推送上限约束。
+    if 'exam' in data:
+        _ensure_dict(data['exam'], f'{path}.exam')
     _validate_meta(data.get('meta'), f'{path}.meta', require_full_schema=False)
     rows, cols = _validate_classroom_payload(data.get('classroom'), f'{path}.classroom')
     _validate_seat_grid(data.get('seats'), f'{path}.seats', rows, cols, SEAT_KEYS)
@@ -563,14 +599,9 @@ def validate_snapshot_for_user(user, data):
     return tier, limits
 
 
-def validate_push_payload(user, payload):
+def validate_push_payload(user, payload, *, classroom=None):
     if not isinstance(payload, dict):
         raise ValueError('同步数据必须是对象')
-    data = payload.get('data') if isinstance(payload.get('data'), dict) else None
-    if not data:
-        raise ValueError('缺少 data')
-    check_payload_size(data, 'max_push_size_mb')
-    tier, limits = validate_snapshot_for_user(user, data)
     classroom_uuid = payload.get('uuid')
     if not classroom_uuid:
         raise ValueError('缺少 uuid')
@@ -578,6 +609,29 @@ def validate_push_payload(user, payload):
         classroom_uuid = str(uuid.UUID(str(classroom_uuid)))
     except (TypeError, ValueError):
         raise ValueError('uuid 格式错误')
+    data = payload.get('data') if isinstance(payload.get('data'), dict) else None
+    if data is None and payload.get('protocol') == DELTA_PROTOCOL:
+        changes = payload.get('changes')
+        check_payload_size(changes, 'max_push_size_mb')
+        if classroom is None:
+            classroom = CloudClassroom.objects.only('data_snapshot', 'version').filter(
+                uuid=classroom_uuid,
+                user=user,
+                is_deleted=False,
+            ).first()
+        if classroom is None:
+            raise ValueError('首次同步必须提供完整 data 基线')
+        base_version = int(payload.get('base_version') or 0)
+        if base_version != int(classroom.version or 0):
+            raise ValueError('增量基线版本与云端不一致')
+        data = apply_delta(classroom.data_snapshot, changes)
+        expected_hash = str(payload.get('snapshot_hash') or '')
+        if expected_hash and snapshot_hash(data) != expected_hash:
+            raise ValueError('增量应用后的快照校验失败')
+    if not isinstance(data, dict) or not data:
+        raise ValueError('缺少 data 或有效增量')
+    check_payload_size(data, 'max_push_size_mb')
+    tier, limits = validate_snapshot_for_user(user, data)
     return data, classroom_uuid, tier, limits
 
 
@@ -637,46 +691,47 @@ def _parse_operation_time(value):
     return parsed
 
 
-def sync_child_records(classroom, snapshot, device_id=''):
-    CloudHistoryEntry.objects.filter(classroom=classroom).delete()
-    history = snapshot.get('history')
-    entries = []
-    if isinstance(history, dict) and isinstance(history.get('entries'), list):
-        entries = history.get('entries')
-    elif isinstance(snapshot.get('history_entries'), list):
-        entries = snapshot.get('history_entries')
+def sync_child_records(classroom, snapshot, device_id='', sections=None):
+    sections = set(sections) if sections is not None else {'history', 'history_entries', 'ai_conversations'}
+    if sections & {'history', 'history_entries'}:
+        CloudHistoryEntry.objects.filter(classroom=classroom).delete()
+        history = snapshot.get('history')
+        entries = []
+        if isinstance(history, dict) and isinstance(history.get('entries'), list):
+            entries = history.get('entries')
+        elif isinstance(snapshot.get('history_entries'), list):
+            entries = snapshot.get('history_entries')
 
-    CloudHistoryEntry.objects.bulk_create([
-        CloudHistoryEntry(
-            classroom=classroom,
-            action_type=str(item.get('action_type') or item.get('type') or '')[:40] if isinstance(item, dict) else '',
-            payload=copy.deepcopy(item.get('payload') if isinstance(item, dict) and isinstance(item.get('payload'), dict) else item if isinstance(item, dict) else {}),
-            device_id=str(device_id or '')[:64],
-            created_at=_parse_created_at(item.get('created_at')) if isinstance(item, dict) else timezone.now(),
-        )
-        for item in entries
-        if isinstance(item, dict)
-    ])
-
-    CloudAIConversation.objects.filter(classroom=classroom).delete()
-    conversations = snapshot.get('ai_conversations')
-    if isinstance(conversations, list):
-        CloudAIConversation.objects.bulk_create([
-            CloudAIConversation(
+        CloudHistoryEntry.objects.bulk_create([
+            CloudHistoryEntry(
                 classroom=classroom,
-                title=str(item.get('title') or '新对话')[:120],
-                messages=copy.deepcopy(item.get('messages') if isinstance(item.get('messages'), list) else []),
-                created_at=_parse_created_at(item.get('created_at')),
-                updated_at=_parse_created_at(item.get('updated_at')),
+                action_type=str(item.get('action_type') or item.get('type') or '')[:40] if isinstance(item, dict) else '',
+                payload=copy.deepcopy(item.get('payload') if isinstance(item, dict) and isinstance(item.get('payload'), dict) else item if isinstance(item, dict) else {}),
+                device_id=str(device_id or '')[:64],
+                created_at=_parse_created_at(item.get('created_at')) if isinstance(item, dict) else timezone.now(),
             )
-            for item in conversations
+            for item in entries
             if isinstance(item, dict)
         ])
 
+    if 'ai_conversations' in sections:
+        CloudAIConversation.objects.filter(classroom=classroom).delete()
+        conversations = snapshot.get('ai_conversations')
+        if isinstance(conversations, list):
+            CloudAIConversation.objects.bulk_create([
+                CloudAIConversation(
+                    classroom=classroom,
+                    title=str(item.get('title') or '新对话')[:120],
+                    messages=copy.deepcopy(item.get('messages') if isinstance(item.get('messages'), list) else []),
+                    created_at=_parse_created_at(item.get('created_at')),
+                    updated_at=_parse_created_at(item.get('updated_at')),
+                )
+                for item in conversations
+                if isinstance(item, dict)
+            ])
 
-def push_classroom_snapshot(user, payload):
-    data, classroom_uuid, tier, limits = validate_push_payload(user, payload)
 
+def push_classroom_snapshot(user, payload, *, validated=None):
     device_id = str(payload.get('device_id') or '')[:64]
     force = bool(payload.get('force'))
     operation_at = _parse_operation_time(
@@ -688,15 +743,11 @@ def push_classroom_snapshot(user, payload):
     if client_version_value in (None, ''):
         client_version_value = payload.get('local_version')
     client_version = int(client_version_value or 0)
-    classroom = CloudClassroom.objects.filter(uuid=classroom_uuid, user=user).first()
-
-    activating_classroom = classroom is None or classroom.is_deleted
-    if activating_classroom:
-        max_classrooms = int(limits.get('max_classrooms', 3) or 3)
-        if max_classrooms != -1:
-            count = CloudClassroom.objects.filter(user=user, is_deleted=False).count()
-            if count >= max_classrooms:
-                raise PermissionError(f'当前订阅最多同步 {max_classrooms} 个班级')
+    try:
+        classroom_uuid = str(uuid.UUID(str(payload.get('uuid') or '')))
+    except (TypeError, ValueError):
+        raise ValueError('uuid 格式错误')
+    classroom = CloudClassroom.objects.defer('data_snapshot').filter(uuid=classroom_uuid, user=user).first()
 
     if classroom and client_version < classroom.version and not force:
         return {
@@ -705,22 +756,76 @@ def push_classroom_snapshot(user, payload):
             'version': classroom.version,
             'message': '云端版本更新，请先拉取或让用户选择保留版本',
         }
+    if force and payload.get('protocol') == DELTA_PROTOCOL and client_version != int(classroom.version if classroom else 0):
+        raise ValueError('强制覆盖必须提供完整 data，不能基于过期版本提交增量')
 
-    if classroom is None:
-        classroom = CloudClassroom(user=user, uuid=classroom_uuid)
+    activating_classroom = classroom is None or classroom.is_deleted
+    tier, limits = _effective_limits_for_user(user)
+    if not limits.get('sync_enabled', True):
+        raise PermissionError('当前订阅不支持云同步')
+    if activating_classroom:
+        max_classrooms = int(limits.get('max_classrooms', 3) or 3)
+        if max_classrooms != -1:
+            count = CloudClassroom.objects.filter(user=user, is_deleted=False).count()
+            if count >= max_classrooms:
+                raise PermissionError(f'当前订阅最多同步 {max_classrooms} 个班级')
 
-    snapshot = copy.deepcopy(data)
-    name, rows, cols = extract_classroom_fields(snapshot)
-    classroom.name = name
-    classroom.rows = rows
-    classroom.cols = cols
-    classroom.data_snapshot = snapshot
-    classroom.version = int(classroom.version or 0) + 1
-    classroom.last_modified_by = device_id
-    classroom.last_modified_at = operation_at or timezone.now()
-    classroom.is_deleted = False
-    classroom.save()
-    sync_child_records(classroom, snapshot, device_id=device_id)
+    with transaction.atomic():
+        locked = CloudClassroom.objects.select_for_update().filter(uuid=classroom_uuid, user=user).first()
+        if locked is not None:
+            classroom = locked
+        elif classroom is None:
+            classroom = CloudClassroom(user=user, uuid=classroom_uuid)
+        current_version = int(classroom.version or 0)
+        if current_version != client_version and not force:
+            return {
+                'ok': False,
+                'conflict': True,
+                'version': current_version,
+                'message': '云端版本更新，请先拉取或让用户选择保留版本',
+            }
+        if force and payload.get('protocol') == DELTA_PROTOCOL and client_version != current_version:
+            raise ValueError('强制覆盖必须提供完整 data，不能基于过期版本提交增量')
+        if validated is None:
+            data, classroom_uuid, tier, limits = validate_push_payload(
+                user,
+                payload,
+                classroom=classroom if classroom.pk and not classroom.is_deleted else None,
+            )
+        else:
+            data, validated_uuid, tier, limits = validated
+            if str(validated_uuid) != str(classroom_uuid):
+                raise ValueError('预校验班级与提交班级不一致')
+        previous_snapshot = copy.deepcopy(classroom.data_snapshot if classroom.pk else {})
+        snapshot = copy.deepcopy(data)
+        name, rows, cols = extract_classroom_fields(snapshot)
+        classroom.name = name
+        classroom.rows = rows
+        classroom.cols = cols
+        classroom.data_snapshot = snapshot
+        classroom.version = current_version + 1
+        classroom.last_modified_by = device_id
+        classroom.last_modified_at = operation_at or timezone.now()
+        classroom.is_deleted = False
+        classroom.save()
+        changes = payload.get('changes') if payload.get('protocol') == DELTA_PROTOCOL else build_delta(previous_snapshot, snapshot)
+        CloudClassroomCommit.objects.create(
+            classroom=classroom,
+            version=classroom.version,
+            base_version=current_version,
+            protocol=DELTA_PROTOCOL,
+            changes=copy.deepcopy(changes),
+            snapshot_hash=snapshot_hash(snapshot),
+            device_id=device_id,
+        )
+        changed_sections = None
+        if payload.get('protocol') == DELTA_PROTOCOL:
+            changed_sections = {
+                item.get('path', [None])[0]
+                for item in changes
+                if isinstance(item, dict) and isinstance(item.get('path'), list) and item.get('path')
+            }
+        sync_child_records(classroom, snapshot, device_id=device_id, sections=changed_sections)
 
     return {
         'ok': True,
@@ -729,4 +834,6 @@ def push_classroom_snapshot(user, payload):
         'updated_at': classroom.updated_at.isoformat(),
         'last_operation_at': classroom.last_modified_at.isoformat() if classroom.last_modified_at else None,
         'last_modified_at': classroom.last_modified_at.isoformat() if classroom.last_modified_at else None,
+        'protocol': DELTA_PROTOCOL,
+        'snapshot_hash': snapshot_hash(snapshot),
     }

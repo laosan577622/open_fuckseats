@@ -663,20 +663,45 @@ def build_constraint_diagnostics(classroom, constraints=None):
         constraints = classroom.constraints.select_related("student", "target_student").all()
     records = [_constraint_record(item) for item in constraints]
     issue_map = defaultdict(lambda: {"issues": [], "seen": set()})
+    layout_seats = list(classroom.seats.select_related("student").all())
+    seat_by_coord = {(seat.row, seat.col): seat for seat in layout_seats}
+    positions = [
+        (seat.row, seat.col)
+        for seat in layout_seats
+        if seat.cell_type == SeatCellType.SEAT
+    ]
+    seat_rows = {row for row, _ in positions}
+    seat_cols = {col for _, col in positions}
+    within_distance = {}
+    beyond_distance = {}
+
+    def has_pair(distance, *, within):
+        cache = within_distance if within else beyond_distance
+        if distance not in cache:
+            cache[distance] = any(
+                (
+                    abs(row_a - row_b) + abs(col_a - col_b) <= distance
+                    if within
+                    else abs(row_a - row_b) + abs(col_a - col_b) > distance
+                )
+                for index, (row_a, col_a) in enumerate(positions)
+                for row_b, col_b in positions[index + 1:]
+            )
+        return cache[distance]
 
     for record in records:
         constraint_type = record["constraint_type"]
         if constraint_type in SEAT_CONSTRAINT_TYPES:
-            seat = _seat_cell(classroom, record["row"], record["col"])
+            seat = seat_by_coord.get((record["row"], record["col"]))
             if not seat or seat.cell_type != SeatCellType.SEAT:
                 _append_issue(issue_map, record["pk"], _issue("invalid", "目标位置已不是可用座位"))
-        if constraint_type in ROW_CONSTRAINT_TYPES and not _has_seat_in_row(classroom, record["row"]):
+        if constraint_type in ROW_CONSTRAINT_TYPES and record["row"] not in seat_rows:
             _append_issue(issue_map, record["pk"], _issue("invalid", "目标行当前没有可用座位"))
-        if constraint_type in COL_CONSTRAINT_TYPES and not _has_seat_in_col(classroom, record["col"]):
+        if constraint_type in COL_CONSTRAINT_TYPES and record["col"] not in seat_cols:
             _append_issue(issue_map, record["pk"], _issue("invalid", "目标列当前没有可用座位"))
-        if constraint_type == SeatConstraint.ConstraintType.MUST_TOGETHER and not _has_any_pair_within_distance(classroom, record["distance"]):
+        if constraint_type == SeatConstraint.ConstraintType.MUST_TOGETHER and not has_pair(record["distance"], within=True):
             _append_issue(issue_map, record["pk"], _issue("invalid", "当前布局中不存在满足该距离要求的双人座位组合"))
-        if constraint_type == SeatConstraint.ConstraintType.FORBID_TOGETHER and not _has_any_pair_beyond_distance(classroom, record["distance"]):
+        if constraint_type == SeatConstraint.ConstraintType.FORBID_TOGETHER and not has_pair(record["distance"], within=False):
             _append_issue(issue_map, record["pk"], _issue("invalid", "当前布局中不存在满足该间隔要求的双人座位组合"))
 
     active_records = [record for record in records if record["enabled"]]
@@ -693,7 +718,8 @@ def build_constraint_diagnostics(classroom, constraints=None):
 
     student_seat_map = {
         seat.student_id: seat
-        for seat in classroom.seats.select_related("student").filter(student__isnull=False)
+        for seat in layout_seats
+        if seat.student_id
     }
     for record in active_records:
         violation = _current_violation_message(record, student_seat_map)
@@ -892,6 +918,7 @@ def serialize_constraint(classroom, constraint, diagnostics=None):
         "issue_count": len(diagnostics["issues"]),
         "delete_url": reverse("delete_constraint", args=[classroom.pk, record["pk"]]) if record["pk"] else "",
         "update_url": reverse("update_constraint", args=[classroom.pk, record["pk"]]) if record["pk"] else "",
+        "edit_page_url": reverse("constraint_edit_page", args=[classroom.pk, record["pk"]]) if record["pk"] else "",
         "toggle_url": reverse("toggle_constraint", args=[classroom.pk, record["pk"]]) if record["pk"] else "",
     }
 

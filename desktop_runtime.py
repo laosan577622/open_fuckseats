@@ -66,6 +66,9 @@ def is_macos():
 
 
 def get_platform_name():
+    override = (os.getenv("FUCKSEATS_APP_PLATFORM") or "").strip().lower()
+    if override in {"windows", "macos", "linux"}:
+        return override
     if sys.platform.startswith("win"):
         return "windows"
     if sys.platform == "darwin":

@@ -264,11 +264,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const applyToolToSeats = (tool, seats) => {
         if (!tool || !seats.length) return;
-        Promise.all(seats.map(seat => postJson({
-            row: seat.dataset.row,
-            col: seat.dataset.col,
-            cell_type: tool
-        }))).then(() => {
+        Promise.all(seats.map(seat => postJson(SeatInteractions.cellPayload(seat, tool)))).then(() => {
             window.location.reload();
         }).catch(() => {
             notify('部分格子操作失败，已刷新为服务器最新状态');
@@ -279,11 +275,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const applyTool = (seat, tool) => {
         if (!seat || !tool) return;
-        postJson({
-            row: seat.dataset.row,
-            col: seat.dataset.col,
-            cell_type: tool
-        }).then(data => {
+        postJson(SeatInteractions.cellPayload(seat, tool)).then(data => {
             if (data && data.status && data.status !== 'success') {
                 notify(data.message || '操作失败');
                 return;
@@ -432,6 +424,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.querySelectorAll('.seat').forEach(seat => {
         seat.dataset.seatKey = seatKey(seat);
+        seat.addEventListener('keydown', (event) => {
+            if (event.key !== 'Enter' && event.key !== ' ') return;
+            event.preventDefault();
+            seat.click();
+        });
         seat.addEventListener('click', (e) => {
             if (consumeSuppressedTouchClick(e)) return;
             if (e.shiftKey || e.ctrlKey || e.metaKey) {

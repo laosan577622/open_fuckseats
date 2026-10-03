@@ -2,14 +2,16 @@
 {% load static %}
 
 {% block title %}{{ plugin_name }} · {{ ui_name }}{% endblock %}
+{% block body_class %}plugin-ui-page-body{% endblock %}
+{% block global_back_button %}{% endblock %}
 
 {% block extra_head %}
 <link rel="stylesheet" href="{% static 'css/plugin_ui.css' %}?v=2.0">
 {% endblock %}
 
 {% block actions %}
-<div class="header-action-row office-ribbon-row">
-    <div class="ribbon-group">
+<div class="context-toolbar-row">
+    <div class="toolbar-group">
         <button type="button" class="btn btn-secondary" id="plugin-ui-back-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="vertical-align: -2px; margin-right: 2px;">
                 <path d="M15 19l-7-7 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
@@ -18,7 +20,7 @@
         </button>
         <button type="button" class="btn btn-primary" id="plugin-ui-refresh-btn">刷新界面</button>
         <a class="btn btn-secondary" href="{% url 'plugin_ui_dispatch' plugin_id ui_name %}{% if request.GET.urlencode %}?{{ request.GET.urlencode }}{% endif %}" target="_blank" rel="noopener noreferrer">查看原始 JSON</a>
-        <span class="ribbon-group-label">插件 UI</span>
+        <span class="toolbar-group-label">插件 UI</span>
     </div>
 </div>
 {% endblock %}

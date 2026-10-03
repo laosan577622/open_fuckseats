@@ -1,11 +1,13 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.http import Http404, HttpResponse, HttpResponseRedirect, JsonResponse, StreamingHttpResponse
 from django.views.decorators.http import require_POST, require_http_methods
+from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, models, IntegrityError, OperationalError, ProgrammingError
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.urls import reverse
 from django.conf import settings
+from .ai_privacy import get_ai_privacy, restore_student_names, with_ai_name_rendering
 from django.test import RequestFactory
 from pypinyin import lazy_pinyin
 import base64
@@ -36,6 +38,7 @@ from .models import (
     ONBOARDING_SEEN_STORE_VALUE,
     ClassroomHistoryEntry,
     SyncMeta,
+    SyncBaseline,
     OnboardingState,
     SortStrategy,
 )
@@ -114,6 +117,7 @@ from .cloud import (
     set_cloud_server_url,
     suspend_sync_version_bump,
 )
+from .cloud_delta import DELTA_PROTOCOL, apply_commit_chain, build_delta, snapshot_hash
 from .data_sharing import (
     get_data_sharing_config,
     get_data_sharing_enabled,
@@ -198,7 +202,9 @@ EXPORT_FONT_BLACK = '鸿蒙黑体 Medium'
 EXPORT_FONT_LIGHT = '鸿蒙黑体 Light'
 
 
-def _ensure_ai_feature_enabled():
+def _ensure_ai_feature_enabled(request=None):
+    if request is not None and getattr(request, '_wendao_authorized', False):
+        return
     if not bool(getattr(settings, 'AI_FEATURE_ENABLED', False)):
         raise Http404('页面不存在')
 HISTORY_STUDENT_ID_KEYS = {
@@ -634,153 +640,64 @@ ONBOARDING_SAMPLE_STUDENTS = [
 ]
 ONBOARDING_SAMPLE_GROUPS = ('第一组', '第二组')
 
-_onboarding_sample_lock = threading.Lock()
-
-
-def _frontend_onboarding_seen():
-    try:
-        value = FrontendKVStore.objects.filter(
-            key=ONBOARDING_SEEN_STORE_KEY,
-        ).values_list('value', flat=True).first()
-        if str(value or '').strip().lower() in {'1', 'true', 'yes', 'seen'}:
-            return True
-    except Exception:
-        pass
-    try:
-        if OnboardingState.objects.filter(seen=True).exists():
-            FrontendKVStore.objects.update_or_create(
-                key=ONBOARDING_SEEN_STORE_KEY,
-                defaults={'value': ONBOARDING_SEEN_STORE_VALUE},
-            )
-            return True
-    except Exception:
-        pass
-    return False
-
-
-def _ensure_onboarding_sample_classroom(request):
-    pk = request.session.get('onboarding_sample_pk')
-    if pk:
-        try:
-            classroom = Classroom.objects.get(pk=pk)
-            _ensure_onboarding_sample_groups(classroom)
-            return classroom
-        except Classroom.DoesNotExist:
-            pass
-
-    with _onboarding_sample_lock:
-        pk = request.session.get('onboarding_sample_pk')
-        if pk:
-            try:
-                classroom = Classroom.objects.get(pk=pk)
-                _ensure_onboarding_sample_groups(classroom)
-                return classroom
-            except Classroom.DoesNotExist:
-                pass
-        existing = Classroom.objects.filter(name=ONBOARDING_SAMPLE_NAME).order_by('-created_at').first()
-        if existing:
-            _ensure_onboarding_sample_groups(existing)
-            request.session['onboarding_sample_pk'] = existing.pk
-            request.session.modified = True
-            return existing
-        classroom = Classroom.objects.create(name=ONBOARDING_SAMPLE_NAME, rows=6, cols=8)
-        Student.objects.bulk_create([
-            Student(classroom=classroom, name=name, gender=gender, score=score)
-            for name, gender, score in ONBOARDING_SAMPLE_STUDENTS
-        ])
-        _ensure_onboarding_sample_groups(classroom)
-        request.session['onboarding_sample_pk'] = classroom.pk
-        request.session.modified = True
-        return classroom
-
-
-def _ensure_onboarding_sample_groups(classroom):
-    for index, name in enumerate(ONBOARDING_SAMPLE_GROUPS, start=1):
-        SeatGroup.objects.get_or_create(
-            classroom=classroom,
-            name=name,
-            defaults={'order': index},
-        )
-
-
-def _delete_onboarding_sample(request, prefer_pk=0):
-    session_pk = _safe_int(request.session.get('onboarding_sample_pk'), 0)
-    prefer_pk = _safe_int(prefer_pk, 0)
-    classroom = None
-    for pk in [prefer_pk, session_pk]:
-        if not pk:
-            continue
-        classroom = Classroom.objects.filter(pk=pk, name=ONBOARDING_SAMPLE_NAME).first()
-        if classroom:
-            break
-    if not classroom:
-        classroom = Classroom.objects.filter(name=ONBOARDING_SAMPLE_NAME).order_by('-created_at').first()
-    if not classroom:
-        if session_pk:
-            request.session.pop('onboarding_sample_pk', None)
-            request.session.modified = True
-        return False
-    with suspend_sync_version_bump(), transaction.atomic():
-        classroom.left_guardian = None
-        classroom.right_guardian = None
-        classroom.save(update_fields=['left_guardian', 'right_guardian'])
-        classroom.groups.update(leader=None)
-        classroom.delete()
-    request.session.pop('onboarding_sample_pk', None)
-    request.session.modified = True
-    return True
-
-
-_CLEANUP_PENDING_KEY = 'onboarding_cleanup_pending'
+@require_http_methods(['GET'])
+def health(request):
+    return HttpResponse('ok', content_type='text/plain')
 
 
 def index(request):
-    if request.session.get(_CLEANUP_PENDING_KEY):
-        request.session.pop(_CLEANUP_PENDING_KEY, None)
-        request.session.modified = True
-        _delete_onboarding_sample(request)
     classrooms = Classroom.objects.select_related('classroom_group').all().order_by('-created_at')
-    sample_pk = None
-    if _onboarding_should_show_flag(request):
-        try:
-            sample = _ensure_onboarding_sample_classroom(request)
-            sample_pk = sample.pk
-            classrooms = Classroom.objects.select_related('classroom_group').all().order_by('-created_at')
-        except Exception:
-            sample_pk = request.session.get('onboarding_sample_pk')
     classroom_groups = list(
         ClassroomGroup.objects.prefetch_related('classrooms__students', 'classrooms__seats').all()
     )
     return render(request, 'seats/index.html', {
         'classrooms': classrooms,
+        # 首页的“最近使用”与未分组班级保持同一可见范围，避免把仅在班级组管理页
+        # 展示的班级再次泄漏到首页列表中。
+        'recent_classrooms': [item for item in classrooms if item.classroom_group_id is None][:4],
         'classroom_groups': classroom_groups,
         'ungrouped_classrooms': [item for item in classrooms if item.classroom_group_id is None],
-        'onboarding_sample_pk': sample_pk,
     })
 
 
-def _onboarding_should_show_flag(request):
-    """轻量判定：当前会话是否需要展示新手引导（与 context_processor 一致）。"""
-    path = getattr(request, 'path', '') or ''
-    if path.startswith('/admin') or path.startswith('/static') or path.startswith('/media'):
-        return False
-    if getattr(request, 'method', 'GET') != 'GET':
-        return False
-    if _frontend_onboarding_seen():
-        return False
+@require_http_methods(['GET'])
+def welcome(request):
+    # Template-only context for the shared toolbar; never instantiate/save a model.
+    return render(request, 'seats/welcome.html', {'classroom': {'pk': 0, 'name': '练习'}})
+
+
+@require_http_methods(['GET'])
+def welcome_file_picker(request, kind):
+    if kind not in ('import', 'layoutimport'):
+        return HttpResponseBadRequest('无效练习')
+    return render(request, 'seats/welcome_file_picker.html', {'picker_kind': kind})
+
+
+@require_http_methods(['GET', 'POST'])
+@csrf_exempt
+def onboarding_state(request):
+    from seats.onboarding import REQUEST_TOKEN, get_state, save_state, payload
+    if request.method == 'GET':
+        return JsonResponse(payload(get_state()))
+    origin = request.headers.get('Origin')
+    if origin:
+        parsed = urllib.parse.urlsplit(origin)
+        if parsed.scheme not in ('http', 'https') or parsed.netloc != request.get_host() or parsed.scheme != request.scheme:
+            return HttpResponse('无效的请求来源', status=403)
+    if not secrets.compare_digest(request.headers.get('X-Onboarding-Token', ''), REQUEST_TOKEN):
+        return HttpResponse('无效的引导请求令牌', status=403)
     try:
-        from seats.models import OnboardingState
-        sk = request.session.session_key
-        if not sk:
-            request.session['ob_init'] = True
-            request.session.save()
-            sk = request.session.session_key
-        if not sk:
-            return False
-        state = OnboardingState.objects.filter(session_key=sk).first()
-        return state is None or not state.seen
-    except Exception:
-        return False
+        if len(request.body) > 32768:
+            raise ValueError()
+        progress = json.loads(request.body)
+        if not isinstance(progress, dict) or not isinstance(progress.get('page'), str) or len(progress['page']) > 64:
+            raise ValueError()
+        for flag in ('finished', 'returning'):
+            if flag in progress and not isinstance(progress[flag], bool):
+                raise ValueError()
+    except (ValueError, TypeError):
+        return JsonResponse({'error': '无效的引导状态'}, status=400)
+    return JsonResponse(payload(save_state(progress)))
 
 
 def settings_page(request):
@@ -2875,8 +2792,8 @@ def _resolve_ai_conversation(classroom, request, conversation_id=None, create_if
 
 
 def _append_ai_conversation_message(conversation, role, content='', payload=None):
-    normalized_content = str(content or '').strip()
-    normalized_payload = payload if isinstance(payload, dict) else {}
+    normalized_content = str(restore_student_names(content or '')).strip()
+    normalized_payload = restore_student_names(payload) if isinstance(payload, dict) else {}
     if not normalized_content and not normalized_payload:
         return None
     message = AIConversationMessage.objects.create(
@@ -3730,6 +3647,7 @@ def _store_future_mode_pending(
         'mode': mode or 'responses',
         'chat_messages': chat_messages or [],
         'session_key': owner_session_key,
+        'name_privacy_enabled': get_ai_privacy(request).enabled,
         '_created_at_ts': time.time(),
     }
     store = _get_future_mode_pending_store(request)
@@ -3837,6 +3755,8 @@ def _get_openai_client(client_config=None):
     base_url = client_config['base_url'] or os.getenv('OPENAI_BASE_URL') or getattr(settings, 'OPENAI_BASE_URL', '')
     if base_url:
         client_kwargs['base_url'] = base_url
+    if str(base_url or '').rstrip('/').endswith('/api/openai/v1'):
+        client_kwargs.update(max_retries=0, timeout=90)
     return OpenAI(**client_kwargs)
 
 
@@ -5202,9 +5122,14 @@ def _sse_event(event_name, payload):
     return f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def _create_future_mode_response(client, model, conversation=None, previous_response_id=None, tool_outputs=None):
+def _create_future_mode_response(client, model, conversation=None, previous_response_id=None, tool_outputs=None, privacy=None):
+    privacy = privacy or get_ai_privacy()
+
+    def create(**kwargs):
+        return client.responses.create(**privacy.protect_request(kwargs, mode='responses'))
+
     if previous_response_id:
-        return client.responses.create(
+        return create(
             model=model,
             previous_response_id=previous_response_id,
             input=tool_outputs or [],
@@ -5231,7 +5156,7 @@ def _create_future_mode_response(client, model, conversation=None, previous_resp
         return input_items
 
     try:
-        return client.responses.create(
+        return create(
             model=model,
             input=build_input_items(use_content_parts=False),
             tools=AI_TOOL_DEFINITIONS,
@@ -5240,7 +5165,7 @@ def _create_future_mode_response(client, model, conversation=None, previous_resp
     except Exception as exc:
         if not _is_responses_content_unmarshal_error(exc):
             raise
-        return client.responses.create(
+        return create(
             model=model,
             input=build_input_items(use_content_parts=True),
             tools=AI_TOOL_DEFINITIONS,
@@ -5391,7 +5316,7 @@ def _run_future_mode_chat(
     if extra_body:
         completion_kwargs['extra_body'] = extra_body
     completion = client.chat.completions.create(
-        **completion_kwargs,
+        **get_ai_privacy(request).protect_request(completion_kwargs, mode='chat'),
     )
     choice = (getattr(completion, 'choices', None) or [None])[0]
     assistant_message = getattr(choice, 'message', None) if choice is not None else None
@@ -5504,6 +5429,7 @@ def _run_future_mode(
             conversation=conversation,
             previous_response_id=previous_response_id,
             tool_outputs=tool_outputs,
+            privacy=get_ai_privacy(request),
         )
     except Exception as exc:
         if _is_responses_not_supported_error(exc) and not previous_response_id:
@@ -6558,6 +6484,7 @@ def _snapshot_payload(classroom, include_students=True, include_constraints=True
             'name': classroom.name,
             'rows': classroom.rows,
             'cols': classroom.cols,
+            'doors': classroom.doors,
             'left_guardian_student_pk': classroom.left_guardian_id,
             'left_guardian_student_id': classroom.left_guardian.student_id if classroom.left_guardian_id and classroom.left_guardian else None,
             'left_guardian_student_name': classroom.left_guardian.name if classroom.left_guardian_id and classroom.left_guardian else None,
@@ -6689,6 +6616,10 @@ def _find_student_tag(classroom, payload):
 def _apply_layout_data(classroom, data, replace_students=False):
     with transaction.atomic():
         classroom_data = data.get('classroom', {})
+        if 'doors' in classroom_data:
+            from .exam_planner import validate_doors
+            classroom.doors = validate_doors(classroom_data['doors'])
+            classroom.save(update_fields=['doors'])
         rows = int(classroom_data.get('rows', classroom.rows))
         cols = int(classroom_data.get('cols', classroom.cols))
         _sync_seats(classroom, rows, cols)
@@ -6895,6 +6826,7 @@ def _capture_history_state(classroom):
             'name': classroom.name,
             'rows': classroom.rows,
             'cols': classroom.cols,
+            'doors': classroom.doors,
             'left_guardian_student_pk': classroom.left_guardian_id,
             'right_guardian_student_pk': classroom.right_guardian_id,
             'created_at': _serialize_history_datetime(classroom.created_at),
@@ -7041,7 +6973,16 @@ def _serialize_ai_conversations_for_export(classroom):
     return data
 
 
-def _serialize_classroom_history_for_export(classroom):
+def _serialize_classroom_history_for_export(classroom, limit=None):
+    queryset = _get_history_queryset(classroom.pk)
+    if limit is not None and limit >= 0:
+        if limit == 0:
+            entries = []
+        else:
+            entries = list(queryset.order_by('-pk')[:limit])
+            entries.reverse()
+    else:
+        entries = queryset
     return [
         {
             'action_type': str(entry.action_type or ''),
@@ -7049,11 +6990,17 @@ def _serialize_classroom_history_for_export(classroom):
             'is_applied': bool(entry.is_applied),
             'created_at': _serialize_history_datetime(entry.created_at),
         }
-        for entry in _get_history_queryset(classroom.pk)
+        for entry in entries
     ]
 
 
-def _serialize_seats_file_bundle(classroom):
+def _serialize_seats_file_bundle(
+    classroom,
+    *,
+    history_limit=None,
+    include_future_mode_config=True,
+    include_ai_conversations=True,
+):
     data = _snapshot_payload(classroom, include_students=True, include_constraints=True)
     data['meta'] = {
         **copy.deepcopy(data.get('meta') or {}),
@@ -7062,10 +7009,12 @@ def _serialize_seats_file_bundle(classroom):
     }
     data['current_state'] = _capture_history_state(classroom)
     data['history'] = {
-        'entries': _serialize_classroom_history_for_export(classroom),
+        'entries': _serialize_classroom_history_for_export(classroom, history_limit),
     }
-    data['future_mode_config'] = _serialize_future_mode_config(classroom)
-    data['ai_conversations'] = _serialize_ai_conversations_for_export(classroom)
+    if include_future_mode_config:
+        data['future_mode_config'] = _serialize_future_mode_config(classroom)
+    if include_ai_conversations:
+        data['ai_conversations'] = _serialize_ai_conversations_for_export(classroom)
     return data
 
 
@@ -7428,6 +7377,10 @@ def _restore_history_state(classroom, state):
     target_cols = int(classroom_data.get('cols') or classroom.cols)
 
     with transaction.atomic():
+        if 'doors' in classroom_data:
+            from .exam_planner import validate_doors
+            classroom.doors = validate_doors(classroom_data['doors'])
+            classroom.save(update_fields=['doors'])
         if classroom.name != target_name:
             classroom.name = target_name
             classroom.save(update_fields=['name'])
@@ -8226,6 +8179,13 @@ def _is_internal_policy_student(student):
     return False
 
 
+def _suggestion_layout_revision(classroom):
+    """建议的座位、分组和成绩前置条件，避免旧面板操作新的布局。"""
+    rows = list(classroom.seats.order_by('pk').values_list(
+        'pk', 'row', 'col', 'cell_type', 'student_id', 'group_id', 'student__score'))
+    return hashlib.sha256(json.dumps(rows, default=str).encode()).hexdigest()[:24]
+
+
 def _evaluate_layout(classroom, request=None):
     issues = []
     seats = list(classroom.seats.select_related('student', 'group'))
@@ -8303,7 +8263,7 @@ def _evaluate_layout(classroom, request=None):
                         'type': 'group_balance',
                         'message': f'建议交换 {s1.name} 和 {s2.name} 以平衡小组均分 (分差 {diff:.1f} → {(diff - current_improvement):.1f})',
                         'action_label': '交换优化',
-                        'action_url': reverse('apply_suggestion', args=[classroom.pk]) + f'?type=swap_balance&s1={s1.pk}&s2={s2.pk}',
+                        'action_url': reverse('apply_suggestion', args=[classroom.pk]) + f'?type=swap_balance&s1={s1.pk}&s2={s2.pk}&revision={_suggestion_layout_revision(classroom)}',
                         'ignore_label': '忽略此条',
                         'ignore_url': '#'
                      })
@@ -8348,11 +8308,25 @@ def classroom_detail(request, pk):
     fixed_student_ids = _get_fixed_seat_student_ids(classroom, constraints=constraints)
 
     seat_grid = []
+    # 给座位网格生成与参考桌面端一致的连续座位编号：只对真实座位计数，
+    # 讲台、过道和空白单元不占用编号。这个编号仅用于显示，不改变数据库坐标。
+    display_number = 0
     for r in range(1, classroom.rows + 1):
         row_seats = []
         for c in range(1, classroom.cols + 1):
-            row_seats.append(seat_map.get((r, c)))
+            seat = seat_map.get((r, c))
+            if seat and seat.cell_type == SeatCellType.SEAT:
+                display_number += 1
+                seat.display_number = display_number
+            row_seats.append(seat)
         seat_grid.append(row_seats)
+
+    # 班级页顶部讲台是第一个真实 podium 单元的可编辑投影；保留其行列坐标，
+    # 让点击、右键和键盘操作都能回到同一套 update_cell/move 业务逻辑。
+    podium_anchor = next(
+        (seat for seat in seats if seat.cell_type == SeatCellType.PODIUM),
+        None,
+    )
 
     students = list(classroom.students.all().order_by('name'))
     for student in students:
@@ -8376,8 +8350,15 @@ def classroom_detail(request, pk):
 
     seated_student_ids = {seat.student_id for seat in seats if seat.student_id}
     unseated_students = [student for student in students if student.pk not in seated_student_ids]
+    seated_count = len(seated_student_ids)
     groups = classroom.groups.all()
-    snapshots = classroom.layout_snapshots.all()
+    snapshots = list(classroom.layout_snapshots.only('pk', 'classroom_id', 'name', 'created_at').all())
+    # 已应用考场布局时，每张桌子显示考场桌号；桌号跟随桌位而不是学生。
+    from .exam_views import active_exam
+    exam_state = active_exam(classroom, seats, snapshots)
+    if exam_state:
+        for seat in seats:
+            seat.exam_number = exam_state['numbers'].get((seat.row, seat.col), '')
     custom_info_keys = sorted({
         str(key)
         for data in classroom.students.values_list('custom_data', flat=True)
@@ -8395,8 +8376,10 @@ def classroom_detail(request, pk):
     return render(request, 'seats/classroom_detail.html', {
         'classroom': classroom,
         'seat_grid': seat_grid,
+        'podium_anchor': podium_anchor,
         'students': students,
         'unseated_students': unseated_students,
+        'seated_count': seated_count,
         'groups': groups,
         'snapshots': snapshots,
         'custom_info_keys': custom_info_keys,
@@ -8411,6 +8394,8 @@ def classroom_detail(request, pk):
         'suggestions': suggestions,
         'sync_meta': sync_meta,
         'sync_meta_payload': _serialize_classroom_sync_meta(classroom, sync_meta),
+        'skip_cloud_entry_sync': request.GET.get('cloud_sync') in ('return', 'pulled', 'import-return'),
+        'exam_state': exam_state,
     })
 
 
@@ -8446,8 +8431,9 @@ def ai_workspace(request, pk):
 
 
 @require_POST
+@with_ai_name_rendering
 def ai_chat(request, pk):
-    _ensure_ai_feature_enabled()
+    _ensure_ai_feature_enabled(request)
     classroom = get_object_or_404(Classroom, pk=pk)
     try:
         payload = json.loads(request.body or '{}')
@@ -8543,7 +8529,7 @@ def ai_chat(request, pk):
             'messages': _load_ai_conversation_messages(active_conversation),
         })
 
-    effective_client_config = _merge_ai_client_config(classroom, client_config)
+    effective_client_config = client_config if getattr(request, '_wendao_authorized', False) else _merge_ai_client_config(classroom, client_config)
 
     if action == 'tool_approval':
         approval_token = str(payload.get('approval_token') or '').strip()
@@ -8599,7 +8585,8 @@ def ai_chat(request, pk):
                 approved = bool(decision_map.get(call['call_id']))
                 if approved:
                     try:
-                        result = _execute_ai_tool(classroom, call['name'], call['arguments'], request=request)
+                        arguments = restore_student_names(call['arguments'])
+                        result = _execute_ai_tool(classroom, call['name'], arguments, request=request)
                     except Exception as exc:
                         result = _build_ai_tool_error_result(call['name'], exc)
                 else:
@@ -8622,6 +8609,18 @@ def ai_chat(request, pk):
                 })
 
             pending_mode = str(pending.get('mode') or 'responses').strip() or 'responses'
+            # Rebuild cloud context when enabling privacy after an unmasked request.
+            if pending_mode == 'responses' and pending.get('name_privacy_enabled', False) != get_ai_privacy(request).enabled:
+                pending_mode = 'chat'
+                pending['chat_messages'] = [
+                    {'role': 'system', 'content': _future_mode_system_prompt()},
+                    *_build_history_from_conversation(conversation),
+                    {'role': 'assistant', 'content': '', 'tool_calls': [
+                        {'id': call['call_id'], 'type': 'function', 'function': {
+                            'name': call['name'], 'arguments': json.dumps(call['arguments'], ensure_ascii=False),
+                        }} for call in pending_calls
+                    ]},
+                ]
             cards = _collect_cards_from_tool_events(tool_events)
             if pending_mode == 'direct':
                 reply = _build_tool_events_success_reply(tool_events)
@@ -8836,8 +8835,9 @@ def ai_chat(request, pk):
 
 
 @require_POST
+@with_ai_name_rendering
 def ai_chat_stream(request, pk):
-    _ensure_ai_feature_enabled()
+    _ensure_ai_feature_enabled(request)
     classroom = get_object_or_404(Classroom, pk=pk)
     try:
         payload = json.loads(request.body or '{}')
@@ -8853,7 +8853,7 @@ def ai_chat_stream(request, pk):
         return JsonResponse({'status': 'error', 'message': '请输入内容后再发送'}, status=400)
 
     client_config = _normalize_ai_client_config(payload.get('client_config'))
-    effective_client_config = _merge_ai_client_config(classroom, client_config)
+    effective_client_config = client_config if getattr(request, '_wendao_authorized', False) else _merge_ai_client_config(classroom, client_config)
     conversation_id = payload.get('conversation_id')
 
     try:
@@ -8969,7 +8969,7 @@ def ai_chat_stream(request, pk):
             extra_body = _build_chat_completion_extra_body(client_config=effective_client_config)
             if extra_body:
                 completion_kwargs['extra_body'] = extra_body
-            stream = client.chat.completions.create(**completion_kwargs)
+            stream = client.chat.completions.create(**get_ai_privacy(request).protect_request(completion_kwargs, mode='chat'))
 
             reply_parts = []
             reasoning_parts = []
@@ -9160,11 +9160,14 @@ def classroom_state(request, pk):
                 'id': student.pk,
                 'name': student.name,
                 'student_id': student.student_id or '',
+                'gender': student.gender or '',
+                'score': student.score or 0,
                 'score_display': score_value,
                 'is_leader': (group and getattr(group, 'leader_id', None) == student.pk),
                 'podium_guardian_side': guardian_side,
                 'is_fixed_seat': student.pk in fixed_student_ids,
                 'tags': tag_map.get(student.pk, []),
+                'update_url': reverse('update_student', args=[classroom.pk, student.pk]),
             } if student else None,
             'group': {
                 'id': group.pk,
@@ -9196,6 +9199,7 @@ def classroom_state(request, pk):
 
     return JsonResponse({
         'seats': seat_payload,
+        'doors': classroom.doors,
         'unseated': unseated_payload,
         'podium_guards': _serialize_podium_guards(
             classroom,
@@ -9594,10 +9598,11 @@ def _transform_layout_rows(rows, layout_transform):
     return rows
 
 
-def _detect_layout_import_defaults(temp_path, options):
-    wb = openpyxl.load_workbook(temp_path, data_only=True)
+def _detect_layout_import_defaults(temp_path, options, *, workbook=None, bounds=None):
+    owns_workbook = workbook is None
+    wb = workbook or openpyxl.load_workbook(temp_path, data_only=True)
     ws = wb.active
-    bounds = _detect_layout_bounds(ws)
+    bounds = bounds or _detect_layout_bounds(ws)
     min_row = bounds['min_row']
     max_row = bounds['max_row']
     min_col = bounds['min_col']
@@ -9617,7 +9622,8 @@ def _detect_layout_import_defaults(temp_path, options):
             if student_name:
                 row_name_count[r] += 1
 
-    wb.close()
+    if owns_workbook:
+        wb.close()
 
     start_row = min_row
     end_row = max_row
@@ -9684,10 +9690,11 @@ def _classify_layout_cell(text, options):
     return SeatCellType.SEAT, None, '默认座位'
 
 
-def _build_layout_grid_from_excel(temp_path, start_row, end_row, options):
-    wb = openpyxl.load_workbook(temp_path, data_only=True)
+def _build_layout_grid_from_excel(temp_path, start_row, end_row, options, *, workbook=None, bounds=None):
+    owns_workbook = workbook is None
+    wb = workbook or openpyxl.load_workbook(temp_path, data_only=True)
     ws = wb.active
-    bounds = _detect_layout_bounds(ws)
+    bounds = bounds or _detect_layout_bounds(ws)
 
     start_row = max(bounds['min_row'], int(start_row or bounds['min_row']))
     end_row = min(bounds['max_row'], int(end_row or bounds['max_row']))
@@ -9733,7 +9740,8 @@ def _build_layout_grid_from_excel(temp_path, start_row, end_row, options):
 
     rows = _transform_layout_rows(rows, options.get('layout_transform', 'none'))
 
-    wb.close()
+    if owns_workbook:
+        wb.close()
     return {
         'start_row': start_row,
         'end_row': end_row,
@@ -9775,8 +9783,23 @@ def _preview_rows_payload(grid_rows):
     return [render_row(i, row) for i, row in front], [render_row(i, row) for i, row in back]
 
 
-def _build_layout_preview_response(temp_path, start_row, end_row, options):
-    grid_data = _build_layout_grid_from_excel(temp_path, start_row, end_row, options)
+def _build_layout_preview_response(
+    temp_path,
+    start_row,
+    end_row,
+    options,
+    *,
+    workbook=None,
+    bounds=None,
+):
+    grid_data = _build_layout_grid_from_excel(
+        temp_path,
+        start_row,
+        end_row,
+        options,
+        workbook=workbook,
+        bounds=bounds,
+    )
     front_rows, back_rows = _preview_rows_payload(grid_data['rows'])
     return {
         'layout_transform': options.get('layout_transform', 'none'),
@@ -9879,15 +9902,27 @@ def import_layout_excel(request, pk):
         suffix = os.path.splitext(excel_file.name)[1].lower() or '.xlsx'
         file_id, temp_path = _save_uploaded_temp_file(excel_file, suffix)
         try:
-            defaults = _detect_layout_import_defaults(temp_path, options)
-            preview_options = dict(options)
-            preview_options['layout_transform'] = defaults['layout_transform']
-            preview = _build_layout_preview_response(
-                temp_path,
-                defaults['start_row'],
-                defaults['end_row'],
-                preview_options
-            )
+            workbook = openpyxl.load_workbook(temp_path, data_only=True)
+            try:
+                bounds = _detect_layout_bounds(workbook.active)
+                defaults = _detect_layout_import_defaults(
+                    temp_path,
+                    options,
+                    workbook=workbook,
+                    bounds=bounds,
+                )
+                preview_options = dict(options)
+                preview_options['layout_transform'] = defaults['layout_transform']
+                preview = _build_layout_preview_response(
+                    temp_path,
+                    defaults['start_row'],
+                    defaults['end_row'],
+                    preview_options,
+                    workbook=workbook,
+                    bounds=bounds,
+                )
+            finally:
+                workbook.close()
             return JsonResponse({
                 'status': 'ready',
                 'file_id': file_id,
@@ -11958,7 +11993,7 @@ def classroom_custom_sort(request, pk):
                 strategy=strategy,
                 python_code=python_code,
             )
-            return redirect('classroom_detail', pk=classroom.pk)
+            return redirect(reverse('classroom_detail', args=[classroom.pk]) + '?cloud_sync=return')
         except ValueError as exc:
             return render(
                 request,
@@ -13787,7 +13822,7 @@ def _constraint_success_response(request, constraint, *, metrics_message='操作
             'enabled': constraint.enabled,
             'message': metrics_message,
         })
-    return redirect('classroom_detail', pk=constraint.classroom_id)
+    return redirect(reverse('classroom_detail', args=[constraint.classroom_id]) + '?tab=constraints&cloud_sync=return')
 
 
 def _constraint_form_payload(request):
@@ -13801,6 +13836,25 @@ def _constraint_form_payload(request):
         'note': request.POST.get('note'),
         'enabled': request.POST.get('enabled'),
     }
+
+
+@require_http_methods(['GET'])
+def constraint_editor(request, pk, constraint_id=None):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    constraint = None
+    if constraint_id is not None:
+        constraint = get_object_or_404(SeatConstraint, pk=constraint_id, classroom=classroom)
+    students = list(classroom.students.order_by('name', 'student_id', 'pk').values('id', 'name', 'student_id'))
+    return render(request, 'seats/constraint_editor.html', {
+        'classroom': classroom,
+        'constraint': constraint,
+        'constraint_types': get_constraint_type_definitions(),
+        'constraint_students': students,
+        'form_action': (
+            reverse('update_constraint', args=[pk, constraint_id])
+            if constraint else reverse('create_constraint', args=[pk])
+        ),
+    })
 
 
 @require_POST
@@ -14215,7 +14269,7 @@ def _bulk_export_options_context(request, fallback_classroom, format_key):
         'batch_export_directory_name': export_group.name if export_group else '批量导出',
         'batch_export_back_url': (
             reverse('classroom_group_detail', args=[export_group.pk])
-            if export_group else reverse('classroom_detail', args=[fallback_classroom.pk])
+            if export_group else reverse('classroom_detail', args=[fallback_classroom.pk]) + '?cloud_sync=return'
         ),
     }
 
@@ -14797,7 +14851,15 @@ def export_students_pptx_options_page(request, pk):
 
 def export_group_report(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
-    groups = list(classroom.groups.all())
+    groups = list(classroom.groups.prefetch_related(
+        models.Prefetch(
+            'seats',
+            queryset=Seat.objects.select_related('student').filter(
+                student__isnull=False,
+            ).order_by('row', 'col', 'pk'),
+            to_attr='report_seats',
+        )
+    ).all())
 
     wb = openpyxl.Workbook()
     ws = wb.active
@@ -14836,9 +14898,8 @@ def export_group_report(request, pk):
         })
         total_weight += WEIGHT_HEADER
         
-        seats = group.seats.select_related('student').filter(student__isnull=False)
         members = []
-        for s in seats:
+        for s in group.report_seats:
              is_ldr = (group.leader_id == s.student_id)
              members.append({'name': s.student.name, 'is_leader': is_ldr})
         
@@ -15855,6 +15916,9 @@ def apply_suggestion(request, pk):
             
             before_state = _capture_history_state(classroom)
             with transaction.atomic():
+                revision = request.GET.get('revision')
+                if revision and revision != _suggestion_layout_revision(classroom):
+                    return JsonResponse({'status': 'error', 'message': '座位、分组或成绩已变化，这条建议已过期，请查看新建议。'}, status=409)
                 _swap_seats(seat1, seat2)
                 violations = _stabilize_layout_with_rules(classroom, request)
                 if violations:
@@ -16067,9 +16131,6 @@ def toggle_fixed_seat(request, pk):
     except Exception as e:
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
-from django.views.decorators.csrf import csrf_exempt
-
-
 def _cloud_json_body(request):
     try:
         raw = request.body.decode('utf-8') if request.body else '{}'
@@ -16210,8 +16271,8 @@ def _cloud_session_payload(session, request=None):
         'token_expires_at': session.token_expires_at.isoformat(),
         'limits': session.limits if isinstance(session.limits, dict) else {},
         'cloud_server_url': get_cloud_server_url(),
-        'cloud_server_locked': True,
-        'official_cloud_server_url': get_cloud_server_url(),
+        'cloud_server_locked': False,
+        'official_cloud_server_url': 'https://fuckseatsapi.577622.xyz',
         'data_sharing': get_data_sharing_config(),
         'login_url': build_cloud_login_url(callback_url) if callback_url else None,
     }
@@ -16222,8 +16283,13 @@ def _cloud_export_payload(classroom, session):
     max_history_steps = int(limits.get('max_history_steps', 0) or 0)
     sync_ai_conversations = bool(limits.get('sync_ai_conversations', False))
 
-    payload = _serialize_seats_file_bundle(classroom)
-    payload.pop('future_mode_config', None)
+    history_limit = None if max_history_steps == -1 else max(0, max_history_steps)
+    payload = _serialize_seats_file_bundle(
+        classroom,
+        history_limit=history_limit,
+        include_future_mode_config=False,
+        include_ai_conversations=sync_ai_conversations,
+    )
     meta = payload.get('meta') if isinstance(payload.get('meta'), dict) else {}
     sync_meta = SyncMeta.objects.filter(classroom=classroom).first()
     operation_at = _sync_meta_operation_time(sync_meta, classroom)
@@ -16231,27 +16297,57 @@ def _cloud_export_payload(classroom, session):
         meta['last_operation_at'] = operation_at.isoformat()
         payload['meta'] = meta
 
-    history = payload.get('history')
-    if isinstance(history, dict):
-        entries = history.get('entries')
-        if isinstance(entries, list):
-            if max_history_steps == 0:
-                history['entries'] = []
-            elif max_history_steps > 0:
-                history['entries'] = entries[-max_history_steps:]
-        payload['history'] = history
-
-    legacy_history = payload.get('history_entries')
-    if isinstance(legacy_history, list):
-        if max_history_steps == 0:
-            payload['history_entries'] = []
-        elif max_history_steps > 0:
-            payload['history_entries'] = legacy_history[-max_history_steps:]
-
-    if not sync_ai_conversations:
-        payload.pop('ai_conversations', None)
-
     return payload
+
+
+def _cloud_base_snapshot(meta):
+    row = SyncBaseline.objects.filter(sync_meta=meta).values('version', 'snapshot').first()
+    if not row or int(row.get('version') or 0) != int(meta.cloud_version or 0):
+        return {}
+    snapshot = row.get('snapshot')
+    return snapshot if isinstance(snapshot, dict) else {}
+
+
+def _save_cloud_base_snapshot(meta, snapshot, version=None):
+    SyncBaseline.objects.update_or_create(
+        sync_meta=meta,
+        defaults={
+            'version': int(meta.cloud_version if version is None else version or 0),
+            'snapshot': copy.deepcopy(snapshot),
+        },
+    )
+
+
+def _cloud_push_item(
+    classroom,
+    meta,
+    session,
+    *,
+    force=False,
+    device_id='local-desktop',
+    operation_at=None,
+    allow_delta=True,
+):
+    snapshot = _cloud_export_payload(classroom, session)
+    item = {
+        'uuid': str(meta.uuid),
+        'base_version': int(meta.cloud_version or 0),
+        'cloud_version': int(meta.cloud_version or 0),
+        'local_version': int(meta.local_version or 0),
+        'force': bool(force),
+        'device_id': str(device_id or 'local-desktop')[:64],
+        'last_operation_at': operation_at.isoformat() if operation_at else None,
+    }
+    base = _cloud_base_snapshot(meta)
+    if allow_delta and not force and int(meta.cloud_version or 0) > 0 and base:
+        item.update({
+            'protocol': DELTA_PROTOCOL,
+            'changes': build_delta(base, snapshot),
+            'snapshot_hash': snapshot_hash(snapshot),
+        })
+    else:
+        item['data'] = snapshot
+    return item, snapshot
 
 
 def _cloud_export_classroom_group_data(classroom_group):
@@ -16398,6 +16494,7 @@ def _cloud_restore_classroom_group_data(group_payload):
     return classroom_group
 
 
+@transaction.atomic
 def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None, operation_time=None):
     if not isinstance(data, dict):
         raise ValueError('云端班级数据格式错误')
@@ -16431,7 +16528,11 @@ def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None, o
             meta.last_operation_at = operation_at
         meta.last_sync_at = timezone.now()
         meta.last_error = ''
-        meta.save(update_fields=['uuid', 'cloud_version', 'local_version', 'last_operation_at', 'last_sync_at', 'last_error', 'updated_at'])
+        meta.save(update_fields=[
+            'uuid', 'cloud_version', 'local_version', 'last_operation_at', 'last_sync_at',
+            'last_error', 'updated_at',
+        ])
+        _save_cloud_base_snapshot(meta, data)
 
     return classroom, meta
 
@@ -16445,37 +16546,73 @@ def _cloud_pull_and_restore_classroom(
     *,
     refresh_subscription=True,
 ):
+    local_meta = SyncMeta.objects.select_related('classroom').filter(uuid=classroom_uuid).first()
+    base_snapshot = _cloud_base_snapshot(local_meta) if local_meta else {}
+    full_path = f'/api/sync/pull/{classroom_uuid}'
+    path = full_path
+    if local_meta and int(local_meta.cloud_version or 0) > 0 and base_snapshot:
+        path += f'?protocol={DELTA_PROTOCOL}&base_version={int(local_meta.cloud_version or 0)}'
     payload = cloud_api_request(
         session,
         'GET',
-        f'/api/sync/pull/{classroom_uuid}',
+        path,
         refresh_subscription=refresh_subscription,
     )
     data = payload.get('data') or payload.get('data_snapshot')
+    if data is None and payload.get('protocol') == DELTA_PROTOCOL:
+        try:
+            if not local_meta or not base_snapshot:
+                raise ValueError('本地缺少增量基线')
+            data = apply_commit_chain(base_snapshot, int(local_meta.cloud_version or 0), payload)
+        except (ValueError, TypeError):
+            # Retry once without delta negotiation; never apply a partial chain.
+            payload = cloud_api_request(
+                session, 'GET', full_path, refresh_subscription=refresh_subscription,
+            )
+            data = payload.get('data') or payload.get('data_snapshot')
+            if not isinstance(data, dict) or not data:
+                raise ValueError('云端增量校验失败，且未返回完整快照')
+            if int(payload.get('version') or 0) < int(local_meta.cloud_version if local_meta else 0):
+                raise ValueError('云端完整快照版本早于本地同步基线')
+        else:
+            if not payload['commits']:
+                local_meta.last_sync_at = timezone.now()
+                local_meta.last_error = ''
+                local_meta.save(update_fields=['last_sync_at', 'last_error', 'updated_at'])
+                return local_meta.classroom, local_meta
     version = payload.get('version') if payload.get('version') is not None else fallback_version
     operation_time = payload.get('last_operation_at') or payload.get('last_modified_at') or fallback_operation_time
     return _cloud_restore_classroom_data(request, classroom_uuid, data, version=version, operation_time=operation_time)
 
 
-def _cloud_pull_and_restore_classroom_group(request, session, group_uuid, *, refresh_subscription=True):
+def _cloud_pull_and_restore_classroom_group(
+    request, session, group_uuid, *, refresh_subscription=True, preserve_local_changes=False,
+):
     payload = cloud_api_request(
         session,
         'GET',
         f'/api/sync/pull-group/{group_uuid}',
         refresh_subscription=refresh_subscription,
     )
-    for item in payload.get('classrooms') or []:
-        if not isinstance(item, dict) or not item.get('uuid'):
-            continue
-        _cloud_restore_classroom_data(
-            request,
-            item.get('uuid'),
-            item.get('data') or item.get('data_snapshot'),
-            version=item.get('version'),
-            operation_time=item.get('last_operation_at') or item.get('last_modified_at') or item.get('updated_at'),
-        )
-    group_payload = payload.get('group') if isinstance(payload.get('group'), dict) else {}
-    classroom_group = _cloud_restore_classroom_group_data(group_payload)
+    with transaction.atomic():
+        items = [item for item in (payload.get('classrooms') or []) if isinstance(item, dict) and item.get('uuid')]
+        if preserve_local_changes:
+            metas = SyncMeta.objects.filter(uuid__in=[item['uuid'] for item in items])
+            if any(int(meta.local_version or 0) > int(meta.cloud_version or 0) for meta in metas):
+                raise CloudAPIError(
+                    '班级组内有尚未同步的本地修改，已保留双方数据；请先处理班级同步冲突',
+                    status_code=409, payload={'conflict': True},
+                )
+        for item in items:
+            _cloud_restore_classroom_data(
+                request,
+                item.get('uuid'),
+                item.get('data') or item.get('data_snapshot'),
+                version=item.get('version'),
+                operation_time=item.get('last_operation_at') or item.get('last_modified_at') or item.get('updated_at'),
+            )
+        group_payload = payload.get('group') if isinstance(payload.get('group'), dict) else {}
+        classroom_group = _cloud_restore_classroom_group_data(group_payload)
     return classroom_group, group_payload
 
 
@@ -16485,7 +16622,8 @@ def cloud_config(request):
     try:
         if request.method == 'POST':
             data = _cloud_json_body(request)
-            server_url = set_cloud_server_url(data.get('cloud_server_url') or data.get('url'))
+            server_url = (set_cloud_server_url(data.get('cloud_server_url') or data.get('url'))
+                          if 'cloud_server_url' in data or 'url' in data else get_cloud_server_url())
             if 'data_sharing_enabled' in data:
                 set_data_sharing_enabled(data.get('data_sharing_enabled'))
             data_sharing_payload = data.get('data_sharing') if isinstance(data.get('data_sharing'), dict) else {}
@@ -16508,8 +16646,8 @@ def cloud_config(request):
         return JsonResponse({
             'status': 'success',
             'cloud_server_url': server_url,
-            'cloud_server_locked': True,
-            'official_cloud_server_url': server_url,
+            'cloud_server_locked': False,
+            'official_cloud_server_url': 'https://fuckseatsapi.577622.xyz',
             'callback_url': callback_url,
             'login_url': build_cloud_login_url(callback_url),
             'data_sharing': get_data_sharing_config(),
@@ -16544,8 +16682,8 @@ def cloud_login(request):
         return JsonResponse({
             'status': 'success',
             'cloud_server_url': get_cloud_server_url(),
-            'cloud_server_locked': True,
-            'official_cloud_server_url': get_cloud_server_url(),
+            'cloud_server_locked': False,
+            'official_cloud_server_url': 'https://fuckseatsapi.577622.xyz',
             'data_sharing': get_data_sharing_config(),
             'callback_url': callback_url,
             'login_url': login_url,
@@ -16630,8 +16768,8 @@ def cloud_userinfo(request):
         return JsonResponse({
             'logged_in': False,
             'cloud_server_url': get_cloud_server_url(),
-            'cloud_server_locked': True,
-            'official_cloud_server_url': get_cloud_server_url(),
+            'cloud_server_locked': False,
+            'official_cloud_server_url': 'https://fuckseatsapi.577622.xyz',
             'data_sharing': get_data_sharing_config(),
             'callback_url': callback_url,
             'login_url': build_cloud_login_url(callback_url),
@@ -16724,7 +16862,6 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
     if sync_scope not in {'all', 'linked'}:
         sync_scope = 'all'
     force = bool(data.get('force'))
-    auto_sync = bool(data.get('auto'))
     queryset = Classroom.objects.all().order_by('pk')
     if classroom_ids:
         if not isinstance(classroom_ids, list):
@@ -16745,6 +16882,7 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
     remote_versions = _cloud_versions_from_status(remote_status)
     remote_operation_times = _cloud_operation_times_from_status(remote_status)
     remote_classrooms = _cloud_classrooms_from_status(remote_status)
+    allow_delta = DELTA_PROTOCOL in (remote_status.get('sync_protocols') or [])
     remote_classroom_count = len(remote_classrooms)
     activated_classroom_count = 0
     results = []
@@ -16755,9 +16893,6 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
         remote_version = _cloud_remote_version_for(remote_versions, meta.uuid)
         remote_operation_at = _cloud_remote_operation_time_for(remote_operation_times, meta.uuid)
         local_operation_at = _sync_meta_operation_time(meta, classroom)
-        cloud_operation_newer = bool(auto_sync and _operation_time_newer(remote_operation_at, local_operation_at))
-        local_operation_newer = bool(auto_sync and _operation_time_newer(local_operation_at, remote_operation_at))
-        upload_by_operation_time = bool(auto_sync and remote_operation_at and local_operation_newer)
         local_has_changes = int(sync_payload['local_version'] or 0) > int(sync_payload['cloud_version'] or 0)
         if (
             max_classrooms != -1
@@ -16773,42 +16908,11 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
             })
             continue
 
-        if cloud_operation_newer and not force:
-            try:
-                classroom, meta = _cloud_pull_and_restore_classroom(
-                    request,
-                    session,
-                    str(meta.uuid),
-                    fallback_version=remote_version,
-                    fallback_operation_time=remote_operation_at,
-                    refresh_subscription=False,
-                )
-            except Exception as exc:
-                meta.last_error = str(exc)
-                meta.save(update_fields=['last_error', 'updated_at'])
-                results.append({
-                    'classroom_id': classroom.pk,
-                    'name': classroom.name,
-                    **_serialize_classroom_sync_meta(classroom, meta),
-                    'status': 'error',
-                    'message': str(exc),
-                })
-            else:
-                results.append({
-                    'classroom_id': classroom.pk,
-                    'name': classroom.name,
-                    **_serialize_classroom_sync_meta(classroom, meta),
-                    'status': 'pulled',
-                    'version': int(meta.cloud_version or remote_version or 0),
-                    'message': '检测到云端操作时间更新，已从云端拉取',
-                })
-            continue
-
+        # Version divergence takes precedence over device clocks, including auto sync.
         if (
             remote_version is not None
             and remote_version > int(meta.cloud_version or 0)
             and not force
-            and not upload_by_operation_time
         ):
             if not local_has_changes:
                 try:
@@ -16849,7 +16953,7 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
                 **_serialize_classroom_sync_meta(classroom, meta),
                 'status': 'conflict',
                 'cloud_version': remote_version,
-                'message': '云端版本更新，请先从云恢复或处理冲突',
+                'message': '本地与云端均有修改，已保留双方数据；请先导出本地副本，再选择要保留的版本',
             })
             continue
 
@@ -16859,7 +16963,6 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
             and sync_payload['backed_up']
             and sync_payload['local_version'] <= sync_payload['cloud_version']
             and remote_version <= sync_payload['cloud_version']
-            and not (remote_operation_at and _operation_time_newer(local_operation_at, remote_operation_at))
         ):
             results.append({
                 'classroom_id': classroom.pk,
@@ -16870,24 +16973,15 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
             })
             continue
 
-        push_force = bool(
-            force
-            or (
-                upload_by_operation_time
-                and remote_version is not None
-                and remote_version > int(meta.cloud_version or 0)
-            )
+        body, pushed_snapshot = _cloud_push_item(
+            classroom,
+            meta,
+            session,
+            force=force,
+            device_id=data.get('device_id') or 'local-desktop',
+            operation_at=local_operation_at,
+            allow_delta=allow_delta,
         )
-        body = {
-            'uuid': str(meta.uuid),
-            'base_version': int(meta.cloud_version or 0),
-            'cloud_version': int(meta.cloud_version or 0),
-            'local_version': int(meta.local_version or 0),
-            'force': push_force,
-            'device_id': data.get('device_id') or 'local-desktop',
-            'last_operation_at': local_operation_at.isoformat() if local_operation_at else None,
-            'data': _cloud_export_payload(classroom, session),
-        }
 
         try:
             payload = cloud_api_request(
@@ -16936,7 +17030,11 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
                 meta.last_operation_at = operation_at
             meta.last_sync_at = timezone.now()
             meta.last_error = ''
-            meta.save(update_fields=['cloud_version', 'local_version', 'last_operation_at', 'last_sync_at', 'last_error', 'updated_at'])
+            meta.save(update_fields=[
+                'cloud_version', 'local_version', 'last_operation_at', 'last_sync_at',
+                'last_error', 'updated_at',
+            ])
+            _save_cloud_base_snapshot(meta, pushed_snapshot, version=version)
             results.append({
                 'classroom_id': classroom.pk,
                 'name': classroom.name,
@@ -17050,13 +17148,14 @@ def _cloud_sync_classroom_groups(request, session, data=None, remote_status=None
                     session,
                     group_uuid,
                     refresh_subscription=False,
+                    preserve_local_changes=True,
                 )
             except Exception as exc:
                 results.append({
                     'group_id': classroom_group.pk,
                     'uuid': group_uuid,
                     'name': classroom_group.name,
-                    'status': 'error',
+                    'status': 'conflict' if isinstance(exc, CloudAPIError) and exc.payload.get('conflict') else 'error',
                     'message': str(exc),
                 })
             else:
@@ -17159,12 +17258,13 @@ def _cloud_sync_classroom_groups(request, session, data=None, remote_status=None
                 session,
                 remote_uuid,
                 refresh_subscription=False,
+                preserve_local_changes=True,
             )
         except Exception as exc:
             results.append({
                 'uuid': remote_uuid,
                 'name': str(remote.get('name') or '云端班级组'),
-                'status': 'error',
+                'status': 'conflict' if isinstance(exc, CloudAPIError) and exc.payload.get('conflict') else 'error',
                 'message': str(exc),
             })
             continue
@@ -17221,24 +17321,28 @@ def cloud_sync_group(request, pk):
             data = {}
         force = bool(data.get('force'))
         device_id = str(data.get('device_id') or 'local-desktop')[:64]
+        remote_status = _cloud_remote_status(session, refresh_subscription=False)
+        allow_delta = DELTA_PROTOCOL in (remote_status.get('sync_protocols') or [])
         group_data = _cloud_export_classroom_group_data(classroom_group)
         group_fingerprint = _cloud_group_fingerprint(group_data, classroom_group.name)
         metas = {}
         items = []
+        pushed_snapshots = {}
         for classroom in classrooms:
             meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
             metas[str(meta.uuid)] = (classroom, meta)
             operation_at = _sync_meta_operation_time(meta, classroom)
-            items.append({
-                'uuid': str(meta.uuid),
-                'base_version': int(meta.cloud_version or 0),
-                'cloud_version': int(meta.cloud_version or 0),
-                'local_version': int(meta.local_version or 0),
-                'force': force,
-                'device_id': device_id,
-                'last_operation_at': operation_at.isoformat() if operation_at else None,
-                'data': _cloud_export_payload(classroom, session),
-            })
+            item, pushed_snapshot = _cloud_push_item(
+                classroom,
+                meta,
+                session,
+                force=force,
+                device_id=device_id,
+                operation_at=operation_at,
+                allow_delta=allow_delta,
+            )
+            items.append(item)
+            pushed_snapshots[str(meta.uuid)] = pushed_snapshot
 
         payload = cloud_api_request(
             session,
@@ -17292,6 +17396,7 @@ def cloud_sync_group(request, pk):
                     'last_error',
                     'updated_at',
                 ])
+                _save_cloud_base_snapshot(meta, pushed_snapshots[classroom_uuid], version=version)
                 response_results.append({
                     'classroom_id': classroom.pk,
                     'name': classroom.name,
@@ -17348,14 +17453,10 @@ def cloud_sync_group_pull(request, group_uuid):
 def cloud_sync_pull(request, classroom_uuid):
     try:
         session = _cloud_local_session_or_401()
-        payload = cloud_api_request(session, 'GET', f'/api/sync/pull/{classroom_uuid}')
-        data = payload.get('data') or payload.get('data_snapshot')
-        classroom, meta = _cloud_restore_classroom_data(
+        classroom, meta = _cloud_pull_and_restore_classroom(
             request,
+            session,
             classroom_uuid,
-            data,
-            version=payload.get('version'),
-            operation_time=payload.get('last_operation_at') or payload.get('last_modified_at'),
         )
         return JsonResponse({
             'status': 'success',
@@ -17503,14 +17604,15 @@ def frontend_store_js(request):
         const oldSetItem = Storage.prototype.setItem;
         const oldGetItem = Storage.prototype.getItem;
         const oldRemoveItem = Storage.prototype.removeItem;
-        const hasBackendValue = (key) => Object.prototype.hasOwnProperty.call(window.BACKEND_STORE, key);
+        const isLocalOnly = (key) => String(key).startsWith('fuckseats_onboarding_v3');
+        const hasBackendValue = (key) => !isLocalOnly(key) && Object.prototype.hasOwnProperty.call(window.BACKEND_STORE, key);
         const normalizeStoreKey = (key) => {{
             if (key === undefined || key === null) return '';
             return String(key);
         }};
         const syncBackendSet = (rawKey, rawValue) => {{
             const key = normalizeStoreKey(rawKey);
-            if (!key || key.length > 255) return;
+            if (!key || key.length > 255 || isLocalOnly(key)) return;
             const value = String(rawValue);
             if (hasBackendValue(key) && window.BACKEND_STORE[key] === value) return;
             window.BACKEND_STORE[key] = value;
@@ -17689,50 +17791,8 @@ def desktop_update_status(request):
 
 @require_POST
 def mark_onboarding_seen(request):
-    sk = request.session.session_key
-    if not sk:
-        request.session['ob_init'] = True
-        request.session.save()
-        sk = request.session.session_key
-    completed = ''
-    body = {}
-    try:
-        body = json.loads(request.body or b'{}')
-        if not isinstance(body, dict):
-            body = {}
-        if isinstance(body, dict) and isinstance(body.get('completed_steps'), str):
-            completed = body['completed_steps'][:120]
-    except Exception:
-        completed = ''
-        body = {}
-    if sk:
-        OnboardingState.objects.update_or_create(
-            session_key=sk,
-            defaults={'seen': True, 'completed_steps': completed},
-        )
-    FrontendKVStore.objects.update_or_create(
-        key=ONBOARDING_SEEN_STORE_KEY,
-        defaults={'value': ONBOARDING_SEEN_STORE_VALUE},
-    )
-    stage = str((body or {}).get('completed_steps') or '').strip()
-    sample_deleted = False
-    if stage in {'detail_done', 'tour_done', 'index_skip'}:
-        # 先留下首页兜底标记，再在完成请求内直接清理。旧实现只在下一次
-        # GET / 时删除，完成请求被前端当作成功但跳转/会话时序异常时，
-        # 示例班级就会永久残留。
-        request.session[_CLEANUP_PENDING_KEY] = True
-        request.session.modified = True
-        sample_deleted = _delete_onboarding_sample(
-            request,
-            prefer_pk=(body or {}).get('current_classroom_id'),
-        )
-        if sample_deleted:
-            request.session.pop(_CLEANUP_PENDING_KEY, None)
-            request.session.modified = True
-    payload = {'ok': True, 'sample_deleted': sample_deleted}
-    if sample_deleted:
-        payload['redirect_url'] = reverse('index')
-    return JsonResponse(payload)
+    # Cached clients must never delete classrooms or persist tutorial state.
+    return JsonResponse({'ok': False, 'retired': True, 'sample_deleted': False}, status=410)
 
 
 @csrf_exempt

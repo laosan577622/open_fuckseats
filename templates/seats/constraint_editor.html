@@ -1,0 +1,80 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}{% if constraint %}编辑约束{% else %}新建约束{% endif %} - {{ classroom.name }}{% endblock %}
+{% block body_class %}constraint-editor-body{% endblock %}
+{% block global_back_button %}{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/constraint-editor.css' %}?v=3">{% endblock %}
+{% block actions %}<a class="btn btn-secondary" href="{% url 'classroom_detail' classroom.pk %}?tab=constraints&amp;cloud_sync=return">返回约束列表</a>{% endblock %}
+
+{% block content %}
+<div class="constraint-editor-layout">
+    <section class="constraint-editor-main">
+        <div class="constraint-editor-heading">
+            <p>{{ classroom.name }} / 约束</p>
+            <h1>{% if constraint %}编辑约束{% else %}新建约束{% endif %}</h1>
+        </div>
+
+        <form id="constraintEditorForm" action="{{ form_action }}" method="post" data-return-url="{% url 'classroom_detail' classroom.pk %}?tab=constraints&amp;cloud_sync=return">
+            {% csrf_token %}
+            <div class="constraint-editor-fields">
+                <div class="form-group constraint-editor-wide">
+                    <label for="constraintTypeSelect">约束类型</label>
+                    <select name="constraint_type" id="constraintTypeSelect" required>
+                        {% for item in constraint_types %}
+                        <option value="{{ item.value }}" {% if constraint.constraint_type == item.value %}selected{% endif %}>{{ item.label }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <div class="form-group constraint-student-picker" data-picker="student" data-selected-id="{{ constraint.student_id|default_if_none:'' }}">
+                    <label for="constraintStudentSearch">学生</label>
+                    <input type="search" id="constraintStudentSearch" placeholder="搜索姓名或学号" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="constraintStudentResults">
+                    <input type="hidden" name="student_id" value="{{ constraint.student_id|default_if_none:'' }}">
+                    <div class="constraint-student-results" id="constraintStudentResults" role="listbox" hidden></div>
+                </div>
+
+                <div class="form-group constraint-student-picker" data-picker="target" data-field="target_student_id" data-selected-id="{{ constraint.target_student_id|default_if_none:'' }}">
+                    <label for="constraintTargetStudentSearch">关联学生</label>
+                    <input type="search" id="constraintTargetStudentSearch" placeholder="搜索姓名或学号" autocomplete="off" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="constraintTargetStudentResults">
+                    <input type="hidden" name="target_student_id" value="{{ constraint.target_student_id|default_if_none:'' }}">
+                    <div class="constraint-student-results" id="constraintTargetStudentResults" role="listbox" hidden></div>
+                </div>
+
+                <div class="form-group" data-field="row">
+                    <label for="constraintRowInput">行</label>
+                    <input type="number" name="row" id="constraintRowInput" min="1" max="{{ classroom.rows }}" placeholder="1–{{ classroom.rows }}" value="{{ constraint.row|default_if_none:'' }}">
+                </div>
+                <div class="form-group" data-field="col">
+                    <label for="constraintColInput">列</label>
+                    <input type="number" name="col" id="constraintColInput" min="1" max="{{ classroom.cols }}" placeholder="1–{{ classroom.cols }}" value="{{ constraint.col|default_if_none:'' }}">
+                </div>
+                <div class="form-group" data-field="distance">
+                    <label for="constraintDistanceInput">距离</label>
+                    <input type="number" name="distance" id="constraintDistanceInput" min="1" value="{{ constraint.distance|default:1 }}">
+                </div>
+                <div class="form-group constraint-editor-wide">
+                    <label for="constraintNoteInput">备注 <span>可选</span></label>
+                    <input type="text" name="note" id="constraintNoteInput" placeholder="记录设置原因" value="{{ constraint.note|default:'' }}">
+                </div>
+            </div>
+            <p class="constraint-editor-error" id="constraintEditorError" role="alert" hidden></p>
+            <div class="constraint-editor-actions">
+                <button type="submit" class="btn btn-primary" id="constraintEditorSubmit">{% if constraint %}保存修改{% else %}添加约束{% endif %}</button>
+                <a href="{% url 'classroom_detail' classroom.pk %}?tab=constraints&amp;cloud_sync=return" class="btn btn-secondary">取消</a>
+            </div>
+        </form>
+    </section>
+
+    <aside class="constraint-editor-aside" aria-live="polite">
+        <span>当前规则</span>
+        <strong id="constraintRuleTitle"></strong>
+        <p id="constraintRuleDescription"></p>
+        <div class="constraint-editor-selection"><small>学生</small><b id="constraintRuleStudent">尚未选择</b></div>
+        <div class="constraint-editor-selection" id="constraintRuleTargetWrap" hidden><small>关联学生</small><b id="constraintRuleTarget">尚未选择</b></div>
+    </aside>
+</div>
+{{ constraint_types|json_script:'constraint-editor-types' }}
+{{ constraint_students|json_script:'constraint-editor-students' }}
+<script src="{% static 'js/constraint-editor.js' %}?v=2"></script>
+{% endblock %}

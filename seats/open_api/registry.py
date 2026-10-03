@@ -5,6 +5,7 @@ from django.db import transaction
 from django.conf import settings
 from django.http import Http404
 
+from desktop_access import READ_ACCESS_TOOL_NAMES
 from seats.models import Classroom
 
 
@@ -111,8 +112,14 @@ class ToolRegistry:
             tools = [tool for tool in tools if tool.category != 'ai']
         return tools
 
-    def schemas(self, *, category=None):
+    def available_tools(self, request=None):
         tools = self.all()
+        if getattr(request, 'open_api_read_only', False):
+            tools = [tool for tool in tools if tool.read_only and tool.name in READ_ACCESS_TOOL_NAMES]
+        return tools
+
+    def schemas(self, *, category=None, request=None):
+        tools = self.available_tools(request)
         if category:
             tools = [tool for tool in tools if tool.category == category]
         return [tool.schema() for tool in tools]
@@ -122,6 +129,13 @@ class ToolRegistry:
 
     def execute(self, name, *, classroom_id=None, arguments=None, request=None):
         tool = self.get(name)
+        if getattr(request, 'open_api_read_only', False) and (
+            not tool.read_only or tool.name not in READ_ACCESS_TOOL_NAMES
+        ):
+            raise ToolExecutionError(
+                '此凭证仅允许读取班级、座位排列和学生资料',
+                code='READ_ONLY_ACCESS', status=403,
+            )
         arguments = dict(arguments or {})
         classroom = None
         effective_classroom_id = classroom_id or arguments.get('classroom_id')

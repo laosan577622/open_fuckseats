@@ -1,6 +1,8 @@
-document.addEventListener('DOMContentLoaded', () => {
+window.StudentImportPage = (options = {}) => {
     const root = document.getElementById('import-students-root');
     if (!root) return;
+    const lifecycle = new AbortController();
+    const fetch = options.fetch || window.fetch.bind(window);
 
     const importForm = document.getElementById('excel-import-form');
     const fileInput = document.getElementById('student-import-file');
@@ -44,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const classroomId = root.dataset.classroomId || '';
     const importReturnSyncKey = classroomId ? `fuckseats_cloud_import_return_${classroomId}` : '';
     const markImportReturn = () => {
+        if (options.onExit) return;
         if (!importReturnSyncKey) return;
         try {
             sessionStorage.setItem(importReturnSyncKey, '1');
@@ -716,7 +719,8 @@ document.addEventListener('DOMContentLoaded', () => {
     cancelBtn?.addEventListener('click', async () => {
         markImportReturn();
         await discardImportFile();
-        window.location.href = backUrl;
+        if (options.onExit) options.onExit(false);
+        else window.location.href = backUrl;
     });
 
     remapBtn?.addEventListener('click', async () => {
@@ -835,7 +839,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape' && !guideModal?.hidden) closeGuideModal();
-    });
+    }, {signal:lifecycle.signal});
 
     importForm?.addEventListener('submit', async (event) => {
         event.preventDefault();
@@ -935,7 +939,9 @@ document.addEventListener('DOMContentLoaded', () => {
             currentImportFileId = '';
             markImportReturn();
             window.setTimeout(() => {
-                window.location.href = backUrl;
+                if (!root.isConnected) return;
+                if (options.onExit) options.onExit(true);
+                else window.location.href = backUrl;
             }, 220);
         } catch (error) {
             setHint('');
@@ -948,7 +954,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('pagehide', () => {
-        if (!currentImportFileId || !navigator.sendBeacon) return;
+        if (options.fetch || !currentImportFileId || !navigator.sendBeacon) return;
         const formData = new FormData();
         formData.append('action', 'discard');
         formData.append('file_id', currentImportFileId);
@@ -957,7 +963,30 @@ document.addEventListener('DOMContentLoaded', () => {
             importForm?.querySelector('input[name="csrfmiddlewaretoken"]')?.value || ''
         );
         navigator.sendBeacon(importUrl, formData);
-    });
+    }, {signal:lifecycle.signal});
 
     renderMappingState();
-});
+    const getState = () => ({
+        preview: currentImportFileId ? {file_id:currentImportFileId,file_name:currentFileName,sheet_name:currentSheetName,sheet_names:lastSheetOptions,preview_data:currentImportData,total_rows:currentTotalRows,total_cols:currentTotalCols,preview_rows:currentPreviewRows,preview_cols:currentPreviewCols} : null,
+        mappings:{...fieldMappings}, customFields:Object.fromEntries(Object.entries(fieldConfig).filter(([,value])=>value.custom)),
+        startRow:getStartRow(), mode:getImportMode(), region:isRegionConfirming,
+        regionStart:selectedRegionStart, regionEnd:selectedRegionEnd, regionStage:regionSelectionStage, regionComplete:regionSelectionComplete
+    });
+    const restore = (saved) => {
+        if (!saved?.preview) return;
+        applyPreviewData(saved.preview);
+        Object.assign(fieldConfig, saved.customFields || {});
+        customFieldCounter = Math.max(0,...Object.keys(saved.customFields || {}).map(key=>Number(key.split('_')[1]) || 0));
+        Object.assign(fieldMappings, saved.mappings || {});
+        setStartRow(saved.startRow); renderCustomFields(); renderMappingState(); renderPreview();
+        const mode = root.querySelector(`input[name="import_mode"][value="${saved.mode === 'replace' ? 'replace' : 'match'}"]`);
+        if (mode) mode.checked = true;
+        if (saved.region) {
+            setRegionConfirming(true); selectedRegionStart=saved.regionStart; selectedRegionEnd=saved.regionEnd;
+            regionSelectionStage=saved.regionStage; regionSelectionComplete=saved.regionComplete;
+            syncRegionInputs();updateRegionStatus();updateFinalConfirmState();renderRegionStudents();renderPreview();
+        }
+    };
+    return {getState, restore, destroy(){lifecycle.abort();closeGuideModal();}};
+};
+document.addEventListener('DOMContentLoaded', () => window.StudentImportPage());

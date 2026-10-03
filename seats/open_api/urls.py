@@ -5,6 +5,8 @@ from . import views
 
 urlpatterns = [
     path('', views.discovery, name='open_api_discovery'),
+    path('access/request', views.request_read_access, name='open_api_request_read_access'),
+    path('access/status', views.read_access_status, name='open_api_read_access_status'),
     path('classrooms', views.classrooms, name='open_api_classrooms'),
     path('classrooms/<int:classroom_id>', views.classroom_detail, name='open_api_classroom_detail'),
     path('classrooms/<int:classroom_id>/enums', views.classroom_enums, name='open_api_classroom_enums'),

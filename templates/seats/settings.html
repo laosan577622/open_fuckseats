@@ -1,21 +1,20 @@
-{% extends 'base.html' %}
+{% extends 'base.html' %}{% load static %}
 
 {% block title %}设置{% endblock %}
-
-{% block ribbon_tabs %}
-<button type="button" class="ribbon-tab active" data-ribbon-tab="settings">设置</button>
-{% endblock %}
+{% block body_class %}settings-page-body{% endblock %}
+{% block ai_titlebar_link %}{% endblock %}
+{% block titlebar_actions %}{% endblock %}
 
 {% block actions %}
-<div class="header-action-row office-ribbon-row">
-    <div class="ribbon-group">
+<div class="context-toolbar-row">
+    <div class="toolbar-group">
         <a href="{% url 'index' %}" class="btn btn-secondary">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                 <path d="M10.7 5.3a1 1 0 0 1 0 1.4L6.4 11H20a1 1 0 1 1 0 2H6.4l4.3 4.3a1 1 0 0 1-1.4 1.4l-6-6a1 1 0 0 1 0-1.4l6-6a1 1 0 0 1 1.4 0z" fill="currentColor"/>
             </svg>
             返回主页
         </a>
-        <span class="ribbon-group-label">导航</span>
+        <span class="toolbar-group-label">导航</span>
     </div>
 </div>
 {% endblock %}
@@ -48,6 +47,7 @@
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="M7.5 18.5h9.8a4.2 4.2 0 0 0 .7-8.3 6.4 6.4 0 0 0-12.2-1.8 5 5 0 0 0 1.7 10.1z" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
                     <span>云服务</span>
                 </button>
+                <button type="button" class="settings-nav-item" data-settings-nav="wendao"><svg width="19" height="19" viewBox="0 0 24 24" fill="none"><path d="m12 3 2.8 6.2L21 12l-6.2 2.8L12 21l-2.8-6.2L3 12l6.2-2.8Z" stroke="currentColor" stroke-width="1.7"/></svg><span>闻道智能</span></button>
                 <button type="button" class="settings-nav-item" data-settings-nav="subscription">
                     <svg width="19" height="19" viewBox="0 0 24 24" fill="none"><rect x="3.5" y="6" width="17" height="13" rx="2.6" stroke="currentColor" stroke-width="1.7"/><path d="M3.5 10.5h17" stroke="currentColor" stroke-width="1.7"/><path d="M7 14.8h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
                     <span>订阅计划</span>
@@ -141,6 +141,32 @@
                         <div class="settings-row-trail">
                             <label class="settings-switch">
                                 <input type="checkbox" id="settings-shift-use-large-groups-toggle" checked>
+                                <span class="settings-switch-track"><span class="settings-switch-thumb"></span></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-main">
+                            <label>显示优化建议</label>
+                            <span class="settings-row-desc">控制班级页面中的布局问题提示和小组均衡建议。</span>
+                            <span class="settings-row-status" id="show-layout-suggestions-status">已开启</span>
+                        </div>
+                        <div class="settings-row-trail">
+                            <label class="settings-switch">
+                                <input type="checkbox" id="settings-show-layout-suggestions-toggle" checked>
+                                <span class="settings-switch-track"><span class="settings-switch-thumb"></span></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-main">
+                            <label>显示分组完成提示</label>
+                            <span class="settings-row-desc">所有学生完成入座和分组后，显示右下角的导出提醒。</span>
+                            <span class="settings-row-status" id="show-group-completion-suggestion-status">已开启</span>
+                        </div>
+                        <div class="settings-row-trail">
+                            <label class="settings-switch">
+                                <input type="checkbox" id="settings-show-group-completion-suggestion-toggle" checked>
                                 <span class="settings-switch-track"><span class="settings-switch-thumb"></span></span>
                             </label>
                         </div>
@@ -412,7 +438,33 @@
             </div>
         </section>
 
-        <section class="settings-panel" data-settings-panel="about" data-client-feature="about_page" data-client-feature-mode="hide">
+        <section class="settings-panel" data-settings-panel="wendao" data-wendao-page="connect" data-classroom="{{ ai_context_classroom.pk|default:'' }}">
+<header class="settings-panel-head"><h1>闻道智能</h1><a class="btn btn-secondary" href="{% if ai_context_classroom %}{% url 'ai_workspace' ai_context_classroom.pk %}{% else %}{% url 'wendao_workspace' %}{% endif %}">{% if ai_context_classroom %}返回 {{ ai_context_classroom.name }} 的 AI{% else %}打开 AI 工作区{% endif %}</a></header>
+<p id="connection-status" role="status">正在读取连接状态…</p>
+<div class="wendao-actions"><button class="btn btn-primary" id="connect">连接闻道智能</button><button class="btn btn-secondary" id="refresh">刷新模型与额度</button><button class="btn btn-secondary" id="disconnect" hidden>解除授权</button></div>
+<p id="connection-hint">授权将在系统浏览器中完成，完成后可返回此窗口。</p>
+<a id="authorize-again" class="btn btn-secondary" target="_blank" rel="noopener noreferrer" data-open-external hidden>再次打开授权页面</a>
+<p id="wendao-error" role="alert" hidden></p>
+<div class="settings-list-group wendao-model-row"><label for="model-select">默认模型</label><select id="model-select" disabled><option value="">连接后自动读取模型</option></select></div>
+<div class="settings-list-group">
+    <div class="settings-row">
+        <div class="settings-row-main">
+            <label for="settings-ai-name-privacy-toggle">AI 加密脱敏</label>
+            <span class="settings-row-desc" id="ai-name-privacy-description">发送给模型前，将名单中的学生姓名替换为随机名称；工具执行和界面显示自动还原真名。</span>
+            <span class="settings-row-status" id="ai-name-privacy-status" role="status">正在读取…</span>
+        </div>
+        <div class="settings-row-trail">
+            <label class="settings-switch">
+                <input type="checkbox" id="settings-ai-name-privacy-toggle" aria-describedby="ai-name-privacy-description" checked disabled>
+                <span class="settings-switch-track"><span class="settings-switch-thumb"></span></span>
+            </label>
+        </div>
+    </div>
+</div>
+<section class="wendao-quota" aria-label="账户额度" id="quota"></section>
+<p class="wendao-muted" id="quota-note" hidden></p>
+</section>
+<section class="settings-panel" data-settings-panel="about" data-client-feature="about_page" data-client-feature-mode="hide">
             <header class="settings-panel-head">
                 <span class="settings-panel-glyph settings-about-icon-lg" aria-hidden="true">
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none">
@@ -442,7 +494,7 @@
                     <span class="settings-about-dot"></span>
                     <a class="settings-about-link" href="https://www.577622.xyz" target="_blank" rel="noopener noreferrer" data-open-external>www.577622.xyz</a>
                 </div>
-                <a href="{% url 'about' %}" class="btn btn-primary settings-about-action">查看关于应用</a>
+                <a href="{% url 'about' %}" class="btn btn-primary settings-about-action" data-about-window="1">查看关于应用</a>
             </div>
         </section>
 
@@ -480,7 +532,7 @@
 </div>
 {% endblock %}
 
-{% block extra_head %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/wendao.css' %}">
 <style>
 /* ===== 设置页 v2：侧栏导航 + 内容面板 ===== */
 .settings-app {
@@ -1492,7 +1544,7 @@
 </style>
 {% endblock %}
 
-{% block extra_scripts %}
+{% block extra_scripts %}<script src="{% static 'js/wendao.js' %}?v=2" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const themePicker = document.getElementById('theme-picker');
@@ -1562,6 +1614,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const SHIFT_USE_LARGE_GROUPS_KEY = 'seats_shift_use_large_groups';
     const GROUP_MOVE_MODE_KEY = 'seats_group_move_mode';
+    const SHOW_LAYOUT_SUGGESTIONS_KEY = 'seats_show_layout_suggestions';
+    const SHOW_GROUP_COMPLETION_SUGGESTION_KEY = 'seats_show_group_completion_suggestion';
     const checkBtn = document.getElementById('manual-check-update-btn');
     const checkBtnOriginalHtml = checkBtn ? checkBtn.innerHTML : '';
     const checkBtnSpinnerHtml = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation: spin 1s linear infinite;"><path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/><path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/></svg>检查中...';
@@ -1569,6 +1623,10 @@ document.addEventListener('DOMContentLoaded', () => {
     const groupMoveModeStatus = document.getElementById('group-move-mode-status');
     const shiftUseLargeGroupsToggle = document.getElementById('settings-shift-use-large-groups-toggle');
     const shiftUseLargeGroupsStatus = document.getElementById('shift-use-large-groups-status');
+    const showLayoutSuggestionsToggle = document.getElementById('settings-show-layout-suggestions-toggle');
+    const showLayoutSuggestionsStatus = document.getElementById('show-layout-suggestions-status');
+    const showGroupCompletionSuggestionToggle = document.getElementById('settings-show-group-completion-suggestion-toggle');
+    const showGroupCompletionSuggestionStatus = document.getElementById('show-group-completion-suggestion-status');
     const GROUP_MOVE_MODE_FOLLOW = 'follow';
     const GROUP_MOVE_MODE_FIXED = 'fixed';
 
@@ -1622,6 +1680,49 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    const syncSuggestionPreferenceUi = (toggle, status, key) => {
+        if (!toggle || !status) return;
+        const enabled = localStorage.getItem(key) !== '0';
+        toggle.checked = enabled;
+        status.textContent = enabled ? '已开启' : '已关闭';
+    };
+
+    const bindSuggestionPreference = (toggle, status, key, enabledMessage, disabledMessage) => {
+        if (!toggle || !status) return;
+        syncSuggestionPreferenceUi(toggle, status, key);
+        toggle.addEventListener('change', () => {
+            localStorage.setItem(key, toggle.checked ? '1' : '0');
+            syncSuggestionPreferenceUi(toggle, status, key);
+            if (typeof showToast === 'function') {
+                showToast(toggle.checked ? enabledMessage : disabledMessage);
+            }
+        });
+    };
+
+    bindSuggestionPreference(
+        showLayoutSuggestionsToggle,
+        showLayoutSuggestionsStatus,
+        SHOW_LAYOUT_SUGGESTIONS_KEY,
+        '已开启优化建议',
+        '已关闭优化建议'
+    );
+    bindSuggestionPreference(
+        showGroupCompletionSuggestionToggle,
+        showGroupCompletionSuggestionStatus,
+        SHOW_GROUP_COMPLETION_SUGGESTION_KEY,
+        '已开启分组完成提示',
+        '已关闭分组完成提示'
+    );
+
+    window.addEventListener('storage', (event) => {
+        if (event.key === SHOW_LAYOUT_SUGGESTIONS_KEY) {
+            syncSuggestionPreferenceUi(showLayoutSuggestionsToggle, showLayoutSuggestionsStatus, SHOW_LAYOUT_SUGGESTIONS_KEY);
+        }
+        if (event.key === SHOW_GROUP_COMPLETION_SUGGESTION_KEY) {
+            syncSuggestionPreferenceUi(showGroupCompletionSuggestionToggle, showGroupCompletionSuggestionStatus, SHOW_GROUP_COMPLETION_SUGGESTION_KEY);
+        }
+    });
 
     if (checkBtn) checkBtn.addEventListener('click', async () => {
         const isMacosLocalUpdate = document.body && document.body.dataset.appPlatform === 'macos';

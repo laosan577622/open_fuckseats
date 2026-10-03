@@ -264,6 +264,19 @@ def _verify_encrypted_database(path: Path, key: bytes):
         connection.close()
 
 
+def _probe_encrypted_database(path: Path, key: bytes):
+    """Confirm the key and schema without scanning every data page on launch."""
+    sqlcipher = _load_sqlcipher()
+    connection = sqlcipher.connect(str(path))
+    try:
+        connection.execute(sqlcipher_key_pragma(key))
+        connection.execute("SELECT count(*) FROM sqlite_master").fetchone()
+    except Exception as exc:
+        raise DatabaseSecurityError("数据库密钥错误或加密数据库已损坏") from exc
+    finally:
+        connection.close()
+
+
 def _copy_plaintext_database(source: Path, target: Path):
     target.parent.mkdir(parents=True, exist_ok=True)
     source_connection = sqlite3.connect(str(source))
@@ -386,8 +399,8 @@ def prepare_desktop_database() -> Path:
                 _write_state("encrypting", database=str(path), legacy_source=str(source or ""))
                 _encrypt_plaintext_database(path, key)
             else:
-                _write_state("verifying", database=str(path))
-                _verify_encrypted_database(path, key)
+                _write_state("probing", database=str(path))
+                _probe_encrypted_database(path, key)
         _harden_database_permissions(path)
         _write_state("ready", database=str(path), encrypted=True)
     return path

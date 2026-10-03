@@ -1,3 +1,4 @@
+import secrets
 import uuid
 
 from django.db import models
@@ -33,6 +34,7 @@ class Classroom(models.Model):
     name = models.CharField(max_length=100, verbose_name="班级/教室名称")
     rows = models.IntegerField(default=6, verbose_name="行数")
     cols = models.IntegerField(default=8, verbose_name="列数")
+    doors = models.JSONField(default=list, blank=True, verbose_name="教室门")
     classroom_group = models.ForeignKey(
         ClassroomGroup,
         on_delete=models.SET_NULL,
@@ -101,6 +103,19 @@ class FutureModeConfig(models.Model):
 
     def __str__(self):
         return f"{self.classroom.name}-FutureModeConfig"
+
+
+def generate_ai_student_alias():
+    return 'STU_' + secrets.token_hex(16)
+
+
+class AIStudentNameAlias(models.Model):
+    name = models.CharField(max_length=50, unique=True, verbose_name="学生真名")
+    alias = models.CharField(max_length=36, unique=True, default=generate_ai_student_alias, verbose_name="AI 脱敏名")
+
+    class Meta:
+        verbose_name = "AI 学生名称映射"
+        verbose_name_plural = verbose_name
 
 
 class AIConversation(models.Model):
@@ -496,6 +511,13 @@ class SyncMeta(models.Model):
         return f"{self.classroom_id}-{self.uuid}"
 
 
+class SyncBaseline(models.Model):
+    sync_meta = models.OneToOneField(SyncMeta, on_delete=models.CASCADE, related_name='baseline')
+    version = models.BigIntegerField(default=0)
+    snapshot = models.JSONField(blank=True, default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
 class CloudSession(models.Model):
     uid = models.CharField(max_length=64, unique=True, verbose_name="老三账户 UID")
     nickname = models.CharField(max_length=100, blank=True, default='', verbose_name="昵称")
@@ -551,6 +573,9 @@ class OnboardingState(models.Model):
     session_key = models.CharField(max_length=64, unique=True, verbose_name="会话 key")
     cloud_uid = models.CharField(max_length=64, blank=True, default='', verbose_name="云端 UID")
     seen = models.BooleanField(default=False, verbose_name="已看过新手引导")
+    returning = models.BooleanField(default=False, verbose_name="旧版用户")
+    version = models.CharField(max_length=16, default='', blank=True)
+    progress = models.JSONField(default=dict, blank=True)
     completed_steps = models.CharField(max_length=120, blank=True, default='', verbose_name="已完成步骤")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -586,3 +611,18 @@ class PluginRuntimeKV(models.Model):
         indexes = [
             models.Index(fields=['plugin_id', 'namespace'], name='plugin_runtime_ns_idx'),
         ]
+
+
+class WendaoConnection(models.Model):
+    # One local OS profile; never included in classroom exports or cloud sync.
+    credentials = models.TextField(default='', blank=True)
+    model = models.CharField(max_length=200, default='', blank=True)
+    pending_state = models.CharField(max_length=64, default='', blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+
+class WendaoAuthorization(models.Model):
+    state_hash = models.CharField(max_length=64, unique=True)
+    payload = models.TextField()
+    status = models.CharField(max_length=20, default='pending')
+    expires_at = models.DateTimeField()

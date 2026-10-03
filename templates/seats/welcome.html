@@ -1,0 +1,35 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}欢迎 - 不想排座位{% endblock %}
+{% block body_class %}welcome-body{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/onboarding.css' %}?v=4.7">{% endblock %}
+{% block ai_titlebar_link %}{% endblock %}
+{% block titlebar_actions %}{% endblock %}
+{% block actions %}
+<div id="welcome-toolbar" hidden>
+    <div id="welcome-classroom-toolbar">{% include 'seats/partials/classroom_toolbar.html' %}</div>
+    <div id="welcome-layout-toolbar" hidden>{% include 'seats/partials/layout_toolbar.html' %}</div>
+</div>
+{% endblock %}
+{% block content %}
+<div id="welcome-app">
+    <section id="welcome-screen" aria-labelledby="welcome-heading"></section>
+    <footer class="welcome-footer"><button type="button" class="welcome-text" id="welcome-back">返回</button><span id="welcome-progress"></span><button type="button" class="welcome-text" id="welcome-skip">跳过引导</button></footer>
+    <div id="welcome-status" class="welcome-status" role="status" aria-live="polite"></div>
+    <div id="welcome-confetti" aria-hidden="true"></div>
+</div>
+<template id="welcome-layout-tools">{% include 'seats/partials/layout_tools.html' %}</template>
+<template id="welcome-import-students">{% include 'seats/partials/import_students_workspace.html' %}</template>
+<template id="welcome-import-layout">{% include 'seats/partials/import_layout_workspace.html' %}</template>
+<noscript>首次引导需要 JavaScript。请启用后重新打开应用。</noscript>
+{% endblock %}
+{% block app_scripts %}
+<script src="{% static 'js/cloud.js' %}?v=3.0"></script>
+<script src="{% static 'js/toast.js' %}?v=2.0"></script>
+<script src="{% static 'js/desktop_bridge.js' %}?v=20260810"></script>
+<script src="{% static 'js/main.js' %}?v=3.0"></script>
+<script src="{% static 'js/import_students_options.js' %}?v=11"></script>
+<script src="{% static 'js/import_layout_options.js' %}?v=4"></script>
+<script src="{% static 'js/welcome-import-fixtures.js' %}?v=1"></script>
+{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/welcome-import.js' %}?v=4.6"></script><script src="{% static 'js/welcome-lessons.js' %}?v=4.6"></script><script src="{% static 'js/welcome.js' %}?v=4.7"></script>{% endblock %}

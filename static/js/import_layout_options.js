@@ -1,6 +1,8 @@
-document.addEventListener('DOMContentLoaded', () => {
+window.LayoutImportPage = (options = {}) => {
     const root = document.getElementById('import-layout-root');
     if (!root) return;
+    const lifecycle = new AbortController();
+    const fetch = options.fetch || window.fetch.bind(window);
 
     const uploadForm = document.getElementById('seat-layout-upload-form');
     const uploadBtn = document.getElementById('seat-layout-upload-btn');
@@ -14,6 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const classroomId = root.dataset.classroomId || '';
     const importReturnSyncKey = classroomId ? `fuckseats_cloud_import_return_${classroomId}` : '';
     const markImportReturn = () => {
+        if (options.onExit) return;
         if (!importReturnSyncKey) return;
         try {
             sessionStorage.setItem(importReturnSyncKey, '1');
@@ -24,6 +27,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let seatLayoutFileId = null;
     let seatLayoutTransform = 'none';
+    let lastPreview = null;
     const notify = (message) => {
         if (!message) return;
         if (typeof window.showToast === 'function') {
@@ -38,7 +42,9 @@ document.addEventListener('DOMContentLoaded', () => {
         hint.textContent = text || '';
     };
 
-    const exitPage = () => {
+    const exitPage = (completed = false) => {
+        if (!root.isConnected) return;
+        if (options.onExit) { options.onExit(completed); return; }
         markImportReturn();
         window.location.href = backUrl;
     };
@@ -119,6 +125,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const applyPreviewData = (data) => {
         if (!data) return;
+        lastPreview = structuredClone(data);
         setTransform(data.layout_transform || seatLayoutTransform, true);
         if (data.file_id) {
             seatLayoutFileId = data.file_id;
@@ -295,7 +302,7 @@ document.addEventListener('DOMContentLoaded', () => {
             sendImport('confirm', true)
                 .then((data) => {
                     setHint(`${data.message || '导入成功'}，正在返回...`);
-                    setTimeout(exitPage, 220);
+                    setTimeout(() => exitPage(true), 220);
                 })
                 .catch((error) => {
                     setHint('');
@@ -310,4 +317,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     renderPreviewRows('seat-layout-front-preview', []);
     renderPreviewRows('seat-layout-back-preview', []);
-});
+    const getState = () => ({preview:lastPreview, settings:getOptions(true)});
+    const restore = (saved) => {
+        if (!saved?.preview) return;
+        applyPreviewData(saved.preview);
+        const ids = {start_row:'start-row',end_row:'end-row',auto_detect_names:'auto-name',manual_name_terms:'manual-names',manual_podium_terms:'manual-podium',manual_empty_terms:'manual-empty',manual_aisle_terms:'manual-aisle',replace_students:'replace-students'};
+        Object.entries(ids).forEach(([key,suffix])=>{const input=document.getElementById(`seat-layout-${suffix}`);if(input?.type==='checkbox')input.checked=saved.settings[key]==='1';else if(input)input.value=saved.settings[key] || '';});
+        setTransform(saved.settings.layout_transform,true);
+    };
+    return {getState,restore,destroy(){lifecycle.abort();}};
+};
+document.addEventListener('DOMContentLoaded', () => window.LayoutImportPage());

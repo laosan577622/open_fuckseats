@@ -310,10 +310,45 @@ def default_export_directory():
     return home
 
 
+def fit_windows_window_geometry(work_area, preferred_width, preferred_height, min_width, min_height):
+    """Fit a Windows window inside a monitor's taskbar-free work area."""
+    available_width = max(1, int(work_area.Width))
+    available_height = max(1, int(work_area.Height))
+    width = min(preferred_width, max(1, available_width - 64))
+    height = min(preferred_height, max(1, available_height - 64))
+    return {
+        "width": width,
+        "height": height,
+        "min_size": (min(min_width, width), min(min_height, height)),
+        "x": int(work_area.Left) + (available_width - width) // 2,
+        "y": int(work_area.Top) + (available_height - height) // 2,
+    }
+
+
+def windows_window_geometry(preferred_width, preferred_height, min_width, min_height):
+    if WinForms is None:
+        return {}
+    try:
+        screen = WinForms.Screen.FromPoint(WinForms.Cursor.Position)
+        return fit_windows_window_geometry(
+            screen.WorkingArea, preferred_width, preferred_height, min_width, min_height
+        )
+    except Exception:
+        return {}
+
+
 class DesktopBridge:
-    def __init__(self, server_origin):
+    def __init__(self, server_origin, native_menu_builder=None):
         self._server_origin = str(server_origin or "").rstrip("/")
         self._window = None
+        self._window_maximized = False
+        self._windows_restore_bounds = None
+        self._window_gesture = None
+        self._mac_restore_frame = None
+        self._about_window = None
+        self._native_menu_builder = native_menu_builder
+        self._native_menu = None
+        self._native_menu_observer = None
         self._last_export_dir = str(default_export_directory())
         self._last_import_dir = str(default_export_directory())
         self._save_lock = threading.Lock()
@@ -327,6 +362,377 @@ class DesktopBridge:
 
     def _attach_window(self, window):
         self._window = window
+        if not hasattr(window, "events"):
+            return
+        window.events.maximized += self._on_window_maximized
+        window.events.restored += self._on_window_restored
+        window.events.loaded += self._publish_window_state
+
+    def _publish_window_state(self, *_):
+        if self._window is not None:
+            try:
+                self._window.evaluate_js(
+                    "window.dispatchEvent(new CustomEvent('desktopwindowstate', {detail: %s}));"
+                    % json.dumps(self.get_window_state())
+                )
+            except Exception:
+                pass  # 页面跳转期间由下一次 loaded 事件补齐状态。
+
+    def _on_window_maximized(self, *_):
+        self._window_maximized = True
+        self._publish_window_state()
+
+    def _on_window_restored(self, *_):
+        self._window_maximized = self._mac_restore_frame is not None or self._windows_restore_bounds is not None
+        self._publish_window_state()
+
+    def _toggle_windows_maximize(self):
+        def toggle():
+            native = self._window.native
+            if self._windows_restore_bounds is None:
+                work_area = WinForms.Screen.FromControl(native).WorkingArea
+                self._windows_restore_bounds = native.Bounds
+                native.Bounds = work_area
+                self._window_maximized = True
+            else:
+                native.Bounds = self._windows_restore_bounds
+                self._windows_restore_bounds = None
+                self._window_maximized = False
+            return self.get_window_state()
+
+        state = self._invoke_on_ui(toggle)
+        self._publish_window_state()
+        return state
+
+    def _toggle_macos_maximize(self):
+        # Cocoa 后端的 maximize 覆盖整个屏幕，restore 仅取消最小化；
+        # 使用可用屏幕区域并保存原位置，避免遮挡菜单栏和 Dock。
+        from PyObjCTools import AppHelper
+
+        def toggle():
+            native = self._window.native
+            if self._mac_restore_frame is None:
+                self._mac_restore_frame = native.frame()
+                native.setFrame_display_(native.screen().visibleFrame(), True)
+                self._window_maximized = True
+            else:
+                native.setFrame_display_(self._mac_restore_frame, True)
+                self._mac_restore_frame = None
+                self._window_maximized = False
+            threading.Thread(target=self._publish_window_state, daemon=True).start()
+
+        AppHelper.callAfter(toggle)
+
+    def get_window_state(self):
+        return {"maximized": self._window_maximized}
+
+    def window_action(self, action):
+        if self._window is None:
+            return {"status": "unavailable"}
+        if action == "minimize":
+            self._window.minimize()
+        elif action == "maximize":
+            if sys.platform == "darwin":
+                self._toggle_macos_maximize()
+            elif sys.platform.startswith("win") and WinForms is not None:
+                return {"status": "ok", **self._toggle_windows_maximize()}
+            elif self._window_maximized:
+                self._window.restore()
+            else:
+                self._window.maximize()
+        elif action == "close":
+            self._window.destroy()
+        else:
+            return {"status": "error", "message": "未知窗口操作"}
+        return {"status": "ok"}
+
+    def begin_window_gesture(self, edge):
+        if self._window is None or self._window_maximized:
+            return False
+        if edge not in {"move", "n", "s", "e", "w", "ne", "nw", "se", "sw"}:
+            return False
+        window = self._window
+        self._window_gesture = (edge, window.x, window.y, window.width, window.height)
+        return True
+
+    def update_window_gesture(self, dx, dy):
+        if self._window_gesture is None or self._window_maximized:
+            return False
+        edge, x, y, width, height = self._window_gesture
+        dx, dy = int(dx), int(dy)
+        window = self._window
+        if edge == "move":
+            window.move(x + dx, y + dy)
+            return True
+        min_width, min_height = window.min_size
+        new_width = max(min_width, width + (dx if "e" in edge else -dx if "w" in edge else 0))
+        new_height = max(min_height, height + (dy if "s" in edge else -dy if "n" in edge else 0))
+        from webview.window import FixPoint
+
+        # 固定对边，让左侧/上侧缩放不会把整个窗口向外推走。
+        anchor = (FixPoint.EAST if "w" in edge else FixPoint.WEST) | (
+            FixPoint.SOUTH if "n" in edge else FixPoint.NORTH
+        )
+        window.resize(new_width, new_height, anchor)
+        return True
+
+    def open_about_window(self):
+        """在桌面壳中打开独立的关于窗口，浏览器模式由前端回退到新标签页。"""
+        try:
+            import webview
+        except Exception:
+            return {"status": "unsupported"}
+
+        existing = self._about_window
+        if existing is not None:
+            try:
+                existing.show()
+                existing.restore()
+                existing.focus()
+                return {"status": "shown"}
+            except Exception:
+                self._about_window = None
+
+        options = {
+            "width": 980,
+            "height": 720,
+            "min_size": (720, 520),
+            "background_color": "#FFFFFF",
+            "text_select": True,
+            "focus": True,
+            "frameless": True,
+            "easy_drag": False,
+            "resizable": True,
+        }
+        if sys.platform == "darwin":
+            options["vibrancy"] = True
+        elif sys.platform.startswith("win"):
+            options.update(windows_window_geometry(980, 720, 720, 520))
+        try:
+            about_bridge = DesktopBridge(self._server_origin, self._native_menu_builder)
+            about_window = webview.create_window(
+                "关于不想排座位",
+                f"{self._server_origin}/about/",
+                js_api=about_bridge,
+                **options,
+            )
+            self._about_window = about_window
+            about_bridge._attach_window(about_window)
+            about_bridge._about_window = about_window
+
+            def clear_about_window(*_args, **_kwargs):
+                if self._about_window is about_window:
+                    self._about_window = None
+
+            try:
+                about_window.events.closed += clear_about_window
+            except Exception:
+                pass
+            return {"status": "opened"}
+        except Exception as exc:
+            self._about_window = None
+            return {"status": "error", "message": str(exc)}
+
+    def open_tutorial_file_picker(self, kind, request_id):
+        """Open a synthetic picker in a separate native window, without disk access."""
+        if kind not in ('import', 'layoutimport') or not re.fullmatch(r'[a-f0-9-]{36}', str(request_id)):
+            return {'status': 'error', 'message': '无效的练习窗口请求'}
+        if self._window is None:
+            return {'status': 'error', 'message': '主窗口不可用'}
+        try:
+            import webview
+            child_bridge = DesktopBridge(self._server_origin)
+            child_bridge._tutorial_parent = self._window
+            child_bridge._tutorial_result = {'requestId': request_id, 'kind': kind}
+            child = webview.create_window('班管理 · 模拟文件选择', f'{self._server_origin}/welcome/files/{kind}/?request={request_id}', js_api=child_bridge, width=780, height=540, min_size=(560, 400), background_color='#FFFFFF', frameless=False, resizable=True)
+            child_bridge._attach_window(child)
+            return {'status': 'opened'}
+        except Exception as exc:
+            return {'status': 'error', 'message': str(exc)}
+
+    def complete_tutorial_file_picker(self):
+        parent = getattr(self, '_tutorial_parent', None)
+        result = getattr(self, '_tutorial_result', None)
+        if parent is None or result is None:
+            return {'status': 'error'}
+        parent.evaluate_js('window.dispatchEvent(new CustomEvent("welcome-file-picked", {detail: ' + json.dumps(result) + '}));')
+        self._tutorial_result = None
+        self._window.destroy()
+        return {'status': 'selected'}
+
+    def cancel_tutorial_file_picker(self):
+        if getattr(self, '_tutorial_parent', None) is not None:
+            self._window.destroy()
+        return {'status': 'cancelled'}
+
+    def sync_native_menu(self, payload=None):
+        """根据当前页面重新生成 macOS 系统菜单栏。"""
+        if sys.platform != "darwin" or self._window is None or not callable(self._native_menu_builder):
+            return {"status": "unsupported"}
+        payload = payload if isinstance(payload, dict) else {}
+        path = str(payload.get("path") or "")
+        if path.startswith("/settings"):
+            context = "settings"
+        elif path.startswith("/classroom/"):
+            context = "classroom"
+        elif path.startswith("/welcome/"):
+            context = "welcome"
+        elif path.startswith("/about"):
+            context = "about"
+        elif path in {"", "/"}:
+            context = "home"
+        else:
+            context = "generic"
+        try:
+            menu = self._native_menu_builder(
+                {
+                    "window": self._window,
+                    "bridge": self,
+                    "available": payload.get("available") or [],
+                },
+                context,
+            )
+        except Exception as exc:
+            return {"status": "error", "message": str(exc)}
+
+        # pywebview 在 macOS 切换 Space 后会从 BrowserView.menu 恢复菜单；
+        # 保存最新菜单并同步回 BrowserView，避免恢复成启动时仅包含“帮助”的菜单。
+        self._native_menu = menu
+        try:
+            self._window.menu = menu
+        except Exception:
+            pass
+
+        def apply_menu():
+            try:
+                from webview.platforms import cocoa
+
+                browser_view = cocoa.BrowserView.instances.get(getattr(self._window, "uid", ""))
+                recreate = getattr(browser_view, "_recreate_menus", None)
+                if not callable(recreate):
+                    return False
+                browser_view.menu = menu
+                self._register_native_menu_observer(browser_view)
+                new_menu = recreate(menu)
+                cocoa.BrowserView.current_menu = menu
+                app = getattr(cocoa.BrowserView, "app", None)
+                if app is not None:
+                    app.setMainMenu_(new_menu)
+                    return True
+            except Exception:
+                return False
+            return False
+
+        try:
+            from webview.platforms.cocoa import AppHelper
+            AppHelper.callAfter(apply_menu)
+        except Exception:
+            apply_menu()
+        return {"status": "queued", "context": context}
+
+    def _register_native_menu_observer(self, browser_view):
+        """让 pywebview 在 macOS Space 切换后重新应用当前动态菜单。"""
+        if self._native_menu_observer is not None:
+            return
+        try:
+            import objc
+            import Foundation
+            import AppKit
+
+            bridge = self
+
+            class NativeMenuObserver(Foundation.NSObject):
+                def initWithBridge_(self, owner):
+                    self = objc.super(NativeMenuObserver, self).init()
+                    if self is not None:
+                        self.bridge = owner
+                    return self
+
+                def windowDidResignKey_(self, _notification):
+                    try:
+                        from webview.platforms import cocoa
+                        cocoa.BrowserView.current_menu = None
+                    except Exception:
+                        pass
+
+                def applicationDidBecomeActive_(self, _notification):
+                    try:
+                        self.bridge._restore_native_menu()
+                    except Exception:
+                        pass
+
+                def applicationDidResignActive_(self, _notification):
+                    try:
+                        from webview.platforms import cocoa
+                        cocoa.BrowserView.current_menu = None
+                    except Exception:
+                        pass
+
+            # Keep objc imported in this scope so PyObjC retains selector metadata
+            # for the dynamically-created NSObject subclass on older macOS builds.
+            _ = objc
+            observer = NativeMenuObserver.alloc().initWithBridge_(bridge)
+            center = Foundation.NSNotificationCenter.defaultCenter()
+            native_window = getattr(browser_view, "window", None)
+            if native_window is not None:
+                center.addObserver_selector_name_object_(
+                    observer,
+                    "windowDidResignKey:",
+                    AppKit.NSWindowDidResignKeyNotification,
+                    native_window,
+                )
+            center.addObserver_selector_name_object_(
+                observer,
+                "applicationDidBecomeActive:",
+                AppKit.NSApplicationDidBecomeActiveNotification,
+                None,
+            )
+            center.addObserver_selector_name_object_(
+                observer,
+                "applicationDidResignActive:",
+                AppKit.NSApplicationDidResignActiveNotification,
+                None,
+            )
+            self._native_menu_observer = observer
+        except Exception:
+            # 非 macOS 或精简版 PyObjC 环境不影响主菜单同步。
+            self._native_menu_observer = None
+
+    def _restore_native_menu(self):
+        """在应用重新激活时立即恢复最近一次动态菜单。"""
+        menu = self._native_menu
+        if menu is None or self._window is None:
+            return False
+        try:
+            self._window.menu = menu
+        except Exception:
+            pass
+
+        def apply_menu():
+            try:
+                from webview.platforms import cocoa
+
+                browser_view = cocoa.BrowserView.instances.get(getattr(self._window, "uid", ""))
+                recreate = getattr(browser_view, "_recreate_menus", None)
+                if not callable(recreate):
+                    return False
+                browser_view.menu = menu
+                cocoa.BrowserView.current_menu = menu
+                new_menu = recreate(menu)
+                app = getattr(cocoa.BrowserView, "app", None)
+                if app is None:
+                    return False
+                app.setMainMenu_(new_menu)
+                return True
+            except Exception:
+                return False
+
+        try:
+            from webview.platforms.cocoa import AppHelper
+            AppHelper.callAfter(apply_menu)
+        except Exception:
+            return apply_menu()
+        return True
 
     def close_app_for_update(self):
         if self._window is None:

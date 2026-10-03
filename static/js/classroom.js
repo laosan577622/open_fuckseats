@@ -75,8 +75,32 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     const quickArrangeForm = document.querySelector('.quick-arrange-form');
     const autoArrangeBtn = document.getElementById('btn-auto-arrange');
+    const arrangeMethodSelect = document.querySelector('.classroom-arrange-select');
+    const arrangeMethodTrigger = document.querySelector('.arrange-method-trigger');
+    const arrangeMethodMenu = document.getElementById('arrange-method-menu');
     const undoBtn = document.getElementById('undoBtn');
     const redoBtn = document.getElementById('redoBtn');
+
+    if (arrangeMethodSelect && arrangeMethodTrigger && arrangeMethodMenu) {
+        const closeArrangeMethods = () => {
+            arrangeMethodMenu.hidden = true;
+            arrangeMethodTrigger.setAttribute('aria-expanded', 'false');
+        };
+        arrangeMethodTrigger.addEventListener('click', (event) => {
+            event.stopPropagation();
+            arrangeMethodMenu.hidden = !arrangeMethodMenu.hidden;
+            arrangeMethodTrigger.setAttribute('aria-expanded', String(!arrangeMethodMenu.hidden));
+        });
+        arrangeMethodMenu.querySelectorAll('[data-arrange-method]').forEach((item) => {
+            item.addEventListener('click', () => {
+                arrangeMethodSelect.value = item.dataset.arrangeMethod || 'random';
+                closeArrangeMethods();
+            });
+        });
+        document.addEventListener('click', (event) => {
+            if (!arrangeMethodMenu.contains(event.target) && event.target !== arrangeMethodTrigger) closeArrangeMethods();
+        });
+    }
     const renameClassroomBtn = document.getElementById('btn-rename-classroom');
     const groupSelect = document.getElementById('groupSelect');
     const groupAssignToggle = document.getElementById('groupAssignToggle');
@@ -104,24 +128,49 @@ document.addEventListener('DOMContentLoaded', () => {
     const unseatedSearch = document.getElementById('unseatedSearch');
     const groupBaseUrl = createGroupForm ? createGroupForm.action.replace(/group\/create\/?$/, 'group/') : '';
     const seatStage = document.querySelector('.seat-stage');
+    const seatGrid = document.getElementById('seat-grid-container');
+    const seatSidePanel = document.querySelector('.side-panel');
     const unseatedList = document.querySelector('.unseated-list');
     const unseatedCount = document.getElementById('unseatedCount');
+    const statusbarSeated = document.getElementById('classroom-seated-status');
+    const statusbarUnseated = document.getElementById('classroom-unseated-status');
     const suggestionList = document.getElementById('suggestionList');
-    const constraintForm = document.getElementById('constraintForm');
-    const constraintIdInput = document.getElementById('constraintIdInput');
-    const constraintTypeSelect = document.getElementById('constraintTypeSelect');
-    const constraintStudentSelect = document.getElementById('constraintStudentSelect');
-    const constraintTargetStudentSelect = document.getElementById('constraintTargetStudentSelect');
-    const constraintRowInput = document.getElementById('constraintRowInput');
-    const constraintColInput = document.getElementById('constraintColInput');
-    const constraintDistanceInput = document.getElementById('constraintDistanceInput');
-    const constraintNoteInput = document.getElementById('constraintNoteInput');
-    const constraintSubmitBtn = document.getElementById('constraintSubmitBtn');
-    const constraintCancelEditBtn = document.getElementById('constraintCancelEditBtn');
     const constraintList = document.getElementById('constraintList');
     const constraintFilterGroup = document.getElementById('constraintFilterGroup');
     const constraintMetrics = document.getElementById('constraintMetrics');
+    const constraintSearchInput = document.getElementById('constraintSearchInput');
     const enabledActionSuggestionTypes = new Set(['export_suggestion', 'group_balance']);
+    const SHOW_LAYOUT_SUGGESTIONS_KEY = 'seats_show_layout_suggestions';
+    const SHOW_GROUP_COMPLETION_SUGGESTION_KEY = 'seats_show_group_completion_suggestion';
+    const readSuggestionPreference = (key) => {
+        try {
+            return localStorage.getItem(key) !== '0';
+        } catch (error) {
+            return true;
+        }
+    };
+    const clearSuggestionToasts = (shouldClear = () => true) => {
+        const toastContainer = document.getElementById('toast-container');
+        if (!toastContainer) return;
+        toastContainer.querySelectorAll('.toast-suggestion').forEach((element) => {
+            if (!shouldClear(element)) return;
+            if (typeof dismissToast === 'function') {
+                dismissToast(element);
+            } else {
+                element.remove();
+            }
+        });
+        if (window.updateToastStack) window.updateToastStack();
+    };
+    window.addEventListener('storage', (event) => {
+        if (event.key !== SHOW_LAYOUT_SUGGESTIONS_KEY && event.key !== SHOW_GROUP_COMPLETION_SUGGESTION_KEY) return;
+        if (event.newValue !== '0') return;
+        if (event.key === SHOW_GROUP_COMPLETION_SUGGESTION_KEY) {
+            clearSuggestionToasts((element) => element.querySelector('[data-msg-type="export_suggestion"]'));
+        } else {
+            clearSuggestionToasts((element) => !element.querySelector('[data-msg-type="export_suggestion"]'));
+        }
+    });
     const selectionBox = document.createElement('div');
     selectionBox.className = 'selection-box';
     selectionBox.style.display = 'none';
@@ -142,6 +191,42 @@ document.addEventListener('DOMContentLoaded', () => {
         navigator.maxTouchPoints > 0 ||
         'ontouchstart' in window
     );
+
+    // 参考图的座位格保持固定视觉比例；当真实班级列数更多时，按可用舞台宽度
+    // 等比收紧格子，避免最后一列被右侧详情栏裁掉，同时不改变布局数据。
+    const syncDesktopSeatDensity = () => {
+        if (!seatStage || !seatGrid) return;
+        const platform = document.body.dataset.appPlatform || '';
+        const isDesktop = window.matchMedia && window.matchMedia('(min-width: 1101px)').matches;
+        const isMacDesktop = platform === 'macos'
+            && document.body.dataset.appShell === 'webview'
+            && window.innerWidth >= 761;
+        if (!isDesktop && !isMacDesktop) {
+            root.style.removeProperty('--seat-density-scale');
+            root.removeAttribute('data-dense-layout');
+            return;
+        }
+
+        root.style.setProperty('--seat-density-scale', '1');
+        const stageRect = seatStage.getBoundingClientRect();
+        const panelRect = seatSidePanel?.getBoundingClientRect();
+        const visibleStageWidth = platform === 'windows' && panelRect && panelRect.left > stageRect.left
+            ? panelRect.left - stageRect.left
+            : seatStage.clientWidth;
+        const availableWidth = Math.max(0, visibleStageWidth - 56);
+        const contentWidth = seatGrid.scrollWidth;
+        // Windows/网页端在窄窗口中保留稍大的格子，优先让文字与座位保持
+        // 可读比例；超出舞台的部分交给座位区自身横向滚动，不再把格子压成小方块。
+        const minimumScale = (platform === 'windows' || platform === 'macos') ? 0.68 : 0.56;
+        const scale = contentWidth > availableWidth
+            ? Math.max(minimumScale, Math.min(1, availableWidth / contentWidth))
+            : 1;
+        root.style.setProperty('--seat-density-scale', scale.toFixed(3));
+        root.dataset.denseLayout = scale < 0.999 ? '1' : '0';
+    };
+
+    syncDesktopSeatDensity();
+    window.addEventListener('resize', syncDesktopSeatDensity, { passive: true });
     const markNextTouchClickSuppressed = () => {
         suppressNextTouchClick = true;
         window.setTimeout(() => {
@@ -168,11 +253,8 @@ document.addEventListener('DOMContentLoaded', () => {
             return fallback;
         }
     };
-    const constraintTypeDefinitions = parseJsonScript('constraint-type-data', []);
-    const constraintTypeMap = new Map(constraintTypeDefinitions.map((item) => [item.value, item]));
     let constraintItems = parseJsonScript('constraint-initial-data', []);
     let activeConstraintFilter = 'all';
-    let editingConstraintId = null;
 
     const normalizeGroupMoveMode = (value) => (
         String(value || '').trim().toLowerCase() === GROUP_MOVE_MODE_FOLLOW
@@ -317,11 +399,6 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
 
-        document.querySelectorAll('.ribbon-tab[data-ribbon-tab]').forEach((tabBtn) => {
-            tabBtn.addEventListener('click', () => {
-                closeAllFileMenus();
-            });
-        });
     };
 
     const initSeatsImport = () => {
@@ -733,8 +810,6 @@ document.addEventListener('DOMContentLoaded', () => {
         };
         constraintMetrics.innerHTML = `
             <span class="constraint-metric-pill">总计 ${merged.total}</span>
-            <span class="constraint-metric-pill">启用 ${merged.enabled}</span>
-            <span class="constraint-metric-pill">停用 ${merged.disabled}</span>
             <span class="constraint-metric-pill">异常 ${merged.with_issues}</span>
         `;
     };
@@ -747,6 +822,11 @@ document.addEventListener('DOMContentLoaded', () => {
     };
 
     const matchesConstraintFilter = (item) => {
+        const query = constraintSearchInput?.value.trim().toLocaleLowerCase() || '';
+        if (query && ![
+            item.student_name, item.target_student_name, item.constraint_type_display,
+            item.summary, item.note,
+        ].some(value => String(value || '').toLocaleLowerCase().includes(query))) return false;
         if (activeConstraintFilter === 'issues') {
             return Number(item.issue_count || 0) > 0;
         }
@@ -763,7 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!constraintList) return;
         const visibleItems = (constraintItems || []).filter(matchesConstraintFilter);
         if (!visibleItems.length) {
-            const emptyText = activeConstraintFilter === 'all' ? '暂无约束' : '当前筛选条件下没有约束';
+            const emptyText = constraintItems.length ? '没有找到符合条件的约束' : '暂无约束';
             constraintList.innerHTML = `<div class="empty-hint">${emptyText}</div>`;
             return;
         }
@@ -810,72 +890,13 @@ document.addEventListener('DOMContentLoaded', () => {
                         ${issuesHtml}
                     </div>
                     <div class="constraint-actions">
-                        <button type="button" class="btn btn-secondary" data-constraint-action="edit">编辑</button>
+                        <a class="btn btn-secondary" href="${escapeAttr(item.edit_page_url || '')}">编辑</a>
                         <button type="button" class="btn btn-secondary" data-constraint-action="toggle">${item.enabled ? '停用' : '启用'}</button>
                         <button type="button" class="btn btn-secondary" data-constraint-action="delete">删除</button>
                     </div>
                 </div>
             `;
         }).join('');
-    };
-
-    const setConstraintFieldVisible = (fieldName, visible) => {
-        if (!constraintForm) return;
-        const field = constraintForm.querySelector(`[data-constraint-field="${fieldName}"]`);
-        if (!field) return;
-        field.hidden = !visible;
-        const input = field.querySelector('input, select');
-        if (!input) return;
-        input.disabled = !visible;
-        if (!visible) {
-            if (input.tagName === 'SELECT') {
-                input.value = '';
-            } else if (fieldName === 'distance') {
-                input.value = '1';
-            } else {
-                input.value = '';
-            }
-        }
-    };
-
-    const syncConstraintFields = () => {
-        if (!constraintTypeSelect) return;
-        const typeConfig = constraintTypeMap.get(constraintTypeSelect.value) || {};
-        setConstraintFieldVisible('target_student_id', !!typeConfig.needs_target);
-        setConstraintFieldVisible('row', !!typeConfig.needs_row);
-        setConstraintFieldVisible('col', !!typeConfig.needs_col);
-        setConstraintFieldVisible('distance', !!typeConfig.needs_distance);
-        setConstraintFieldVisible('note', true);
-    };
-
-    const resetConstraintForm = () => {
-        if (!constraintForm) return;
-        editingConstraintId = null;
-        constraintForm.reset();
-        constraintForm.action = constraintForm.dataset.createUrl || constraintForm.action;
-        if (constraintIdInput) constraintIdInput.value = '';
-        if (constraintDistanceInput) constraintDistanceInput.value = '1';
-        if (constraintSubmitBtn) constraintSubmitBtn.textContent = '添加约束';
-        if (constraintCancelEditBtn) constraintCancelEditBtn.hidden = true;
-        syncConstraintFields();
-    };
-
-    const populateConstraintForm = (item) => {
-        if (!constraintForm || !item) return;
-        editingConstraintId = item.pk;
-        constraintForm.action = item.update_url || constraintForm.dataset.createUrl || constraintForm.action;
-        if (constraintIdInput) constraintIdInput.value = item.pk;
-        if (constraintTypeSelect) constraintTypeSelect.value = item.constraint_type || '';
-        if (constraintStudentSelect) constraintStudentSelect.value = item.student_pk || '';
-        if (constraintTargetStudentSelect) constraintTargetStudentSelect.value = item.target_student_pk || '';
-        if (constraintRowInput) constraintRowInput.value = item.row || '';
-        if (constraintColInput) constraintColInput.value = item.col || '';
-        if (constraintDistanceInput) constraintDistanceInput.value = item.distance || 1;
-        if (constraintNoteInput) constraintNoteInput.value = item.note || '';
-        if (constraintSubmitBtn) constraintSubmitBtn.textContent = '保存修改';
-        if (constraintCancelEditBtn) constraintCancelEditBtn.hidden = false;
-        syncConstraintFields();
-        constraintForm.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
     };
 
     const dismissToast = (toast) => {
@@ -949,6 +970,25 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!data) return;
         handleResponse(postJson(urls.addStudent, data));
     });
+
+    const studentDetailEdit = document.querySelector('.student-detail-edit');
+    if (studentDetailEdit) {
+        studentDetailEdit.addEventListener('click', async () => {
+            const detail = document.querySelector('.student-detail-grid');
+            if (!detail || !detail.dataset.studentDetailId) return;
+            const data = await openStudentForm({
+                title: '编辑学生信息',
+                name: detail.dataset.studentName || '',
+                student_id: detail.dataset.studentSid || '',
+                gender: detail.dataset.studentGender || '',
+                score: detail.dataset.studentScore || '',
+            });
+            if (!data) return;
+            const updateUrl = detail.dataset.studentUpdateUrl;
+            if (!updateUrl) return;
+            handleResponse(postJson(updateUrl, data));
+        });
+    }
 
     const notify = (message) => {
         showInlineToast(message);
@@ -2739,38 +2779,12 @@ document.addEventListener('DOMContentLoaded', () => {
         groupTour.drive();
     }
 
-    if (constraintTypeSelect) {
-        constraintTypeSelect.addEventListener('change', syncConstraintFields);
-    }
-
-    if (constraintCancelEditBtn) {
-        constraintCancelEditBtn.addEventListener('click', () => {
-            resetConstraintForm();
-        });
-    }
-
-    if (constraintForm) {
-        resetConstraintForm();
+    if (constraintList) {
         renderConstraintMetrics(deriveConstraintMetrics(constraintItems));
         renderConstraintList();
-
-        constraintForm.addEventListener('submit', (event) => {
-            event.preventDefault();
-            const isEditing = editingConstraintId != null;
-            const formData = new FormData(constraintForm);
-            if (!isEditing) {
-                formData.delete('constraint_id');
-            }
-            const payload = Object.fromEntries(formData.entries());
-            const url = isEditing
-                ? (constraintForm.action || constraintForm.dataset.createUrl)
-                : constraintForm.dataset.createUrl;
-            handleResponse(postFormData(url, payload), (data) => {
-                showInlineToast(data?.message || (isEditing ? '约束已更新' : '约束已创建'));
-                resetConstraintForm();
-            });
-        });
     }
+
+    constraintSearchInput?.addEventListener('input', renderConstraintList);
 
     if (constraintFilterGroup) {
         constraintFilterGroup.addEventListener('click', (event) => {
@@ -2795,11 +2809,6 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!item) return;
 
             const action = actionButton.dataset.constraintAction;
-            if (action === 'edit') {
-                populateConstraintForm(item);
-                return;
-            }
-
             if (action === 'toggle') {
                 const nextEnabled = item.enabled ? '0' : '1';
                 handleResponse(postFormData(item.toggle_url, { enabled: nextEnabled }), (data) => {
@@ -2814,9 +2823,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     : window.confirm('确定要删除这条约束吗？');
                 if (!confirmed) return;
                 handleResponse(postFormData(item.delete_url, {}), () => {
-                    if (String(editingConstraintId) === String(item.pk)) {
-                        resetConstraintForm();
-                    }
                     showInlineToast('约束已删除');
                 });
             }
@@ -2835,11 +2841,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const groupToolsToggle = document.getElementById('groupToolsToggle');
     if (groupToolsToggle) {
         const section = groupToolsToggle.closest('.collapsible-section');
-        const stored = localStorage.getItem('groupToolsOpen');
-        if (stored === 'true') section.classList.add('open');
         groupToolsToggle.addEventListener('click', () => {
             section.classList.toggle('open');
-            localStorage.setItem('groupToolsOpen', section.classList.contains('open'));
+            groupToolsToggle.setAttribute('aria-expanded', String(section.classList.contains('open')));
         });
     }
 
@@ -2933,19 +2937,75 @@ document.addEventListener('DOMContentLoaded', () => {
         return row;
     };
 
+    const syncStudentDetailFromElement = (element) => {
+        const panel = document.querySelector('.student-detail-grid');
+        if (!panel || !element || !element.dataset.studentId) return;
+        const name = element.dataset.studentName || element.querySelector('.seat-name, .unseated-name')?.textContent?.trim() || '';
+        const gender = element.dataset.studentGender || '';
+        const genderLabel = gender === 'M' ? '男' : (gender === 'F' ? '女' : '—');
+        const sid = element.dataset.studentSid || '—';
+        const score = element.dataset.studentScore && Number(element.dataset.studentScore) > 0
+            ? `${element.dataset.studentScore}分` : '—';
+        const group = element.querySelector('.seat-group-tag')?.textContent?.trim() || '未分组';
+        const seat = element.classList.contains('seat') && element.dataset.row
+            ? `第${element.dataset.row}排第${element.dataset.col}列` : '未入座';
+        const fixed = element.dataset.fixedSeat === '1' ? '是' : '否';
+        panel.dataset.studentDetailId = element.dataset.studentId;
+        panel.dataset.studentUpdateUrl = element.dataset.updateUrl || panel.dataset.studentUpdateUrl || '';
+        panel.dataset.studentName = name;
+        panel.dataset.studentSid = element.dataset.studentSid || '';
+        panel.dataset.studentGender = gender;
+        panel.dataset.studentScore = element.dataset.studentScore || '';
+        const values = { name, gender: genderLabel, student_id: sid, group, seat, fixed };
+        Object.keys(values).forEach((key) => {
+            const target = panel.querySelector(`[data-student-value="${key}"]`);
+            if (target) target.textContent = values[key];
+        });
+        const editButton = document.querySelector('.student-detail-edit');
+        if (editButton) editButton.dataset.studentId = element.dataset.studentId;
+    };
+
+    const initStudentDisplayControls = () => {
+        const panel = document.querySelector('.student-detail-grid');
+        if (!panel) return;
+        document.querySelectorAll('[data-student-display-toggle]').forEach((toggle) => {
+            const key = toggle.dataset.studentDisplayToggle;
+            let visible = true;
+            try {
+                const saved = localStorage.getItem(`student_detail_field:${key}`);
+                if (saved !== null) visible = saved !== '0';
+            } catch (_) {}
+            toggle.checked = visible;
+            panel.querySelectorAll(`[data-student-field="${key}"]`).forEach((field) => {
+                field.hidden = !visible;
+            });
+            toggle.addEventListener('change', () => {
+                const next = toggle.checked;
+                panel.querySelectorAll(`[data-student-field="${key}"]`).forEach((field) => {
+                    field.hidden = !next;
+                });
+                try { localStorage.setItem(`student_detail_field:${key}`, next ? '1' : '0'); } catch (_) {}
+            });
+        });
+    };
+
     const setSelectedSeat = (seat) => {
         if (selectedSeat) selectedSeat.classList.remove('selected');
         selectedSeat = seat;
         if (selectedSeat) selectedSeat.classList.add('selected');
+        syncStudentDetailFromElement(selectedSeat);
     };
 
     const setSelectedUnseated = (item) => {
         if (selectedUnseated) selectedUnseated.classList.remove('selected');
         selectedUnseated = item;
         if (selectedUnseated) selectedUnseated.classList.add('selected');
+        syncStudentDetailFromElement(selectedUnseated);
     };
 
-    const seatKey = (seat) => `${seat.dataset.row}-${seat.dataset.col}`;
+    initStudentDisplayControls();
+
+    const seatKey = (seat) => seat.dataset.seatKey || `${seat.dataset.row}-${seat.dataset.col}`;
 
     const clearMultiSelection = () => {
         selectedSeats.forEach(key => {
@@ -2978,56 +3038,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const getSeatByKey = (key) => document.querySelector(`.seat[data-seat-key="${key}"]`);
     const getSeatByCoord = (row, col) => document.querySelector(`.seat[data-row="${row}"][data-col="${col}"]`);
 
-    const showQuickSwapInput = (seat) => {
-        const existing = seat.querySelector('.quick-swap-input');
-        if (existing) existing.remove();
-
-        const input = document.createElement('input');
-        input.className = 'quick-swap-input';
-        input.placeholder = '输入姓名、首字母或学号';
-        input.autocomplete = 'off';
-        seat.appendChild(input);
-
-        setTimeout(() => input.focus(), 10);
-
-        const cleanup = () => {
-            if (input.parentNode) input.remove();
-        };
-
-        input.addEventListener('blur', () => setTimeout(cleanup, 200));
-        input.addEventListener('keydown', async (e) => {
-            if (e.key === 'Escape') {
-                cleanup();
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                const query = input.value.trim();
-                if (!query) return cleanup();
-
-                try {
-                    const res = await fetch(`${window.location.pathname}search-students/?q=${encodeURIComponent(query)}`);
-                    const data = await res.json();
-                    const matches = data.students || [];
-
-                    const exactStudentIdMatch = matches.find((item) =>
-                        String(item.student_id || '').trim().toLowerCase() === query.toLowerCase()
-                    );
-                    if (matches.length === 0) {
-                        input.style.borderColor = '#ef4444';
-                        setTimeout(() => input.style.borderColor = '', 300);
-                    } else if (exactStudentIdMatch || matches.length === 1) {
-                        cleanup();
-                        await swapStudents(seat, (exactStudentIdMatch || matches[0]).id);
-                    } else {
-                        cleanup();
-                        showQuickSwapModal(seat, matches);
-                    }
-                } catch (err) {
-                    input.style.borderColor = '#ef4444';
-                    setTimeout(() => input.style.borderColor = '', 300);
-                }
-            }
-        });
-    };
+    const showQuickSwapInput = (seat) => SeatInteractions.quickSwap(seat, {
+        search: async (query) => {
+            const response = await fetch(`${window.location.pathname}search-students/?q=${encodeURIComponent(query)}`);
+            if (!response.ok) throw new Error('查找学生失败，请重试');
+            const data = await response.json();
+            return data.students || [];
+        },
+        swap: swapStudents,
+        choose: showQuickSwapModal,
+        notify,
+    });
 
     const swapStudents = async (seat, targetStudentId) => {
         const currentStudentId = seat.dataset.studentId;
@@ -3538,10 +3559,25 @@ document.addEventListener('DOMContentLoaded', () => {
         seat.dataset.cellType = data.cell_type;
         seat.dataset.studentId = data.student ? data.student.id : '';
         seat.dataset.fixedSeat = data.student && data.student.is_fixed_seat ? '1' : '0';
+        seat.dataset.studentName = data.student ? (data.student.name || '') : '';
+        seat.dataset.studentSid = data.student ? (data.student.student_id || '') : '';
+        seat.dataset.studentGender = data.student ? (data.student.gender || '') : '';
+        seat.dataset.studentScore = data.student ? (data.student.score || 0) : '';
+        seat.dataset.studentTagIds = data.student && Array.isArray(data.student.tags)
+            ? data.student.tags.map(tag => tag.id).join(',') : '';
+        seat.dataset.updateUrl = data.student && data.student.update_url ? data.student.update_url : '';
 
         const row = seat.dataset.row;
         const col = seat.dataset.col;
         seat.innerHTML = '';
+        // 考场桌号属于桌位，重绘学生内容时保留。
+        if (seat.dataset.examNumber && data.cell_type === 'seat') {
+            const examNumber = document.createElement('span');
+            examNumber.className = 'seat-exam-number';
+            examNumber.title = '考场桌号';
+            examNumber.textContent = seat.dataset.examNumber;
+            seat.appendChild(examNumber);
+        }
 
         if (data.cell_type === 'seat') {
             if (data.student) {
@@ -3671,6 +3707,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let refreshInFlight = null;
     let refreshRequested = false;
+    const updateStatusbarCounts = (data) => {
+        const seats = Array.isArray(data?.seats) ? data.seats : [];
+        const seated = seats.reduce((count, seat) => count + (seat && seat.student ? 1 : 0), 0);
+        const rawUnseated = Number(data?.unseated_count);
+        const unseated = Number.isFinite(rawUnseated)
+            ? Math.max(0, rawUnseated)
+            : (Array.isArray(data?.unseated) ? data.unseated.length : 0);
+        const total = seated + unseated;
+        if (statusbarSeated) statusbarSeated.textContent = `已排座 ${seated}/${total}`;
+        if (statusbarUnseated) statusbarUnseated.textContent = `未入座 ${unseated}`;
+    };
+
     const refreshState = window.refreshState = () => {
         if (!urls.state) return Promise.resolve();
         // 在途请求复用：连续拖拽/多次撤销只保留一个网络请求，乱序到达时取最新结果。
@@ -3691,6 +3739,8 @@ document.addEventListener('DOMContentLoaded', () => {
         return refreshInFlight = fetch(stateUrl, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
             .then(res => res.json())
             .then(data => {
+                updateStatusbarCounts(data);
+                if (Array.isArray(data.doors)) root.dispatchEvent(new CustomEvent('classroom-state-updated', {detail: {doors: data.doors}}));
                 const seatMap = new Map();
                 data.seats.forEach(seat => {
                     seatMap.set(`${seat.row}-${seat.col}`, seat);
@@ -3725,6 +3775,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             const studentTagIds = Array.isArray(student.tags) ? student.tags.map(t => t.id).join(',') : '';
                             return `
                                 <div class="unseated-item" draggable="true" data-student-id="${student.id}"
+                                    data-student-name="${escapeAttr(student.name || '')}"
                                     data-student-sid="${escapeAttr(student.student_id || '')}"
                                     data-student-gender="${escapeAttr(student.gender || '')}"
                                     data-student-score="${student.score || 0}"
@@ -3752,47 +3803,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     constraintItems = data.constraints;
                     renderConstraintMetrics(data.constraint_metrics || deriveConstraintMetrics(constraintItems));
                     renderConstraintList();
-                    if (editingConstraintId != null) {
-                        const editedItem = constraintItems.find((item) => String(item.pk) === String(editingConstraintId));
-                        if (!editedItem) {
-                            resetConstraintForm();
-                        }
-                    }
-                }
-
-                // 学生增删后同步约束表单的两个学生下拉，避免新学生选不到、过期学生残留。
-                const allStudents = [];
-                const seenStudentIds = new Set();
-                (Array.isArray(data.seats) ? data.seats : []).forEach(seatInfo => {
-                    const student = seatInfo && seatInfo.student;
-                    if (student && student.id && !seenStudentIds.has(student.id)) {
-                        seenStudentIds.add(student.id);
-                        allStudents.push({ id: student.id, name: student.name });
-                    }
-                });
-                (Array.isArray(data.unseated) ? data.unseated : []).forEach(student => {
-                    if (student && student.id && !seenStudentIds.has(student.id)) {
-                        seenStudentIds.add(student.id);
-                        allStudents.push({ id: student.id, name: student.name });
-                    }
-                });
-                if (allStudents.length) {
-                    [constraintStudentSelect, constraintTargetStudentSelect].forEach(select => {
-                        if (!select) return;
-                        const previousValue = select.value;
-                        select.innerHTML = select.querySelector('option[value=""]')
-                            ? '<option value="">请选择</option>'
-                            : '';
-                        allStudents.forEach(student => {
-                            const option = document.createElement('option');
-                            option.value = String(student.id);
-                            option.textContent = student.name;
-                            select.appendChild(option);
-                        });
-                        if (previousValue && seenStudentIds.has(Number(previousValue))) {
-                            select.value = previousValue;
-                        }
-                    });
                 }
 
                 if (Array.isArray(data.tags)) {
@@ -3807,13 +3817,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
 
                 if (data.suggestions) {
+                    if (window.WendaoDock) {
+                        window.WendaoDock.setSuggestions(data.suggestions, {
+                            async execute(item) {
+                                if (item.type === 'export_suggestion') {
+                                    const result = await saveExportFromUrl(item.action_url, {
+                                        fallbackFilename: '小组作业表.xlsx', acceptMime: excelMime, acceptExtensions: ['.xlsx']
+                                    });
+                                    return {...result, message: result.status === 'saved' ? `文件已保存：${result.filename}` : result.status === 'downloaded' ? '已开始下载小组作业表。' : '已取消保存。'};
+                                }
+                                const result = await postJson(item.action_url, {});
+                                await refreshState();
+                                if (result.status !== 'success') throw new Error(result.message || '建议执行失败');
+                                return result;
+                            },
+                            async dismiss(item) {
+                                const result = await postJson(item.ignore_url, {});
+                                if (result.status !== 'success') throw new Error(result.message || '忽略建议失败');
+                            }
+                        });
+                    } else {
                     const toastContainer = document.getElementById('toast-container') || createToastContainer();
                     toastContainer.querySelectorAll('.toast-suggestion').forEach(el => el.remove());
 
+                    const showLayoutSuggestions = readSuggestionPreference(SHOW_LAYOUT_SUGGESTIONS_KEY);
+                    const showGroupCompletionSuggestion = readSuggestionPreference(SHOW_GROUP_COMPLETION_SUGGESTION_KEY);
                     const listItems = [];
                     data.suggestions.forEach(item => {
                         if (typeof item === 'object' && item.action_label) {
                             const suggestionType = item.type || '';
+                            const isGroupCompletionSuggestion = suggestionType === 'export_suggestion';
+                            if (isGroupCompletionSuggestion && !showGroupCompletionSuggestion) return;
+                            if (!isGroupCompletionSuggestion && !showLayoutSuggestions) return;
                             if (!enabledActionSuggestionTypes.has(suggestionType)) {
                                 if (item.message) {
                                     listItems.push(`<div class="suggestion-item">${item.message}</div>`);
@@ -3822,9 +3857,10 @@ document.addEventListener('DOMContentLoaded', () => {
                             }
                             const toast = document.createElement('div');
                             toast.className = 'toast-notification toast-suggestion';
+                            const toastTitle = isGroupCompletionSuggestion ? '分组完成提示' : '优化建议';
                             toast.innerHTML = `
                                 <div class="toast-header">
-                                    <span>优化建议</span>
+                                    <span>${toastTitle}</span>
                                     <span style="color:var(--text-secondary); font-weight:400; font-size:11px;">刚刚</span>
                                 </div>
                                 <div class="toast-body">${item.message}</div>
@@ -3834,7 +3870,7 @@ document.addEventListener('DOMContentLoaded', () => {
                                 </div>
                             `;
                             toastContainer.appendChild(toast);
-                        } else {
+                        } else if (showLayoutSuggestions) {
                             listItems.push(`<div class="suggestion-item">${item}</div>`);
                         }
                     });
@@ -3890,13 +3926,16 @@ document.addEventListener('DOMContentLoaded', () => {
                     });
 
                     if (suggestionList) {
-                        if (listItems.length) {
+                        if (!showLayoutSuggestions) {
+                            suggestionList.innerHTML = '';
+                        } else if (listItems.length) {
                             suggestionList.innerHTML = listItems.join('');
                         } else {
                             suggestionList.innerHTML = '<div class="empty-hint">当前布局没有明显问题</div>';
                         }
                     }
                     if (window.updateToastStack) window.updateToastStack();
+                    }
                 }
 
                 if (selectedSeatKey) {
@@ -3922,6 +3961,18 @@ document.addEventListener('DOMContentLoaded', () => {
             });
     };
 
+    // 状态栏与其他窗口/设备的改动保持同步；页面隐藏时暂停请求，回到当前桌面后立即补刷。
+    const refreshVisibleClassroomState = () => {
+        if (document.visibilityState === 'hidden') return;
+        refreshState().catch(() => {});
+    };
+    window.setInterval(refreshVisibleClassroomState, 5000);
+    window.addEventListener('focus', refreshVisibleClassroomState, { passive: true });
+    window.addEventListener('pageshow', refreshVisibleClassroomState, { passive: true });
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') refreshVisibleClassroomState();
+    });
+
 
 
     seatElements.forEach(seat => {
@@ -3929,9 +3980,23 @@ document.addEventListener('DOMContentLoaded', () => {
         seat.addEventListener('mouseenter', () => {
             lastHoveredSeat = seat;
         });
+        seat.addEventListener('keydown', (e) => {
+            if (e.key !== 'Enter' && e.key !== ' ') return;
+            e.preventDefault();
+            seat.click();
+        });
         seat.addEventListener('click', (e) => {
             if (consumeSuppressedTouchClick(e)) return;
-            if (seat.dataset.cellType !== 'seat') return;
+            // 讲台、过道和空位同样是布局中的可编辑格，不再因为不是 seat
+            // 类型而吞掉点击；选中后可用右键菜单或快捷操作继续编辑。
+            if (seat.dataset.cellType !== 'seat') {
+                if (e.shiftKey || e.ctrlKey || e.metaKey || groupMode) {
+                    toggleMultiSelection(seat);
+                } else {
+                    setSelectedSeat(seat);
+                }
+                return;
+            }
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
                 addToMultiSelection(seat);
                 return;
@@ -3960,14 +4025,7 @@ document.addEventListener('DOMContentLoaded', () => {
             e.preventDefault();
             showQuickSwapInput(seat);
         });
-        seat.addEventListener('dragover', (e) => {
-            if (seat.dataset.cellType !== 'seat') return;
-            e.preventDefault();
-            applyDragPreviewForSeat(seat);
-        });
-        seat.addEventListener('drop', (e) => {
-            if (seat.dataset.cellType !== 'seat') return;
-            e.preventDefault();
+        SeatInteractions.bindDrop(seat, (e) => {
             setSelectedSeat(seat);
 
             if (dragState.active && dragState.mode === 'multi') {
@@ -4016,7 +4074,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 row: seat.dataset.row,
                 col: seat.dataset.col
             }));
-        });
+        }, () => applyDragPreviewForSeat(seat));
     });
 
     if (unseatedList) {
@@ -4674,6 +4732,8 @@ document.addEventListener('DOMContentLoaded', () => {
         btn.addEventListener('click', () => {
             const tab = btn.dataset.tab;
             if (!tab) return;
+            const sidePanel = btn.closest('.side-panel') || document.querySelector('.side-panel');
+            if (sidePanel) sidePanel.dataset.activeTab = tab;
             document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab-panel').forEach(el => el.classList.remove('active'));
             btn.classList.add('active');
@@ -4683,9 +4743,12 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const requestedTab = new URLSearchParams(window.location.search).get('tab');
     const savedTab = localStorage.getItem('classroom_active_tab');
-    if (savedTab) {
-        openSideTab(savedTab);
+    const desktopShell = document.body?.dataset?.appShell === 'webview';
+    const visibleDefaultTab = requestedTab || (desktopShell ? 'students' : savedTab);
+    if (visibleDefaultTab) {
+        openSideTab(visibleDefaultTab);
     }
 
     document.querySelectorAll('[data-open-side-tab]').forEach((btn) => {
@@ -5320,6 +5383,34 @@ document.addEventListener('DOMContentLoaded', () => {
             handleResponse(postJson(updateUrl, data));
         });
     }
+
+    document.querySelectorAll('[data-student-action]').forEach((button) => {
+        button.addEventListener('click', () => {
+            const studentId = button.dataset.studentId;
+            const seat = studentId
+                ? document.querySelector(`.seat[data-student-id="${studentId}"]`)
+                : null;
+            if (!seat) {
+                notify('该学生当前未入座');
+                return;
+            }
+            openSeatContextMenuFromTarget({
+                clientX: Math.round(window.innerWidth / 2),
+                clientY: Math.round(window.innerHeight / 2),
+                preventDefault() {},
+                stopPropagation() {},
+            }, seat);
+            const actionTarget = {
+                fixed: '#ctx-toggle-fixed-seat',
+                leader: '#ctx-set-leader',
+                unseat: '#ctx-move-to-unseated',
+            }[button.dataset.studentAction];
+            const targetButton = actionTarget && document.querySelector(actionTarget);
+            if (targetButton && targetButton.style.display !== 'none') {
+                targetButton.click();
+            }
+        });
+    });
 
     (function initSpotlight() {
         const overlay = document.getElementById('spotlight-overlay');

@@ -1,70 +1,40 @@
 from django.conf import settings
+import os
 import desktop_runtime
 
 
 def app_runtime(request):
+    from seats.models import Classroom
+    selected = request.GET.get('classroom', '')
+    ai_classroom = Classroom.objects.filter(pk=int(selected)).first() if selected.isdecimal() and len(selected) < 10 else None
+    shell = getattr(settings, "APP_SHELL", "browser")
+    platform = desktop_runtime.get_platform_name()
+    # 浏览器端统一采用 Windows 信息架构；桌面壳仍按运行时系统适配。
+    # 如需本地截图或回归测试覆盖，可显式设置 FUCKSEATS_APP_PLATFORM。
+    if shell == "browser" and not (os.getenv("FUCKSEATS_APP_PLATFORM") or "").strip():
+        platform = "windows"
     ctx = {
+        "ai_context_classroom": ai_classroom,
         "app_runtime": {
-            "shell": getattr(settings, "APP_SHELL", "browser"),
+            "shell": shell,
             "version": desktop_runtime.get_current_version(),
-            "platform": desktop_runtime.get_platform_name(),
+            "platform": platform,
         },
-        "onboarding_should_show": _onboarding_should_show(request),
-        "onboarding_sample_pk": request.session.get('onboarding_sample_pk') if hasattr(request, 'session') else None,
+        "onboarding_bootstrap": onboarding_bootstrap(request),
+        "is_onboarding": request.path == "/welcome/",
         "wendao_ai_url": getattr(settings, "WENDAO_AI_URL", "https://ai.577622.xyz"),
     }
     return ctx
 
 
-def _ensure_session_key(request):
-    sk = request.session.session_key
-    if not sk:
-        request.session['ob_init'] = True
-        request.session.save()
-        sk = request.session.session_key
-    return sk
-
-
-def _onboarding_should_show(request):
-    path = getattr(request, 'path', '') or ''
-    if path.startswith('/admin') or path.startswith('/static') or path.startswith('/media'):
-        return False
-    if getattr(request, 'method', 'GET') != 'GET':
-        return False
-    try:
-        from seats.models import (
-            FrontendKVStore,
-            ONBOARDING_SEEN_STORE_KEY,
-            ONBOARDING_SEEN_STORE_VALUE,
-            OnboardingState,
-        )
-    except Exception:
-        return False
-    try:
-        value = FrontendKVStore.objects.filter(
-            key=ONBOARDING_SEEN_STORE_KEY,
-        ).values_list('value', flat=True).first()
-        if str(value or '').strip().lower() in {'1', 'true', 'yes', 'seen'}:
-            return False
-    except Exception:
-        pass
-    try:
-        if OnboardingState.objects.filter(seen=True).exists():
-            FrontendKVStore.objects.update_or_create(
-                key=ONBOARDING_SEEN_STORE_KEY,
-                defaults={'value': ONBOARDING_SEEN_STORE_VALUE},
-            )
-            return False
-    except Exception:
-        pass
-    try:
-        sk = _ensure_session_key(request)
-    except Exception:
-        return False
-    if not sk:
-        return False
-    try:
-        state = OnboardingState.objects.filter(session_key=sk).first()
-    except Exception:
-        return False
-    return state is None or not state.seen
+def onboarding_bootstrap(request):
+    """Database state is shared by browser sessions and the desktop shell."""
+    if request.path not in ('/', '/welcome/'):
+        return None
+    from seats.models import Classroom, CloudSession
+    from django.utils import timezone
+    from seats.onboarding import REQUEST_TOKEN, get_state, payload
+    state = get_state()
+    has_data = Classroom.objects.exists()
+    user = CloudSession.objects.filter(token_expires_at__gt=timezone.now()).values('nickname').first()
+    return {**payload(state), 'hasData': has_data, 'cloudUser': user, 'requestToken': REQUEST_TOKEN}

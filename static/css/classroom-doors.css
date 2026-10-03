@@ -1,0 +1,122 @@
+body.classroom-detail-body #seat-grid-container {
+    position: relative;
+    width: max-content;
+    min-width: 0;
+    padding-left: 46px;
+    padding-right: 46px;
+}
+
+.classroom-door-save-status {
+    position: absolute;
+    z-index: 2;
+    top: 3px;
+    right: 16px;
+    margin: 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 1.5;
+    pointer-events: none;
+}
+
+.classroom-door-position {
+    position: absolute;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    gap: 2px;
+    transform: translateY(-50%);
+    width: 42px;
+    height: 30px;
+}
+
+.classroom-door-position[data-side="left"] { left: 3px; }
+.classroom-door-position[data-side="right"] { right: 3px; }
+.classroom-door-position button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    border: 0;
+    cursor: pointer;
+    color: #0a59f7;
+    background: transparent;
+    padding: 0;
+    touch-action: manipulation;
+}
+.classroom-door-position button:focus-visible {
+    outline: 2px solid #0a59f7;
+    outline-offset: 2px;
+}
+.classroom-door-position .classroom-door-empty,
+.classroom-door-position .classroom-door-existing {
+    width: 25px;
+    height: 29px;
+    border-radius: 999px;
+}
+.classroom-door-position .classroom-door-empty {
+    opacity: .18;
+    border: 1px dashed #0a59f7;
+    background: rgba(10, 89, 247, .08);
+    transition: opacity .18s ease, background .18s ease;
+}
+.classroom-door-position .classroom-door-empty:hover,
+.classroom-door-position .classroom-door-empty:focus-visible {
+    opacity: .42;
+    background: rgba(10, 89, 247, .14);
+}
+.classroom-door-position .classroom-door-existing {
+    position: relative;
+    color: white;
+    background: #0a59f7;
+}
+.classroom-door-position .classroom-door-existing:hover { background: #084ad0; }
+.classroom-door-position .classroom-door-count {
+    position: absolute;
+    top: -4px;
+    right: -5px;
+    min-width: 14px;
+    padding: 0 3px;
+    border-radius: 999px;
+    background: white;
+    color: #0a59f7;
+    border: 1px solid #0a59f7;
+    font-size: 9px;
+    line-height: 13px;
+}
+.classroom-door-position .classroom-door-add {
+    width: 16px;
+    height: 24px;
+    border-radius: 999px;
+    opacity: .35;
+}
+.classroom-door-position .classroom-door-add:hover,
+.classroom-door-position .classroom-door-add:focus-visible { opacity: 1; background: rgba(10, 89, 247, .1); }
+.classroom-door-position button:disabled { opacity: .4; cursor: wait; }
+@media (prefers-reduced-motion: reduce) {
+    .classroom-door-position .classroom-door-empty { transition: none; }
+}
+
+/* 考场桌号：已应用考场布局时显示在桌子左上角，不影响拖拽与点击。 */
+body.classroom-detail-body .seat[data-exam-number] { position: relative; }
+body.classroom-detail-body .seat[data-exam-number] .seat-content { padding-top: 14px; }
+body.classroom-detail-body .seat-exam-number {
+    position: absolute;
+    top: 3px;
+    left: 4px;
+    z-index: 2;
+    min-width: 18px;
+    padding: 0 4px;
+    border-radius: 999px;
+    background: #0a59f7;
+    color: #fff;
+    font-size: 9px;
+    font-weight: 600;
+    line-height: 13px;
+    text-align: center;
+    font-variant-numeric: tabular-nums;
+    pointer-events: none;
+}
+body.classroom-detail-body .classroom-toolbar-button.is-exam-active { color: #0a59f7 !important; font-weight: 600; }
+@media print {
+    body.classroom-detail-body .seat-exam-number { background: none; color: #000; border: 1px solid #000; }
+}

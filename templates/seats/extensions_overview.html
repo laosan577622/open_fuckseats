@@ -1,17 +1,15 @@
 {% extends 'base.html' %}
 
 {% block title %}扩展清单{% endblock %}
-
-{% block ribbon_tabs %}
-<button type="button" class="ribbon-tab active" data-ribbon-tab="extensions">扩展清单</button>
-{% endblock %}
+{% block body_class %}extensions-page-body{% endblock %}
+{% block global_back_button %}{% endblock %}
 
 {% block actions %}
-<div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="extensions">
-    <div class="ribbon-group">
+<div class="context-toolbar-row context-toolbar-panel active" data-toolbar-panel="extensions">
+    <div class="toolbar-group">
         <a href="{% url 'index' %}" class="btn btn-secondary">返回首页</a>
         <a href="{% url 'plugins_overview' %}" class="btn btn-secondary" target="_blank" rel="noopener noreferrer">插件 API</a>
-        <span class="ribbon-group-label">导航</span>
+        <span class="toolbar-group-label">导航</span>
     </div>
 </div>
 {% endblock %}

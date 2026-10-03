@@ -8,11 +8,11 @@
     min-height: calc(100vh - var(--header-height));
 }
 
-.about-ribbon-back {
+.about-toolbar-back {
     text-decoration: none;
 }
 
-.about-ribbon-back svg {
+.about-toolbar-back svg {
     width: 15px;
     height: 15px;
 }

@@ -2,15 +2,23 @@
 {% load static %}
 
 {% block title %}{{ classroom.name }} - 排座详情{% endblock %}
-
-{% block ribbon_tabs %}
-<button type="button" class="ribbon-tab active" data-ribbon-tab="home">开始</button>
-<button type="button" class="ribbon-tab" data-ribbon-tab="view">视图</button>
-<button type="button" class="ribbon-tab" data-ribbon-tab="file">文件</button>
-<button type="button" class="ribbon-tab" data-ribbon-tab="transform">变换</button>
+{% block body_class %}classroom-detail-body{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/classroom-doors.css' %}?v=5">{% endblock %}
+{% block ai_titlebar_link %}
+<div class="wd-dock" id="wendao-dock">
+    <button type="button" class="btn wd-spectrum wd-launch" id="wd-launch" aria-expanded="false" aria-controls="wd-composer-panel"><span class="wd-brand-text">闻道智能</span><span class="wd-notice" hidden></span></button>
+    <button type="button" class="btn wd-spectrum wd-orb" id="wd-orb" hidden aria-label="排座建议" aria-expanded="false" aria-controls="wd-suggestions">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="url(#wd-suggestion-gradient)" stroke-width="1.7" aria-hidden="true"><defs><linearGradient id="wd-suggestion-gradient" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#5bd6c2"/><stop offset="1" stop-color="#e5bd28"/></linearGradient></defs><path d="M9 18h6M10 21h4M8.3 13.8a6 6 0 1 1 7.4 0c-1 .7-1.2 1.5-1.2 2.2h-5c0-.7-.2-1.5-1.2-2.2Z"/><path d="m10 9 2 2 2-2"/></svg>
+        <span class="wd-count" hidden></span>
+    </button>
+</div>
 {% endblock %}
 
 {% block titlebar_actions %}
+<div class="classroom-titlebar-meta" aria-label="当前班级">
+    <strong>{{ classroom.name }}</strong>
+    <small>{{ students|length }} 人</small>
+</div>
 <button type="button" class="btn btn-secondary" id="btn-open-tour-titlebar" title="新手引导"
     onclick="startOnboarding(true)" style="padding: 6px 12px;">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -23,214 +31,12 @@
 {% endblock %}
 
 {% block actions %}
-<div class="ribbon-panels">
-    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="home">
-        <div class="ribbon-group">
-            <form method="post" action="{% url 'auto_arrange_seats' classroom.pk %}" class="quick-arrange-form">
-                {% csrf_token %}
-                <select name="method" aria-label="自动排座算法">
-                    <option value="random">随机排座</option>
-                    <option value="score_desc">按成绩从高到低</option>
-                    <option value="score_asc">按成绩从低到高</option>
-                    <option value="good_front">成绩好的在前排</option>
-                    <option value="good_back">成绩好的在后排</option>
-                    <option value="score_spread">相邻成绩差异大</option>
-                    <option value="group_balanced">小组均衡模式</option>
-                    <option value="group_mentor">小组优带差模式</option>
-                </select>
-                <button class="btn btn-primary" id="btn-auto-arrange" type="submit">执行排座</button>
-                <a class="btn btn-secondary quick-custom-sort-link" href="{% url 'classroom_custom_sort' classroom.pk %}">自定义策略设置</a>
-            </form>
-            <span class="ribbon-group-label">排座</span>
-        </div>
-        <div class="ribbon-group">
-            <a href="{{ wendao_ai_url }}" class="btn btn-primary" id="btn-open-future-mode"
-                target="_blank" rel="noopener noreferrer" data-open-external>打开闻道智能</a>
-            <span class="ribbon-group-label">AI</span>
-        </div>
-        <div class="ribbon-group">
-            <button type="button" class="btn btn-secondary" id="btn-open-plugin-hub" data-open-modal="plugin-hub-modal">插件中心</button>
-            <button type="button" class="btn btn-secondary" id="btn-open-plugin-command" data-open-modal="plugin-command-modal">命令面板</button>
-            <a href="{% url 'extensions_overview' %}?classroom_id={{ classroom.pk }}" class="btn btn-secondary">扩展清单</a>
-            <span class="ribbon-group-label">插件</span>
-        </div>
-        <div class="ribbon-group plugin-ribbon-quick-group">
-            <div id="pluginQuickLaunch" class="plugin-quick-launch-inline">
-                <span class="plugin-quick-launch-empty">正在加载插件快捷入口...</span>
-            </div>
-            <span class="ribbon-group-label">快捷入口</span>
-        </div>
-    </div>
-
-    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="view">
-        <div class="ribbon-group">
-            <a href="{% url 'layout_editor' classroom.pk %}" class="btn btn-secondary" id="btn-layout-editor">布局编辑</a>
-            <button type="button" class="btn btn-secondary" onclick="toggleFullScreen()" id="btn-fullscreen">全屏</button>
-            <span class="ribbon-group-label">视图</span>
-        </div>
-    </div>
-
-    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="transform">
-        <div class="ribbon-group">
-            <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
-                <input type="number" id="shiftLayoutSteps" value="1" min="1" aria-label="移动步数" style="width: 54px; padding: 4px 8px; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 6px; font-size: 12px; outline: none;" title="移动步数">
-                <button type="button" class="btn btn-secondary" id="btn-shift-layout-left">左移</button>
-                <button type="button" class="btn btn-secondary" id="btn-shift-layout-right">右移</button>
-            </div>
-            <span class="ribbon-group-label">集体左右移动</span>
-        </div>
-        <div class="ribbon-group">
-            <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
-                <button type="button" class="btn btn-secondary" id="btn-shift-layout-front">前移</button>
-                <button type="button" class="btn btn-secondary" id="btn-shift-layout-back">后移</button>
-            </div>
-            <span class="ribbon-group-label">集体前后移动</span>
-        </div>
-        <div class="ribbon-group">
-            <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
-                <button type="button" class="btn btn-secondary" id="btn-mirror-layout-lr">左右镜像</button>
-            </div>
-            <span class="ribbon-group-label">布局镜像</span>
-        </div>
-        <div class="ribbon-group">
-            <button type="button" class="btn btn-secondary" data-open-modal="shift-options-modal">移动选项</button>
-            <span class="ribbon-group-label">详细操作</span>
-        </div>
-    </div>
-
-    <div class="header-action-row office-ribbon-row ribbon-panel" data-ribbon-panel="file">
-        <div class="ribbon-group file-ribbon-group">
-            <div class="menu-dropdown" data-menu-root>
-                <button type="button" class="btn btn-secondary menu-trigger" id="btn-open-excel-import-modal"
-                    data-menu-toggle="file-import-menu" aria-haspopup="true" aria-expanded="false">导入</button>
-                <div class="menu-panel menu-panel-root" id="file-import-menu" role="menu">
-                    <div class="menu-submenu">
-                        <button type="button" class="menu-item-button menu-item-has-children"
-                            data-menu-toggle="file-import-third-party-menu" aria-haspopup="true" aria-expanded="false">
-                            第三方软件
-                        </button>
-                        <div class="menu-panel menu-panel-sub" id="file-import-third-party-menu" role="menu">
-                            <div class="menu-submenu">
-                                <button type="button" class="menu-item-button menu-item-has-children"
-                                    data-menu-toggle="file-import-third-party-seat-table-menu" aria-haspopup="true"
-                                    aria-expanded="false">
-                                    座位表
-                                </button>
-                                <div class="menu-panel menu-panel-sub" id="file-import-third-party-seat-table-menu"
-                                    role="menu">
-                                    <a href="{% url 'import_layout_excel_options_page' classroom.pk %}"
-                                        class="menu-item-link" id="btn-open-layout-import-modal"
-                                        role="menuitem">导入座位表</a>
-                                    <button type="button" class="menu-item-button" data-bsce-import-trigger="1"
-                                        role="menuitem">BSCE 导入</button>
-                                </div>
-                            </div>
-                            <div class="menu-submenu">
-                                <button type="button" class="menu-item-button menu-item-has-children"
-                                    data-menu-toggle="file-import-third-party-other-table-menu" aria-haspopup="true"
-                                    aria-expanded="false">
-                                    其他表格
-                                </button>
-                                <div class="menu-panel menu-panel-sub" id="file-import-third-party-other-table-menu"
-                                    role="menu">
-                                    <a href="{% url 'import_students_options_page' classroom.pk %}"
-                                        class="menu-item-link" id="btn-import-students" role="menuitem">导入 Excel 成绩表</a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="menu-submenu">
-                        <button type="button" class="menu-item-button menu-item-has-children"
-                            data-menu-toggle="file-import-system-menu" aria-haspopup="true" aria-expanded="false">
-                            系统操作
-                        </button>
-                        <div class="menu-panel menu-panel-sub" id="file-import-system-menu" role="menu">
-                            <button type="button" class="menu-item-button" id="btn-import-seats-file"
-                                data-seats-import-trigger="1">导入 .seats</button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <span class="ribbon-group-label">导入</span>
-        </div>
-        <div class="ribbon-group file-ribbon-group">
-            <div class="menu-dropdown" data-menu-root>
-                <button type="button" class="btn btn-secondary menu-trigger" id="btn-export"
-                    data-menu-toggle="file-export-menu" aria-haspopup="true" aria-expanded="false">导出</button>
-                <div class="menu-panel menu-panel-root" id="file-export-menu" role="menu">
-                    <div class="menu-submenu">
-                        <button type="button" class="menu-item-button menu-item-has-children"
-                            data-menu-toggle="file-export-third-party-menu" aria-haspopup="true" aria-expanded="false">
-                            第三方软件
-                        </button>
-                        <div class="menu-panel menu-panel-sub" id="file-export-third-party-menu" role="menu">
-                            <div class="menu-submenu">
-                                <button type="button" class="menu-item-button menu-item-has-children"
-                                    data-menu-toggle="file-export-third-party-seat-table-menu" aria-haspopup="true"
-                                    aria-expanded="false">
-                                    座位表
-                                </button>
-                                <div class="menu-panel menu-panel-sub" id="file-export-third-party-seat-table-menu"
-                                    role="menu">
-                                    <a href="{% url 'export_students_options_page' classroom.pk %}"
-                                        class="menu-item-link" id="btn-export-excel" role="menuitem"
-                                        data-default-filename="{{ classroom.name }}_座次图.xlsx"
-                                        data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                        data-accept-ext=".xlsx">导出排座表</a>
-                                    <a href="{% url 'export_students_svg_options_page' classroom.pk %}"
-                                        class="menu-item-link" id="btn-export-svg" role="menuitem"
-                                        data-default-filename="{{ classroom.name }}_座次图.svg"
-                                        data-accept-mime="image/svg+xml" data-accept-ext=".svg">导出 SVG</a>
-                                    <a href="{% url 'export_students_pptx_options_page' classroom.pk %}"
-                                        class="menu-item-link" id="btn-export-pptx" role="menuitem"
-                                        data-default-filename="{{ classroom.name }}_座次图.pptx"
-                                        data-accept-mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
-                                        data-accept-ext=".pptx">导出单页 PPT</a>
-                                </div>
-                            </div>
-                            <div class="menu-submenu">
-                                <button type="button" class="menu-item-button menu-item-has-children"
-                                    data-menu-toggle="file-export-third-party-other-table-menu" aria-haspopup="true"
-                                    aria-expanded="false">
-                                    其他表格
-                                </button>
-                                <div class="menu-panel menu-panel-sub" id="file-export-third-party-other-table-menu"
-                                    role="menu">
-                                    <a href="{% url 'export_group_report' classroom.pk %}" class="menu-item-link"
-                                        id="btn-export-group-report" role="menuitem" data-system-save="1"
-                                        data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
-                                        data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                                        data-accept-ext=".xlsx">导出小组登记表</a>
-                                    <a href="{% url 'export_students_csis' classroom.pk %}" class="menu-item-link"
-                                        id="btn-export-csis" role="menuitem" data-system-save="1"
-                                        data-default-filename="{{ classroom.name }}_CSIS.csls"
-                                        data-accept-mime="application/json" data-accept-ext=".csls,.json">导出 CSIS（CSLS）</a>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="menu-submenu">
-                        <button type="button" class="menu-item-button menu-item-has-children"
-                            data-menu-toggle="file-export-system-menu" aria-haspopup="true" aria-expanded="false">
-                            系统操作
-                        </button>
-                        <div class="menu-panel menu-panel-sub" id="file-export-system-menu" role="menu">
-                            <a href="{% url 'export_seats_file' classroom.pk %}" class="menu-item-link"
-                                id="btn-export-seats-file" role="menuitem" data-system-save="1"
-                                data-default-filename="{{ classroom.name }}.seats"
-                                data-accept-mime="application/octet-stream" data-accept-ext=".seats,.json">导出 .seats</a>
-                        </div>
-                    </div>
-                </div>
-            </div>
-            <span class="ribbon-group-label">导出</span>
-        </div>
-    </div>
-</div>
+{% include 'seats/partials/classroom_toolbar.html' %}
 {% endblock %}
 
 {% block content %}
-{% if sync_meta_payload.backed_up %}
+{% include 'seats/partials/wendao_dock.html' %}
+{% if sync_meta_payload.backed_up and not skip_cloud_entry_sync %}
 <div id="cloud-entry-sync-screen" class="cloud-entry-sync-screen" data-state="syncing" role="status" aria-live="polite">
     <div class="cloud-entry-sync-mark" aria-hidden="true">
         <div class="led-matrix">
@@ -251,7 +57,7 @@
     </div>
 </div>
 {% endif %}
-<div id="classroom-root" class="classroom-layout animate-fade-in{% if sync_meta_payload.backed_up %} cloud-entry-pending{% endif %}" data-move-url="{% url 'move_student' classroom.pk %}"
+<div id="classroom-root" class="classroom-layout animate-fade-in{% if sync_meta_payload.backed_up and not skip_cloud_entry_sync %} cloud-entry-pending{% endif %}" data-move-url="{% url 'move_student' classroom.pk %}"
     data-classroom-id="{{ classroom.pk }}" data-extensions-list-url="{% url 'extensions_overview' %}"
     data-cloud-backed-up="{% if sync_meta_payload.backed_up %}1{% else %}0{% endif %}"
     data-move-batch-url="{% url 'move_students_batch' classroom.pk %}"
@@ -264,7 +70,7 @@
     data-shift-layout-url="{% url 'shift_layout' classroom.pk %}"
     data-mirror-layout-url="{% url 'mirror_layout' classroom.pk %}"
     data-rename-classroom-url="{% url 'rename_classroom' classroom.pk %}" data-classroom-name="{{ classroom.name }}"
-    data-state-url="{% url 'classroom_state' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
+    data-state-url="{% url 'classroom_state' classroom.pk %}" data-door-url="{% url 'exam_doors' classroom.pk %}" data-undo-url="{% url 'undo_action' classroom.pk %}"
     data-redo-url="{% url 'redo_action' classroom.pk %}" data-set-leader-url="{% url 'set_group_leader' classroom.pk %}"
     data-toggle-fixed-seat-url="{% url 'toggle_fixed_seat' classroom.pk %}"
     data-add-student-url="{% url 'add_student' classroom.pk %}"
@@ -277,13 +83,17 @@
     data-export-excel-options-url="{% url 'export_students_options_page' classroom.pk %}"
     data-csrf="{{ csrf_token }}">
 
+    <a id="classroom-custom-sort-link" href="{% url 'classroom_custom_sort' classroom.pk %}" hidden>自定义策略设置</a>
+
     <div class="zoom-controls">
         <button type="button" class="zoom-btn" onclick="zoomOut()" title="缩小" aria-label="缩小">-</button>
         <span id="zoom-level">100%</span>
         <button type="button" class="zoom-btn" onclick="zoomIn()" title="放大" aria-label="放大">+</button>
     </div>
 
-    <section class="seat-stage">
+    {{ classroom.doors|json_script:'classroom-door-data' }}
+    <section class="seat-stage" id="classroom-door-stage">
+        <span class="classroom-door-save-status" id="classroom-door-status" role="status" aria-live="polite"></span>
         <div class="seat-grid" id="seat-grid-container">
             {% for row_seats in seat_grid %}
             <div class="seat-row">
@@ -291,11 +101,20 @@
                 {% if seat %}
                 <div class="seat cell-{{ seat.cell_type }} {% if seat.student %}occupied{% endif %} {% if seat.student and seat.group and seat.group.leader_id == seat.student.pk %}is-leader{% endif %}{% if seat.student and seat.student.is_fixed_seat %} is-fixed-seat{% endif %}"
                     data-row="{{ seat.row }}" data-col="{{ seat.col }}" data-cell-type="{{ seat.cell_type }}"
+                    tabindex="0" role="button" aria-label="第{{ seat.row }}排第{{ seat.col }}列{{ seat.get_cell_type_display }}"
                     data-student-id="{% if seat.student %}{{ seat.student.pk }}{% endif %}"
-                    data-fixed-seat="{% if seat.student and seat.student.is_fixed_seat %}1{% else %}0{% endif %}">
+                    {% if seat.student %}data-student-name="{{ seat.student.name|escape }}"
+                    data-student-sid="{{ seat.student.student_id|default:''|escape }}"
+                    data-student-gender="{{ seat.student.gender|default:'' }}"
+                    data-student-score="{{ seat.student.score|default:'0' }}"
+                    data-update-url="{% url 'update_student' classroom.pk seat.student.pk %}"{% endif %}
+                    data-fixed-seat="{% if seat.student and seat.student.is_fixed_seat %}1{% else %}0{% endif %}"{% if seat.exam_number %}
+                    data-exam-number="{{ seat.exam_number }}"{% endif %}>
+                    {% if seat.exam_number %}<span class="seat-exam-number" title="考场桌号">{{ seat.exam_number }}</span>{% endif %}
                     {% if seat.cell_type == 'seat' %}
                     {% if seat.student %}
                     <div class="seat-content" draggable="true" data-student-id="{{ seat.student.pk }}">
+                        <span class="seat-number" aria-hidden="true">{{ seat.display_number }}</span>
                         <div class="seat-name">{{ seat.student.name }}</div>
                         {% if seat.student.podium_guardian_side or seat.student.is_fixed_seat %}
                         <div class="seat-badge-row">
@@ -314,7 +133,8 @@
                         {% endif %}
                     </div>
                     {% else %}
-                    <div class="seat-info seat-coord">{{ seat.row }}-{{ seat.col }}</div>
+                    <span class="seat-number" aria-hidden="true">{{ seat.display_number }}</span>
+                    <div class="seat-info seat-coord">空座</div>
                     {% endif %}
                     {% if seat.group %}
                     <div class="seat-group-tag">{{ seat.group.name }}</div>
@@ -332,14 +152,10 @@
         </div>
     </section>
 
-    <aside class="side-panel">
+    <aside class="side-panel" data-active-tab="students">
         <div class="panel-card">
             <div class="panel-header">
                 <h3>快捷操作</h3>
-                <div class="panel-actions" id="shortcut-actions">
-                    <button type="button" class="btn btn-secondary" id="undoBtn">撤销</button>
-                    <button type="button" class="btn btn-secondary" id="redoBtn">重做</button>
-                </div>
             </div>
             <div class="tool-row">
                 <button type="button" class="btn btn-secondary" id="btn-rename-classroom">修改班级名称</button>
@@ -363,8 +179,8 @@
 
             <div class="tab-body">
                 <div class="tab-panel active" data-tab-panel="students">
-                    <div class="panel-header">
-                        <h3>未入座</h3>
+                    <div class="panel-header student-list-heading">
+                        <h3>未入座学生 <span class="student-list-count">（{{ unseated_students|length }}）</span></h3>
                         <div style="display: flex; align-items: center; gap: 8px;">
                             <span class="panel-meta" id="unseatedCount">{{ unseated_students|length }} 人</span>
                             <button type="button" class="icon-btn" id="btn-add-student" title="添加学生" style="width:24px;height:24px;font-size:16px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;">+</button>
@@ -374,6 +190,7 @@
                     <div class="unseated-list">
                         {% for student in unseated_students %}
                         <div class="unseated-item" draggable="true" data-student-id="{{ student.pk }}"
+                            data-student-name="{{ student.name|escape }}"
                             data-student-sid="{{ student.student_id|default:'' }}"
                             data-student-gender="{{ student.gender|default:'' }}"
                             data-student-score="{{ student.score|default:'0' }}"
@@ -401,6 +218,42 @@
                         <div class="empty-hint">所有学生已入座</div>
                         {% endfor %}
                     </div>
+                    {% with selected_student=students|first %}
+                    {% if selected_student %}
+                    <section class="student-detail-panel" aria-label="学生信息">
+                        <div class="student-detail-heading">
+                            <h3>学生信息</h3>
+                            <div class="student-detail-tools">
+                                <details class="student-display-menu">
+                                    <summary type="button">显示字段</summary>
+                                    <div class="student-display-options">
+                                        <label><input type="checkbox" data-student-display-toggle="student_id" checked> 学号</label>
+                                        <label><input type="checkbox" data-student-display-toggle="gender" checked> 性别</label>
+                                        <label><input type="checkbox" data-student-display-toggle="score" checked> 成绩</label>
+                                        <label><input type="checkbox" data-student-display-toggle="group" checked> 分组</label>
+                                        <label><input type="checkbox" data-student-display-toggle="seat" checked> 座位</label>
+                                    </div>
+                                </details>
+                                <button type="button" class="student-detail-edit" data-student-id="{{ selected_student.pk }}">编辑</button>
+                            </div>
+                        </div>
+                        <dl class="student-detail-grid" data-student-detail-id="{{ selected_student.pk }}" data-student-update-url="{% url 'update_student' classroom.pk selected_student.pk %}" data-student-name="{{ selected_student.name|escape }}" data-student-sid="{{ selected_student.student_id|default:''|escape }}" data-student-gender="{{ selected_student.gender|default:'' }}" data-student-score="{{ selected_student.score|default:'0' }}">
+                            <div data-student-field="name"><dt>姓名</dt><dd data-student-value="name">{{ selected_student.name }}</dd></div>
+                            <div data-student-field="gender"><dt>性别</dt><dd data-student-value="gender">{% if selected_student.gender == 'M' %}男{% elif selected_student.gender == 'F' %}女{% else %}—{% endif %}</dd></div>
+                            <div data-student-field="student_id"><dt>学号</dt><dd data-student-value="student_id">{{ selected_student.student_id|default:'—' }}</dd></div>
+                            <div data-student-field="group"><dt>分组</dt><dd data-student-value="group">{% if selected_student.assigned_seat.group %}{{ selected_student.assigned_seat.group.name }}{% else %}未分组{% endif %}</dd></div>
+                            <div data-student-field="seat"><dt>座位</dt><dd data-student-value="seat">{% if selected_student.assigned_seat %}第{{ selected_student.assigned_seat.row }}排第{{ selected_student.assigned_seat.col }}列{% else %}未入座{% endif %}</dd></div>
+                            <div data-student-field="fixed"><dt>是否固定</dt><dd data-student-value="fixed">{% if selected_student.is_fixed_seat %}是{% else %}否{% endif %}</dd></div>
+                        </dl>
+                        <div class="student-detail-note">备注 <span>—</span></div>
+                        <div class="student-detail-actions">
+                            <button type="button" class="student-detail-action" data-student-action="fixed" data-student-id="{{ selected_student.pk }}">固定座位</button>
+                            <button type="button" class="student-detail-action" data-student-action="leader" data-student-id="{{ selected_student.pk }}">设为组长</button>
+                            <button type="button" class="student-detail-action is-danger" data-student-action="unseat" data-student-id="{{ selected_student.pk }}">移出座位</button>
+                        </div>
+                    </section>
+                    {% endif %}
+                    {% endwith %}
                 </div>
 
                 <div class="tab-panel" data-tab-panel="groups">
@@ -459,8 +312,8 @@
                         <button type="button" class="btn btn-secondary" id="groupMergeBtn">合并组</button>
                     </div>
 
-                    <div class="collapsible-section">
-                        <button type="button" class="collapsible-toggle" id="groupToolsToggle">
+                    <div class="collapsible-section open">
+                        <button type="button" class="collapsible-toggle" id="groupToolsToggle" aria-expanded="true" aria-controls="groupToolsBody">
                             <svg class="collapsible-chevron" width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M9 18l6-6-6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
                             小组详情
                         </button>
@@ -493,76 +346,22 @@
 
                 <div class="tab-panel" data-tab-panel="constraints">
                     <div class="panel-header">
-                        <div>
-                            <h3>约束管理</h3>
-                            <div class="panel-note">约束会参与自动排座、手动移动后的自动修复，以及当前布局诊断。</div>
-                        </div>
+                        <h3>约束管理</h3>
+                        <a class="btn btn-primary" href="{% url 'constraint_create_page' classroom.pk %}">新建约束</a>
                     </div>
                     <div class="constraint-metrics" id="constraintMetrics">
                         <span class="constraint-metric-pill">总计 {{ constraint_metrics.total }}</span>
-                        <span class="constraint-metric-pill">启用 {{ constraint_metrics.enabled }}</span>
-                        <span class="constraint-metric-pill">停用 {{ constraint_metrics.disabled }}</span>
                         <span class="constraint-metric-pill">异常 {{ constraint_metrics.with_issues }}</span>
                     </div>
-                    <form method="post" action="{% url 'create_constraint' classroom.pk %}" class="constraint-form" id="constraintForm" data-create-url="{% url 'create_constraint' classroom.pk %}">
-                        {% csrf_token %}
-                        <input type="hidden" name="constraint_id" id="constraintIdInput" value="">
-                        <div class="constraint-form-grid">
-                            <div class="form-group">
-                                <label for="constraintTypeSelect">约束类型</label>
-                                <select name="constraint_type" id="constraintTypeSelect" required>
-                                    {% for item in constraint_types %}
-                                    <option value="{{ item.value }}">{{ item.label }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="form-group">
-                                <label for="constraintStudentSelect">学生</label>
-                                <select name="student_id" id="constraintStudentSelect" required>
-                                    {% for student in students %}
-                                    <option value="{{ student.pk }}">{{ student.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="form-group" data-constraint-field="target_student_id">
-                                <label for="constraintTargetStudentSelect">关联学生</label>
-                                <select name="target_student_id" id="constraintTargetStudentSelect">
-                                    <option value="">请选择</option>
-                                    {% for student in students %}
-                                    <option value="{{ student.pk }}">{{ student.name }}</option>
-                                    {% endfor %}
-                                </select>
-                            </div>
-                            <div class="form-group" data-constraint-field="row">
-                                <label for="constraintRowInput">行</label>
-                                <input type="number" name="row" id="constraintRowInput" placeholder="行" min="1" max="{{ classroom.rows }}">
-                            </div>
-                            <div class="form-group" data-constraint-field="col">
-                                <label for="constraintColInput">列</label>
-                                <input type="number" name="col" id="constraintColInput" placeholder="列" min="1" max="{{ classroom.cols }}">
-                            </div>
-                            <div class="form-group" data-constraint-field="distance">
-                                <label for="constraintDistanceInput">距离</label>
-                                <input type="number" name="distance" id="constraintDistanceInput" placeholder="距离" min="1" value="1">
-                            </div>
-                            <div class="form-group constraint-note-field" data-constraint-field="note">
-                                <label for="constraintNoteInput">备注</label>
-                                <input type="text" name="note" id="constraintNoteInput" placeholder="备注（可选）">
-                            </div>
-                        </div>
-                        <div class="tool-row">
-                            <button type="submit" class="btn btn-primary" id="constraintSubmitBtn">添加约束</button>
-                            <button type="button" class="btn btn-secondary" id="constraintCancelEditBtn" hidden>取消编辑</button>
-                        </div>
-                    </form>
                     <div class="constraint-toolbar">
+                        <label class="constraint-search-label" for="constraintSearchInput">搜索约束</label>
+                        <input type="search" id="constraintSearchInput" placeholder="学生姓名、规则或备注" autocomplete="off">
                         <div class="tool-grid constraint-filter-group" id="constraintFilterGroup">
                             <button type="button" class="tool-btn active" data-constraint-filter="all">全部</button>
                             <button type="button" class="tool-btn" data-constraint-filter="issues">有问题</button>
                             <button type="button" class="tool-btn" data-constraint-filter="enabled">启用中</button>
                             <button type="button" class="tool-btn" data-constraint-filter="disabled">已停用</button>
                         </div>
-                        <div class="panel-note" id="constraintFilterHint">可以筛选当前约束，并在列表中直接编辑或启停。</div>
                     </div>
                     <div class="constraint-list" id="constraintList">
                         {% for item in constraint_items %}
@@ -602,7 +401,7 @@
                                 {% endif %}
                             </div>
                             <div class="constraint-actions">
-                                <button type="button" class="btn btn-secondary" data-constraint-action="edit">编辑</button>
+                                <a class="btn btn-secondary" href="{% url 'constraint_edit_page' classroom.pk item.pk %}">编辑</a>
                                 <button type="button" class="btn btn-secondary" data-constraint-action="toggle">
                                     {% if item.enabled %}停用{% else %}启用{% endif %}
                                 </button>
@@ -763,6 +562,17 @@
             </div>
         </div>
     </aside>
+
+    <footer class="classroom-statusbar" aria-label="班级状态">
+        <span id="classroom-seated-status">已排座 {{ seated_count }}/{{ students|length }}</span>
+        <span id="classroom-unseated-status">未入座 {{ unseated_students|length }}</span>
+        <span class="classroom-status-sync" id="classroom-sync-status" data-state="checking">
+            <i aria-hidden="true"></i><span data-sync-status-label>同步状态：检查中</span>
+        </span>
+        <span class="classroom-status-spacer"></span>
+        <span>{{ classroom.name }}</span>
+        <span>本地数据已保存</span>
+    </footer>
 
     <div id="plugin-command-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="pluginCommandTitle">
         <div class="modal-content plugin-command-modal-content">
@@ -1121,7 +931,12 @@
     </div>
 </div>
 
-<script src="{% static 'js/classroom.js' %}?v=2026081510"></script>
+<script src="{% static 'js/wendao-workspace-transition.js' %}?v=2"></script>
+<script src="{% static 'js/wendao-dock.js' %}?v=23"></script>
+<script src="{% static 'js/ai_name_privacy.js' %}?v=1"></script>
+<script src="{% static 'js/ai_workspace.js' %}?v=8"></script>
+<script src="{% static 'js/classroom.js' %}?v=2026092901"></script>
+<script src="{% static 'js/classroom-doors.js' %}?v=3"></script>
 <script>
     function toggleFullScreen() {
         const doc = document;
@@ -1197,10 +1012,10 @@
             }
         });
     })();
+
 </script>
 
 {{ constraint_items|json_script:"constraint-initial-data" }}
-{{ constraint_types|json_script:"constraint-type-data" }}
 {{ sync_meta_payload|json_script:"classroom-sync-meta" }}
 
 <script>
@@ -1236,12 +1051,31 @@
         }
     }
 
+    function updateStatusbarSync(status) {
+        var statusbar = document.getElementById('classroom-sync-status');
+        if (!statusbar) return;
+        var state = status && status.state ? String(status.state) : 'checking';
+        var labels = {
+            checking: '检查中',
+            login: '未登录',
+            'not-backed-up': '未启用云同步',
+            syncing: '同步中',
+            synced: '已同步',
+            dirty: '待同步',
+            offline: '离线',
+            error: '同步失败',
+        };
+        statusbar.dataset.state = state;
+        var label = document.querySelector('[data-sync-status-label]');
+        if (label) label.textContent = '同步状态：' + (labels[state] || '检查中');
+    }
+
     function consumeAutoSyncSkipFlag() {
         var shouldSkip = false;
         try {
             var url = new URL(window.location.href);
             var cloudSyncReason = url.searchParams.get('cloud_sync');
-            if (cloudSyncReason === 'pulled' || cloudSyncReason === 'import-return') {
+            if (cloudSyncReason === 'return' || cloudSyncReason === 'pulled' || cloudSyncReason === 'import-return') {
                 shouldSkip = true;
                 url.searchParams.delete('cloud_sync');
                 window.history.replaceState(null, '', url.pathname + url.search + url.hash);
@@ -1367,9 +1201,16 @@
     }
 
     function setPillStatus(status) {
+        updateStatusbarSync(status);
         if (!pillButton) return;
         pillButton.dataset.state = status.state;
-        pillButton.disabled = status.state === 'syncing';
+        // 不使用原生 disabled：disabled 按钮会强制使用 default 光标，
+        // 在 macOS 壳中会让“点击上云”看起来像不可点击。重复点击由
+        // handlePillClick 的状态守卫处理，同时保留无障碍状态提示。
+        var isSyncing = status.state === 'syncing';
+        pillButton.disabled = false;
+        pillButton.setAttribute('aria-busy', isSyncing ? 'true' : 'false');
+        pillButton.setAttribute('aria-disabled', isSyncing ? 'true' : 'false');
         pillButton.title = status.title || status.text;
         pillButton.querySelector('.cloud-sync-pill-text').textContent = status.text;
         var icon = pillButton.querySelector('.cloud-sync-pill-icon');
@@ -1418,6 +1259,7 @@
         pillButton = document.createElement('button');
         pillButton.type = 'button';
         pillButton.className = 'cloud-sync-pill';
+        pillButton.setAttribute('aria-live', 'polite');
         pillButton.innerHTML = '<span class="cloud-sync-dot"></span><span class="cloud-sync-pill-icon" aria-hidden="true"></span><span class="cloud-sync-pill-text"></span>';
         pillButton.addEventListener('click', function (event) {
             event.preventDefault();
@@ -1495,11 +1337,21 @@
     async function syncCurrentClass(options) {
         options = options || {};
         usingLocalMode = false;
+        // 先更新按钮状态，再等待登录态/网络，避免首次“点击上云”时界面没有任何反馈。
+        setPillStatus({ state: 'syncing', text: '同步中', title: '正在准备同步到云端' });
         if (options.preflight) {
             setCloudEntryStatus('正在同步云端数据', '进入班级前先确认云端是否有更新。', 'syncing');
         }
-        if (!(await ensureLoggedIn(!options.preflight))) {
-            if (options.preflight) revealClassroomContent();
+        try {
+            if (!(await ensureLoggedIn(!options.preflight))) {
+                if (options.preflight) revealClassroomContent();
+                return;
+            }
+        } catch (error) {
+            var loginError = (error && error.message) || '云服务登录状态检查失败';
+            setPillStatus({ state: 'error', text: '同步失败，点击重试', title: loginError });
+            if (options.preflight) showEntryFailure(loginError, 'error');
+            if (!options.silent) showToast(loginError);
             return;
         }
         setPillStatus({ state: 'syncing', text: '同步中', title: '正在同步到云端' });
@@ -1526,8 +1378,8 @@
             }
             if (row.status === 'conflict') {
                 updateSyncMeta(row.sync_meta || row);
-                setPillStatus({ state: 'error', text: '云端有冲突', title: '云端版本更新，请从头像菜单恢复或处理冲突' });
-                showToast('云端存在冲突，请先从云恢复');
+                setPillStatus({ state: 'error', text: '云端有冲突', title: row.message || '本地与云端均有修改，请先导出本地副本再处理冲突' });
+                showToast('双方修改已保留，请先导出本地副本再处理冲突');
                 if (options.preflight) showEntryFailure(row.message || '本地与云端均有修改，请稍后处理冲突。', 'error');
                 return;
             }
@@ -1548,7 +1400,11 @@
         }
         if (pillButton && pillButton.dataset.state === 'syncing') return;
         if (!syncMeta.backed_up || syncMeta.has_local_changes || (pillButton && (pillButton.dataset.state === 'error' || pillButton.dataset.state === 'offline'))) {
-            syncCurrentClass({ force: false, deviceId: 'classroom-manual' });
+            syncCurrentClass({ force: false, deviceId: 'classroom-manual' }).catch(function (error) {
+                var message = (error && error.message) || '同步失败';
+                setPillStatus({ state: 'error', text: '同步失败，点击重试', title: message });
+                showToast(message);
+            });
             return;
         }
         showToast('云端已是最新');
@@ -1601,7 +1457,7 @@
                 }
                 if (matched && matched.status === 'conflict') {
                     updateSyncMeta(matched.sync_meta || matched);
-                    setPillStatus({ state: 'error', text: '云端有冲突', title: '云端版本更新，请从头像菜单恢复或处理冲突' });
+                    setPillStatus({ state: 'error', text: '云端有冲突', title: matched.message || '本地与云端均有修改，请先导出本地副本再处理冲突' });
                     return null;
                 }
                 return syncCurrentClass({ auto: true, silent: true, deviceId: 'classroom-login' });

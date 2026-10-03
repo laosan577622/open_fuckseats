@@ -2,12 +2,14 @@
 {% load static %}
 
 {% block title %}{{ classroom.name }} - 布局轮换选项{% endblock %}
+{% block body_class %}workflow-page-body transform-options-body{% endblock %}
+{% block global_back_button %}{% endblock %}
 
 {% block actions %}
-<div class="header-action-row office-ribbon-row">
-    <div class="ribbon-group">
-        <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回排座</a>
-        <span class="ribbon-group-label">导航</span>
+<div class="context-toolbar-row">
+    <div class="toolbar-group">
+        <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return" class="btn btn-secondary">返回班级</a>
+        <span class="toolbar-group-label">导航</span>
     </div>
 </div>
 {% endblock %}
@@ -110,7 +112,7 @@ document.getElementById('shiftForm').addEventListener('submit', function(e) {
     .then(r => r.json())
     .then(data => {
         if (data.status === 'success') {
-            window.location.href = "{% url 'classroom_detail' classroom.pk %}";
+            window.location.href = "{% url 'classroom_detail' classroom.pk %}?cloud_sync=return";
         } else {
             notify(data.message || '操作失败');
         }

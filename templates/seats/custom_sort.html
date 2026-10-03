@@ -1,21 +1,19 @@
 {% extends 'base.html' %}
 
 {% block title %}{% if classroom_group %}自动排序模式{% else %}自定义策略设置{% endif %} - {% if classroom_group %}{{ classroom_group.name }}{% else %}{{ classroom.name }}{% endif %}{% endblock %}
-
-{% block ribbon_tabs %}
-<button type="button" class="ribbon-tab active" data-ribbon-tab="custom-sort">{% if classroom_group %}自动排序模式{% else %}自定义策略设置{% endif %}</button>
-{% endblock %}
+{% block body_class %}workflow-page-body custom-sort-body{% endblock %}
+{% block global_back_button %}{% endblock %}
 
 {% block actions %}
-<div class="ribbon-panels">
-    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="custom-sort">
-        <div class="ribbon-group">
+<div class="context-toolbar-panels">
+    <div class="context-toolbar-row context-toolbar-panel active" data-toolbar-panel="custom-sort">
+        <div class="toolbar-group">
             {% if classroom_group %}
             <a href="{% url 'classroom_group_detail' classroom_group.pk %}" class="btn btn-secondary">返回班级组</a>
             {% else %}
-            <a href="{% url 'classroom_detail' classroom.pk %}" class="btn btn-secondary">返回班级</a>
+            <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return" class="btn btn-secondary">返回班级</a>
             {% endif %}
-            <span class="ribbon-group-label">导航</span>
+            <span class="toolbar-group-label">导航</span>
         </div>
     </div>
 </div>

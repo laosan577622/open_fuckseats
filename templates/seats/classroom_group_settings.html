@@ -1,17 +1,15 @@
 {% extends 'base.html' %}
 
 {% block title %}{{ classroom_group.name }} - 班级组设置{% endblock %}
-
-{% block ribbon_tabs %}
-<button type="button" class="ribbon-tab active" data-ribbon-tab="group-settings">班级组设置</button>
-{% endblock %}
+{% block body_class %}group-workspace-body group-settings-body{% endblock %}
+{% block global_back_button %}{% endblock %}
 
 {% block actions %}
-<div class="ribbon-panels">
-    <div class="header-action-row office-ribbon-row ribbon-panel active" data-ribbon-panel="group-settings">
-        <div class="ribbon-group">
+<div class="context-toolbar-panels">
+    <div class="context-toolbar-row context-toolbar-panel active" data-toolbar-panel="group-settings">
+        <div class="toolbar-group">
             <a href="{% url 'classroom_group_detail' classroom_group.pk %}" class="btn btn-secondary">返回班级管理</a>
-            <span class="ribbon-group-label">导航</span>
+            <span class="toolbar-group-label">导航</span>
         </div>
     </div>
 </div>

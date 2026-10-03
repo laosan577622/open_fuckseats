@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}{{ classroom.name }} · 考场模式{% endblock %}
+{% block body_class %}workflow-page-body exam-body{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/exam.css' %}?v=9">{% endblock %}
+{% block actions %}
+<div class="context-toolbar-panels"><div class="context-toolbar-row context-toolbar-panel active">
+    <a class="btn btn-secondary" href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return">返回教室</a>
+    <a class="btn btn-secondary" href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return#classroom-door-stage">门设置</a>
+</div></div>
+{% endblock %}
+{% block content %}
+<main class="exam-workspace">
+    <nav class="exam-steps" aria-label="考场流程">
+        {% if plan.kind == 'restore' %}
+        <a class="exam-step {% if stage == 'movement' %}is-current{% else %}is-done{% endif %}" href="{% url 'exam_stage' classroom.pk saved.pk 'movement' %}"><b>1</b>恢复演示</a>
+        <a class="exam-step {% if stage == 'result' %}is-current{% elif applied %}is-done{% endif %}" href="{% url 'exam_stage' classroom.pk saved.pk 'result' %}"><b>2</b>应用恢复</a>
+        <a class="exam-step {% if stage == 'print' %}is-current{% endif %}" href="{% url 'exam_stage' classroom.pk saved.pk 'print' %}"><b>3</b>打印清单</a>
+        {% else %}
+        <a class="exam-step {% if not saved %}is-current{% else %}is-done{% endif %}" href="{% url 'exam_setup' classroom.pk %}"><b>1</b>考场布局</a>
+        {% if saved %}
+        <a class="exam-step {% if stage == 'movement' %}is-current{% else %}is-done{% endif %}" href="{% url 'exam_stage' classroom.pk saved.pk 'movement' %}"><b>2</b>搬运演示</a>
+        <a class="exam-step {% if stage == 'numbering' %}is-current{% elif stage == 'result' or stage == 'print' or applied %}is-done{% endif %}" href="{% url 'exam_stage' classroom.pk saved.pk 'numbering' %}"><b>3</b>桌号</a>
+        <a class="exam-step {% if stage == 'result' %}is-current{% elif applied %}is-done{% endif %}" href="{% url 'exam_stage' classroom.pk saved.pk 'result' %}"><b>4</b>应用</a>
+        <a class="exam-step {% if stage == 'print' %}is-current{% endif %}" href="{% url 'exam_stage' classroom.pk saved.pk 'print' %}"><b>5</b>打印</a>
+        {% else %}
+        <span class="exam-step"><b>2</b>搬运演示</span><span class="exam-step"><b>3</b>桌号</span>
+        <span class="exam-step"><b>4</b>应用</span><span class="exam-step"><b>5</b>打印</span>
+        {% endif %}
+        {% endif %}
+    </nav>
+    <p id="exam-error" role="alert" hidden></p>
+    {% block exam_content %}{% endblock %}
+</main>
+<script src="{% static 'js/exam.js' %}?v=13" defer></script>
+{% endblock %}

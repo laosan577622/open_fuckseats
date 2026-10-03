@@ -107,53 +107,13 @@
     }
 
     function showWelcomeFinale(onDone) {
-        var overlay = document.getElementById('welcome-finale-overlay');
-        if (!overlay) { if (typeof onDone === 'function') onDone(); return; }
-        if (overlay.dataset.busy === '1') return;
-
-        function resetAnimations() {
-            var els = overlay.querySelectorAll('.wf-backdrop, .wf-card, .wf-emblem-ring, .wf-emblem-seat, .wf-emblem-glow, .wf-line, .wf-title, .wf-progress, .wf-progress-bar, .wf-skip, .wf-conf');
-            els.forEach(function (el) {
-                el.style.animation = 'none';
-                void el.offsetWidth;
-                el.style.animation = '';
-            });
-        }
-
-        var finished = false;
-        var timer = null;
-
-        function play() {
-            overlay.dataset.busy = '1';
-            overlay.style.display = '';
-            overlay.classList.remove('wf-hidden');
-            resetAnimations();
-
-            function finish() {
-                if (finished) return;
-                finished = true;
-                if (timer) { clearTimeout(timer); timer = null; }
-                overlay.classList.add('wf-hidden');
-                if (window.PopupManager) PopupManager.notifyDismissed('welcome_finale');
-                setTimeout(function () {
-                    overlay.style.display = 'none';
-                    overlay.dataset.busy = '';
-                    if (typeof onDone === 'function') onDone();
-                }, 620);
-            }
-
-            timer = setTimeout(finish, 11000);
-            var skipBtn = document.getElementById('wf-skip');
-            if (skipBtn) { skipBtn.onclick = finish; }
-        }
-
-        if (window.PopupManager) PopupManager.request('welcome_finale', play);
-        else play();
+        if (window.WelcomeFinale) WelcomeFinale.play().then(onDone);
+        else if (onDone) onDone();
     }
 
     function checkDataSharingPrompt() {
         if (consumeAfterOnboardingPromptRequest()) {
-            showWelcomeFinale(function () { requestDataSharingPrompt(700); });
+            requestDataSharingPrompt(700);
             return;
         }
         if (shouldDeferForOnboarding()) return;

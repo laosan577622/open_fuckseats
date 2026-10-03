@@ -89,6 +89,1178 @@ select {
     min-width: 0;
 }
 
+/* 原生菜单层：桌面壳与浏览器预览共用。 */
+.native-menu-bar {
+    position: absolute;
+    top: 6px;
+    left: 250px;
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    z-index: 12;
+}
+
+.native-menu-brand {
+    display: none;
+    align-items: center;
+    min-height: 28px;
+    padding: 3px 12px 3px 0;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 650;
+    white-space: nowrap;
+}
+
+
+.native-menu-trigger {
+    min-height: 26px;
+    padding: 3px 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.native-menu-trigger:hover,
+.native-menu-trigger.is-open {
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), .1);
+    color: var(--primary-color);
+}
+
+.native-menu-popover {
+    position: fixed;
+    min-width: 190px;
+    padding: 5px;
+    border: 1px solid rgba(15, 23, 42, .12);
+    border-radius: 10px;
+    background: rgba(255, 255, 255, .98);
+    box-shadow: 0 14px 35px rgba(15, 23, 42, .18);
+    z-index: 5000;
+}
+
+.native-menu-item {
+    display: flex;
+    width: 100%;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 32px;
+    padding: 6px 10px;
+    border: 0;
+    border-radius: 7px;
+    background: transparent;
+    color: var(--text-primary);
+    font-size: 13px;
+    text-align: left;
+    cursor: pointer;
+}
+
+.native-menu-item:hover:not(:disabled) {
+    background: var(--primary-color);
+    color: #fff;
+}
+
+.native-menu-item:disabled {
+    color: var(--text-secondary);
+    opacity: .55;
+    cursor: not-allowed;
+}
+
+body[data-app-shell="webview"] .native-menu-bar {
+    display: inline-flex;
+}
+
+/* 桌面壳中，菜单栏承接系统级菜单，页面动作保留在上下文工具栏。 */
+body[data-app-shell="webview"] .context-toolbar-shell {
+    border-color: transparent;
+    background: transparent;
+    box-shadow: none;
+}
+
+body[data-app-shell="webview"] .header-actions {
+    padding-left: 2px;
+}
+
+body[data-app-shell="webview"] .app-header {
+    background: rgba(249, 251, 255, .94);
+}
+
+body[data-app-platform="macos"] .native-menu-bar {
+    left: 260px;
+}
+
+body[data-app-platform="windows"] .native-menu-bar {
+    left: 210px;
+}
+
+/* macOS 桌面端使用 pywebview 提供的系统菜单栏，不在窗口内容里重复绘制一份。 */
+body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar {
+    display: none !important;
+}
+
+body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-titlebar-sync,
+body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-titlebar-settings,
+body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
+    display: none !important;
+}
+
+/* 平台调性：同一套业务布局使用不同的窗口密度和圆角语言。 */
+body[data-app-shell="webview"][data-app-platform="windows"] .settings-app,
+body[data-app-shell="webview"][data-app-platform="windows"] .classroom-layout {
+    border-radius: 0;
+}
+
+body[data-app-shell="webview"][data-app-platform="windows"] .settings-rail,
+body[data-app-shell="webview"][data-app-platform="windows"] .panel-card {
+    border-radius: 6px;
+}
+
+body[data-app-shell="webview"][data-app-platform="macos"] .settings-rail,
+body[data-app-shell="webview"][data-app-platform="macos"] .panel-card {
+    border-radius: 12px;
+}
+
+body[data-app-shell="webview"][data-app-platform="macos"] .classroom-detail-body .seat-stage {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+body[data-app-shell="webview"][data-app-platform="macos"] .layout-editor-body .seat-stage {
+    padding-left: 8px;
+    padding-right: 8px;
+}
+
+body[data-app-shell="webview"][data-app-platform="windows"] .layout-editor-body .panel-card {
+    border-radius: 6px;
+}
+
+body[data-app-shell="webview"][data-app-platform="macos"] .settings-page-body .settings-canvas {
+    padding-right: 28px;
+}
+
+body[data-app-shell="webview"][data-app-platform="windows"] .settings-page-body .settings-canvas {
+    padding-right: 20px;
+}
+
+body[data-app-shell="webview"] .workflow-page-body main.form-page {
+    min-height: calc(100vh - var(--header-height) - 12px);
+    padding-top: 18px;
+}
+
+body[data-app-shell="webview"][data-app-platform="windows"] .workflow-page-body .form-card {
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(15, 23, 42, .08);
+}
+
+body[data-app-shell="webview"][data-app-platform="macos"] .workflow-page-body .form-card {
+    border-radius: 14px;
+    box-shadow: 0 12px 32px rgba(15, 23, 42, .10);
+}
+
+body[data-app-shell="webview"] .group-workspace-body .classroom-group-detail-page,
+body[data-app-shell="webview"] .group-workspace-body .classroom-group-settings-page,
+body[data-app-shell="webview"] .group-workspace-body .classroom-group-students-page,
+body[data-app-shell="webview"] .group-workspace-body .group-add-page {
+    min-height: calc(100vh - var(--header-height) - 12px);
+    padding-top: 18px;
+}
+
+body[data-app-shell="webview"][data-app-platform="windows"] .group-workspace-body .card,
+body[data-app-shell="webview"][data-app-platform="windows"] .group-workspace-body .panel-card {
+    border-radius: 6px;
+}
+
+body[data-app-shell="webview"][data-app-platform="macos"] .group-workspace-body .card,
+body[data-app-shell="webview"][data-app-platform="macos"] .group-workspace-body .panel-card {
+    border-radius: 14px;
+}
+
+body[data-app-shell="webview"] .custom-sort-body .custom-sort-page,
+body[data-app-shell="webview"] .extensions-page-body main,
+body[data-app-shell="webview"] .plugin-ui-page-body main {
+    min-height: calc(100vh - var(--header-height) - 12px);
+    padding-top: 18px;
+}
+
+body[data-app-shell="webview"][data-app-platform="windows"] .custom-sort-body .custom-sort-card,
+body[data-app-shell="webview"][data-app-platform="windows"] .extensions-page-body .card,
+body[data-app-shell="webview"][data-app-platform="windows"] .plugin-ui-page-body .card {
+    border-radius: 6px;
+}
+
+body[data-app-shell="webview"][data-app-platform="macos"] .custom-sort-body .custom-sort-card,
+body[data-app-shell="webview"][data-app-platform="macos"] .extensions-page-body .card,
+body[data-app-shell="webview"][data-app-platform="macos"] .plugin-ui-page-body .card {
+    border-radius: 14px;
+}
+
+@media (max-width: 760px) {
+    .native-menu-bar {
+        display: none !important;
+    }
+}
+
+/* 浏览器预览也采用 Windows 桌面版的三段式标题栏，避免班级标题与菜单重叠。 */
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] {
+    overflow: hidden;
+    --header-height: 130px;
+    padding-top: 130px;
+    background: #f5f6f8;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .app-header {
+    height: 130px;
+    min-height: 130px;
+    padding: 0;
+    background: #fff;
+    border-bottom: 1px solid #dfe3e8;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .header-content {
+    display: grid;
+    grid-template-rows: 38px 28px 64px;
+    gap: 0;
+    height: 100%;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .header-titlebar {
+    grid-row: 1;
+    height: 38px;
+    padding: 0 16px;
+    border-bottom: 1px solid #edf0f4;
+    background: #fbfcfd;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .logo {
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: #172033;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .logo-svg {
+    width: 20px;
+    height: 20px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .logo-meta small,
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] #btn-open-tour-titlebar,
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .cloud-header-area {
+    display: none !important;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 190px;
+    margin-left: 10px;
+    margin-right: auto;
+    line-height: 1.2;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta strong {
+    font-size: 13px;
+    font-weight: 650;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta small {
+    display: block;
+    margin-top: 2px;
+    color: #7b8493;
+    font-size: 10px;
+}
+
+/* Windows 标题栏使用参考图的应用名 + 当前班级标题，不重复显示旧版品牌胶囊。 */
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .logo-meta,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .logo-meta {
+    display: none !important;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta strong::before,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta strong::before {
+    content: "不想排座位 - ";
+    font-weight: 650;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta small,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta small {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-bar {
+    top: 38px;
+    left: 16px;
+    right: 0;
+    height: 28px;
+    padding-left: 0;
+    gap: 0;
+    align-items: stretch;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-brand {
+    display: inline-flex;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-trigger {
+    min-height: 28px;
+    padding: 3px 12px;
+    border-radius: 0;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .context-toolbar-shell {
+    grid-row: 3;
+    min-height: 64px;
+    height: 64px;
+    padding: 0 20px;
+    border: 0;
+    border-top: 1px solid #e8ebf0;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .header-actions {
+    gap: 0;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-row {
+    height: 63px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-arrange .quick-arrange-form {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-arrange-select {
+    width: 170px;
+    min-width: 170px;
+    min-height: 38px;
+    padding: 0 28px 0 12px;
+    border: 1px solid #d6dce5;
+    border-radius: 6px;
+    background: #fff;
+    color: #243047;
+    font-size: 13px;
+    font-weight: 550;
+    cursor: pointer;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #243047;
+    font-size: 13px;
+    font-weight: 550;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-button:hover {
+    background: #edf3ff;
+    color: #0a59f7;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-menu-trigger {
+    min-width: 78px;
+    padding-right: 28px;
+    border: 1px solid #d6dce5;
+    background: #fff;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-menu-trigger:hover,
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-menu.open .classroom-toolbar-menu-trigger {
+    border-color: rgba(10, 89, 247, .34);
+    background: #eef5ff;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] #btn-auto-arrange {
+    min-height: 38px;
+    padding: 0 22px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-divider {
+    width: 1px;
+    height: 28px;
+    flex: 0 0 1px;
+    background: #e0e4ea;
+}
+
+/* 班级工作区：以参考图中的桌面应用结构为基线，保留原有座位网格与业务 DOM。 */
+body.classroom-detail-body[data-app-shell="webview"] {
+    overflow: hidden;
+    --header-height: 130px;
+    padding-top: 130px;
+    background: #f5f6f8;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .app-header {
+    height: 130px;
+    min-height: 130px;
+    padding: 0;
+    background: rgba(255, 255, 255, .97);
+    border-bottom: 1px solid #dfe3e8;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .header-content {
+    display: grid;
+    grid-template-rows: 38px 28px 64px;
+    gap: 0;
+    height: 100%;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .header-titlebar {
+    grid-row: 1;
+    height: 38px;
+    padding: 0 16px;
+    border-bottom: 1px solid #edf0f4;
+    background: #fbfcfd;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .logo {
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: #172033;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .logo-svg {
+    width: 20px;
+    height: 20px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .logo-meta small,
+body.classroom-detail-body[data-app-shell="webview"] #btn-open-tour-titlebar,
+body.classroom-detail-body[data-app-shell="webview"] .cloud-header-area {
+    display: none !important;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-titlebar-meta {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    min-width: 190px;
+    margin-left: 10px;
+    margin-right: auto;
+    line-height: 1.2;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-titlebar-meta strong {
+    font-size: 13px;
+    font-weight: 650;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-titlebar-meta small {
+    display: block;
+    margin-top: 2px;
+    color: #7b8493;
+    font-size: 10px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .native-menu-bar {
+    top: 38px;
+    left: 142px;
+    right: 0;
+    height: 28px;
+    padding-left: 0;
+    gap: 0;
+    align-items: stretch;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .native-menu-trigger {
+    min-height: 28px;
+    padding: 3px 12px;
+    border-radius: 0;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .context-toolbar-shell {
+    grid-row: 3;
+    min-height: 64px;
+    height: 64px;
+    padding: 0 20px;
+    border: 0;
+    border-top: 1px solid #e8ebf0;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .header-actions {
+    gap: 0;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-row {
+    height: 63px;
+    gap: 14px;
+    overflow: visible;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-group {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    flex: 0 0 auto;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange .quick-arrange-form {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-arrange-select {
+    width: 170px;
+    min-width: 170px;
+    min-height: 38px;
+    padding: 0 28px 0 12px;
+    border: 1px solid #d6dce5;
+    border-radius: 6px;
+    opacity: 1;
+    pointer-events: auto;
+    background: #fff;
+    color: #243047;
+    font-size: 13px;
+    font-weight: 550;
+    cursor: pointer;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 34px;
+    padding: 0 14px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    color: #243047;
+    font-size: 13px;
+    font-weight: 550;
+    text-decoration: none;
+    cursor: pointer;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-button:hover {
+    background: #edf3ff;
+    color: #0a59f7;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-menu-trigger {
+    min-width: 78px;
+    padding-right: 28px;
+    border: 1px solid #d6dce5;
+    background: #fff;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-menu-trigger:hover,
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-menu.open .classroom-toolbar-menu-trigger {
+    border-color: rgba(10, 89, 247, .34);
+    background: #eef5ff;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] #btn-auto-arrange {
+    min-height: 38px;
+    padding: 0 22px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-divider {
+    width: 1px;
+    height: 28px;
+    flex: 0 0 1px;
+    background: #e0e4ea;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-overflow {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .classroom-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 27vw);
+    gap: 0;
+    height: calc(100vh - 130px);
+    margin: 0;
+    padding: 0;
+    background: #fff;
+    border: 0;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat-stage {
+    justify-content: center;
+    align-items: flex-start;
+    padding: 28px 28px 44px;
+    background: #fff;
+    overflow: auto;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat-grid {
+    gap: 12px;
+    padding: 8px 12px 32px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat-column-labels,
+body.classroom-detail-body[data-app-shell="webview"] .seat-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat-column-labels {
+    margin-bottom: -2px;
+    color: #727c8b;
+    font-size: 11px;
+    text-align: center;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat-column-labels span {
+    width: clamp(72px, 6.5vw, 102px);
+    flex: 0 0 clamp(72px, 6.5vw, 102px);
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat-column-labels .seat-column-label-spacer {
+    width: 56px;
+    flex-basis: 56px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat-row-label {
+    width: 56px;
+    flex: 0 0 56px;
+    color: #727c8b;
+    font-size: 11px;
+    text-align: right;
+    white-space: nowrap;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat {
+    width: clamp(72px, 6.5vw, 102px);
+    height: clamp(62px, 6vw, 82px);
+    flex: 0 0 clamp(72px, 6.5vw, 102px);
+    border: 1px solid #d6dce5;
+    border-radius: 6px;
+    background: #fff;
+    box-shadow: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat.occupied {
+    border-color: #d6dce5;
+    background: #fff;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat.selected {
+    border: 2px solid #0a59f7;
+    background: #eef5ff;
+    box-shadow: 0 0 0 1px rgba(10, 89, 247, .12);
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat.cell-podium {
+    background: #dfe3e8;
+    border: 0;
+    border-radius: 3px;
+    color: #434c59;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat.cell-aisle {
+    background: #e9edf2;
+    border: 0;
+    border-radius: 3px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat-name {
+    font-size: 13px;
+    font-weight: 600;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .seat-group-tag {
+    right: 4px;
+    bottom: 3px;
+    font-size: 9px;
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .side-panel {
+    gap: 0;
+    max-height: none;
+    height: 100%;
+    padding: 0;
+    overflow: hidden;
+    border-left: 1px solid #e0e4ea;
+    background: #fff;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-card:first-child {
+    display: flex;
+    order: 2;
+    flex: 0 0 auto;
+    padding: 16px 20px 20px;
+    border: 0;
+    border-top: 1px solid #e4e8ed;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+/* 快捷操作只属于学生面板；切到小组、标签、约束或文件时让内容占满侧栏，
+   避免底部快捷区覆盖长表单和列表。功能仍保留，切回学生即可继续使用。 */
+body.classroom-detail-body[data-app-shell="webview"] .side-panel[data-active-tab]:not([data-active-tab="students"]) > .panel-card:first-child {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-tabs {
+    order: 1;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-tabs {
+    padding: 0;
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #fff;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-tabs .tab-body {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overflow-x: hidden;
+    overscroll-behavior: contain;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .tab-header {
+    height: 48px;
+    flex: 0 0 48px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    padding: 5px 12px;
+    gap: 4px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    flex-wrap: nowrap;
+    scrollbar-width: none;
+    border-bottom: 1px solid #e4e8ed;
+    background: #fff;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .tab-header::-webkit-scrollbar {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .tab-btn {
+    height: 36px;
+    min-width: 56px;
+    flex: 0 0 auto;
+    padding: 0 8px;
+    border: 1px solid #dfe4ec;
+    border-radius: 8px;
+    background: #f7f9fc;
+    border-bottom: 1px solid #dfe4ec;
+    color: #586273;
+    font-size: 13px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .tab-btn.active {
+    border-color: rgba(10, 89, 247, .34);
+    color: #0a59f7;
+    background: #eef5ff;
+    box-shadow: 0 2px 5px rgba(10, 89, 247, .08);
+}
+
+/* 窄窗口响应式：座位区与侧栏上下排列，侧栏内部独立滚动，避免 Tab 被固定顶栏或长列表覆盖。 */
+@media (max-width: 1100px) {
+    body.classroom-detail-body[data-app-shell="webview"] {
+        overflow: auto;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .classroom-layout {
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+        min-height: calc(100vh - var(--header-height));
+        overflow: visible;
+        padding: 0 0 20px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .seat-stage {
+        min-height: min(58vh, 620px);
+        max-height: none;
+        padding: 24px 20px 48px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .side-panel {
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        overflow: visible;
+        border-top: 1px solid #e0e4ea;
+        border-left: 0;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-card:first-child {
+        order: 2;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-tabs {
+        order: 1;
+        flex: 0 0 min(640px, calc(100vh - var(--header-height) - 24px));
+        height: min(640px, calc(100vh - var(--header-height) - 24px));
+        min-height: 420px;
+        max-height: calc(100vh - var(--header-height) - 24px);
+        overflow: hidden;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-tabs .tab-body {
+        max-height: none;
+        overflow-y: auto;
+    }
+}
+
+/* Windows 参考图的侧栏从工具栏下方开始，工具栏只占左侧工作区。 */
+body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
+body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
+    width: calc(100% - 430px);
+    margin-right: 430px;
+}
+
+body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
+body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .classroom-layout {
+    grid-template-columns: minmax(0, 1fr);
+    padding-right: 430px;
+}
+
+body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
+body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
+    position: fixed;
+    z-index: 1001;
+    top: 76px;
+    right: 0;
+    bottom: 0;
+    width: min(430px, 32vw);
+    height: auto;
+    max-height: none;
+    border-top: 0;
+    border-left: 1px solid #e0e4ea;
+}
+
+@media (max-width: 1100px) {
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
+        width: auto;
+        margin-right: 0;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .classroom-layout {
+        padding-right: 0;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
+        position: static;
+        width: auto;
+        border-top: 1px solid #e0e4ea;
+        border-left: 0;
+    }
+}
+
+@media (max-width: 760px) {
+    body.classroom-detail-body[data-app-shell="webview"] .native-menu-bar {
+        display: none !important;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .classroom-layout {
+        padding-bottom: max(20px, env(safe-area-inset-bottom));
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .seat-stage {
+        min-height: 52vh;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-tabs {
+        min-height: 380px;
+        flex-basis: min(580px, calc(100vh - var(--header-height) - 20px));
+        height: min(580px, calc(100vh - var(--header-height) - 20px));
+        max-height: calc(100vh - var(--header-height) - 20px);
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .tab-header {
+        top: 0;
+        padding-left: 10px;
+        padding-right: 10px;
+    }
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .tab-body {
+    padding: 18px 20px 28px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .tab-panel[data-tab-panel="students"] {
+    gap: 0;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-list-heading h3,
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-heading h3 {
+    font-size: 15px;
+    font-weight: 650;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-list-count {
+    color: #596477;
+    font-weight: 500;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] #unseatedSearch {
+    min-height: 34px;
+    margin: 10px 0;
+    border-radius: 6px;
+    border-color: #d6dce5;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .unseated-item {
+    min-height: 38px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #edf0f3;
+    border-radius: 0;
+    background: transparent;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-panel {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid #e4e8ed;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-display-menu {
+    position: relative;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-display-menu summary {
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid #d6dce5;
+    border-radius: 8px;
+    background: #fff;
+    color: #415066;
+    font-size: 12px;
+    line-height: 30px;
+    cursor: pointer;
+    list-style: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-display-menu summary::-webkit-details-marker {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-display-options {
+    position: absolute;
+    z-index: 12;
+    top: 36px;
+    right: 0;
+    display: grid;
+    min-width: 116px;
+    gap: 7px;
+    padding: 10px;
+    border: 1px solid #dfe4eb;
+    border-radius: 10px;
+    background: #fff;
+    box-shadow: 0 10px 26px rgba(15, 23, 42, .14);
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-display-options label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    white-space: nowrap;
+    color: #415066;
+    font-size: 12px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-edit {
+    min-height: 30px;
+    padding: 0 12px;
+    border: 1px solid #d6dce5;
+    border-radius: 6px;
+    background: #f7f9fc;
+    color: #415066;
+    cursor: pointer;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-grid {
+    display: grid;
+    gap: 9px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-grid > div {
+    display: grid;
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 12px;
+    font-size: 13px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-grid dt,
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-note {
+    color: #7a8492;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-grid dd {
+    color: #202b3c;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-note {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #edf0f3;
+    font-size: 13px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-note span {
+    margin-left: 12px;
+    color: #202b3c;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-action {
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid #d6dce5;
+    border-radius: 6px;
+    background: #fff;
+    color: #354256;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+body.classroom-detail-body[data-app-shell="webview"] .student-detail-action.is-danger {
+    color: #a13737;
+}
+
+/* 详情页使用同一套卡片圆角，避免 Windows 直角与 macOS 小圆角混用。 */
+body.classroom-detail-body .classroom-layout,
+body.classroom-detail-body .side-panel > .panel-card,
+body.classroom-detail-body .student-detail-edit,
+body.classroom-detail-body .student-detail-action,
+body.classroom-detail-body .student-display-menu summary {
+    border-radius: 14px;
+}
+
+body.classroom-detail-body .tab-header {
+    border-radius: 12px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-layout {
+    border-radius: 0;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] {
+    --header-height: 72px;
+    padding-top: 72px;
+    background: #e9eef5;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
+    height: 72px;
+    min-height: 72px;
+    background: rgba(255, 255, 255, .84);
+    border: 0;
+    border-radius: 14px 14px 0 0;
+    box-shadow: 0 8px 24px rgba(31, 41, 55, .12);
+    backdrop-filter: saturate(160%) blur(18px);
+    -webkit-backdrop-filter: saturate(160%) blur(18px);
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-content {
+    display: block;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
+    height: 72px;
+    padding: 0 24px;
+    border: 0;
+    background: transparent;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell {
+    position: absolute;
+    top: 0;
+    left: 350px;
+    right: 24px;
+    height: 72px;
+    min-height: 72px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout {
+    height: calc(100vh - 72px);
+    border-radius: 0 0 14px 14px;
+    box-shadow: 0 12px 32px rgba(31, 41, 55, .14);
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-toolbar-row {
+    justify-content: flex-start;
+}
+
 .logo {
     display: flex;
     align-items: center;
@@ -130,22 +1302,7 @@ select {
     display: none;
 }
 
-.titlebar-badge {
-    height: 24px;
-    padding: 0 10px;
-    border-radius: 999px;
-    border: 1px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.2);
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.12);
-    color: var(--primary-color);
-    font-size: 11px;
-    font-weight: 600;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    flex: 0 0 auto;
-}
-
-.header-ribbon {
+.context-toolbar-shell {
     border: 1px solid rgba(15, 23, 42, 0.08);
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.86);
@@ -156,49 +1313,6 @@ select {
     gap: 8px;
     padding: 4px 6px;
     min-width: 0;
-}
-
-.ribbon-tab-strip {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    background: rgba(15, 23, 42, 0.04);
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    border-radius: 8px;
-    padding: 2px;
-}
-
-.ribbon-tab {
-    height: 26px;
-    border: none;
-    padding: 0 10px;
-    border-radius: 8px;
-    background: transparent;
-    color: var(--text-secondary);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.3s var(--spring-fast),
-                color 0.3s var(--spring-fast),
-                box-shadow 0.3s var(--spring-fast),
-                transform 0.25s var(--spring-fast);
-}
-
-.ribbon-tab.active {
-    background: #fff;
-    color: var(--primary-color);
-    box-shadow: 0 2px 8px rgba(var(--primary-color-rgb, 10, 89, 247), 0.12), 0 0 0 1px rgba(var(--primary-color-rgb, 10, 89, 247), 0.04);
-    transform: scale(1.02);
-}
-
-.ribbon-tab:not(.active):not(:disabled):hover {
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.06);
-    color: var(--text-primary);
-}
-
-.ribbon-tab:disabled {
-    opacity: 0.55;
-    cursor: not-allowed;
 }
 
 .header-actions {
@@ -226,24 +1340,24 @@ select {
     font-weight: 600;
 }
 
-.header-action-row {
+.context-toolbar-row {
     display: flex;
     align-items: center;
     gap: 8px;
     min-width: 0;
 }
 
-.office-ribbon-row {
+.context-toolbar-row {
     align-items: center;
 }
 
-.ribbon-panels {
+.context-toolbar-panels {
     width: 100%;
     min-width: 0;
     display: grid;
 }
 
-.ribbon-panel {
+.context-toolbar-panel {
     grid-area: 1 / 1;
     display: flex;
     align-items: center;
@@ -263,11 +1377,11 @@ select {
     z-index: 1;
 }
 
-.ribbon-panel::-webkit-scrollbar {
+.context-toolbar-panel::-webkit-scrollbar {
     display: none;
 }
 
-.ribbon-panel.active {
+.context-toolbar-panel.active {
     opacity: 1;
     visibility: visible;
     filter: blur(0px);
@@ -276,11 +1390,11 @@ select {
     z-index: 2;
 }
 
-.ribbon-panel[data-ribbon-panel="file"] {
+.context-toolbar-panel[data-toolbar-panel="file"] {
     overflow: visible;
 }
 
-.ribbon-group {
+.toolbar-group {
     display: flex;
     flex-direction: row;
     align-items: center;
@@ -290,23 +1404,23 @@ select {
     border-right: 1px solid rgba(15, 23, 42, 0.12);
 }
 
-.ribbon-group:last-child {
+.toolbar-group:last-child {
     border-right: none;
     margin-right: 0;
     padding-right: 0;
 }
 
-.ribbon-group>*:not(.ribbon-group-label) {
+.toolbar-group>*:not(.toolbar-group-label) {
     display: flex;
     align-items: center;
     gap: 8px;
 }
 
-.ribbon-group-label {
+.toolbar-group-label {
     display: none;
 }
 
-.ribbon-group-danger .ribbon-group-label {
+.toolbar-group-danger .toolbar-group-label {
     color: #c6423a;
 }
 
@@ -577,7 +1691,7 @@ input:focus {
     animation-delay: calc(var(--card-index, 0) * 0.06s + 0.1s);
 }
 
-.ribbon-panels {
+.context-toolbar-panels {
     opacity: 0;
     animation: fadeIn 0.4s var(--spring-gentle) 0.08s forwards;
 }
@@ -1596,6 +2710,20 @@ input:focus {
 .snapshot-actions {
     display: flex;
     gap: 8px;
+    flex: 0 0 auto;
+    align-items: center;
+}
+
+.snapshot-item > span {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
+
+.snapshot-actions .btn {
+    white-space: nowrap;
+    word-break: keep-all;
+    flex: 0 0 auto;
 }
 
 .constraint-form {
@@ -1654,6 +2782,21 @@ input:focus {
     gap: 8px;
     flex-wrap: wrap;
 }
+
+[data-tab-panel="constraints"] > .panel-header { align-items: center; }
+[data-tab-panel="constraints"] > .panel-header .btn { flex: 0 0 auto; white-space: nowrap; }
+[data-tab-panel="constraints"] .constraint-metrics { margin-top: 12px; margin-bottom: 0; }
+[data-tab-panel="constraints"] .constraint-metric-pill { background: #edf4ff; }
+[data-tab-panel="constraints"] .constraint-toolbar { display: flex; flex-direction: column; align-items: stretch; gap: 10px; margin-top: 18px; }
+[data-tab-panel="constraints"] .constraint-search-label { color: #59677a; font-size: 12px; font-weight: 600; }
+[data-tab-panel="constraints"] #constraintSearchInput { width: 100%; min-height: 38px; padding: 8px 12px; border: 1px solid #d8e0eb; border-radius: 10px; background: #fff; color: #1d1d1f; font-size: 13px; }
+[data-tab-panel="constraints"] #constraintSearchInput:focus { outline: none; border-color: #0a59f7; box-shadow: 0 0 0 3px #0a59f720; }
+[data-tab-panel="constraints"] .constraint-filter-group { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; margin-top: 2px; }
+[data-tab-panel="constraints"] .constraint-filter-group .tool-btn { min-width: 0; }
+[data-tab-panel="constraints"] .constraint-item { display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; padding: 12px; border-radius: 12px; box-shadow: none; }
+[data-tab-panel="constraints"] .constraint-item:hover { transform: none; border-color: #cbd9ed; box-shadow: none; }
+[data-tab-panel="constraints"] .constraint-actions { flex-direction: row; gap: 6px; margin-left: 0; }
+[data-tab-panel="constraints"] .constraint-actions .btn { padding: 5px 10px; border-radius: 999px; }
 
 .constraint-item {
     align-items: flex-start;
@@ -1895,11 +3038,11 @@ input:focus {
     color: var(--text-secondary);
 }
 
-.file-ribbon-group {
+.file-toolbar-group {
     overflow: visible;
 }
 
-.group-export-ribbon-panel {
+.group-export-toolbar-panel {
     overflow: visible;
 }
 
@@ -2434,9 +3577,7 @@ input:focus {
     gap: 0 !important;
 }
 
-.home-dashboard-body .header-ribbon,
-.home-dashboard-body .ribbon-tab-strip,
-.home-dashboard-body .titlebar-badge {
+.home-dashboard-body .context-toolbar-shell {
     display: none;
 }
 
@@ -2525,10 +3666,6 @@ input:focus {
     transition: background .18s ease, transform .18s ease, opacity .18s ease;
 }
 
-.home-titlebar-sync:hover {
-    background: #084dcc;
-}
-
 .home-titlebar-sync:active {
     transform: scale(.97);
 }
@@ -2557,6 +3694,248 @@ input:focus {
     min-height: calc(100vh - 52px);
     padding: 26px 24px 42px;
     background: #fbfcfe;
+}
+
+.home-shell {
+    display: flex;
+    width: 100%;
+    min-height: calc(100vh - 52px);
+    background: #fbfcfe;
+}
+
+.home-sidebar {
+    display: flex;
+    width: 214px;
+    flex: 0 0 214px;
+    flex-direction: column;
+    gap: 4px;
+    padding: 22px 14px 16px;
+    border-right: 1px solid rgba(15, 23, 42, .08);
+    background: rgba(247, 249, 253, .9);
+    pointer-events: auto;
+}
+
+/* 首页左栏是应用级导航，不应跟随内容滚动；内容区为它预留固定宽度。 */
+body.home-dashboard-body .home-shell {
+    display: block;
+}
+
+body.home-dashboard-body .home-sidebar {
+    position: fixed;
+    z-index: 30;
+    top: var(--header-height, 52px);
+    left: 0;
+    bottom: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    box-sizing: border-box;
+}
+
+body.home-dashboard-body .home-dashboard-page {
+    width: calc(100% - 214px);
+    min-height: calc(100vh - var(--header-height, 52px));
+    margin-left: 214px;
+    box-sizing: border-box;
+}
+
+body.home-dashboard-body .home-sidebar a {
+    pointer-events: auto;
+}
+
+body.home-dashboard-body [id^="home-"] {
+    scroll-margin-top: calc(var(--header-height, 52px) + 16px);
+}
+
+.home-archive-section {
+    margin-top: 28px;
+}
+
+.home-archive-card {
+    display: flex;
+    min-height: 88px;
+    align-items: center;
+    gap: 14px;
+    padding: 18px 20px;
+    border: 1px solid rgba(15, 23, 42, .09);
+    border-radius: var(--radius-card, 12px);
+    background: rgba(255, 255, 255, .9);
+    color: var(--text-secondary, #64748b);
+}
+
+.home-archive-card svg {
+    width: 24px;
+    height: 24px;
+    flex: 0 0 auto;
+    color: #8a96a8;
+}
+
+.home-sidebar-item {
+    display: flex;
+    min-height: 34px;
+    align-items: center;
+    gap: 10px;
+    padding: 0 11px;
+    border-radius: 8px;
+    color: #4b5567;
+    font-size: 13px;
+    font-weight: 600;
+    text-decoration: none;
+    transition: background .18s ease, color .18s ease;
+}
+
+.home-sidebar-item:hover {
+    color: #0a59f7;
+    background: rgba(10, 89, 247, .07);
+}
+
+.home-sidebar-item.is-active {
+    color: #0a59f7;
+    background: rgba(10, 89, 247, .12);
+}
+
+.home-sidebar-icon {
+    display: grid;
+    width: 20px;
+    height: 20px;
+    flex: 0 0 20px;
+    place-items: center;
+    color: currentColor;
+    font-size: 16px;
+    font-weight: 500;
+}
+
+.home-sidebar-icon svg {
+    width: 18px;
+    height: 18px;
+    display: block;
+}
+
+.home-sidebar-subitem {
+    min-height: 31px;
+    padding-left: 18px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.home-sidebar-subitem small {
+    margin-left: auto;
+    color: #8a96a8;
+    font-size: 11px;
+}
+
+.home-sidebar-divider {
+    height: 1px;
+    margin: 16px 8px 10px;
+    background: rgba(15, 23, 42, .08);
+}
+
+.home-sidebar-label {
+    padding: 0 11px 5px;
+    color: #8a96a8;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.home-sidebar-spacer {
+    min-height: 20px;
+    flex: 1 1 auto;
+}
+
+.home-sidebar-sync {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 8px 4px;
+    padding: 10px 8px;
+    border-top: 1px solid rgba(15, 23, 42, .08);
+    color: #374151;
+}
+
+.home-sidebar-sync-dot {
+    width: 8px;
+    height: 8px;
+    flex: 0 0 8px;
+    border-radius: 50%;
+    background: #22c55e;
+    box-shadow: 0 0 0 3px rgba(34, 197, 94, .12);
+}
+
+.home-sidebar-sync div {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: 2px;
+}
+
+.home-sidebar-sync strong {
+    font-size: 11px;
+}
+
+.home-sidebar-sync small {
+    color: #8a96a8;
+    font-size: 10px;
+}
+
+.home-sidebar-settings {
+    margin-top: 2px;
+}
+
+.home-shell > .home-dashboard-page {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+@media (max-width: 820px) {
+    body.home-dashboard-body .home-sidebar {
+        width: 62px;
+        flex-basis: 62px;
+        padding-left: 9px;
+        padding-right: 9px;
+    }
+
+    body.home-dashboard-body .home-dashboard-page {
+        width: calc(100% - 62px);
+        margin-left: 62px;
+    }
+
+    .home-sidebar {
+        width: 62px;
+        flex-basis: 62px;
+        align-items: center;
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+
+    .home-sidebar-item {
+        width: 42px;
+        justify-content: center;
+        padding: 0;
+    }
+
+    .home-sidebar-item > span:not(.home-sidebar-icon),
+    .home-sidebar-item small,
+    .home-sidebar-label,
+    .home-sidebar-sync div {
+        display: none;
+    }
+
+    .home-sidebar-sync {
+        justify-content: center;
+        margin-left: 0;
+        margin-right: 0;
+        padding-left: 0;
+        padding-right: 0;
+    }
+}
+
+body[data-app-platform="windows"] .home-sidebar {
+    background: #f2f4f8;
+}
+
+body[data-app-platform="macos"] .home-sidebar {
+    background: rgba(247, 249, 253, .72);
+    backdrop-filter: saturate(160%) blur(16px);
+    -webkit-backdrop-filter: saturate(160%) blur(16px);
 }
 
 .home-dashboard-hero {
@@ -2807,6 +4186,110 @@ input:focus {
     color: #64748b;
     font-size: 12px;
     white-space: nowrap;
+}
+
+.home-recent-section {
+    width: 100%;
+    margin-bottom: 30px;
+}
+
+.home-section-more {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: #0a59f7;
+    font-size: 12px;
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.home-section-more span {
+    font-size: 20px;
+    line-height: 12px;
+}
+
+.home-recent-list {
+    display: grid;
+    gap: 8px;
+}
+
+.home-recent-item {
+    display: flex;
+    min-height: 64px;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 12px;
+    border: 1px solid rgba(100, 116, 139, .16);
+    border-radius: 10px;
+    color: #172033;
+    background: rgba(255, 255, 255, .86);
+    text-decoration: none;
+    transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
+}
+
+.home-recent-item:hover {
+    border-color: rgba(10, 89, 247, .22);
+    background: #fff;
+    box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
+}
+
+.home-recent-thumb {
+    display: grid;
+    width: 48px;
+    height: 34px;
+    flex: 0 0 48px;
+    place-items: center;
+    border-radius: 5px;
+    color: #7d899b;
+    background: linear-gradient(145deg, #eef1f5, #dfe4ea);
+}
+
+.home-recent-thumb svg {
+    width: 38px;
+    height: 28px;
+}
+
+.home-recent-copy {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.home-recent-copy strong {
+    overflow: hidden;
+    color: #1d2738;
+    font-size: 13px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.home-recent-copy small {
+    color: #7a8492;
+    font-size: 11px;
+}
+
+.home-recent-item em {
+    padding: 3px 7px;
+    border-radius: 5px;
+    color: #0a59f7;
+    background: #e9f1ff;
+    font-size: 10px;
+    font-style: normal;
+    white-space: nowrap;
+}
+
+.home-recent-item em.is-muted {
+    color: #6b7482;
+    background: #eef1f4;
+}
+
+.home-recent-more {
+    color: #7d8795;
+    font-size: 16px;
+    letter-spacing: 2px;
 }
 
 .home-outline-action {
@@ -5415,16 +6898,12 @@ input:focus {
         pointer-events: auto;
     }
 
-    .header-ribbon {
+    .context-toolbar-shell {
         grid-template-columns: 1fr;
         gap: 4px;
     }
 
-    .ribbon-tab-strip {
-        display: none;
-    }
-
-    .header-action-row {
+    .context-toolbar-row {
         flex-wrap: nowrap;
         justify-content: flex-start;
     }
@@ -5439,12 +6918,12 @@ input:focus {
         min-width: 160px;
     }
 
-    .ribbon-group {
+    .toolbar-group {
         padding-right: 6px;
         margin-right: 0;
     }
 
-    .ribbon-group-label {
+    .toolbar-group-label {
         display: none;
     }
 
@@ -5465,9 +6944,6 @@ input:focus {
         padding: 22px 14px 8px;
     }
 
-    .titlebar-badge {
-        display: none;
-    }
 }
 
 
@@ -6006,7 +7482,7 @@ body.cloud-login-locked {
 }
 
 
-.plugin-ribbon-quick-group {
+.plugin-quick-group {
     min-width: min(56vw, 740px);
     overflow: hidden;
 }
@@ -6219,7 +7695,7 @@ body.cloud-login-locked {
 }
 
 @media (max-width: 980px) {
-    .plugin-ribbon-quick-group {
+    .plugin-quick-group {
         display: none;
     }
 }
@@ -8063,7 +9539,7 @@ html.has-touch-ui body {
 
 html.has-touch-ui .seat-stage,
 html.has-touch-ui .side-panel,
-html.has-touch-ui .ribbon-panel,
+html.has-touch-ui .context-toolbar-panel,
 html.has-touch-ui .header-actions,
 html.has-touch-ui .modal,
 html.has-touch-ui .modal-content {
@@ -8071,7 +9547,7 @@ html.has-touch-ui .modal-content {
 }
 
 html.has-touch-ui .btn,
-html.has-touch-ui .ribbon-tab,
+html.has-touch-ui .context-toolbar-row,
 html.has-touch-ui .menu-item-link,
 html.has-touch-ui .menu-item-button,
 html.has-touch-ui .tab-btn,
@@ -8137,7 +9613,7 @@ html.has-touch-ui body.touch-dragging .unseated-item {
         border-radius: 14px;
     }
 
-    .ribbon-tab-strip {
+    .context-toolbar-panels {
         display: flex;
         flex: 1 1 auto;
         min-width: 0;
@@ -8149,34 +9625,34 @@ html.has-touch-ui body.touch-dragging .unseated-item {
         -webkit-overflow-scrolling: touch;
     }
 
-    .ribbon-tab-strip::-webkit-scrollbar {
+    .context-toolbar-panels::-webkit-scrollbar {
         display: none;
     }
 
-    .ribbon-tab {
+    .context-toolbar-row {
         flex: 0 0 auto;
         min-height: 38px;
         padding: 0 14px;
         scroll-snap-align: start;
     }
 
-    .header-ribbon {
+    .context-toolbar-shell {
         border-radius: 14px;
         padding: 6px;
     }
 
     .header-actions,
-    .ribbon-panel {
+    .context-toolbar-panel {
         overflow-x: auto;
         overflow-y: hidden;
         scroll-snap-type: x proximity;
     }
 
-    .ribbon-panel[data-ribbon-panel="file"] {
+    .context-toolbar-panel[data-toolbar-panel="file"] {
         overflow: visible;
     }
 
-    .ribbon-group {
+    .toolbar-group {
         flex: 0 0 auto;
         scroll-snap-align: start;
     }
@@ -8371,14 +9847,14 @@ html.has-touch-ui body.touch-dragging .unseated-item {
         display: none;
     }
 
-    .ribbon-tab-strip {
+    .context-toolbar-panels {
         display: flex;
         overflow-x: auto;
         scrollbar-width: none;
         -webkit-overflow-scrolling: touch;
     }
 
-    .ribbon-tab-strip::-webkit-scrollbar {
+    .context-toolbar-panels::-webkit-scrollbar {
         display: none;
     }
 
@@ -8440,6 +9916,314 @@ html.has-touch-ui body.touch-dragging .unseated-item {
 
     .seat::before {
         display: none;
+    }
+}
+
+/* 放在全局响应式规则之后，确保 macOS 窗口的桌面布局规则不会重新覆盖窄窗口策略。 */
+@media (max-width: 1100px) {
+    body.classroom-detail-body[data-app-shell="webview"] .classroom-layout {
+        grid-template-columns: minmax(0, 1fr) !important;
+        height: auto !important;
+        min-height: calc(100vh - var(--header-height));
+        overflow: visible;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .side-panel {
+        height: auto !important;
+        max-height: none !important;
+        overflow: visible;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-tabs {
+        height: min(640px, calc(100vh - var(--header-height) - 24px));
+        max-height: calc(100vh - var(--header-height) - 24px);
+        overflow: hidden;
+    }
+}
+
+/*
+ * 浏览器 Windows 版与桌面窗口共用同一套班级详情密度。
+ * 之前这里只给 webview 写了右侧栏规则，浏览器命中全局响应式规则后，
+ * 学生详情会退化成普通 block，导致标签和值逐行拉开、操作区被推到很远。
+ * 这组规则保持 Windows 参考图的「中间座位区 + 固定右侧栏」结构，
+ * 在窄窗口上下排列时也继续使用紧凑的定义列表和独立滚动。
+ */
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(330px, 27vw);
+    gap: 0;
+    height: calc(100vh - 130px);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #fff;
+    border: 0;
+    border-radius: 0;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .seat-stage {
+    justify-content: center;
+    align-items: flex-start;
+    min-width: 0;
+    padding: 28px 28px 44px;
+    background: #fff;
+    overflow: auto;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    height: 100%;
+    min-width: 0;
+    max-height: none;
+    padding: 0;
+    overflow: hidden;
+    border-left: 1px solid #e0e4ea;
+    background: #fff;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-card:first-child {
+    display: flex;
+    order: 2;
+    flex: 0 0 auto;
+    padding: 16px 20px 20px;
+    border: 0;
+    border-top: 1px solid #e4e8ed;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel[data-active-tab]:not([data-active-tab="students"]) > .panel-card:first-child {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-tabs {
+    order: 1;
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    padding: 0;
+    overflow: hidden;
+    gap: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+    background: #fff;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-tabs .tab-header {
+    height: 48px;
+    flex: 0 0 48px;
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 4px;
+    padding: 5px 12px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    border-bottom: 1px solid #e4e8ed;
+    border-radius: 0;
+    background: #fff;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-tabs .tab-header::-webkit-scrollbar {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn {
+    height: 36px;
+    min-width: 56px;
+    flex: 0 0 auto;
+    padding: 0 8px;
+    border: 1px solid #dfe4ec;
+    border-radius: 8px;
+    background: #f7f9fc;
+    color: #586273;
+    font-size: 13px;
+    line-height: 34px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn.active {
+    border-color: rgba(10, 89, 247, .34);
+    background: #eef5ff;
+    color: #0a59f7;
+    box-shadow: 0 2px 5px rgba(10, 89, 247, .08);
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-tabs .tab-body {
+    display: flex;
+    flex: 1 1 auto;
+    min-height: 0;
+    flex-direction: column;
+    padding: 18px 20px 28px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .tab-panel[data-tab-panel="students"] {
+    gap: 0;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-list-heading h3,
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-heading h3 {
+    font-size: 15px;
+    font-weight: 650;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] #unseatedSearch {
+    min-height: 34px;
+    margin: 10px 0;
+    border-radius: 6px;
+    border-color: #d6dce5;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .unseated-item {
+    min-height: 38px;
+    padding: 8px 10px;
+    border-bottom: 1px solid #edf0f3;
+    border-radius: 0;
+    background: transparent;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-panel {
+    margin-top: 22px;
+    padding-top: 18px;
+    border-top: 1px solid #e4e8ed;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 14px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-display-menu summary {
+    min-height: 30px;
+    padding: 0 10px;
+    border: 1px solid #d6dce5;
+    border-radius: 8px;
+    background: #fff;
+    color: #415066;
+    font-size: 12px;
+    line-height: 30px;
+    list-style: none;
+    cursor: pointer;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-display-menu summary::-webkit-details-marker {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-edit {
+    min-height: 30px;
+    padding: 0 12px;
+    border: 1px solid #d6dce5;
+    border-radius: 6px;
+    background: #f7f9fc;
+    color: #415066;
+    cursor: pointer;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-grid {
+    display: grid;
+    gap: 9px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-grid > div {
+    display: grid;
+    grid-template-columns: 70px minmax(0, 1fr);
+    gap: 12px;
+    font-size: 13px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-grid dt,
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-note {
+    color: #7a8492;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-grid dd {
+    color: #202b3c;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-note {
+    margin-top: 14px;
+    padding-top: 12px;
+    border-top: 1px solid #edf0f3;
+    font-size: 13px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-note span {
+    margin-left: 12px;
+    color: #202b3c;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 18px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-action {
+    min-height: 32px;
+    padding: 0 10px;
+    border: 1px solid #d6dce5;
+    border-radius: 6px;
+    background: #fff;
+    color: #354256;
+    font-size: 12px;
+    cursor: pointer;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-action.is-danger {
+    color: #a13737;
+}
+
+/* 窄窗口仍是 Windows 版，不切回移动端大字号；只把内容上下排列并保留内部滚动。 */
+@media (max-width: 1100px) {
+    body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] {
+        overflow: auto;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-layout {
+        grid-template-columns: minmax(0, 1fr);
+        height: auto;
+        min-height: calc(100vh - 130px);
+        overflow: visible;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .seat-stage {
+        min-height: min(58vh, 620px);
+        padding: 24px 20px 48px;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel {
+        height: auto;
+        min-height: 0;
+        max-height: none;
+        overflow: visible;
+        border-top: 1px solid #e0e4ea;
+        border-left: 0;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-tabs {
+        flex: 0 0 min(640px, calc(100vh - 154px));
+        height: min(640px, calc(100vh - 154px));
+        min-height: 420px;
+        max-height: calc(100vh - 154px);
     }
 }
 
@@ -8519,6 +10303,11 @@ html.has-touch-ui body.touch-dragging .unseated-item {
     cursor: pointer;
     box-shadow: 0 8px 18px rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
     transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+}
+
+.cloud-sync-pill:not(:disabled) {
+    cursor: pointer !important;
+    pointer-events: auto;
 }
 
 .cloud-sync-pill:disabled {
@@ -9158,4 +10947,2732 @@ body.cloud-connectivity-locked {
 
 @media (prefers-reduced-motion: reduce) {
     .theme-ripple-overlay { display: none; }
+}
+
+/* Windows 桌面版侧栏跨过工具栏右侧，从菜单栏下沿开始。 */
+@media (min-width: 1101px) {
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
+        top: 76px !important;
+        right: 0 !important;
+        bottom: 0 !important;
+        height: auto !important;
+        width: min(430px, 32vw) !important;
+    }
+}
+
+/* 原生窗口模式不再绘制“桌面背景 + 内嵌小窗口”的展示壳。pywebview/系统窗口
+ * 已经提供标题栏、阴影和窗口按钮，页面内容直接占满当前窗口，避免套壳感。 */
+@media (min-width: 1101px) {
+    /* Windows 班级页：右侧栏与座位区采用同一网格的“并排占位”，不再
+       用固定层覆盖内容。工具栏和座位区都为侧栏预留同一宽度。 */
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"],
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] {
+        --desktop-side-width: min(430px, 32vw);
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
+        width: calc(100% - var(--desktop-side-width));
+        margin-right: var(--desktop-side-width);
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .classroom-layout {
+        grid-template-columns: minmax(0, 1fr);
+        width: 100%;
+        padding-right: var(--desktop-side-width);
+        overflow: hidden;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
+        position: fixed;
+        top: 76px;
+        right: 0;
+        bottom: 46px;
+        width: var(--desktop-side-width);
+        height: auto;
+        max-height: none;
+        z-index: 1001;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .seat-stage,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .seat-stage {
+        min-width: 0;
+        max-width: 100%;
+    }
+
+    /* 信息较多的座位使用可压缩的两行结构，分数与小组标签各占独立区域，
+       避免在网页端窄格中相互覆盖。 */
+    body.classroom-detail-body[data-app-platform="windows"] .seat-content {
+        min-width: 0;
+        padding: 5px 4px 14px;
+        gap: 1px;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-name,
+    body.classroom-detail-body[data-app-platform="windows"] .seat-info,
+    body.classroom-detail-body[data-app-platform="windows"] .seat-badge-row {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-name {
+        line-height: 1.25;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-badge-row {
+        flex-wrap: nowrap;
+        gap: 2px;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-badge-row > * {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-info {
+        line-height: 1.15;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-group-tag {
+        left: 4px;
+        right: 4px;
+        bottom: 2px;
+        max-width: calc(100% - 8px);
+        overflow: hidden;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    /* 所有单元格都保持可选中/右键编辑语义，讲台与过道也显示焦点态。 */
+    body.classroom-detail-body[data-app-platform="windows"] .seat.cell-podium,
+    body.classroom-detail-body[data-app-platform="macos"] .seat.cell-podium,
+    body.classroom-detail-body[data-app-platform="windows"] .seat.cell-aisle,
+    body.classroom-detail-body[data-app-platform="macos"] .seat.cell-aisle,
+    body.classroom-detail-body[data-app-platform="windows"] .seat.cell-empty,
+    body.classroom-detail-body[data-app-platform="macos"] .seat.cell-empty {
+        cursor: pointer;
+    }
+
+    body.classroom-detail-body .seat.cell-podium.selected,
+    body.classroom-detail-body .seat.cell-aisle.selected,
+    body.classroom-detail-body .seat.cell-empty.selected {
+        border: 2px solid #0a59f7;
+        box-shadow: 0 0 0 1px rgba(10, 89, 247, .12);
+    }
+
+    /* 座位网格滚动区域为内容让路，固定状态栏不再压住最后一排。 */
+    body.classroom-detail-body[data-app-platform="windows"] .seat-stage {
+        padding-bottom: 52px !important;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"],
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"],
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"],
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] {
+        --mac-window-left: 0px;
+        --mac-window-right: 0px;
+        --mac-window-top: 0px;
+        --mac-window-bottom: 0px;
+        min-height: 100vh;
+        padding-top: 0;
+        overflow: hidden;
+        background: #f5f6f8;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
+        top: 0;
+        left: 0;
+        right: 0;
+        border-radius: 0;
+        box-shadow: 0 1px 6px rgba(31, 41, 55, .08);
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
+        display: none;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-shell,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-app,
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout,
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root {
+        left: 0;
+        right: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-statusbar {
+        left: 0;
+        right: 0;
+        border-radius: 0;
+    }
+
+    /* 末尾覆盖旧的 fixed 侧栏规则，确保其不会回到工具栏上方。 */
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"],
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] {
+        --desktop-side-width: min(430px, 32vw);
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
+        width: calc(100% - var(--desktop-side-width));
+        margin-right: var(--desktop-side-width);
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .classroom-layout {
+        grid-template-columns: minmax(0, 1fr);
+        width: 100%;
+        padding-right: var(--desktop-side-width);
+        overflow: hidden;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
+        position: fixed;
+        top: 76px;
+        right: 0;
+        bottom: 46px;
+        width: var(--desktop-side-width);
+        height: auto;
+        max-height: none;
+        z-index: 1001;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-stage {
+        min-width: 0;
+        max-width: 100%;
+        padding-bottom: 52px !important;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-content {
+        min-width: 0;
+        padding: 5px 4px 14px;
+        gap: 1px;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-name,
+    body.classroom-detail-body[data-app-platform="windows"] .seat-info,
+    body.classroom-detail-body[data-app-platform="windows"] .seat-badge-row {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-badge-row {
+        flex-wrap: nowrap;
+        gap: 2px;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-group-tag {
+        left: 4px;
+        right: 4px;
+        bottom: 2px;
+        max-width: calc(100% - 8px);
+        overflow: hidden;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.classroom-detail-body .seat.cell-podium,
+    body.classroom-detail-body .seat.cell-aisle,
+    body.classroom-detail-body .seat.cell-empty {
+        cursor: pointer;
+    }
+
+    body.classroom-detail-body .seat.cell-podium.selected,
+    body.classroom-detail-body .seat.cell-aisle.selected,
+    body.classroom-detail-body .seat.cell-empty.selected {
+        border: 2px solid #0a59f7;
+        box-shadow: 0 0 0 1px rgba(10, 89, 247, .12);
+    }
+
+    /* 旧版标签与文件能力继续保留；空间不足时由 tab-header 自身横向滚动，
+       不再通过 display:none 静默砍掉入口。 */
+    body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn[data-tab="tags"],
+    body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn[data-tab="files"],
+    body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn[data-tab="tags"],
+    body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn[data-tab="files"] {
+        display: inline-flex !important;
+    }
+}
+
+/* macOS 班级窗口：按参考图还原为带交通灯、左侧教室导航和右侧详情栏的独立窗口。 */
+@media (min-width: 1101px) {
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] {
+        --mac-window-left: 82px;
+        --mac-window-right: 82px;
+        --mac-window-top: 47px;
+        --mac-window-bottom: 75px;
+        overflow: hidden;
+        padding-top: 0;
+        min-height: 100vh;
+        background:
+            radial-gradient(ellipse at 12% 46%, rgba(40, 100, 164, .72), transparent 34%),
+            radial-gradient(ellipse at 84% 42%, rgba(53, 115, 66, .66), transparent 38%),
+            linear-gradient(135deg, #6d9dcc 0%, #c6d7e8 44%, #6e9f77 100%);
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
+        top: var(--mac-window-top);
+        left: var(--mac-window-left);
+        right: var(--mac-window-right);
+        height: 66px;
+        min-height: 66px;
+        padding: 0;
+        overflow: hidden;
+        border-radius: 14px 14px 0 0;
+        background: rgba(255, 255, 255, .91);
+        box-shadow: 0 8px 24px rgba(31, 41, 55, .16);
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-content {
+        display: block;
+        height: 66px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
+        position: relative;
+        height: 66px;
+        padding: 0 24px;
+        border: 0;
+        background: transparent;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
+        content: "";
+        position: absolute;
+        top: 26px;
+        left: 18px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ff5f57;
+        box-shadow: 24px 0 #febc2e, 48px 0 #28c840;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar,
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] #btn-open-tour-titlebar,
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
+        display: none !important;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-titlebar-meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        min-width: 210px;
+        margin-left: 118px;
+        margin-right: auto;
+        line-height: 1.2;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-titlebar-meta strong {
+        color: #263143;
+        font-size: 16px;
+        font-weight: 650;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-titlebar-meta small {
+        display: block;
+        margin-top: 4px;
+        color: #7a8492;
+        font-size: 12px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell {
+        position: absolute;
+        top: 0;
+        left: 500px;
+        right: 0;
+        width: auto;
+        height: 66px;
+        min-height: 66px;
+        margin: 0;
+        padding: 0 24px 0 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-actions {
+        height: 66px;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-toolbar-row {
+        height: 66px;
+        justify-content: flex-start;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-toolbar-divider {
+        height: 30px;
+        background: #e3e7ec;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout {
+        position: fixed;
+        top: calc(var(--mac-window-top) + 66px);
+        right: var(--mac-window-right);
+        bottom: var(--mac-window-bottom);
+        left: var(--mac-window-left);
+        width: auto;
+        height: auto;
+        min-height: 0;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        border-radius: 0 0 14px 0;
+        background: #fff;
+        box-shadow: 0 12px 32px rgba(31, 41, 55, .16);
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-stage {
+        justify-content: center;
+        align-items: flex-start;
+        padding: 20px 24px 38px;
+        background: #fff;
+        overflow: auto;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat {
+        height: clamp(58px, 6vw, 72px);
+        border-radius: 6px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .side-panel {
+        position: static;
+        width: auto;
+        height: 100%;
+        border-left: 1px solid #e0e4ea;
+        border-top: 0;
+        border-radius: 0 0 14px 0;
+    }
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .side-panel > .panel-card:first-child {
+        border-radius: 0;
+    }
+}
+
+/* 参考图级别的桌面窗口细节：浏览器预览也绘制 Windows 标题栏控制区，
+ * 这样同一套业务页面在浏览器和桌面壳中保持几何一致。 */
+.browser-window-controls {
+    display: flex;
+    align-items: stretch;
+    align-self: stretch;
+    margin-left: auto;
+    flex: 0 0 auto;
+}
+
+.browser-window-control {
+    position: relative;
+    width: 46px;
+    height: 38px;
+    display: block;
+}
+
+.browser-window-control::before,
+.browser-window-control::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    background: #263143;
+}
+
+.browser-window-minimize::before { width: 10px; height: 1px; }
+.browser-window-maximize::before { width: 10px; height: 10px; border: 1px solid #263143; background: transparent; }
+.browser-window-close::before,
+.browser-window-close::after { width: 12px; height: 1px; }
+.browser-window-close::before { transform: translate(-50%, -50%) rotate(45deg); }
+.browser-window-close::after { transform: translate(-50%, -50%) rotate(-45deg); }
+.browser-window-control:hover { background: #edf3ff; }
+.browser-window-close:hover { background: #d13438; }
+.browser-window-close:hover::before,
+.browser-window-close:hover::after { background: #fff; }
+
+body[data-app-shell="webview"] .browser-window-controls,
+body[data-app-platform="macos"] .browser-window-controls {
+    display: none;
+}
+
+/* Windows 参考图：座位格是紧凑的直角桌面单元，不使用网页卡片的大圆角。 */
+body.classroom-detail-body[data-app-platform="windows"] .seat-stage,
+body.classroom-detail-body[data-app-platform="windows"] .seat-grid {
+    position: relative;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat-stage {
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    padding: 16px 28px 24px;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat-grid {
+    gap: 12px;
+    width: max-content;
+    min-width: 100%;
+    padding: 0 0 22px;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat-row {
+    gap: 12px;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat {
+    width: 100px;
+    height: 80px;
+    flex: 0 0 100px;
+    border: 1px solid #d6dce5;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: none;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat.occupied {
+    border-color: #0a59f7;
+    background: #f7fbff;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat.selected {
+    border-width: 2px;
+    box-shadow: 0 0 0 1px rgba(10, 89, 247, .12);
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat-column-labels {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat-row-label {
+    width: 50px;
+    flex: 0 0 50px;
+    color: #586273;
+    font-size: 13px;
+    text-align: left;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat-number {
+    display: block;
+    color: #6e7785;
+    font-size: 12px;
+    line-height: 1.1;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat-name {
+    font-size: 14px;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat-info.seat-coord {
+    color: #9aa3af;
+    font-size: 12px;
+    display: none;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat-group-tag {
+    right: 4px;
+    bottom: 3px;
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-size: 10px;
+}
+
+/* 所有非首页页面提供稳定的返回入口；它是普通路由链接，不依赖浏览器历史。 */
+.global-back-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 30px;
+    padding: 0 12px;
+    border: 1px solid #d6dce5;
+    border-radius: 7px;
+    background: #fff;
+    color: #354256;
+    font-size: 12px;
+    font-weight: 550;
+    text-decoration: none;
+    white-space: nowrap;
+}
+
+.global-back-button::before {
+    content: "‹";
+    margin-right: 5px;
+    color: #0a59f7;
+    font-size: 17px;
+    line-height: 1;
+}
+
+.global-back-button:hover {
+    border-color: rgba(10, 89, 247, .35);
+    background: #eef5ff;
+    color: #0a59f7;
+}
+
+body.home-dashboard-body .global-back-button {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat.cell-podium {
+    visibility: hidden;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .seat.cell-aisle {
+    width: 52px;
+    flex-basis: 52px;
+    background: #e9edf2;
+    border: 0;
+    border-radius: 2px;
+}
+
+.classroom-board {
+    width: min(480px, 52%);
+    height: 68px;
+    flex: 0 0 68px;
+    margin: 0 auto 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #4b5563;
+    background: #dfe3e8;
+    border-radius: 2px;
+    font-size: 18px;
+    letter-spacing: .3em;
+    text-indent: .3em;
+}
+
+/* Windows 参考图在右侧详情底部保留快捷操作；macOS 以原生菜单承接班级级操作。 */
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .side-panel > .panel-card:first-child {
+    display: none !important;
+}
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-card:first-child,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .side-panel > .panel-card:first-child {
+    display: flex !important;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn[data-tab="tags"],
+body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn[data-tab="files"],
+body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn[data-tab="tags"],
+body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn[data-tab="files"] {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .classroom-toolbar-arrange .classroom-arrange-select {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] #btn-auto-arrange {
+    min-width: 126px;
+    height: 40px;
+    border-radius: 6px;
+    font-size: 14px;
+}
+
+body.classroom-detail-body[data-app-platform="windows"] .classroom-toolbar-arrange .quick-arrange-form {
+    position: relative;
+}
+
+.arrange-method-trigger {
+    width: 28px;
+    height: 40px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: -1px;
+    border: 0;
+    border-left: 1px solid rgba(255,255,255,.38);
+    border-radius: 0 6px 6px 0;
+    background: #0a59f7;
+    color: #fff;
+    cursor: pointer;
+}
+.arrange-method-trigger:hover { background: #084fdc; }
+.arrange-method-menu {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    z-index: 2400;
+    width: 210px;
+    padding: 6px;
+    border: 1px solid #dfe4ea;
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 12px 28px rgba(15,23,42,.16);
+}
+.arrange-method-menu[hidden] { display: none; }
+.arrange-method-menu button {
+    display: block;
+    width: 100%;
+    min-height: 30px;
+    padding: 5px 10px;
+    border: 0;
+    border-radius: 5px;
+    background: transparent;
+    color: #263143;
+    font-size: 12px;
+    text-align: left;
+    cursor: pointer;
+}
+.arrange-method-menu button:hover { background: #edf3ff; color: #0a59f7; }
+
+body.classroom-detail-body[data-app-platform="macos"] .arrange-method-trigger {
+    height: 36px;
+    border-radius: 0 8px 8px 0;
+}
+
+.classroom-statusbar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 20;
+    min-height: 46px;
+    display: flex;
+    align-items: center;
+    gap: 18px;
+    padding: 0 28px;
+    border-top: 1px solid #dfe4ea;
+    background: rgba(255,255,255,.96);
+    color: #586273;
+    font-size: 12px;
+}
+
+.classroom-statusbar > span + span { border-left: 1px solid #dfe4ea; padding-left: 18px; }
+.classroom-status-spacer { flex: 1; border-left: 0 !important; padding-left: 0 !important; }
+.classroom-status-sync { display: inline-flex; align-items: center; gap: 6px; }
+.classroom-status-sync i { width: 9px; height: 9px; display: inline-block; border-radius: 50%; background: #34c759; }
+.classroom-status-sync[data-state="checking"] i,
+.classroom-status-sync[data-state="login"] i,
+.classroom-status-sync[data-state="not-backed-up"] i { background: #8b95a5; }
+.classroom-status-sync[data-state="syncing"] i { background: #0a59f7; }
+.classroom-status-sync[data-state="dirty"] i { background: #f59e0b; }
+.classroom-status-sync[data-state="offline"] i { background: #8b95a5; }
+.classroom-status-sync[data-state="error"] i { background: #ff3b30; }
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-layout {
+    height: calc(100vh - 176px);
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel {
+    bottom: 46px !important;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-layout {
+    height: calc(100vh - 176px);
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .side-panel {
+    bottom: 46px !important;
+}
+
+/* macOS 参考图保留列标题与更宽松的座位格，状态栏落在圆角窗口内部。 */
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-stage {
+    flex-direction: column;
+    justify-content: flex-start;
+    align-items: stretch;
+    padding: 20px 24px 24px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-grid {
+    width: max-content;
+    min-width: 100%;
+    gap: 12px;
+    padding: 0 0 20px;
+}
+
+/* 真实班级可能比参考图拥有更多列：只在超出舞台时等比压缩，保留座位格与间距的整体关系。 */
+body.classroom-detail-body[data-app-platform="windows"] #classroom-root,
+body.classroom-detail-body[data-app-platform="macos"] #classroom-root {
+    --seat-density-scale: 1;
+}
+body.classroom-detail-body[data-app-platform="windows"] .seat-grid,
+body.classroom-detail-body[data-app-platform="macos"] .seat-grid {
+    gap: calc(12px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-platform="windows"] .seat-row,
+body.classroom-detail-body[data-app-platform="macos"] .seat-row,
+body.classroom-detail-body[data-app-platform="macos"] .seat-column-labels {
+    gap: calc(12px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-platform="windows"] .seat,
+body.classroom-detail-body[data-app-platform="windows"] .seat-row-label {
+    width: calc(100px * var(--seat-density-scale, 1));
+    height: calc(80px * var(--seat-density-scale, 1));
+    flex-basis: calc(100px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-platform="windows"] .seat-row-label {
+    width: calc(50px * var(--seat-density-scale, 1));
+    flex-basis: calc(50px * var(--seat-density-scale, 1));
+    height: auto;
+}
+body.classroom-detail-body[data-app-platform="windows"] .seat.cell-aisle {
+    width: calc(52px * var(--seat-density-scale, 1));
+    flex-basis: calc(52px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-platform="macos"] .seat-column-labels span,
+body.classroom-detail-body[data-app-platform="macos"] .seat {
+    width: calc(104px * var(--seat-density-scale, 1));
+    flex-basis: calc(104px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-platform="macos"] .seat {
+    height: calc(66px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-platform="macos"] .seat-column-labels .seat-column-label-spacer,
+body.classroom-detail-body[data-app-platform="macos"] .seat-row-label {
+    width: calc(62px * var(--seat-density-scale, 1));
+    flex-basis: calc(62px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-platform="macos"] .seat.cell-aisle {
+    width: calc(68px * var(--seat-density-scale, 1));
+    flex-basis: calc(68px * var(--seat-density-scale, 1));
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-arrange-select {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-board {
+    width: 325px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-row,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-column-labels {
+    gap: 12px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-column-labels {
+    display: flex;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-column-labels span {
+    width: 104px;
+    flex: 0 0 104px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-column-labels .seat-column-label-spacer,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-row-label {
+    width: 62px;
+    flex-basis: 62px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-row-label {
+    text-align: right;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat {
+    width: 104px;
+    height: 66px;
+    flex-basis: 104px;
+    border-radius: 5px;
+    border-color: #d6dce5;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat.cell-aisle {
+    width: 68px;
+    flex-basis: 68px;
+    background: #e9edf2;
+    border: 0;
+    border-radius: 3px;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-number {
+    display: none;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-info.seat-coord,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat.cell-podium {
+    visibility: hidden;
+}
+
+/* 扩展入口由原生“扩展”菜单承接，班级主工具栏只保留参考图中的排座、历史与导入导出。 */
+@media (min-width: 1101px) {
+    body.classroom-detail-body[data-app-platform="windows"] .classroom-toolbar-overflow,
+    body.classroom-detail-body[data-app-platform="macos"] .classroom-toolbar-overflow {
+        display: none !important;
+    }
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-name { font-size: 14px; }
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-statusbar {
+    left: var(--mac-window-left);
+    right: var(--mac-window-right);
+    bottom: var(--mac-window-bottom);
+    min-height: 38px;
+    padding: 0 18px;
+    border-radius: 0 0 14px 14px;
+    border-top-color: #e1e5eb;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout {
+    bottom: calc(var(--mac-window-bottom) + 38px);
+}
+
+/* Windows 参考图的三行标题区：38px 标题栏 + 38px 菜单栏 + 54px 工具栏。 */
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .header-content,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
+    grid-template-rows: 38px 38px 54px;
+}
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-bar,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-bar {
+    height: 38px;
+}
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-trigger,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
+    min-height: 38px;
+}
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .context-toolbar-shell,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
+    min-height: 54px;
+    height: 54px;
+}
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-row,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-toolbar-row {
+    height: 53px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .seat-stage,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .seat-stage {
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    padding: 16px 28px 24px !important;
+}
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .seat-grid,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .seat-grid {
+    padding-top: 12px !important;
+}
+
+@media (min-width: 1101px) {
+    body.classroom-detail-body[data-app-platform="windows"] .zoom-controls,
+    body.classroom-detail-body[data-app-platform="macos"] .zoom-controls {
+        display: none;
+    }
+}
+
+/* macOS 首页与设置页也使用独立窗口层级，避免 WebView 预览退化成整页网页。 */
+@media (min-width: 1101px) {
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"],
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] {
+        --mac-window-left: 82px;
+        --mac-window-right: 82px;
+        --mac-window-top: 47px;
+        --mac-window-bottom: 75px;
+        min-height: 100vh;
+        padding-top: 0;
+        overflow: hidden;
+        background:
+            radial-gradient(ellipse at 12% 44%, rgba(40, 100, 164, .72), transparent 34%),
+            radial-gradient(ellipse at 84% 42%, rgba(53, 115, 66, .66), transparent 38%),
+            linear-gradient(135deg, #6d9dcc 0%, #c6d7e8 44%, #6e9f77 100%);
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
+        top: var(--mac-window-top);
+        left: var(--mac-window-left);
+        right: var(--mac-window-right);
+        height: 66px;
+        min-height: 66px;
+        padding: 0;
+        overflow: hidden;
+        border-radius: 14px 14px 0 0;
+        border: 0;
+        background: rgba(255, 255, 255, .91);
+        box-shadow: 0 8px 24px rgba(31, 41, 55, .16);
+        backdrop-filter: saturate(160%) blur(18px);
+        -webkit-backdrop-filter: saturate(160%) blur(18px);
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-content,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-content {
+        display: block;
+        height: 66px;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
+        position: relative;
+        height: 66px;
+        padding: 0 24px;
+        border: 0;
+        background: transparent;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
+        content: "";
+        position: absolute;
+        top: 26px;
+        left: 18px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ff5f57;
+        box-shadow: 24px 0 #febc2e, 48px 0 #28c840;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after {
+        position: absolute;
+        top: 23px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #263143;
+        font-size: 15px;
+        font-weight: 650;
+        white-space: nowrap;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after {
+        content: "不想排座位";
+    }
+
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after {
+        content: "设置 — 不想排座位";
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-titlebar-sync,
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-titlebar-settings,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area,
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
+        display: none !important;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-shell,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-app {
+        position: fixed;
+        top: calc(var(--mac-window-top) + 66px);
+        right: var(--mac-window-right);
+        bottom: var(--mac-window-bottom);
+        left: var(--mac-window-left);
+        width: auto;
+        height: auto;
+        min-height: 0;
+        overflow: hidden;
+        background: #fff;
+        box-shadow: 0 12px 32px rgba(31, 41, 55, .16);
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-shell {
+        border-radius: 0 0 14px 14px;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-sidebar {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        width: 214px;
+        min-height: 0;
+        border-radius: 0 0 0 14px;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-dashboard-page {
+        height: 100%;
+        min-height: 0;
+        margin-left: 214px;
+        overflow-y: auto;
+        background: #fff;
+    }
+
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-app {
+        grid-template-columns: 214px minmax(0, 1fr);
+        border-radius: 0 0 14px 14px;
+    }
+
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-rail {
+        border-radius: 0 0 0 14px;
+        background: rgba(247, 249, 253, .84);
+    }
+
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-canvas {
+        background: #fff;
+    }
+}
+
+/* 动态密度变量必须放在所有平台覆盖规则之后，才能覆盖 macOS 独立窗口的固定尺寸。 */
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] #classroom-root {
+    --seat-density-scale: 1;
+}
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-grid {
+    gap: calc(12px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-row,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-column-labels {
+    gap: calc(12px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-column-labels span,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat {
+    width: calc(104px * var(--seat-density-scale, 1));
+    flex-basis: calc(104px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat {
+    height: calc(66px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-column-labels .seat-column-label-spacer,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-row-label {
+    width: calc(62px * var(--seat-density-scale, 1));
+    flex-basis: calc(62px * var(--seat-density-scale, 1));
+}
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat.cell-aisle {
+    width: calc(68px * var(--seat-density-scale, 1));
+    flex-basis: calc(68px * var(--seat-density-scale, 1));
+}
+
+/* 布局编辑页与班级页共用桌面窗口骨架：保持真实行列网格，但把旧的
+ * 大圆角卡片收敛为 Windows 桌面单元，避免出现“网页套壳”的视觉断层。 */
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"],
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] {
+    overflow: hidden;
+    --header-height: 130px;
+    padding-top: 130px;
+    background: #f5f6f8;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .app-header,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .app-header {
+    height: 130px;
+    min-height: 130px;
+    padding: 0;
+    background: #fff;
+    border-bottom: 1px solid #dfe3e8;
+    box-shadow: none;
+    backdrop-filter: none;
+    -webkit-backdrop-filter: none;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .header-content,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
+    display: grid;
+    grid-template-rows: 38px 28px 64px;
+    gap: 0;
+    height: 100%;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .header-titlebar,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar {
+    grid-row: 1;
+    height: 38px;
+    padding: 0 16px;
+    border-bottom: 1px solid #edf0f4;
+    background: #fbfcfd;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .logo,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .logo {
+    gap: 8px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+    color: #172033;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .logo-svg,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .logo-svg {
+    width: 20px;
+    height: 20px;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .logo-meta small,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .logo-meta small,
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .cloud-header-area,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .cloud-header-area {
+    display: none !important;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-bar,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-bar {
+    top: 38px;
+    left: 16px;
+    right: 0;
+    height: 28px;
+    padding-left: 0;
+    gap: 0;
+    align-items: stretch;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-brand {
+    display: inline-flex;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-trigger,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
+    min-height: 28px;
+    padding: 3px 12px;
+    border-radius: 0;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .context-toolbar-shell,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
+    grid-row: 3;
+    min-height: 64px;
+    height: 64px;
+    padding: 0 20px;
+    border: 0;
+    border-top: 1px solid #e8ebf0;
+    border-radius: 0;
+    background: #fff;
+    box-shadow: none;
+}
+
+body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .context-toolbar-row,
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-row {
+    height: 63px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    overflow: visible;
+}
+
+body.layout-editor-body[data-app-platform="windows"] #layout-root {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 27vw);
+    gap: 0;
+    width: 100%;
+    height: calc(100vh - 130px);
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: #fff;
+    border: 0;
+    border-radius: 0;
+}
+
+body.layout-editor-body[data-app-platform="windows"] #layout-root .seat-stage {
+    min-width: 0;
+    padding: 18px 28px 34px;
+    background: #fff;
+    overflow: auto;
+}
+
+body.layout-editor-body[data-app-platform="windows"] #layout-root .seat-grid {
+    gap: 12px;
+    width: max-content;
+    min-width: 100%;
+    padding: 10px 0 26px;
+}
+
+body.layout-editor-body[data-app-platform="windows"] #layout-root .seat-row {
+    gap: 12px;
+}
+
+body.layout-editor-body[data-app-platform="windows"] #layout-root .seat {
+    width: 100px;
+    height: 80px;
+    flex: 0 0 100px;
+    border: 1px solid #d6dce5;
+    border-radius: 4px;
+    background: #fff;
+    box-shadow: none;
+}
+
+body.layout-editor-body[data-app-platform="windows"] #layout-root .seat.cell-aisle {
+    width: 52px;
+    flex-basis: 52px;
+    border: 0;
+    border-radius: 2px;
+    background: #e9edf2;
+}
+
+body.layout-editor-body[data-app-platform="windows"] #layout-root .side-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    min-width: 0;
+    height: 100%;
+    max-height: none;
+    padding: 14px 16px 18px;
+    overflow-x: hidden;
+    overflow-y: auto;
+    border-left: 1px solid #e0e4ea;
+    background: #fff;
+}
+
+body.layout-editor-body[data-app-platform="windows"] #layout-root .panel-card {
+    flex: 0 0 auto;
+    margin-bottom: 12px;
+    padding: 14px;
+    border: 1px solid #e0e4ea;
+    border-radius: 8px;
+    box-shadow: none;
+    background: #fff;
+}
+
+/* macOS 布局编辑器使用与班级页一致的独立窗口层级。 */
+@media (min-width: 1101px) {
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] {
+        --mac-window-left: 82px;
+        --mac-window-right: 82px;
+        --mac-window-top: 47px;
+        --mac-window-bottom: 75px;
+        min-height: 100vh;
+        padding-top: 0;
+        overflow: hidden;
+        background:
+            radial-gradient(ellipse at 12% 44%, rgba(40, 100, 164, .72), transparent 34%),
+            radial-gradient(ellipse at 84% 42%, rgba(53, 115, 66, .66), transparent 38%),
+            linear-gradient(135deg, #6d9dcc 0%, #c6d7e8 44%, #6e9f77 100%);
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
+        position: fixed;
+        top: var(--mac-window-top);
+        left: var(--mac-window-left);
+        right: var(--mac-window-right);
+        height: 66px;
+        min-height: 66px;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        border-radius: 14px 14px 0 0;
+        background: rgba(255, 255, 255, .91);
+        box-shadow: 0 8px 24px rgba(31, 41, 55, .16);
+        backdrop-filter: saturate(160%) blur(18px);
+        -webkit-backdrop-filter: saturate(160%) blur(18px);
+        z-index: 1000;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-content {
+        display: block;
+        height: 66px;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
+        position: relative;
+        height: 66px;
+        padding: 0 24px;
+        border: 0;
+        background: transparent;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
+        content: "";
+        position: absolute;
+        top: 26px;
+        left: 18px;
+        width: 12px;
+        height: 12px;
+        border-radius: 50%;
+        background: #ff5f57;
+        box-shadow: 24px 0 #febc2e, 48px 0 #28c840;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after {
+        content: "布局编辑";
+        position: absolute;
+        top: 23px;
+        left: 50%;
+        transform: translateX(-50%);
+        color: #263143;
+        font-size: 15px;
+        font-weight: 650;
+        white-space: nowrap;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar,
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
+        display: none !important;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell {
+        position: absolute;
+        top: 0;
+        left: 500px;
+        right: 0;
+        width: auto;
+        height: 66px;
+        min-height: 66px;
+        padding: 0 24px 0 0;
+        border: 0;
+        border-radius: 0;
+        background: transparent;
+        box-shadow: none;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-row {
+        height: 66px;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root {
+        position: fixed;
+        top: calc(var(--mac-window-top) + 66px);
+        right: var(--mac-window-right);
+        bottom: var(--mac-window-bottom);
+        left: var(--mac-window-left);
+        width: auto;
+        height: auto;
+        min-height: 0;
+        grid-template-columns: minmax(0, 1fr) 320px;
+        gap: 0;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        border: 0;
+        border-radius: 0 0 14px 14px;
+        background: #fff;
+        box-shadow: 0 12px 32px rgba(31, 41, 55, .16);
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat-stage {
+        min-width: 0;
+        padding: 20px 24px 30px;
+        background: #fff;
+        overflow: auto;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat-grid {
+        gap: 12px;
+        width: max-content;
+        min-width: 100%;
+        padding: 0 0 20px;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat-row {
+        gap: 12px;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat {
+        width: 104px;
+        height: 66px;
+        flex: 0 0 104px;
+        border: 1px solid #d6dce5;
+        border-radius: 5px;
+        background: #fff;
+        box-shadow: none;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat.cell-aisle {
+        width: 68px;
+        flex-basis: 68px;
+        border: 0;
+        border-radius: 3px;
+        background: #e9edf2;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .side-panel {
+        min-width: 0;
+        height: 100%;
+        max-height: none;
+        padding: 14px 16px 18px;
+        overflow-x: hidden;
+        overflow-y: auto;
+        border-left: 1px solid #e0e4ea;
+        border-radius: 0 0 14px 0;
+        background: #fff;
+    }
+
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .panel-card {
+        margin-bottom: 12px;
+        padding: 14px;
+        border: 1px solid #e3e7ed;
+        border-radius: 12px;
+        box-shadow: 0 2px 8px rgba(31, 41, 55, .06);
+        background: rgba(255, 255, 255, .96);
+    }
+}
+
+/* 最终覆盖：原生 macOS 窗口内容铺满，不保留外层桌面背景或内嵌窗口边界。 */
+@media (min-width: 1101px) {
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"],
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"],
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"],
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] {
+        --mac-window-left: 0px;
+        --mac-window-right: 0px;
+        --mac-window-top: 0px;
+        --mac-window-bottom: 0px;
+        min-height: 100vh;
+        padding-top: 0;
+        overflow: hidden;
+        background: #f5f6f8;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
+        top: 0;
+        left: 0;
+        right: 0;
+        border-radius: 0;
+        box-shadow: 0 1px 6px rgba(31, 41, 55, .08);
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
+        display: none;
+    }
+
+    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-shell,
+    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-app,
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout,
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root {
+        left: 0;
+        right: 0;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-statusbar {
+        left: 0;
+        right: 0;
+        border-radius: 0;
+    }
+
+    /* 布局编辑页只保留工具栏里的返回排座，避免两个返回入口重叠。 */
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .global-back-button {
+        display: none;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
+        justify-content: flex-end;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .wd-global-link {
+        position: absolute;
+        right: 110px;
+    }
+
+    /* 左侧工具栏从窗口控制点之后开始，居中的页面标题不参与工具排列。 */
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell {
+        left: 96px !important;
+        right: 18px !important;
+        width: auto !important;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .constraint-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 10px;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .constraint-grid input {
+        min-width: 0;
+        width: 100%;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .constraint-grid .btn {
+        min-width: 0;
+        white-space: nowrap;
+    }
+
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .panel-card:first-child .constraint-grid .btn,
+    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .panel-card:nth-child(2) .constraint-grid input {
+        grid-column: 1 / -1;
+    }
+}
+
+/* Windows 班级页最终层级修正：右侧栏和座位区绝不互相覆盖。 */
+@media (min-width: 1101px) {
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"],
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] {
+        --desktop-side-width: min(430px, 32vw);
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
+        width: calc(100% - var(--desktop-side-width));
+        margin-right: var(--desktop-side-width);
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .classroom-layout {
+        grid-template-columns: minmax(0, 1fr);
+        width: 100%;
+        padding-right: var(--desktop-side-width);
+        overflow: hidden;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
+        position: fixed;
+        top: 76px;
+        right: 0;
+        bottom: 46px;
+        width: var(--desktop-side-width);
+        height: auto;
+        max-height: none;
+        z-index: 1001;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-stage {
+        min-width: 0;
+        max-width: 100%;
+        padding-bottom: 52px !important;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-content {
+        min-width: 0;
+        padding: 5px 4px 14px;
+        gap: 1px;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-name,
+    body.classroom-detail-body[data-app-platform="windows"] .seat-info,
+    body.classroom-detail-body[data-app-platform="windows"] .seat-badge-row {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-badge-row {
+        flex-wrap: nowrap;
+        gap: 2px;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-group-tag {
+        left: 4px;
+        right: 4px;
+        bottom: 2px;
+        max-width: calc(100% - 8px);
+        overflow: hidden;
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.classroom-detail-body .seat.cell-podium,
+    body.classroom-detail-body .seat.cell-aisle,
+    body.classroom-detail-body .seat.cell-empty {
+        cursor: pointer;
+    }
+
+    body.classroom-detail-body .seat.cell-podium.selected,
+    body.classroom-detail-body .seat.cell-aisle.selected,
+    body.classroom-detail-body .seat.cell-empty.selected {
+        border: 2px solid #0a59f7;
+        box-shadow: 0 0 0 1px rgba(10, 89, 247, .12);
+    }
+}
+
+/* 末尾覆盖旧的隐藏规则，标签与文件面板入口始终保留。 */
+@media (min-width: 1101px) {
+    body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn[data-tab="tags"],
+    body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn[data-tab="files"],
+    body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn[data-tab="tags"],
+    body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn[data-tab="files"] {
+        display: inline-flex !important;
+    }
+}
+
+/* 讲台回到布局网格中的真实单元，不再额外绘制一个脱离格子的大横条。
+   cell_type=podium 仍走和座位相同的行列、选中、右键与键盘编辑链路。 */
+body.classroom-detail-body .seat-grid .seat.cell-podium {
+    visibility: visible !important;
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+    background: #dfe3e8 !important;
+    border: 1px solid #cbd2dc !important;
+    border-radius: 6px !important;
+    color: #4b5563 !important;
+}
+
+body.classroom-detail-body .seat-grid .seat.cell-podium .seat-placeholder {
+    color: #4b5563;
+    font-size: 12px;
+    letter-spacing: .08em;
+}
+
+/* 班级工具栏的下拉菜单必须能够越过工具栏底边展开。
+   旧规则同时使用 overflow-x:auto 和 overflow-y:hidden，菜单打开后只剩
+   一个空白圆角边，造成“箭头打开但菜单被遮住”的错觉。桌面宽度下核心
+   操作已经能完整放入预留区域，窄窗口则改为换行，因此这里不再裁切纵向内容。 */
+body.classroom-detail-body .context-toolbar-panel.active,
+body.classroom-detail-body .classroom-toolbar-row {
+    overflow: visible !important;
+}
+
+/* macOS 班级页的原生风格标题栏曾用 overflow:hidden 裁切交通灯区域，
+   同时也把网页内的导入/导出三级菜单裁掉；标题栏本身不再承担裁切职责。 */
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
+    overflow: visible !important;
+}
+
+/* 响应式班级页：窄窗口不再把固定 130px 顶栏压在座位区上方，
+   顶栏根据两行工具按钮自然增高，页面主体从顶栏之后开始布局。 */
+@media (max-width: 1100px) {
+    body.classroom-detail-body[data-app-shell="browser"],
+    body.classroom-detail-body[data-app-shell="webview"] {
+        --header-height: 0px;
+        padding-top: 0 !important;
+        overflow: auto;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"] .app-header,
+    body.classroom-detail-body[data-app-shell="webview"] .app-header {
+        position: relative !important;
+        height: auto !important;
+        min-height: 0 !important;
+        z-index: 1000;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"] .header-content,
+    body.classroom-detail-body[data-app-shell="webview"] .header-content {
+        height: auto !important;
+        grid-template-rows: 38px 38px auto !important;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"] .context-toolbar-shell,
+    body.classroom-detail-body[data-app-shell="webview"] .context-toolbar-shell {
+        height: auto !important;
+        min-height: 54px;
+        padding: 0 12px 8px;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-row,
+    body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-row {
+        height: auto !important;
+        min-height: 53px;
+        flex-wrap: wrap;
+        align-content: center;
+        row-gap: 8px;
+        padding: 8px 0 0;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-overflow,
+    body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-overflow {
+        display: flex !important;
+        flex: 1 1 100%;
+        min-width: 0;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding-bottom: 2px;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-overflow .plugin-quick-launch-inline,
+    body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-overflow .plugin-quick-launch-inline {
+        display: flex;
+        min-width: 0;
+        max-width: 100%;
+        flex-wrap: wrap;
+        gap: 8px;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"] .classroom-layout,
+    body.classroom-detail-body[data-app-shell="webview"] .classroom-layout {
+        height: auto !important;
+        min-height: calc(100vh - 1px);
+        overflow: visible !important;
+    }
+
+    body.classroom-detail-body .side-panel > .panel-tabs {
+        position: relative;
+        isolation: isolate;
+    }
+
+    body.classroom-detail-body .side-panel > .panel-tabs .tab-header {
+        position: sticky;
+        top: 0;
+        z-index: 20;
+        background: #fff;
+        opacity: 1;
+        visibility: visible;
+    }
+}
+
+@media (max-width: 760px) {
+    body.classroom-detail-body[data-app-shell="browser"] .header-content,
+    body.classroom-detail-body[data-app-shell="webview"] .header-content {
+        grid-template-rows: 38px 0 auto !important;
+    }
+
+    body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-row,
+    body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-row {
+        padding-top: 8px;
+    }
+}
+
+/* 标签与文件是原有业务入口，任意窗口宽度都保留；空间不足时 tab-header
+   自身横向滚动，而不是被旧的 display:none 规则静默删掉。 */
+body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn[data-tab="tags"],
+body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn[data-tab="files"],
+body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn[data-tab="tags"],
+body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn[data-tab="files"] {
+    display: inline-flex !important;
+    visibility: visible !important;
+}
+
+/* Windows 班级页：标题内容与应用菜单共用首行，工具栏独占第二行。 */
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .wd-launch {
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+@media (min-width: 1101px) {
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] {
+        --header-height: 120px;
+        padding-top: 120px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .app-header {
+        height: 120px;
+        min-height: 120px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
+        position: relative;
+        grid-template-rows: 56px 64px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar {
+        height: 56px;
+        padding: 0 16px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta {
+        max-width: 210px;
+        overflow: hidden;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta strong {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar > .native-menu-bar {
+        position: static;
+        inset: auto;
+        flex: 0 1 auto;
+        height: 56px;
+        min-width: 0;
+        margin-left: 14px;
+        margin-right: auto;
+        padding: 0;
+        align-items: center;
+        overflow-x: auto;
+        scrollbar-width: thin;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
+        flex: 0 0 auto;
+        min-height: 38px;
+        padding: 6px 12px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
+        grid-row: 2;
+        height: 64px;
+        min-height: 64px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-toolbar-row {
+        height: 63px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-layout {
+        height: calc(100vh - 166px);
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .side-panel {
+        top: 56px !important;
+        bottom: 46px !important;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .desktop-window-button {
+        height: 56px;
+    }
+}
+
+@media (max-width: 1100px) {
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
+        position: relative;
+        grid-template-rows: 56px auto !important;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar {
+        height: 56px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta {
+        max-width: 100px;
+        overflow: hidden;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta strong {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar > .native-menu-bar {
+        position: static;
+        inset: auto;
+        flex: 0 1 auto;
+        height: 56px;
+        min-width: 0;
+        margin-left: 4px;
+        margin-right: auto;
+        align-items: center;
+        overflow-x: auto;
+        scrollbar-width: thin;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta {
+        min-width: 0;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
+        flex: 0 0 auto;
+        min-height: 34px;
+        padding: 4px 6px;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
+        grid-row: 2;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .desktop-window-button {
+        height: 56px;
+    }
+}
+
+@media (min-width: 1101px) and (max-width: 1250px) {
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+}
+
+body.classroom-detail-body .side-panel > .panel-tabs .tab-header {
+    display: flex;
+    align-items: center;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+}
+
+body.classroom-detail-body .side-panel > .panel-tabs .tab-header::-webkit-scrollbar {
+    display: none;
+}
+
+/* 被强制保留的“标签/文件”按钮也必须沿用同一套 Flex 居中规则；
+   否则 inline-flex 的匿名文本会贴到按钮顶部，造成两项与前面标签不在同一水平线上。 */
+body.classroom-detail-body .side-panel > .panel-tabs .tab-btn {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    line-height: 1.2;
+    white-space: nowrap;
+}
+
+/* 桌面版标签栏使用同一条基线：按钮均分可用宽度，左右留白一致，
+   避免第一项偏移或最后一项被挤到边界。窄窗口仍保留横向滚动策略。 */
+@media (min-width: 761px) {
+    body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-header,
+    body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-header {
+        justify-content: stretch;
+        gap: 8px;
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn,
+    body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn {
+        flex: 1 1 0;
+        min-width: 0;
+        padding-left: 6px;
+        padding-right: 6px;
+    }
+}
+
+/* 自动排座采用真正的分段按钮：外层不再显示浅色套壳，主操作与算法菜单
+   共用一块蓝色背景，只在中间保留细分隔线，避免出现双重圆角和错位边框。 */
+body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange .quick-arrange-form,
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange .quick-arrange-form {
+    height: 40px;
+    min-height: 40px;
+    position: relative;
+    gap: 0;
+    padding: 2px;
+    border: 0;
+    border-radius: 12px;
+    background: #0a59f7;
+    box-shadow: 0 2px 8px rgba(10, 89, 247, .18);
+    overflow: visible;
+}
+
+body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange #btn-auto-arrange,
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange #btn-auto-arrange {
+    height: 36px;
+    min-height: 36px;
+    min-width: 126px;
+    flex: 1 1 auto;
+    padding: 0 20px;
+    border: 0;
+    border-radius: 10px 0 0 10px;
+    background: #0a59f7;
+    box-shadow: none;
+    line-height: 36px;
+}
+
+body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange .arrange-method-trigger,
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange .arrange-method-trigger {
+    width: 40px;
+    height: 36px;
+    min-height: 36px;
+    flex: 0 0 40px;
+    margin-left: 0;
+    border: 0;
+    border-left: 1px solid rgba(255, 255, 255, .42);
+    border-radius: 0 10px 10px 0;
+    background: #0a59f7;
+}
+
+body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange .arrange-method-trigger:hover,
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange .arrange-method-trigger:hover,
+body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange #btn-auto-arrange:hover,
+body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange #btn-auto-arrange:hover {
+    background: #084fdc;
+}
+
+/* 班级网格不再显示“第几排/第几列”外围文字，让格子本身成为唯一视觉单位。 */
+body.classroom-detail-body .seat-column-labels,
+body.classroom-detail-body .seat-row-label {
+    display: none !important;
+}
+
+/* 格子内容分成：左上座位号、中央姓名/分数、底部小组标签，
+   每层占用独立区域，避免分数与小组标签相互覆盖。 */
+body.classroom-detail-body .seat {
+    border-radius: 8px;
+}
+
+body.classroom-detail-body .seat-content {
+    position: relative;
+    box-sizing: border-box;
+    justify-content: center;
+    gap: 2px;
+    padding: 8px 6px 19px;
+}
+
+body.classroom-detail-body .seat-number {
+    /* 座位编号属于内部调试信息，桌面/网页排座界面不再占用格子空间。 */
+    display: none !important;
+}
+
+body.classroom-detail-body .seat-name,
+body.classroom-detail-body .seat-info {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    text-align: center;
+}
+
+body.classroom-detail-body .seat-name {
+    font-size: 13px;
+    line-height: 1.25;
+}
+
+body.classroom-detail-body .seat-info {
+    color: #7c8796;
+    font-size: 11px;
+    line-height: 1.15;
+}
+
+body.classroom-detail-body .seat-badge-row {
+    position: absolute;
+    top: 4px;
+    right: 5px;
+    max-width: calc(100% - 11px);
+    margin: 0;
+    gap: 2px;
+    flex-wrap: nowrap;
+}
+
+body.classroom-detail-body .seat-badge-row > * {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-size: 8px;
+    line-height: 12px;
+    padding: 0 3px;
+}
+
+body.classroom-detail-body .seat-group-tag {
+    left: 6px;
+    right: 6px;
+    bottom: 4px;
+    max-width: calc(100% - 12px);
+    height: 16px;
+    box-sizing: border-box;
+    overflow: hidden;
+    padding: 0 5px;
+    border-radius: 5px;
+    font-size: 9px;
+    line-height: 16px;
+    text-align: center;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* macOS 独立窗口的座位格高度更紧，单独收紧文字层级并为底部小组条预留空间，
+   保证姓名、分数都完整落在小组标签之上，不再出现上下截断。 */
+body.classroom-detail-body[data-app-platform="macos"] .seat-content {
+    gap: 1px;
+    padding: 8px 6px 21px;
+}
+
+body.classroom-detail-body[data-app-platform="macos"] .seat-name {
+    font-size: 13px;
+    line-height: 1.2;
+}
+
+body.classroom-detail-body[data-app-platform="macos"] .seat-info {
+    font-size: 10px;
+    line-height: 1.1;
+}
+
+body.classroom-detail-body[data-app-platform="macos"] .seat-group-tag {
+    bottom: 4px;
+    height: 14px;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-size: 8px;
+    line-height: 14px;
+}
+
+/* Windows 二级页的应用菜单参与标题栏排版，避免绝对定位盖住返回和帮助控件。 */
+body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar > .native-menu-bar {
+    position: static;
+    inset: auto;
+    display: inline-flex;
+    flex: 0 1 auto;
+    min-width: 0;
+    max-width: 100%;
+    margin: 0 8px;
+    padding: 0;
+    align-items: center;
+    overflow-x: auto;
+    scrollbar-width: thin;
+}
+
+/* 布局编辑页原先的菜单独占一行；菜单进入标题栏后收掉空行。 */
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] {
+    --header-height: 102px;
+    padding-top: 102px;
+}
+
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .app-header {
+    height: 102px;
+    min-height: 102px;
+}
+
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
+    grid-template-rows: 38px 64px;
+}
+
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
+    grid-row: 2;
+}
+
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] #layout-root {
+    height: calc(100vh - 102px);
+}
+
+/* Web/Windows 的走廊与座位使用同一列宽，保持真实网格对齐；
+   走廊只改变填充和文字样式，不再挤压两侧座位。 */
+@media (min-width: 1101px) {
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .seat.cell-aisle,
+    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .seat.cell-aisle {
+        width: calc(100px * var(--seat-density-scale, 1));
+        flex-basis: calc(100px * var(--seat-density-scale, 1));
+    }
+}
+
+/* Windows/网页端密度较高时，文字跟随座位密度收缩；不再出现“大字体塞进小格子”。
+   使用最小字号保证普通 Windows 屏幕仍然清晰，满宽窗口则恢复参考图字号。 */
+@media (min-width: 1101px) {
+    body.classroom-detail-body[data-app-platform="windows"] .seat-name {
+        font-size: max(10px, calc(14px * var(--seat-density-scale, 1)));
+        line-height: 1.15;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-info {
+        font-size: max(8px, calc(11px * var(--seat-density-scale, 1)));
+        line-height: 1.1;
+    }
+
+    body.classroom-detail-body[data-app-platform="windows"] .seat-group-tag {
+        height: max(14px, calc(16px * var(--seat-density-scale, 1)));
+        font-size: max(8px, calc(10px * var(--seat-density-scale, 1)));
+        line-height: max(14px, calc(16px * var(--seat-density-scale, 1)));
+        padding-left: 4px;
+        padding-right: 4px;
+    }
+}
+
+/* 班级详情页始终保留云同步入口。
+   之前 Windows/网页与桌面壳的标题栏规则把动态生成的云按钮一起隐藏，
+   逻辑仍在运行但用户看不到入口；将它放回标题栏右侧，和班级标题保持同一层级。 */
+body.classroom-detail-body .cloud-header-area {
+    display: flex !important;
+    align-items: center;
+    margin-left: auto;
+    margin-right: 12px;
+    min-width: 0;
+    flex: 0 0 auto;
+    position: relative;
+    z-index: 30;
+    pointer-events: auto !important;
+    visibility: visible !important;
+}
+
+/* 覆盖平台级隐藏规则（它们带有更高的选择器权重）。 */
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .cloud-header-area,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .cloud-header-area,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
+    display: flex !important;
+}
+
+/* macOS 标题栏由桌面壳接管布局，但云同步按钮仍是页面内真实可点击控件。
+   显式恢复命中区域和手型，避免标题栏/拖拽层样式影响悬停反馈。 */
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area .cloud-sync-pill {
+    cursor: pointer !important;
+    pointer-events: auto !important;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area .cloud-sync-pill[aria-busy="true"] {
+    cursor: progress !important;
+}
+
+body.classroom-detail-body .cloud-header-sync-cluster {
+    max-width: min(300px, 32vw);
+}
+
+body.classroom-detail-body .classroom-titlebar-meta {
+    margin-right: 0;
+}
+
+body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta,
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-titlebar-meta {
+    margin-right: 0;
+}
+
+body.classroom-detail-body .browser-window-controls {
+    margin-left: 12px;
+}
+
+/* 首页与设置页不承载班级级菜单；Windows/网页预览只保留一行标题栏，
+   避免菜单、返回按钮和标题挤在同一行后产生错位。 */
+body.home-dashboard-body[data-app-platform="windows"] .native-menu-bar,
+body.settings-page-body[data-app-platform="windows"] .native-menu-bar,
+body.home-dashboard-body[data-app-platform="windows"] .context-toolbar-shell,
+body.settings-page-body[data-app-platform="windows"] .context-toolbar-shell {
+    display: none !important;
+}
+
+body.home-dashboard-body[data-app-platform="windows"],
+body.settings-page-body[data-app-platform="windows"] {
+    padding-top: 52px;
+}
+
+body.home-dashboard-body[data-app-platform="windows"] .app-header,
+body.settings-page-body[data-app-platform="windows"] .app-header {
+    height: 52px;
+    min-height: 52px;
+    padding: 6px 10px;
+}
+
+body.home-dashboard-body[data-app-platform="windows"] .header-content,
+body.settings-page-body[data-app-platform="windows"] .header-content {
+    display: block;
+    height: 100%;
+}
+
+body.home-dashboard-body[data-app-platform="windows"] .header-titlebar,
+body.settings-page-body[data-app-platform="windows"] .header-titlebar {
+    height: 100%;
+}
+
+/* 小屏网页保留一个紧凑的同步入口，不让状态文案挤占标题栏。 */
+@media (max-width: 760px) {
+    body.classroom-detail-body .cloud-header-area {
+        margin-right: 4px;
+    }
+
+    body.classroom-detail-body .cloud-sync-pill {
+        width: 32px;
+        min-width: 32px;
+        max-width: 32px;
+        padding: 0;
+    }
+
+    body.classroom-detail-body .cloud-sync-pill-text {
+        display: none;
+    }
+}
+
+/* macOS 详情/布局编辑网格：走廊是网格中的普通单元，宽度与座位保持一致，
+   这样每一列的视觉节奏和拖拽命中区域统一。 */
+body.classroom-detail-body[data-app-platform="macos"] .seat.cell-aisle {
+    width: calc(104px * var(--seat-density-scale, 1)) !important;
+    flex-basis: calc(104px * var(--seat-density-scale, 1)) !important;
+}
+
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat.cell-aisle {
+    width: calc(104px * var(--seat-density-scale, 1)) !important;
+    flex-basis: calc(104px * var(--seat-density-scale, 1)) !important;
+}
+
+body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat.cell-aisle {
+    width: 104px !important;
+    flex-basis: 104px !important;
+}
+
+/* macOS 缩放后的座位内容沿用网页/Windows 的两行压缩策略：姓名、分数和小组
+   标签一起跟随密度收缩，并给底部标签预留稳定空间，避免姓名被格子上下边界截断。 */
+@media (min-width: 761px) {
+    body.classroom-detail-body[data-app-platform="macos"] .seat-content {
+        min-width: 0;
+        gap: max(1px, calc(2px * var(--seat-density-scale, 1)));
+        padding: max(4px, calc(5px * var(--seat-density-scale, 1))) 4px max(10px, calc(14px * var(--seat-density-scale, 1)));
+    }
+
+    body.classroom-detail-body[data-app-platform="macos"] .seat-name,
+    body.classroom-detail-body[data-app-platform="macos"] .seat-info,
+    body.classroom-detail-body[data-app-platform="macos"] .seat-badge-row {
+        max-width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    body.classroom-detail-body[data-app-platform="macos"] .seat-name {
+        font-size: max(10px, calc(13px * var(--seat-density-scale, 1)));
+        line-height: 1.15;
+    }
+
+    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-name {
+        font-size: max(10px, calc(13px * var(--seat-density-scale, 1)));
+    }
+
+    body.classroom-detail-body[data-app-platform="macos"] .seat-info {
+        font-size: max(8px, calc(10px * var(--seat-density-scale, 1)));
+        line-height: 1.1;
+    }
+
+    body.classroom-detail-body[data-app-platform="macos"] .seat-badge-row {
+        flex-wrap: nowrap;
+        gap: 2px;
+    }
+
+    body.classroom-detail-body[data-app-platform="macos"] .seat-group-tag {
+        left: 4px;
+        right: 4px;
+        bottom: 2px;
+        height: max(12px, calc(14px * var(--seat-density-scale, 1)));
+        max-width: calc(100% - 8px);
+        overflow: hidden;
+        padding-left: 4px;
+        padding-right: 4px;
+        font-size: max(8px, calc(8px * var(--seat-density-scale, 1)));
+        line-height: max(12px, calc(14px * var(--seat-density-scale, 1)));
+        text-align: center;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+}
+
+
+/* Bencho Create menu (MIT, Copyright (c) 2026 Lorenzo Cabra).
+   Original demo commentary is retained below. Homepage adaptation:
+   reserve only the existing 108 × 34px action (full width on mobile);
+   the two 34px rows plus padding need a 212 × 92px overlay, not a
+   244px demo square. Never move the surrounding content on open. */
+/* the create menu has no ::before to hang it on — its shape
+   is a blob on a metaball layer — so its ring is a spread
+   shadow, which is the same mark by another means */
+[data-stroke="on"] .crt-body {
+  box-shadow: 0 0 0 1px var(--pane-edge);}
+
+/* ── 5 · create ──────────────────────────────────────────── */
+/* ── back to 244 ────────────────────────────────────────────
+   The stage, the panel and the rows are the numbers this was
+   drawn at. They had been shrunk three times chasing a
+   request that was only ever about the PILL — and shrinking
+   the panel with it was wrong twice over: the open state is
+   sized by the four rows it has to hold, so taking it down
+   crushed the rows, and the stage is sized by the panel plus
+   the room the blobs need to travel, so taking THAT down left
+   the metaball nowhere to go.
+
+   One number is smaller than it was, and it is the one that
+   was asked about. */
+.crt-stage {
+  position: relative;
+  width: var(--pill-w); height: var(--pill-h);
+  flex: 0 0 auto;
+  z-index: 1;
+  /* the two states, as two sets of numbers. One attribute
+     picks between them and everything else follows. */
+  /* The pill, and only the pill. Its WIDTH is set inline from
+     the measured label — see Liquid.tsx — so this is the
+     fallback for the frame before that measurement lands, and
+     the height is the part that lives here. 46 before. */
+  --pill-w: 108px;
+  --pill-h: 34px;
+  --panel-w: 212px;
+  --panel-h: 92px;    /* four rows and the padding; no header any more */
+  --w: var(--pill-w);
+  --h: var(--pill-h);
+  --r: var(--crt-shut-r, 999px);}
+
+.crt-stage[data-open="true"] {
+  --w: var(--panel-w);
+  --h: var(--panel-h);
+  /* 28 outside against a 10px inset leaves 18 for the rows to
+     nest in, and a 34px row rounds fully at 17 — so the two
+     curves are concentric rather than merely both round. The
+     Corner knob moves all three together; see Liquid.tsx. */
+  --r: var(--crt-r, 28px);}
+
+/* No metaball filter on this one, and that is the point. The
+   other studies have two or more shapes that have to fuse;
+   this has exactly one, so a blur can only damage it — at the
+   radius the others use, a fifth of this shape's height, the
+   corners came back bulged and uneven instead of at the
+   radius they were given. The liquid here is entirely in the
+   timing. */
+.crt-blobs {
+  position: absolute; inset: 0;
+  pointer-events: none;}
+
+/* one shape, dead centre, in both states */
+/* ── CENTRED BY AUTO MARGINS, and it has been three things ──
+   A negative margin first, which had to be animated alongside
+   the size — two axes on different clocks, and the box drifted
+   34px above centre halfway through the morph.
+
+   Then `left: 50%` with `translate(-50%, -50%)`, which fixed
+   that: a percentage translate is always half of whatever the
+   box is right now, so there is nothing to keep in step.
+
+   And now auto margins, which are self-correcting in the same
+   way and use NO TRANSFORM AT ALL. That is the whole reason
+   for the third version. This box is a motion.div whose width
+   and height Framer writes inline on every frame of the open,
+   and a CSS transform on a Framer-managed element is the trap
+   this codebase has hit before — CSS `translate` and `scale`
+   resolve BEFORE `transform`, and anything the library decides
+   to write into `transform` takes the centring with it.
+   Reported on iOS as the menu jumping to one side as it opens,
+   which is exactly what a lost -50% looks like.
+
+   `inset: 0` plus `margin: auto` centres an absolutely
+   positioned box against its containing block whatever size
+   the box currently is — no transform to lose, nothing to
+   animate, and the same answer every frame. */
+.crt-body {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--w); height: var(--h);
+  border-radius: var(--r);
+
+  background: var(--slab);
+
+  /* No shadow. It had four stacked ones, added when this
+     became a white panel on the argument that a white panel on
+     a white page has no edge — which was true, and was still
+     the wrong fix: it made the menu read as a card lifted off
+     the page rather than as the page opening up. Stroke is the
+     way to give it an edge now, and it is off by default. */
+  /* One move: width, height and the corner all run the same
+     curve for the same time. Staggering the axes made the
+     open read as two animations queued up rather than one
+     thing changing size.
+
+     And no overshoot. A spring past the target takes the
+     corner radius with it — the corners dipped under 28 and
+     came back, which is a wobble, not a bounce. This curve is
+     quick off the mark and lands without ever passing the
+     number it is going to. */
+  /* width, height and the corner are Framer's now; `scale` stays
+     here because the press beat is a discrete state, not a value
+     being interpolated from JS. */
+  transition: scale 340ms cubic-bezier(0.22, 1, 0.36, 1);}
+
+/* The first beat: pressed down. A plain uniform shrink — the
+   button gets smaller, nothing squashes and nothing spreads.
+   In fast, because a press should be felt at once and not
+   eased into. */
+.crt-stage[data-sink="true"] .crt-body,
+.crt-stage[data-sink="true"] .crt-pill {
+  scale: 0.94;
+  /* 120 against a 95ms handoff: the spread starts while this
+     is still running, so there is never a frame where nothing
+     is moving */
+  transition: scale 120ms cubic-bezier(0.35, 0, 0.5, 1);}
+
+/* and closing is the same single move, run down */
+.crt-stage:not([data-open="true"]) .crt-body {
+  transition: scale 260ms cubic-bezier(0.22, 1, 0.36, 1);}
+
+/* ── a panel, not a slab of ink ───────────────────────────
+   `--slab` is redefined for this component rather than
+   changed at the root, because exactly two things read it and
+   the other is the overlay's Copy button — a primary action
+   that should stay filled.
+
+   On the STAGE, not on the body. The shape and the type are
+   deliberately two layers here — opaque blobs on a filtered
+   one, text riding above on an unfiltered one — and they are
+   siblings, so tokens set on the body reach the fill and
+   none of the words. The stage is the first element that is
+   an ancestor of both.
+
+   `--board` and `--ink` both flip with the theme, so one
+   definition covers both: white with dark type in light,
+   #212429 with light type in dark — which is what dark
+   already had. Only the light theme changes. */
+.crt-stage {
+  /* the fill layer first, and what this was before it as the
+     fallback — so Auto is genuinely unchanged rather than a
+     third value that happens to look similar */
+  --slab: var(--primary-color);
+  --on-slab: var(--fill-on, var(--ink));
+  --on-slab-rgb: var(--fill-on-rgb, var(--ink-rgb));}
+
+.crt-ink { position: absolute; inset: 0; }
+
+/* the pill. It does not move aside, it is simply not there
+   once the shape has spread. */
+/* the same auto-margin centring as .crt-body above, and for
+   the second reason given there: three boxes stacked on one
+   stage, centred by two different mechanisms, can round a
+   sub-pixel apart. One mechanism, one answer. */
+.crt-pill {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: 100%; height: var(--pill-h);
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 0 12px;
+  border: 0; border-radius: var(--crt-shut-r); background: none;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 12px;
+  font-weight: 650;
+  cursor: pointer;
+  transition:
+    width 380ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 160ms ease,
+    scale 340ms cubic-bezier(0.22, 1, 0.36, 1);}
+
+.crt-stage[data-open="true"] .crt-pill {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;}
+
+/* held at full strength through the press: fading it during
+   the squash would hide the beat that the squash is for */
+.crt-stage[data-sink="true"] .crt-pill { opacity: 1; }
+
+.crt-glyph { display: grid; place-items: center; }
+
+/* the pill takes the width of whatever it is saying, so the
+   label can change without it jumping */
+.crt-say {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-align: left;
+  transition: width 380ms cubic-bezier(0.22, 1, 0.36, 1);}
+
+/* inline-block so it has an offsetWidth to be measured by */
+.crt-say > span { display: inline-block; }
+
+/* the window, in the same place */
+.crt-panel {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  width: var(--panel-w); height: var(--panel-h);
+  padding: 11px 10px;
+  color: var(--on-slab);
+  pointer-events: none;}
+
+.crt-stage[data-open="true"] .crt-panel { pointer-events: auto; }
+
+.crt-menu {
+  margin: 0; padding: 0;
+  list-style: none;
+  display: grid; align-content: start; gap: 2px;}
+
+.crt-item {
+  opacity: 0;
+  transform: translateY(6px);
+  /* the same curve as the shell, and no overshoot either: a
+     row that slides past its resting line and comes back is
+     the same wobble at a smaller size. Shortened with it —
+     320ms of travel on a box that lands in 180 left the rows
+     still moving after the shape had stopped. */
+  transition: opacity 150ms ease, transform 240ms cubic-bezier(0.22, 1, 0.36, 1);}
+
+.crt-stage[data-open="true"] .crt-item { opacity: 1; transform: none; }
+
+.crt-item a {
+  position: relative;
+  width: 100%;
+  display: flex; align-items: center; gap: 10px;
+  height: 34px; padding: 0 14px;
+  /* fully round, so a row nests inside the card's own corners
+     instead of squaring off against them */
+  border: 0; border-radius: var(--crt-row-r, 999px);
+  background: none;
+  /* 0.78, not the 0.72 this carried when the slab was dark.
+     The same fraction is not the same contrast once the ink
+     and the ground swap ends: light type at 0.72 on near
+     black measured comfortably, dark type at 0.72 on white
+     lands at 4.6:1 — over the line but only just, and this is
+     the menu's only body text. */
+  color: rgba(var(--on-slab-rgb), 0.78);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: color 200ms ease;}
+
+.crt-item a:hover { color: var(--on-slab); }
+
+/* ── the hover wash, one per row ───────────────────────────
+   It was one pill that travelled between rows and stretched
+   on the way. Each row now fades its own in and out; nothing
+   moves between them. */
+.crt-item a::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: rgba(var(--on-slab-rgb), 0.08);
+  opacity: 0;
+  transition: opacity 220ms ease;
+  pointer-events: none;}
+
+@media (hover: hover) {
+  .crt-item a:hover::before { opacity: 1; transition-duration: 140ms; }
+}
+
+.crt-item a:focus-visible::before { opacity: 1; }
+
+/* the wash sits behind the label, inside its own row */
+.crt-item a { isolation: isolate; }
+
+@media (prefers-reduced-motion: reduce) {
+  .crt-body, .crt-pill, .crt-item, .crt-say { transition-duration: 1ms; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .crt-stage[data-sink="true"] .crt-body,
+    .crt-stage[data-sink="true"] .crt-pill { scale: 1; }
+}
+
+/* Bencho tokens are aliases scoped to this component, never globals.
+   RGB fallbacks stay local because the app's text token is a hex value. */
+.crt-stage {
+    --board: var(--bg-color);
+    --fill-slab: var(--card-bg);
+    --fill-on: var(--text-primary);
+    --fill-on-rgb: var(--text-primary-rgb, 29, 29, 31);
+    --ink: var(--text-primary);
+    --ink-rgb: var(--text-primary-rgb, 29, 29, 31);
+    --pane-edge: var(--border-color);
+    --font-ui: inherit;
+}
+.crt-stage[data-open="true"] { --slab: var(--fill-slab); z-index: 80; }
+.crt-stage[data-sink="true"] { z-index: 80; }
+.crt-body {
+    box-shadow: inset 0 0 0 1px rgba(var(--primary-color-rgb, 10, 89, 247), .16);
+    transition: background-color 180ms ease, scale 340ms cubic-bezier(.22, 1, .36, 1);
+}
+.crt-stage[data-open="true"] .crt-body {
+    box-shadow: inset 0 0 0 1px var(--pane-edge);
+}
+.crt-pill:focus-visible, .crt-item a:focus-visible {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}
+.crt-panel { box-sizing: border-box; }
+.crt-item a { font-size: 12px; font-weight: 650; }
+.crt-item svg { flex: 0 0 auto; }
+.crt-item a:focus-visible { outline-offset: -2px; }
+.home-create-host { flex: 0 0 auto; }
+
+/* The hero's entrance animation creates a stacking context. Raising a
+   descendant dropdown alone cannot place it above later animated rows. */
+.home-dashboard-hero { position: relative; z-index: 90; }
+@media (max-width: 620px) {
+    .home-create-host, .home-create-host .crt-stage { width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+    .crt-body, .crt-pill, .crt-item, .crt-say { transition: none !important; }
+    .crt-item { transition-delay: 0ms !important; }
+}
+
+/* Creation pages share the homepage body class, but have no fixed
+   .home-shell to reserve the macOS header. Give their own content that
+   space, and keep every wizard step scrollable inside the window. */
+@media (min-width: 1101px) {
+    body.home-dashboard-body.create-classroom-body[data-app-shell="webview"][data-app-platform="macos"] {
+        padding-top: var(--header-height, 66px);
+        height: 100dvh;
+        box-sizing: border-box;
+    }
+    body.home-dashboard-body.create-classroom-body[data-app-shell="webview"][data-app-platform="macos"] .create-classroom-page {
+        height: calc(100dvh - var(--header-height, 66px));
+        min-height: 0;
+        overflow-y: auto;
+    }
 }

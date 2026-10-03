@@ -18,7 +18,8 @@ from .config import (
     get_tier_limits,
     subscription_payload,
 )
-from .models import CloudClassroom, CloudClassroomGroup, CloudSnapshot, PendingLogin
+from .delta import DELTA_PROTOCOL
+from .models import CloudClassroom, CloudClassroomCommit, CloudClassroomGroup, CloudSnapshot, PendingLogin
 from .oauth import OAuthError, exchange_code_for_token, fetch_userinfo, refresh_user_subscription, upsert_cloud_user
 from .sync import (
     check_payload_size,
@@ -292,7 +293,9 @@ def api_refresh_subscription(request):
 @require_http_methods(['GET'])
 @require_session
 def sync_status(request):
-    classrooms = CloudClassroom.objects.filter(user=request.cloud_user, is_deleted=False).order_by('-updated_at')
+    classrooms = CloudClassroom.objects.only(
+        'uuid', 'name', 'rows', 'cols', 'version', 'updated_at', 'last_modified_at'
+    ).filter(user=request.cloud_user, is_deleted=False).order_by('-updated_at')
     rows = [
         {
             'uuid': str(item.uuid),
@@ -315,11 +318,14 @@ def sync_status(request):
             'updated_at': item.updated_at.isoformat(),
             'last_modified_at': item.last_modified_at.isoformat() if item.last_modified_at else None,
         }
-        for item in CloudClassroomGroup.objects.filter(user=request.cloud_user).order_by('name', 'pk')
+        for item in CloudClassroomGroup.objects.only(
+            'uuid', 'name', 'version', 'classroom_uuids', 'updated_at', 'last_modified_at'
+        ).filter(user=request.cloud_user).order_by('name', 'pk')
     ]
     return _encrypted_json_response({
         'ok': True,
         'status': 'success',
+        'sync_protocols': ['full-v1', DELTA_PROTOCOL],
         'classrooms': rows,
         'versions': {item['uuid']: item['version'] for item in rows},
         'operation_times': {item['uuid']: item['last_operation_at'] for item in rows if item.get('last_operation_at')},
@@ -364,18 +370,19 @@ def sync_push_batch(request):
     except ValueError as exc:
         return _json_error(exc, status=413)
 
+    validated_items = []
     try:
         for item in items:
-            validate_push_payload(request.cloud_user, item)
+            validated_items.append(validate_push_payload(request.cloud_user, item))
     except ValueError as exc:
         return _json_error(exc, status=400)
     except PermissionError as exc:
         return _json_error(exc, status=403)
 
     results = []
-    for item in items:
+    for item, validated_item in zip(items, validated_items):
         try:
-            result = push_classroom_snapshot(request.cloud_user, item)
+            result = push_classroom_snapshot(request.cloud_user, item, validated=validated_item)
             results.append({'status': 'conflict' if result.get('conflict') else 'ok', **result})
         except PermissionError as exc:
             results.append({'status': 'error', 'message': str(exc)})
@@ -407,6 +414,7 @@ def sync_push_group(request):
         check_payload_size(group_data, 'max_push_size_mb')
 
         validated = []
+        validated_payloads = {}
         seen_uuids = set()
         limits = None
         for item in items:
@@ -416,6 +424,7 @@ def sync_push_group(request):
             seen_uuids.add(classroom_uuid)
             limits = limits or item_limits
             validated.append((item, data, classroom_uuid))
+            validated_payloads[id(item)] = (data, classroom_uuid, _tier, item_limits)
         validated_uuids = [str(item[2]) for item in validated]
         if group_classroom_uuids and group_classroom_uuids != validated_uuids:
             raise ValueError('班级组内班级顺序与上传班级不一致')
@@ -425,7 +434,7 @@ def sync_push_group(request):
             for item in CloudClassroom.objects.filter(
                 user=request.cloud_user,
                 uuid__in=[item[2] for item in validated],
-            )
+            ).only('pk', 'uuid', 'name', 'version', 'is_deleted')
         }
         active_count = CloudClassroom.objects.filter(user=request.cloud_user, is_deleted=False).count()
         activating_count = sum(
@@ -481,7 +490,11 @@ def sync_push_group(request):
                 defaults={'name': group_name},
             )
             for item, _, _ in validated:
-                result = push_classroom_snapshot(request.cloud_user, item)
+                result = push_classroom_snapshot(
+                    request.cloud_user,
+                    item,
+                    validated=validated_payloads[id(item)],
+                )
                 if result.get('conflict'):
                     raise ValueError(result.get('message') or '班级组备份冲突')
                 results.append({'status': 'ok', **result})
@@ -622,9 +635,52 @@ def sync_pull_group(request, group_uuid):
 @require_http_methods(['GET'])
 @require_session
 def sync_pull(request, classroom_uuid):
-    classroom = CloudClassroom.objects.filter(user=request.cloud_user, uuid=classroom_uuid, is_deleted=False).first()
+    classroom = CloudClassroom.objects.only(
+        'pk', 'uuid', 'name', 'version', 'updated_at', 'last_modified_at'
+    ).filter(user=request.cloud_user, uuid=classroom_uuid, is_deleted=False).first()
     if not classroom:
         return _json_error('班级不存在', status=404)
+    try:
+        base_version = int(request.GET.get('base_version'))
+    except (TypeError, ValueError):
+        base_version = None
+    if request.GET.get('protocol') == DELTA_PROTOCOL and base_version is not None and 0 <= base_version <= classroom.version:
+        commits = list(
+            CloudClassroomCommit.objects.only(
+                'version', 'base_version', 'protocol', 'changes', 'snapshot_hash', 'created_at'
+            ).filter(classroom=classroom, version__gt=base_version).order_by('version', 'pk')
+        )
+        expected = base_version
+        continuous = True
+        commit_payloads = []
+        for commit in commits:
+            if int(commit.base_version) != expected or int(commit.version) != expected + 1:
+                continuous = False
+                break
+            commit_payloads.append({
+                'version': int(commit.version),
+                'base_version': int(commit.base_version),
+                'protocol': commit.protocol,
+                'changes': commit.changes,
+                'snapshot_hash': commit.snapshot_hash,
+                'created_at': commit.created_at.isoformat(),
+            })
+            expected = int(commit.version)
+        if continuous and expected == int(classroom.version):
+            return _encrypted_json_response({
+                'ok': True,
+                'status': 'success',
+                'uuid': str(classroom.uuid),
+                'name': classroom.name,
+                'version': classroom.version,
+                'protocol': DELTA_PROTOCOL,
+                'base_version': base_version,
+                'commits': commit_payloads,
+                'updated_at': classroom.updated_at.isoformat(),
+                'last_operation_at': classroom.last_modified_at.isoformat() if classroom.last_modified_at else None,
+                'last_modified_at': classroom.last_modified_at.isoformat() if classroom.last_modified_at else None,
+            }, session=request.cloud_session)
+    classroom = CloudClassroom.objects.get(pk=classroom.pk)
     return _encrypted_json_response({
         'ok': True,
         'status': 'success',
@@ -650,7 +706,7 @@ def sync_delete(request, classroom_uuid):
     except ValueError as exc:
         return _json_error(exc)
 
-    classroom = CloudClassroom.objects.filter(user=request.cloud_user, uuid=classroom_uuid).first()
+    classroom = CloudClassroom.objects.defer('data_snapshot').filter(user=request.cloud_user, uuid=classroom_uuid).first()
     if not classroom:
         return _json_error('班级不存在', status=404)
 
@@ -667,7 +723,11 @@ def sync_delete(request, classroom_uuid):
 @require_http_methods(['GET'])
 @require_session
 def snapshots_list(request, classroom_uuid):
-    classroom = CloudClassroom.objects.filter(user=request.cloud_user, uuid=classroom_uuid, is_deleted=False).first()
+    classroom = CloudClassroom.objects.only('pk', 'uuid').filter(
+        user=request.cloud_user,
+        uuid=classroom_uuid,
+        is_deleted=False,
+    ).first()
     if not classroom:
         return _json_error('班级不存在', status=404)
     snapshots = [
@@ -677,7 +737,7 @@ def snapshots_list(request, classroom_uuid):
             'size_bytes': item.size_bytes,
             'created_at': item.created_at.isoformat(),
         }
-        for item in classroom.snapshots.all()
+        for item in classroom.snapshots.only('pk', 'classroom_id', 'name', 'size_bytes', 'created_at').all()
     ]
     return _encrypted_json_response({'ok': True, 'status': 'success', 'classroom_uuid': str(classroom.uuid), 'snapshots': snapshots}, session=request.cloud_session)
 
@@ -694,7 +754,11 @@ def snapshots_create(request):
     except ValueError as exc:
         return _json_error(exc)
 
-    classroom = CloudClassroom.objects.filter(user=request.cloud_user, uuid=payload.get('classroom_uuid'), is_deleted=False).first()
+    classroom = CloudClassroom.objects.defer('data_snapshot').filter(
+        user=request.cloud_user,
+        uuid=payload.get('classroom_uuid'),
+        is_deleted=False,
+    ).first()
     if not classroom:
         return _json_error('班级不存在', status=404)
 
@@ -755,7 +819,7 @@ def snapshots_download(request, snapshot_id):
 @require_http_methods(['DELETE'])
 @require_session
 def snapshots_delete(request, snapshot_id):
-    snapshot = CloudSnapshot.objects.filter(
+    snapshot = CloudSnapshot.objects.only('pk').filter(
         pk=snapshot_id,
         classroom__user=request.cloud_user,
     ).first()

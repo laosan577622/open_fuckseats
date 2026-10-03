@@ -75,6 +75,26 @@ class CloudClassroom(models.Model):
         return f'{self.user_id}-{self.name}'
 
 
+class CloudClassroomCommit(models.Model):
+    classroom = models.ForeignKey(CloudClassroom, on_delete=models.CASCADE, related_name='commits')
+    version = models.BigIntegerField()
+    base_version = models.BigIntegerField(default=0)
+    protocol = models.CharField(max_length=24, default='delta-v1')
+    changes = models.JSONField(default=list)
+    snapshot_hash = models.CharField(max_length=64, blank=True, default='')
+    device_id = models.CharField(max_length=64, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['version', 'pk']
+        constraints = [
+            models.UniqueConstraint(fields=['classroom', 'version'], name='cloud_commit_version_uniq'),
+        ]
+        indexes = [
+            models.Index(fields=['classroom', 'version'], name='cloud_commit_chain_idx'),
+        ]
+
+
 class CloudClassroomGroup(models.Model):
     user = models.ForeignKey(CloudUser, on_delete=models.CASCADE, related_name='classroom_groups')
     uuid = models.UUIDField(default=uuid.uuid4, db_index=True)

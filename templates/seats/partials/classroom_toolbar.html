@@ -1,0 +1,281 @@
+<div class="context-toolbar-panels">
+    <div class="context-toolbar-row context-toolbar-panel active classroom-toolbar-row" data-toolbar-panel="home">
+        <div class="classroom-toolbar-group classroom-toolbar-arrange">
+            <form method="post" action="{% url 'auto_arrange_seats' classroom.pk %}" class="quick-arrange-form">
+                {% csrf_token %}
+                <select name="method" aria-label="自动排座算法" class="classroom-arrange-select">
+                    <option value="random">随机排座</option>
+                    <option value="score_desc">按成绩从高到低</option>
+                    <option value="score_asc">按成绩从低到高</option>
+                    <option value="good_front">成绩好的在前排</option>
+                    <option value="good_back">成绩好的在后排</option>
+                    <option value="score_spread">相邻成绩差异大</option>
+                    <option value="group_balanced">小组均衡模式</option>
+                    <option value="group_mentor">小组优带差模式</option>
+                </select>
+                <button class="btn btn-primary" id="btn-auto-arrange" type="submit">自动排座</button>
+                <button type="button" class="arrange-method-trigger" aria-label="选择自动排座算法" aria-expanded="false" aria-controls="arrange-method-menu">
+                    <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="m2.2 4.4 3.8 3.8 3.8-3.8" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                </button>
+                <div class="arrange-method-menu" id="arrange-method-menu" role="menu" hidden>
+                    <button type="button" role="menuitem" data-arrange-method="random">随机排座</button>
+                    <button type="button" role="menuitem" data-arrange-method="score_desc">按成绩从高到低</button>
+                    <button type="button" role="menuitem" data-arrange-method="score_asc">按成绩从低到高</button>
+                    <button type="button" role="menuitem" data-arrange-method="good_front">成绩好的在前排</button>
+                    <button type="button" role="menuitem" data-arrange-method="good_back">成绩好的在后排</button>
+                    <button type="button" role="menuitem" data-arrange-method="score_spread">相邻成绩差异大</button>
+                    <button type="button" role="menuitem" data-arrange-method="group_balanced">小组均衡模式</button>
+                    <button type="button" role="menuitem" data-arrange-method="group_mentor">小组优带差模式</button>
+                </div>
+            </form>
+        </div>
+        <span class="classroom-toolbar-divider" aria-hidden="true"></span>
+        <div class="classroom-toolbar-group classroom-toolbar-history">
+            {% if exam_state %}
+            <a class="classroom-toolbar-button is-exam-active" href="{% url 'exam_stage' classroom.pk exam_state.snapshot.pk 'result' %}" title="当前为考场布局，桌上显示考场桌号">考场中</a>
+            {% else %}
+            <a class="classroom-toolbar-button" href="{% url 'exam_setup' classroom.pk %}">考场模式</a>
+            {% endif %}
+            {% include 'seats/partials/history_buttons.html' with history_button_class='classroom-toolbar-button' %}
+        </div>
+        <span class="classroom-toolbar-divider" aria-hidden="true"></span>
+        <div class="classroom-toolbar-group classroom-toolbar-files">
+            <div class="menu-dropdown classroom-toolbar-menu" data-menu-root>
+                <button type="button" class="classroom-toolbar-button classroom-toolbar-menu-trigger menu-trigger"
+                    data-menu-toggle="classroom-import-menu" aria-haspopup="true" aria-expanded="false">导入</button>
+                <div class="menu-panel menu-panel-root" id="classroom-import-menu" role="menu">
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-import-third-party-menu" aria-haspopup="true" aria-expanded="false">第三方软件</button>
+                        <div class="menu-panel menu-panel-sub" id="classroom-import-third-party-menu" role="menu">
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-import-seat-table-menu" aria-haspopup="true" aria-expanded="false">座位表</button>
+                                <div class="menu-panel menu-panel-sub" id="classroom-import-seat-table-menu" role="menu">
+                                    <a href="{% url 'import_layout_excel_options_page' classroom.pk %}" class="menu-item-link" role="menuitem">导入座位表</a>
+                                    <button type="button" class="menu-item-button" data-bsce-import-trigger="1" role="menuitem">BSCE 导入</button>
+                                </div>
+                            </div>
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-import-other-table-menu" aria-haspopup="true" aria-expanded="false">其他表格</button>
+                                <div class="menu-panel menu-panel-sub" id="classroom-import-other-table-menu" role="menu">
+                                    <a href="{% url 'import_students_options_page' classroom.pk %}" class="menu-item-link" role="menuitem">导入 Excel 成绩表</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-import-system-menu" aria-haspopup="true" aria-expanded="false">系统操作</button>
+                        <div class="menu-panel menu-panel-sub" id="classroom-import-system-menu" role="menu">
+                            <button type="button" class="menu-item-button" data-seats-import-trigger="1" role="menuitem">导入 .seats</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="menu-dropdown classroom-toolbar-menu" data-menu-root>
+                <button type="button" class="classroom-toolbar-button classroom-toolbar-menu-trigger menu-trigger"
+                    data-menu-toggle="classroom-export-menu" aria-haspopup="true" aria-expanded="false">导出</button>
+                <div class="menu-panel menu-panel-root" id="classroom-export-menu" role="menu">
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-export-third-party-menu" aria-haspopup="true" aria-expanded="false">第三方软件</button>
+                        <div class="menu-panel menu-panel-sub" id="classroom-export-third-party-menu" role="menu">
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-export-seat-table-menu" aria-haspopup="true" aria-expanded="false">座位表</button>
+                                <div class="menu-panel menu-panel-sub" id="classroom-export-seat-table-menu" role="menu">
+                                    <a href="{% url 'export_students_options_page' classroom.pk %}" class="menu-item-link" role="menuitem">导出排座表</a>
+                                    <a href="{% url 'export_students_svg_options_page' classroom.pk %}" class="menu-item-link" role="menuitem">导出 SVG</a>
+                                    <a href="{% url 'export_students_pptx_options_page' classroom.pk %}" class="menu-item-link" role="menuitem">导出 PPTX</a>
+                                </div>
+                            </div>
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-export-other-table-menu" aria-haspopup="true" aria-expanded="false">其他表格</button>
+                                <div class="menu-panel menu-panel-sub" id="classroom-export-other-table-menu" role="menu">
+                                    <a href="{% url 'export_group_report' classroom.pk %}" class="menu-item-link" data-system-save="1" role="menuitem">导出小组登记表</a>
+                                    <a href="{% url 'export_students_csis' classroom.pk %}" class="menu-item-link" data-system-save="1" role="menuitem">导出 CSIS</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-export-system-menu" aria-haspopup="true" aria-expanded="false">系统操作</button>
+                        <div class="menu-panel menu-panel-sub" id="classroom-export-system-menu" role="menu">
+                            <a href="{% url 'export_seats_file' classroom.pk %}" class="menu-item-link" data-system-save="1" role="menuitem">导出 .seats</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="classroom-toolbar-overflow" aria-label="更多功能">
+            <a href="{% url 'ai_workspace' classroom.pk %}" class="btn btn-secondary" id="btn-open-future-mode">闻道智能</a>
+            <button type="button" class="btn btn-secondary" id="btn-open-plugin-hub" data-open-modal="plugin-hub-modal">插件中心</button>
+            <button type="button" class="btn btn-secondary" id="btn-open-plugin-command" data-open-modal="plugin-command-modal">命令面板</button>
+            <a href="{% url 'extensions_overview' %}?classroom_id={{ classroom.pk }}" class="btn btn-secondary">扩展清单</a>
+            <div id="pluginQuickLaunch" class="plugin-quick-launch-inline" aria-label="插件快捷入口">
+                <span class="plugin-quick-launch-empty">正在加载插件快捷入口...</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="context-toolbar-row context-toolbar-panel" data-toolbar-panel="view">
+        <div class="toolbar-group">
+            {% url 'layout_editor' classroom.pk as layout_editor_url %}{% include 'seats/partials/layout_button.html' %}
+            <button type="button" class="btn btn-secondary" onclick="toggleFullScreen()" id="btn-fullscreen">全屏</button>
+            <span class="toolbar-group-label">视图</span>
+        </div>
+    </div>
+
+    <div class="context-toolbar-row context-toolbar-panel" data-toolbar-panel="transform">
+        <div class="toolbar-group">
+            <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
+                <input type="number" id="shiftLayoutSteps" value="1" min="1" aria-label="移动步数" style="width: 54px; padding: 4px 8px; border: 1px solid rgba(15, 23, 42, 0.12); border-radius: 6px; font-size: 12px; outline: none;" title="移动步数">
+                <button type="button" class="btn btn-secondary" id="btn-shift-layout-left">左移</button>
+                <button type="button" class="btn btn-secondary" id="btn-shift-layout-right">右移</button>
+            </div>
+            <span class="toolbar-group-label">集体左右移动</span>
+        </div>
+        <div class="toolbar-group">
+            <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
+                <button type="button" class="btn btn-secondary" id="btn-shift-layout-front">前移</button>
+                <button type="button" class="btn btn-secondary" id="btn-shift-layout-back">后移</button>
+            </div>
+            <span class="toolbar-group-label">集体前后移动</span>
+        </div>
+        <div class="toolbar-group">
+            <div style="display: flex; gap: 6px; align-items: center; padding: 0 4px;">
+                <button type="button" class="btn btn-secondary" id="btn-mirror-layout-lr">左右镜像</button>
+            </div>
+            <span class="toolbar-group-label">布局镜像</span>
+        </div>
+        <div class="toolbar-group">
+            <button type="button" class="btn btn-secondary" data-open-modal="shift-options-modal">移动选项</button>
+            <span class="toolbar-group-label">详细操作</span>
+        </div>
+    </div>
+
+    <div class="context-toolbar-row context-toolbar-panel" data-toolbar-panel="file">
+        <div class="toolbar-group file-toolbar-group">
+            <div class="menu-dropdown" data-menu-root>
+                <button type="button" class="btn btn-secondary menu-trigger" id="btn-open-excel-import-modal"
+                    data-menu-toggle="file-import-menu" aria-haspopup="true" aria-expanded="false">导入</button>
+                <div class="menu-panel menu-panel-root" id="file-import-menu" role="menu">
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-import-third-party-menu" aria-haspopup="true" aria-expanded="false">
+                            第三方软件
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-import-third-party-menu" role="menu">
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-import-third-party-seat-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    座位表
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-import-third-party-seat-table-menu"
+                                    role="menu">
+                                    <a href="{% url 'import_layout_excel_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-open-layout-import-modal"
+                                        role="menuitem">导入座位表</a>
+                                    <button type="button" class="menu-item-button" data-bsce-import-trigger="1"
+                                        role="menuitem">BSCE 导入</button>
+                                </div>
+                            </div>
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-import-third-party-other-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    其他表格
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-import-third-party-other-table-menu"
+                                    role="menu">
+                                    <a href="{% url 'import_students_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-import-students" role="menuitem">导入 Excel 成绩表</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-import-system-menu" aria-haspopup="true" aria-expanded="false">
+                            系统操作
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-import-system-menu" role="menu">
+                            <button type="button" class="menu-item-button" id="btn-import-seats-file"
+                                data-seats-import-trigger="1">导入 .seats</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <span class="toolbar-group-label">导入</span>
+        </div>
+        <div class="toolbar-group file-toolbar-group">
+            <div class="menu-dropdown" data-menu-root>
+                <button type="button" class="btn btn-secondary menu-trigger" id="btn-export"
+                    data-menu-toggle="file-export-menu" aria-haspopup="true" aria-expanded="false">导出</button>
+                <div class="menu-panel menu-panel-root" id="file-export-menu" role="menu">
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-export-third-party-menu" aria-haspopup="true" aria-expanded="false">
+                            第三方软件
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-export-third-party-menu" role="menu">
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-export-third-party-seat-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    座位表
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-export-third-party-seat-table-menu"
+                                    role="menu">
+                                    <a href="{% url 'export_students_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-export-excel" role="menuitem"
+                                        data-default-filename="{{ classroom.name }}_座次图.xlsx"
+                                        data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                        data-accept-ext=".xlsx">导出排座表</a>
+                                    <a href="{% url 'export_students_svg_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-export-svg" role="menuitem"
+                                        data-default-filename="{{ classroom.name }}_座次图.svg"
+                                        data-accept-mime="image/svg+xml" data-accept-ext=".svg">导出 SVG</a>
+                                    <a href="{% url 'export_students_pptx_options_page' classroom.pk %}"
+                                        class="menu-item-link" id="btn-export-pptx" role="menuitem"
+                                        data-default-filename="{{ classroom.name }}_座次图.pptx"
+                                        data-accept-mime="application/vnd.openxmlformats-officedocument.presentationml.presentation"
+                                        data-accept-ext=".pptx">导出单页 PPT</a>
+                                </div>
+                            </div>
+                            <div class="menu-submenu">
+                                <button type="button" class="menu-item-button menu-item-has-children"
+                                    data-menu-toggle="file-export-third-party-other-table-menu" aria-haspopup="true"
+                                    aria-expanded="false">
+                                    其他表格
+                                </button>
+                                <div class="menu-panel menu-panel-sub" id="file-export-third-party-other-table-menu"
+                                    role="menu">
+                                    <a href="{% url 'export_group_report' classroom.pk %}" class="menu-item-link"
+                                        id="btn-export-group-report" role="menuitem" data-system-save="1"
+                                        data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
+                                        data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                                        data-accept-ext=".xlsx">导出小组登记表</a>
+                                    <a href="{% url 'export_students_csis' classroom.pk %}" class="menu-item-link"
+                                        id="btn-export-csis" role="menuitem" data-system-save="1"
+                                        data-default-filename="{{ classroom.name }}_CSIS.csls"
+                                        data-accept-mime="application/json" data-accept-ext=".csls,.json">导出 CSIS（CSLS）</a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="menu-submenu">
+                        <button type="button" class="menu-item-button menu-item-has-children"
+                            data-menu-toggle="file-export-system-menu" aria-haspopup="true" aria-expanded="false">
+                            系统操作
+                        </button>
+                        <div class="menu-panel menu-panel-sub" id="file-export-system-menu" role="menu">
+                            <a href="{% url 'export_seats_file' classroom.pk %}" class="menu-item-link"
+                                id="btn-export-seats-file" role="menuitem" data-system-save="1"
+                                data-default-filename="{{ classroom.name }}.seats"
+                                data-accept-mime="application/octet-stream" data-accept-ext=".seats,.json">导出 .seats</a>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <span class="toolbar-group-label">导出</span>
+        </div>
+    </div>
+</div>

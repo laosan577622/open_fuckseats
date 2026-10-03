@@ -379,13 +379,23 @@ def _compare_values(left, right):
 
 def sort_students(students, definition):
     normalized = normalize_sort_definition(definition)
+    students = list(students)
+    prepared = {}
+    for student in students:
+        values = []
+        for rule in normalized['rules']:
+            raw = _student_field_value(student, rule['field'])
+            is_null = _is_null(raw)
+            values.append((
+                is_null,
+                None if is_null else _transformed_value(raw, rule['transform'], rule['field']),
+            ))
+        prepared[id(student)] = values
 
     def compare(left, right):
-        for rule in normalized['rules']:
-            left_raw = _student_field_value(left, rule['field'])
-            right_raw = _student_field_value(right, rule['field'])
-            left_null = _is_null(left_raw)
-            right_null = _is_null(right_raw)
+        for index, rule in enumerate(normalized['rules']):
+            left_null, left_value = prepared[id(left)][index]
+            right_null, right_value = prepared[id(right)][index]
             if left_null or right_null:
                 if left_null and right_null:
                     continue
@@ -394,14 +404,14 @@ def sort_students(students, definition):
                     result *= -1
                 return result
             result = _compare_values(
-                _transformed_value(left_raw, rule['transform'], rule['field']),
-                _transformed_value(right_raw, rule['transform'], rule['field']),
+                left_value,
+                right_value,
             )
             if result:
                 return -result if rule['direction'] == 'desc' else result
         return _compare_values(left.pk or 0, right.pk or 0)
 
-    return sorted(list(students), key=cmp_to_key(compare))
+    return sorted(students, key=cmp_to_key(compare))
 
 
 def definition_for_field(field, direction='asc', transform='auto'):

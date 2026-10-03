@@ -1,6 +1,9 @@
+import argparse
+import importlib.util
 import json
 import os
 import plistlib
+import platform
 import re
 import shutil
 import subprocess
@@ -35,9 +38,9 @@ def _read_manifest_version(base_dir):
         return ''
 
 
-def _resolve_version(base_dir):
-    if len(sys.argv) > 1:
-        version = str(sys.argv[1] or '').strip()
+def _resolve_version(base_dir, requested=None):
+    if requested:
+        version = str(requested).strip()
         if version:
             return version
 
@@ -65,6 +68,58 @@ def _find_app_bundle(base_dir):
 
 def _truthy(value):
     return str(value or '').strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def _preflight(base_dir, version):
+    """Read-only checks: never stages files, builds, signs or submits to Apple."""
+    errors = []
+    print(f'检查环境：Python {platform.python_version()} / {platform.machine()}', flush=True)
+    if not re.fullmatch(r'\d+\.\d+\.\d+', version):
+        errors.append('请明确指定三段数字版本号（例如 2.3.0），本地占位版本不能用于 PKG。')
+    for tool in ('codesign', 'pkgbuild', 'pkgutil', 'hdiutil', 'security', 'xcrun'):
+        if not shutil.which(tool):
+            errors.append(f'缺少 macOS 工具：{tool}')
+    for module in ('PyInstaller', 'django', 'webview', 'Cocoa', 'WebKit',
+                   'waitress', 'whitenoise', 'pandas', 'openai', 'openpyxl',
+                   'pptx', 'xlrd', 'cryptography', 'sqlcipher3', 'keyring',
+                   'pypinyin', 'tzdata', 'pytz', 'certifi', 'yaml'):
+        if importlib.util.find_spec(module) is None:
+            errors.append(f'当前 Python 缺少依赖：{module}')
+    for relative in ('templates', 'static', 'run_app.py', 'install/macos/scripts/preinstall'):
+        if not os.path.exists(os.path.join(base_dir, relative)):
+            errors.append(f'缺少打包输入：{relative}')
+    identities = [str(os.getenv(name) or '').strip() for name in (
+        'MACOS_APP_SIGNING_IDENTITY', 'MACOS_INSTALLER_SIGNING_IDENTITY')]
+    signing_required = _truthy(os.getenv('MACOS_REQUIRE_SIGNING'))
+    notarization_required = _truthy(os.getenv('MACOS_REQUIRE_NOTARIZATION'))
+    profile = str(os.getenv('MACOS_NOTARY_PROFILE') or '').strip()
+    credentials = all(os.getenv(name, '').strip() for name in (
+        'MACOS_NOTARY_APPLE_ID', 'MACOS_NOTARY_PASSWORD', 'MACOS_NOTARY_TEAM_ID'))
+    notarizing = bool(profile or credentials or notarization_required)
+    for name, identity in zip(('Application', 'Installer'), identities):
+        if not identity and (signing_required or notarizing):
+            errors.append(f'缺少 Developer ID {name} 签名身份。')
+        elif identity and shutil.which('security'):
+            result = subprocess.run(['security', 'find-identity', '-v'], capture_output=True, text=True)
+            if result.returncode or identity not in result.stdout:
+                errors.append(f'钥匙串未找到配置的 Developer ID {name} 有效身份及私钥。')
+    if notarizing:
+        if not (os.getenv('MACOS_TEAM_ID') or os.getenv('MACOS_NOTARY_TEAM_ID')):
+            errors.append('请配置 MACOS_TEAM_ID 或 MACOS_NOTARY_TEAM_ID，用于升级包团队校验。')
+        if not (profile or credentials):
+            errors.append('缺少公证凭据：配置 MACOS_NOTARY_PROFILE 或完整 Apple ID 公证环境变量。')
+        if shutil.which('xcrun'):
+            for tool in ('notarytool', 'stapler'):
+                result = subprocess.run(['xcrun', '--find', tool], capture_output=True, text=True)
+                if result.returncode:
+                    errors.append(f'开发工具中找不到 {tool}。')
+    if not any(identities) and not notarizing and not signing_required:
+        print('当前为无开发者证书模式：App 使用 ad-hoc 签名，PKG 未签名，并跳过公证。')
+        print('未签名 PKG 可用于手动安装，不能作为应用内升级包。')
+    for error in errors:
+        print(f'未就绪：{error}', file=sys.stderr)
+    print('仅检查本地配置；证书信任、公证凭据有效性及成品运行仍需正式构建时验证。')
+    return not errors
 
 
 def _configure_app_info(app_path, version):
@@ -162,15 +217,24 @@ def _notarize_and_staple(paths):
         subprocess.check_call(['/usr/bin/xcrun', 'stapler', 'staple', path])
 
 
-def main():
+def main(argv=None):
     _ensure_utf8_stdio()
+    parser = argparse.ArgumentParser(description='构建 macOS DMG / PKG，或仅检查打包准备情况。')
+    parser.add_argument('version', nargs='?', help='三段数字版本号，例如 2.3.0')
+    parser.add_argument('--check-only', action='store_true', help='只读检查，不构建、不签名、不公证')
+    args = parser.parse_args(argv)
 
     if sys.platform != 'darwin':
         print('macOS DMG 打包脚本只能在 macOS 上运行。', file=sys.stderr, flush=True)
         sys.exit(1)
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    version = _resolve_version(base_dir)
+    version = _resolve_version(base_dir, args.version)
+    if not _preflight(base_dir, version):
+        return 1
+    if args.check_only:
+        print('检查结束，未触发打包。', flush=True)
+        return 0
     safe_version = _safe_filename_part(version)
     artifacts_dir = os.path.join(base_dir, 'artifacts', 'macos')
     stage_dir = os.path.join(base_dir, '_mac_dmg_stage')
@@ -229,4 +293,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

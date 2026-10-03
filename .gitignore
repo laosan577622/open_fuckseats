@@ -24,7 +24,7 @@ staticfiles/
 *.spec
 build/
 dist/
-artifacts/
+artifacts/*
 # Flask stuff:
 instance/
 .webassets-cache
@@ -112,6 +112,7 @@ temp_git_backup/
 temp_imports/
 _data_stage/
 _mac_dmg_stage/
+/install/macos/release.env.local
 .runtime/
 /backups/
 /locks/
@@ -122,7 +123,3 @@ _mac_dmg_stage/
 node_modules/
 dist/
 npm-debug.log
-
-# Generated promo media
-promo-video/presentation/public/audio/
-promo-video/exports/

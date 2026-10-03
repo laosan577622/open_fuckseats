@@ -6,6 +6,7 @@ from django.conf import settings
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
+import desktop_access
 from seats.models import FrontendKVStore
 
 
@@ -95,6 +96,26 @@ def unauthorized_response(message='缺少或无效的 Bearer API Key'):
     return response
 
 
+def read_access_state(request):
+    token = extract_bearer_token(request)
+    if not token.startswith(desktop_access.READ_TOKEN_PREFIX):
+        return None
+    return desktop_access.read_access_broker.lookup(token)
+
+
+def read_access_error(state):
+    if state is None:
+        return unauthorized_response('只读凭证无效，或应用重启后授权已失效')
+    authorization = state['authorization']
+    pending = authorization == 'pending'
+    return JsonResponse({
+        'status': 'error',
+        'authorization': authorization,
+        'error': '等待用户允许第三方读取' if pending else '用户已拒绝第三方读取',
+        'code': 'ACCESS_PENDING' if pending else 'ACCESS_DENIED',
+    }, status=409 if pending else 403)
+
+
 def allowed_browser_origins():
     configured = str(os.environ.get(OPEN_API_BROWSER_ORIGINS_ENV) or '').strip()
     if not configured:
@@ -140,6 +161,15 @@ def require_open_api_auth(view_func):
                     'code': 'ORIGIN_NOT_ALLOWED',
                 }, status=403)
             return apply_open_api_browser_headers(request, JsonResponse({'status': 'ok'}))
+        request.open_api_read_only = False
+        token = extract_bearer_token(request)
+        if token.startswith(desktop_access.READ_TOKEN_PREFIX):
+            state = read_access_state(request)
+            if state is None or state['authorization'] != 'granted':
+                return apply_open_api_browser_headers(request, read_access_error(state))
+            request.open_api_read_only = True
+            request.open_api_client_name = state['client_name']
+            return apply_open_api_browser_headers(request, view_func(request, *args, **kwargs))
         if not is_authorized(request) and not is_trusted_browser_request(request):
             return apply_open_api_browser_headers(request, unauthorized_response())
         return apply_open_api_browser_headers(request, view_func(request, *args, **kwargs))

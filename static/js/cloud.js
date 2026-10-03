@@ -228,51 +228,50 @@ window.CloudManager = (function () {
         }));
     }
 
-    async function autoSyncAfterLogin(userInfo) {
-        updateLoginStatus('登录成功，正在自动同步云端数据...');
+    async function autoSyncAfterLogin(userInfo, options = {}) {
+        if (options.inline) options.onStatus?.('登录成功，正在同步已关联的班级…');
+        else updateLoginStatus('登录成功，正在自动同步云端数据...');
         const result = await sync(null, { auto: true, scope: 'linked', deviceId: 'login-auto-sync' });
         _userInfo = userInfo || await getUserInfo(true);
         dispatchLoginSyncComplete(result, _userInfo);
         return result;
     }
 
-    function waitForLoginStatus() {
-        let attempts = 0;
-        const maxAttempts = 180;
+    function waitForLoginStatus(signal) {
         return new Promise((resolve, reject) => {
-            const interval = setInterval(async () => {
-                attempts++;
-                if (attempts > maxAttempts) {
-                    clearInterval(interval);
-                    reject(new Error('登录等待超时，请重新登录'));
-                    return;
-                }
-                try {
-                    const info = await getUserInfo(true, { refreshSubscription: false });
-                    if (info && info.logged_in) {
-                        clearInterval(interval);
-                        resolve(info);
-                    }
-                } catch {}
-            }, 2000);
+            let timer, attempts = 0;
+            const cancel = () => { clearTimeout(timer); reject(new DOMException('登录已取消', 'AbortError')); };
+            const done = (fn, value) => { clearTimeout(timer); signal?.removeEventListener('abort', cancel); fn(value); };
+            const poll = async () => {
+                if (signal?.aborted) return done(reject, new DOMException('登录已取消', 'AbortError'));
+                if (++attempts > 180) return done(reject, new Error('登录等待超时，请重新登录'));
+                const info = await getUserInfo(true, { refreshSubscription: false });
+                if (signal?.aborted) return;
+                if (info?.logged_in) return done(resolve, info);
+                timer = setTimeout(poll, 2000);
+            };
+            signal?.addEventListener('abort', cancel, {once:true});
+            poll();
         });
     }
 
-    function openLogin() {
+    function openLogin(options = {}) {
         if (_loginFlowPromise) return _loginFlowPromise;
 
         _loginFlowPromise = (async () => {
             const data = await getUserInfo(true, { refreshSubscription: false });
+            if (options.signal?.aborted) return { status: 'cancelled' };
+            if (data.connection_error) throw new Error(data.message || '无法连接云服务，请稍后重试');
             if (data && data.logged_in) {
                 return { status: 'already_logged_in', user: data };
             }
             const loginUrl = data.login_url;
             if (!loginUrl) throw new Error('云服务登录地址无效');
 
-            const shouldContinue = await showLoginPreparationDialog();
+            const shouldContinue = options.inline || await showLoginPreparationDialog();
             if (!shouldContinue) return { status: 'cancelled' };
 
-            setLoginOverlayMode(
+            if (!options.inline) setLoginOverlayMode(
                 'waiting',
                 '请在打开的浏览器窗口中完成登录。登录完成前，主程序将暂时锁定，避免数据状态不一致。',
                 '正在打开浏览器...'
@@ -284,6 +283,8 @@ window.CloudManager = (function () {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ url: loginUrl }),
                 });
+            } else if (options.inline) {
+                await openExternalUrl(loginUrl);
             } else {
                 const popup = window.open(loginUrl, '_blank');
                 if (!popup) {
@@ -292,11 +293,14 @@ window.CloudManager = (function () {
                 }
             }
 
-            updateLoginStatus('等待浏览器登录完成...');
-            const info = await waitForLoginStatus();
-            const syncResult = await autoSyncAfterLogin(info);
+            if (options.signal?.aborted) return { status: 'cancelled' };
+            if (options.inline) options.onStatus?.('请在打开的浏览器中完成登录，也可以不登录继续。');
+            else updateLoginStatus('等待浏览器登录完成...');
+            const info = await waitForLoginStatus(options.signal);
+            if (options.signal?.aborted) return { status: 'cancelled' };
+            const syncResult = await autoSyncAfterLogin(info, options);
             const syncedCount = countSyncedRows(syncResult);
-            updateLoginStatus(syncedCount ? '自动同步完成' : '自动同步完成，没有需要更新的班级');
+            if (!options.inline) updateLoginStatus(syncedCount ? '自动同步完成' : '自动同步完成，没有需要更新的班级');
             if (typeof showToast === 'function') {
                 showToast(syncedCount ? '登录成功，自动同步完成' : '登录成功，没有需要同步的班级');
             }
@@ -307,7 +311,8 @@ window.CloudManager = (function () {
 
         _loginFlowPromise = _loginFlowPromise
             .catch((error) => {
-                if (typeof showToast === 'function') {
+                if (error?.name === 'AbortError') return { status: 'cancelled' };
+                if (!options.inline && typeof showToast === 'function') {
                     showToast((error && error.message) || '云服务登录失败');
                 }
                 return { status: 'error', error };
@@ -451,11 +456,13 @@ window.CloudManager = (function () {
     }
 
     async function setCloudServerUrl(url) {
-        return fetchJSON('/cloud/config', {
+        const result = await fetchJSON('/cloud/config', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ cloud_server_url: url }),
         });
+        _userInfo = null;
+        return result;
     }
 
     function isSyncing() {

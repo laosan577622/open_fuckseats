@@ -1,8 +1,8 @@
 from .registry import registry
 
 
-def build_openapi_schema(base_url='/open_api'):
-    tools = registry.schemas()
+def build_openapi_schema(base_url='/open_api', *, request=None):
+    tools = registry.schemas(request=request)
     tool_names = [tool['function']['name'] for tool in tools]
     return {
         'openapi': '3.0.3',
@@ -38,6 +38,29 @@ def build_openapi_schema(base_url='/open_api'):
                     'summary': '枚举值',
                     'parameters': [{'name': 'id', 'in': 'path', 'required': True, 'schema': {'type': 'integer'}}],
                     'responses': {'200': {'description': 'OK'}},
+                },
+            },
+            '/classrooms/{id}/seats': {
+                'get': {
+                    'summary': '读取具体座位排列',
+                    'parameters': [{'name': 'id', 'in': 'path', 'required': True, 'schema': {'type': 'integer'}}],
+                    'responses': {'200': {'description': 'OK'}},
+                },
+            },
+            '/classrooms/{id}/students': {
+                'get': {
+                    'summary': '读取班级名单与学生资料',
+                    'parameters': [{'name': 'id', 'in': 'path', 'required': True, 'schema': {'type': 'integer'}}],
+                    'responses': {'200': {'description': 'OK'}},
+                },
+            },
+            '/access/status': {
+                'get': {
+                    'summary': '查询本次运行的只读授权状态',
+                    'responses': {
+                        '200': {'description': '已授权'}, '202': {'description': '等待用户授权'},
+                        '401': {'description': '凭证无效或已失效'}, '403': {'description': '用户拒绝'},
+                    },
                 },
             },
             '/tools/execute': {

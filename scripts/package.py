@@ -19,6 +19,9 @@ OPENAI_ENV_NAMES = (
 )
 
 COMMON_HIDDEN_IMPORTS = (
+    'tkinter',
+    'tkinter.ttk',
+    'tkinter.messagebox',
     'waitress',
     'webview',
     'whitenoise',
@@ -176,6 +179,10 @@ def _build_pyinstaller_command(data_args):
         cmd.append('--windowed')
     if _is_macos():
         cmd.extend(['--osx-bundle-identifier', 'xyz.577622.fuckseats'])
+        # Sign bundled native libraries with the same identity as the outer App.
+        identity = str(os.getenv('MACOS_APP_SIGNING_IDENTITY') or '').strip()
+        if identity:
+            cmd.extend(['--codesign-identity', identity])
 
     _extend_option_pairs(cmd, '--hidden-import', COMMON_HIDDEN_IMPORTS)
     _extend_option_pairs(cmd, '--hidden-import', OPEN_API_HIDDEN_IMPORTS)
@@ -266,6 +273,17 @@ def _remove_project_backend_payload(dist_root):
     return removed
 
 
+def _stage_startup_font(base_dir, stage_dir):
+    filename = 'HarmonyOS_SansSC_Regular.ttf'
+    source = os.path.join(base_dir, 'fonts', filename)
+    if not os.path.isfile(source):
+        raise FileNotFoundError(f'缺少启动字体：{source}')
+    target_dir = os.path.join(stage_dir, 'fonts')
+    os.makedirs(target_dir, exist_ok=True)
+    shutil.copy2(source, os.path.join(target_dir, filename))
+    return target_dir
+
+
 def main():
     _ensure_utf8_stdio()
 
@@ -324,8 +342,9 @@ def main():
         staged_data_dirs[data_dir] = dst_dir
 
     _write_staged_release_manifest(STAGE_DIR)
+    staged_font_dir = _stage_startup_font(BASE_DIR, STAGE_DIR)
 
-    data_args = []
+    data_args = ['--add-data', f'{staged_font_dir}{os.pathsep}fonts']
     for data_dir in DATA_DIRS:
         staged_dir = staged_data_dirs.get(data_dir)
         if staged_dir:

@@ -1,0 +1,8 @@
+{% load static %}<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>班管理 · 模拟文件选择</title><link rel="stylesheet" href="{% static 'css/welcome-picker.css' %}?v=4.2"></head>
+<body data-platform="{{ app_runtime.platform }}" data-kind="{{ picker_kind }}">
+<header><h1>班管理</h1><span>模拟文件选择器</span></header>
+<div class="picker-path"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6h7l2 3h9v11H3z" stroke="currentColor" stroke-width="1.5"/></svg><span class="picker-mac-path">班管理</span><span class="picker-win-path">此电脑　›　文档　›　班管理</span></div>
+<main><aside><span class="picker-mac-path">个人收藏</span><span class="picker-win-path">快速访问</span><p>文档</p><p class="active">班管理</p></aside><section aria-label="班管理文件夹"><p class="notice">以下文件均为模拟数据，不会读取本机文件或修改真实班级。</p><div class="file-columns"><span>名称</span><span>种类</span></div><label class="file-row"><input type="radio" name="file" value="import"><span>期中成绩表（模拟）.xlsx</span><small>Excel 工作簿</small></label><label class="file-row"><input type="radio" name="file" value="layoutimport"><span>教室座位表（模拟）.xlsx</span><small>Excel 工作簿</small></label><p id="picker-error" role="status"></p></section></main>
+<footer><button id="picker-cancel">取消</button><button id="picker-open" disabled>打开</button></footer>
+<script src="{% static 'js/welcome-picker.js' %}?v=4.2"></script></body></html>

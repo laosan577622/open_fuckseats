@@ -1,0 +1,63 @@
+{% extends 'seats/exam_base.html' %}
+{% block exam_content %}
+{{ source|json_script:'exam-source' }}
+<form id="exam-setup" class="exam-setup" data-url="{% url 'exam_generate' classroom.pk %}" data-estimate="{% url 'exam_estimate' classroom.pk %}" data-doors="{{ classroom.doors|length }}">
+    {% csrf_token %}
+    <section class="exam-panel exam-setup-controls" aria-label="考场设置">
+        <h1>考场布局</h1>
+        <label class="exam-field">考生人数
+            <input name="examinees" type="number" min="1" max="1600" placeholder="可选，输入后推荐行列" inputmode="numeric">
+        </label>
+        <div id="exam-suggestions" class="exam-chips" aria-live="polite"></div>
+        <div class="exam-size">
+            <div class="exam-field">组数（列）
+                <div class="exam-stepper"><button type="button" class="btn btn-secondary" data-step="cols" data-delta="-1" aria-label="减少一组">−</button><input name="cols" type="number" min="1" max="128" required inputmode="numeric"><button type="button" class="btn btn-secondary" data-step="cols" data-delta="1" aria-label="增加一组">+</button></div>
+            </div>
+            <div class="exam-field">每组排数
+                <div class="exam-stepper"><button type="button" class="btn btn-secondary" data-step="rows" data-delta="-1" aria-label="减少一排">−</button><input name="rows" type="number" min="1" max="128" required inputmode="numeric"><button type="button" class="btn btn-secondary" data-step="rows" data-delta="1" aria-label="增加一排">+</button></div>
+            </div>
+        </div>
+        <p id="exam-count" class="exam-status" aria-live="polite"></p>
+        {% if classroom.doors %}
+        <p class="exam-status">已设置 {{ classroom.doors|length }} 扇门，多出的桌子从最近的门搬出。<a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return#classroom-door-stage">修改</a></p>
+        {% else %}
+        <p class="exam-warning">还没有设置教室门：桌数有增减时无法规划搬入搬出。<a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return#classroom-door-stage">去设置门</a></p>
+        {% endif %}
+        {% if snapshots %}
+        <details class="exam-advanced">
+            <summary>来源布局</summary>
+            <label class="exam-field"><select name="snapshot_id"><option value="">当前教室</option>{% for snapshot in snapshots %}<option value="{{ snapshot.pk }}">{{ snapshot.name }}</option>{% endfor %}</select></label>
+            <p class="exam-status">快照的桌位和学生位置须与当前教室一致，否则请先恢复该快照。</p>
+        </details>
+        {% endif %}
+        <button class="btn btn-primary exam-wide" type="submit" id="exam-generate">生成方案，查看搬运</button>
+        <p class="exam-status">生成时自动保存原布局快照，应用前不会改动教室。</p>
+        {% if plans %}
+        <div class="exam-history">
+            <h2>已有方案</h2>
+            {% for item in plans %}
+            <a class="exam-history-item" href="{% url 'exam_stage' classroom.pk item.saved.pk item.applied|yesno:'result,movement' %}">
+                <span>{{ item.saved.name }}</span>
+                <small>{% if item.applied %}已应用{% elif item.usable %}可继续{% else %}教室已变化，仅供查看{% endif %}</small>
+            </a>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </section>
+    <section class="exam-panel exam-setup-preview" aria-label="方案预览">
+        <div class="exam-metrics" id="exam-metrics"></div>
+        <p id="exam-estimate-status" class="exam-status" aria-live="polite"></p>
+        <div class="exam-legend">
+            <span><i class="is-keep"></i>不用单独搬（原位或随整列平移）</span>
+            <span><i class="is-carry"></i>单独搬运补位</span>
+            <span><i class="is-export"></i>搬出</span>
+            <span><i class="is-import"></i>搬入</span>
+        </div>
+        <div class="exam-compare">
+            <figure><figcaption>现在的教室</figcaption><div id="exam-source-map" class="exam-mini"></div></figure>
+            <figure><figcaption>考场（前方在上）</figcaption><div id="exam-layout-preview" class="exam-mini"></div></figure>
+        </div>
+        <ol id="exam-estimate-steps" class="exam-steps-list"></ol>
+    </section>
+</form>
+{% endblock %}

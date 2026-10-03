@@ -1,0 +1,50 @@
+.constraint-editor-body { background: #fff; }
+.constraint-editor-body .global-back-button { display: none; }
+@media (min-width: 1101px) {
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] { --header-height: 66px; padding-top: 66px; }
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .app-header { height: 66px; min-height: 66px; padding: 0; background: #ffffffeb; }
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-content { display: block; height: 66px; }
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar { position: relative; height: 66px; padding: 0 24px; justify-content: flex-end; }
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after { content: "约束"; position: absolute; left: 50%; top: 22px; transform: translateX(-50%); color: #263143; font-size: 15px; font-weight: 650; }
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .global-back-button,
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar,
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area { display: none !important; }
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .wd-global-link { position: absolute; right: 110px; }
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell { position: absolute; top: 0; left: 96px; right: auto; width: auto; height: 66px; min-height: 66px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+}
+.constraint-editor-body .constraint-editor-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, .8fr); min-height: calc(100vh - var(--header-height)); }
+.constraint-editor-main { min-width: 0; padding: 32px clamp(24px, 4vw, 64px); }
+.constraint-editor-heading { margin-bottom: 20px; }
+.constraint-editor-heading p { color: #777e8a; font-size: 13px; margin-bottom: 12px; }
+.constraint-editor-heading h1 { color: #172033; font-size: 30px; font-weight: 650; letter-spacing: -.03em; }
+#constraintEditorForm { max-width: 860px; }
+.constraint-editor-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.constraint-editor-wide { grid-column: 1 / -1; }
+.constraint-editor-fields .form-group { min-width: 0; position: relative; display: flex; flex-direction: column; gap: 9px; }
+.constraint-editor-fields .form-group[hidden] { display: none; }
+.constraint-editor-fields label { font-size: 13px; font-weight: 600; color: #354052; }
+.constraint-editor-fields label span { font-weight: 400; color: #8a909a; }
+.constraint-editor-fields input:not([type="hidden"]), .constraint-editor-fields select { width: 100%; min-height: 46px; border: 1px solid #d8dfe9; border-radius: 12px; background: #fff; color: #1c2736; padding: 10px 14px; font-size: 15px; outline: none; box-shadow: none; }
+.constraint-editor-fields input:focus, .constraint-editor-fields select:focus { border-color: #0a59f7; box-shadow: 0 0 0 3px #0a59f720; }
+.constraint-editor-fields input::placeholder { color: #929aa7; }
+.constraint-student-results { position: absolute; top: calc(100% + 5px); left: 0; right: 0; z-index: 10; max-height: 286px; overflow: auto; padding: 5px; border: 1px solid #d8dfe9; border-radius: 13px; background: #fff; box-shadow: 0 14px 35px #1b355125; }
+.constraint-student-results[hidden] { display: none; }
+.constraint-student-results button { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; padding: 10px 11px; border: 0; border-radius: 9px; background: transparent; color: #263143; text-align: left; font-size: 14px; cursor: pointer; }
+.constraint-student-results button:hover, .constraint-student-results button.is-active { background: #edf4ff; }
+.constraint-student-results button small { flex: 0 0 auto; color: #7c8796; font-size: 12px; }
+.constraint-student-results p { padding: 12px; color: #7c8796; font-size: 13px; }
+.constraint-editor-error { margin-top: 24px; color: #b23434; font-size: 13px; }
+.constraint-editor-error[hidden] { display: none; }
+.constraint-editor-actions { display: flex; align-items: center; gap: 10px; margin-top: 24px; }
+.constraint-editor-actions .btn { min-width: 116px; min-height: 42px; }
+.constraint-editor-aside { border-left: 1px solid #e6eaf0; padding: 32px clamp(24px, 3vw, 48px); background: #f8fafd; }
+.constraint-editor-aside > span { display: block; color: #69778b; font-size: 12px; font-weight: 600; letter-spacing: .08em; margin-bottom: 24px; }
+.constraint-editor-aside > strong { display: block; color: #172033; font-size: 23px; font-weight: 650; margin-bottom: 10px; }
+.constraint-editor-aside > p { color: #69778b; font-size: 14px; line-height: 1.7; margin-bottom: 35px; }
+.constraint-editor-selection { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 17px 0; border-top: 1px solid #dfe6f0; }
+.constraint-editor-selection small { color: #747f8d; font-size: 12px; }
+.constraint-editor-selection b { color: #253145; font-size: 14px; font-weight: 550; text-align: right; }
+.constraint-editor-selection[hidden] { display: none; }
+@media (max-width: 900px) { .constraint-editor-body .constraint-editor-layout { grid-template-columns: 1fr; } .constraint-editor-aside { border-left: 0; border-top: 1px solid #e6eaf0; } }
+@media (max-width: 640px) { .constraint-editor-main { padding: 24px 18px 42px; } .constraint-editor-fields { grid-template-columns: 1fr; gap: 20px; } .constraint-editor-wide { grid-column: auto; } .constraint-editor-aside { padding: 30px 18px; } }

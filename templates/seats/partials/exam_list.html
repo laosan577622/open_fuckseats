@@ -1,0 +1,9 @@
+<details id="exam-list" class="exam-list" {% if stage == 'print' %}open{% endif %}>
+    <summary>逐桌清单 <span>{{ plan.desks|length }} 张</span></summary>
+    <div class="exam-list-tools">
+        <input type="search" id="exam-search" placeholder="查找姓名、原位置或桌号" aria-label="查找桌子">
+        <button type="button" class="btn btn-secondary" id="exam-clear-selection" hidden>显示全部</button>
+    </div>
+    <table class="exam-table"><thead><tr><th>原桌／同学</th><th>去向</th><th>桌号</th><th>执行顺序</th></tr></thead><tbody id="exam-tasks"></tbody></table>
+    <p class="exam-footnote">{{ plan.notes.0 }}</p>
+</details>

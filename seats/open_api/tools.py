@@ -291,7 +291,7 @@ def list_classrooms(ctx):
     read_only=True,
 )
 def get_classroom(ctx):
-    return classroom_detail_payload(ctx.classroom, include_tools=True, tools=registry.schemas())
+    return classroom_detail_payload(ctx.classroom, include_tools=True, tools=registry.schemas(request=ctx.request))
 
 
 @registry.register(

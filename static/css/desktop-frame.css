@@ -1,0 +1,88 @@
+/* 复用原有标题栏高度与内容尺寸，仅替换系统窗口装饰。 */
+body[data-app-shell="webview"] .header-titlebar {
+    position: relative;
+    user-select: none;
+    -webkit-user-select: none;
+    touch-action: none;
+}
+body[data-app-shell="webview"] .app-header {
+    background-color: rgba(255, 255, 255, .86);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+}
+.desktop-window-controls {
+    display: flex;
+    align-items: center;
+    flex: 0 0 auto;
+    margin-left: auto;
+    z-index: 20;
+    gap: 0;
+}
+body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-bar {
+    left: 16px;
+}
+.desktop-window-button {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 46px;
+    height: 38px;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: #263143;
+    cursor: default;
+    box-shadow: none;
+}
+.desktop-window-button svg { width: 12px; height: 12px; fill: none; stroke: currentColor; stroke-width: 1; }
+.desktop-window-button:hover { background: rgba(0, 0, 0, .07); }
+.desktop-window-button[data-window-action="close"]:hover { background: #c42b1c; color: white; }
+.desktop-window-button:focus-visible { outline: 2px solid #0a59f7; outline-offset: -2px; }
+body.classroom-detail-body[data-app-platform="windows"] .desktop-window-button,
+body.layout-editor-body[data-app-platform="windows"] .desktop-window-button { height: 32px; }
+.window-restore-icon { display: none; }
+body[data-window-maximized="true"] .window-maximize-icon { display: none; }
+body[data-window-maximized="true"] .window-restore-icon { display: block; }
+body[data-app-platform="macos"][data-app-shell="webview"] .header-titlebar {
+    padding-left: 96px !important;
+}
+body[data-app-platform="macos"] .desktop-window-controls {
+    position: absolute;
+    left: 18px;
+    top: 50%;
+    transform: translateY(-50%);
+    margin: 0;
+    gap: 12px;
+}
+body[data-app-platform="macos"] .desktop-window-button {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    border: 1px solid rgba(0, 0, 0, .12);
+    color: #4c2600;
+}
+body[data-app-platform="macos"] .desktop-window-button svg { width: 8px; height: 8px; opacity: 0; stroke-width: 1.5; }
+body[data-app-platform="macos"] .desktop-window-controls:hover svg,
+body[data-app-platform="macos"] .desktop-window-button:focus-visible svg { opacity: 1; }
+body[data-app-platform="macos"] [data-window-action="close"] { order: -1; background: #ff5f57; }
+body[data-app-platform="macos"] [data-window-action="minimize"] { background: #febc2e; }
+body[data-app-platform="macos"] [data-window-action="maximize"] { background: #28c840; }
+body[data-app-platform="linux"] .desktop-window-controls { gap: 8px; }
+body.home-dashboard-body[data-app-platform="linux"] .native-menu-bar,
+body.settings-page-body[data-app-platform="linux"] .native-menu-bar { display: none !important; }
+body[data-app-platform="linux"] .desktop-window-button { width: 28px; height: 28px; border-radius: 50%; background: #ebebeb; }
+body[data-app-platform="linux"] .desktop-window-button:hover { background: #d8d8d8; }
+body[data-app-platform="linux"] [data-window-action="close"]:hover { background: #c42b1c; }
+.desktop-resize-edge { position: fixed; z-index: 2147483647; touch-action: none; }
+.desktop-resize-edge[data-edge="n"] { top: 0; left: 12px; right: 12px; height: 8px; cursor: ns-resize; }
+.desktop-resize-edge[data-edge="s"] { bottom: 0; left: 12px; right: 12px; height: 8px; cursor: ns-resize; }
+.desktop-resize-edge[data-edge="w"] { left: 0; top: 12px; bottom: 12px; width: 8px; cursor: ew-resize; }
+.desktop-resize-edge[data-edge="e"] { right: 0; top: 12px; bottom: 12px; width: 8px; cursor: ew-resize; }
+.desktop-resize-edge[data-edge="nw"], .desktop-resize-edge[data-edge="ne"],
+.desktop-resize-edge[data-edge="sw"], .desktop-resize-edge[data-edge="se"] { width: 12px; height: 12px; }
+.desktop-resize-edge[data-edge="nw"] { top: 0; left: 0; cursor: nwse-resize; }
+.desktop-resize-edge[data-edge="ne"] { top: 0; right: 0; cursor: nesw-resize; }
+.desktop-resize-edge[data-edge="sw"] { bottom: 0; left: 0; cursor: nesw-resize; }
+.desktop-resize-edge[data-edge="se"] { bottom: 0; right: 0; cursor: nwse-resize; }
+body[data-window-maximized="true"] .desktop-resize-edge { display: none; }

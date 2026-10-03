@@ -291,6 +291,8 @@ def _feature_for_url_name(url_name: str) -> str:
     name = str(url_name or '')
     if not name:
         return ''
+    if name == 'health':
+        return ''
     if name.startswith('cloud_'):
         return 'cloud'
     if 'plugin' in name or 'extension' in name:

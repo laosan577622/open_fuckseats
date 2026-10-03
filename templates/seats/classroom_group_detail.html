@@ -1,22 +1,20 @@
 {% extends 'base.html' %}
 
 {% block title %}{{ classroom_group.name }} - 班级管理{% endblock %}
-
-{% block ribbon_tabs %}
-<button type="button" class="ribbon-tab active" data-ribbon-tab="group">班级管理</button>
-{% endblock %}
+{% block body_class %}group-workspace-body group-detail-body{% endblock %}
+{% block global_back_button %}{% endblock %}
 
 {% block actions %}
-<div class="ribbon-panels">
-    <div class="header-action-row office-ribbon-row ribbon-panel active group-export-ribbon-panel" data-ribbon-panel="group">
-        <div class="ribbon-group">
+<div class="context-toolbar-panels">
+    <div class="context-toolbar-row context-toolbar-panel active group-export-toolbar-panel" data-toolbar-panel="group">
+        <div class="toolbar-group">
             <a href="{% url 'index' %}" class="btn btn-secondary">返回首页</a>
             <a href="{% url 'classroom_group_settings' classroom_group.pk %}" class="btn btn-secondary">班级组设置</a>
             <a href="https://blog.577622.xyz/post/47" target="_blank" class="btn btn-secondary" title="查看班级组使用教程">教程</a>
-            <span class="ribbon-group-label">班级组</span>
+            <span class="toolbar-group-label">班级组</span>
         </div>
         {% if classrooms %}
-        <div class="ribbon-group file-ribbon-group">
+        <div class="toolbar-group file-toolbar-group">
             <div class="menu-dropdown" data-menu-root data-group-export-menu-root>
                 <button type="button" class="btn btn-secondary menu-trigger" id="btn-export"
                     data-menu-toggle="file-export-menu" aria-haspopup="true" aria-expanded="false">导出</button>
@@ -71,7 +69,7 @@
                     </div>
                 </div>
             </div>
-            <span class="ribbon-group-label">导出</span>
+            <span class="toolbar-group-label">导出</span>
         </div>
         {% endif %}
     </div>

@@ -131,3 +131,9 @@ OPEN_API_AI_TOOLS_ENABLED = os.getenv(
     'OPEN_API_AI_TOOLS_ENABLED',
     '1',
 ).strip().lower() not in {'0', 'false', 'no', 'off'}
+
+# Official service integration is fixed; user environment variables cannot redirect it.
+# Public OAuth client: no client secret is embedded in desktop packages.
+WENDAO_OAUTH_SITE = 'https://ai.577622.xyz'
+WENDAO_OAUTH_CLIENT_ID = 'dx_client_fuckseats_desktop'
+WENDAO_OAUTH_REDIRECT_URI = 'http://127.0.0.1:23948/ai/connect/callback/'

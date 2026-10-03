@@ -1,12 +1,13 @@
 {% extends 'base.html' %}
+{% load static %}
 
 {% block title %}班级与班级组{% endblock %}
 {% block body_class %}home-dashboard-body{% endblock %}
 
-{% block ribbon_tabs %}{% endblock %}
 {% block actions %}{% endblock %}
 
 {% block titlebar_actions %}
+{{ block.super }}
 <button type="button" class="home-titlebar-sync" id="home-sync-all-btn" title="同步所有班级和班级组" data-client-feature="cloud_sync">
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
         <path d="M19 7v4h-4M5 17v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
@@ -23,12 +24,55 @@
 {% endblock %}
 
 {% block content %}
-<div class="home-dashboard-page">
+<div class="home-shell">
+    <aside class="home-sidebar" aria-label="主导航">
+        <a class="home-sidebar-item is-active" href="{% url 'index' %}">
+            <span class="home-sidebar-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="m4 10 8-6 8 6v9.5A1.5 1.5 0 0 1 18.5 21h-13A1.5 1.5 0 0 1 4 19.5V10Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 21v-6h6v6" stroke="currentColor" stroke-width="1.7"/></svg></span>
+            <span>首页</span>
+        </a>
+        <a class="home-sidebar-item" href="#home-classrooms">
+            <span class="home-sidebar-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><rect x="4" y="4" width="16" height="16" rx="2" stroke="currentColor" stroke-width="1.7"/><path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+            <span>我的班级</span>
+        </a>
+        <a class="home-sidebar-item" href="#home-recent">
+            <span class="home-sidebar-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+            <span>最近使用</span>
+        </a>
+        <a class="home-sidebar-item" href="#home-archived">
+            <span class="home-sidebar-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 5h12v14H6z" stroke="currentColor" stroke-width="1.7"/><path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></span>
+            <span>废纸篓</span>
+        </a>
+        <div class="home-sidebar-divider"></div>
+        <div class="home-sidebar-label">班级组</div>
+        {% for group in classroom_groups %}
+        <a class="home-sidebar-item home-sidebar-subitem" href="{% url 'classroom_group_detail' group.pk %}">
+            <span class="home-sidebar-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5h16v12H4v-12Zm3-3h10v3H7v-3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>
+            <span>{{ group.name }}</span>
+            <small>{{ group.classrooms.count }}</small>
+        </a>
+        {% endfor %}
+        <a class="home-sidebar-item home-sidebar-subitem" href="#home-classrooms">
+            <span class="home-sidebar-icon" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7.5h16v12H4v-12Zm3-3h10v3H7v-3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg></span>
+            <span>未分组班级</span>
+            <small>{{ ungrouped_classrooms|length }}</small>
+        </a>
+        <div class="home-sidebar-spacer"></div>
+        <div class="home-sidebar-sync" aria-live="polite">
+            <span class="home-sidebar-sync-dot"></span>
+            <div><strong>同步状态</strong><small>由云端管理</small></div>
+        </div>
+        <a class="home-sidebar-item home-sidebar-settings" href="{% url 'settings' %}">
+            <span class="home-sidebar-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M12.02 9Q12.84 9 13.52 9.41Q14.21 9.82 14.6 10.51Q15 11.21 15 12.02Q15 12.84 14.6 13.52Q14.21 14.21 13.52 14.6Q12.84 15 12 15Q11.18 15 10.49 14.59Q9.79 14.18 9.4 13.49Q9 12.79 9 11.98Q9 11.16 9.41 10.48Q9.82 9.79 10.51 9.4Q11.21 9 12.02 9ZM12.05 7.51Q10.82 7.51 9.78 8.11Q8.74 8.71 8.12 9.73Q7.51 10.75 7.51 11.98Q7.51 13.2 8.11 14.24Q8.71 15.29 9.74 15.9Q10.78 16.51 12 16.51Q13.22 16.51 14.26 15.91Q15.29 15.31 15.9 14.28Q16.51 13.25 16.51 12.02Q16.51 10.8 15.91 9.77Q15.31 8.74 14.29 8.12Q13.27 7.51 12.05 7.51ZM13.56 22.66Q14.02 22.66 14.4 22.4Q14.78 22.15 14.98 21.74L15.79 19.85L15.98 19.75Q16.42 19.49 16.85 19.22L18.91 19.49Q19.39 19.54 19.8 19.33Q20.21 19.13 20.45 18.72L22.03 15.98Q22.27 15.58 22.24 15.12Q22.2 14.66 21.94 14.28L20.69 12.6L20.69 11.42L21.94 9.74Q22.22 9.36 22.25 8.9Q22.27 8.45 22.03 8.04L20.45 5.28Q20.23 4.9 19.82 4.68Q19.42 4.46 18.94 4.51L16.85 4.78Q16.42 4.46 15.86 4.2L15.02 2.23Q14.83 1.82 14.45 1.56Q14.06 1.3 13.61 1.3L10.44 1.3Q9.98 1.3 9.59 1.56Q9.19 1.82 9 2.23L8.16 4.2L7.92 4.34Q7.73 4.44 7.55 4.54Q7.37 4.63 7.2 4.75L5.09 4.51Q4.63 4.44 4.21 4.64Q3.79 4.85 3.55 5.26L1.97 8.02Q1.73 8.4 1.76 8.87Q1.8 9.34 2.06 9.72L3.34 11.42L3.34 12.53L2.06 14.23Q1.78 14.62 1.75 15.07Q1.73 15.53 1.97 15.94L3.53 18.67Q3.77 19.08 4.18 19.28Q4.58 19.49 5.06 19.44L7.13 19.2Q7.8 19.63 8.14 19.8L8.98 21.72Q9.14 22.15 9.53 22.4Q9.91 22.66 10.39 22.66L13.56 22.66ZM7.08 17.66L4.8 17.9L3.22 15.1L4.58 13.27Q4.8 12.94 4.8 12.6Q4.78 12.31 4.78 11.95Q4.78 11.59 4.8 11.3Q4.8 10.92 4.58 10.61L3.22 8.74L4.85 5.95L7.15 6.24Q7.37 6.26 7.55 6.22Q7.73 6.17 7.87 6.07Q8.3 5.76 8.93 5.47Q9.29 5.28 9.43 4.94L10.39 2.78L13.61 2.81L14.52 4.94Q14.64 5.26 15.02 5.47Q15.55 5.71 16.1 6.1Q16.46 6.34 16.82 6.26L19.13 6.02L20.71 8.83L19.37 10.63Q19.1 10.92 19.15 11.33Q19.18 11.64 19.18 12.01Q19.18 12.38 19.15 12.67Q19.13 13.06 19.37 13.37L20.71 15.19L19.08 17.98L16.85 17.71Q16.66 17.69 16.46 17.72Q16.27 17.76 16.13 17.88Q15.6 18.26 15 18.53Q14.83 18.62 14.69 18.76Q14.54 18.89 14.47 19.06L13.56 21.14L10.34 21.12L9.46 19.03Q9.29 18.67 8.95 18.5Q8.47 18.29 7.85 17.88Q7.58 17.69 7.25 17.69Z" fill="currentColor"/></svg></span>
+            <span>设置</span>
+        </a>
+    </aside>
+    <div class="home-dashboard-page">
     <section class="home-dashboard-hero animate-fade-in">
         <div class="home-dashboard-heading">
             <h1>班级与班级组</h1>
         </div>
         <div class="home-dashboard-tools">
+            <div class="home-create-host" data-create-menu data-classroom-url="{% url 'create_classroom' %}" data-group-url="{% url 'create_classroom_group' %}">
             <details class="home-create-menu" data-home-create-menu>
                 <summary class="home-primary-action">
                     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
@@ -50,6 +94,7 @@
                     </a>
                 </div>
             </details>
+            </div>
             <label class="home-search-box">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <circle cx="10.8" cy="10.8" r="6.8" stroke="currentColor" stroke-width="1.8"/>
@@ -57,6 +102,30 @@
                 </svg>
                 <input type="search" placeholder="搜索班级或班级组..." aria-label="搜索班级或班级组" data-home-search>
             </label>
+        </div>
+    </section>
+
+    <section class="home-recent-section" id="home-recent" data-home-section="recent">
+        <header class="home-section-heading home-stagger-in" style="--stagger-i:0">
+            <div class="home-section-title">
+                <span class="home-section-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8" stroke="currentColor" stroke-width="1.7"/><path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                </span>
+                <h2>最近使用</h2>
+            </div>
+            <a href="#home-classrooms" class="home-section-more">查看全部 <span aria-hidden="true">›</span></a>
+        </header>
+        <div class="home-recent-list">
+            {% for classroom in recent_classrooms %}
+            <a class="home-recent-item home-stagger-in" style="--stagger-i:{{ forloop.counter }}" href="{% url 'classroom_detail' classroom.pk %}">
+                <span class="home-recent-thumb" aria-hidden="true"><svg viewBox="0 0 48 34" fill="none"><rect x="3" y="4" width="42" height="26" rx="3" fill="currentColor" opacity=".16"/><path d="M9 11h30M9 17h8m5 0h8m-21 6h11m4 0h8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" opacity=".72"/></svg></span>
+                <span class="home-recent-copy"><strong>{{ classroom.name }}</strong><small>共 {{ classroom.students.count }} 人 · {{ classroom.rows }} × {{ classroom.cols }} 布局</small></span>
+                {% if classroom.classroom_group %}<em>{{ classroom.classroom_group.name }}</em>{% else %}<em class="is-muted">未分组</em>{% endif %}
+                <span class="home-recent-more" aria-hidden="true">···</span>
+            </a>
+            {% empty %}
+            <div class="home-section-empty">暂无最近使用的班级</div>
+            {% endfor %}
         </div>
     </section>
 
@@ -102,7 +171,7 @@
         {% endif %}
     </section>
 
-    <section class="home-library-section" data-home-section="classrooms">
+    <section class="home-library-section" id="home-classrooms" data-home-section="classrooms">
         <header class="home-section-heading home-stagger-in" style="--stagger-i:0">
             <div class="home-section-title">
                 <span class="home-section-icon" aria-hidden="true">
@@ -158,7 +227,22 @@
             <span>暂无未分组班级</span>
             <a href="{% url 'create_classroom' %}" class="btn btn-primary">新建班级</a>
         </div>
-        {% endif %}
+    {% endif %}
+    </section>
+
+    <section class="home-archive-section" id="home-archived" aria-labelledby="home-archived-title">
+        <header class="home-section-heading">
+            <div class="home-section-title">
+                <span class="home-section-icon" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" fill="none"><path d="M5 7h14v12H5V7Zm2-3h10l1 3H6l1-3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 11v4m3-4v4m3-4v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+                </span>
+                <h2 id="home-archived-title">废纸篓</h2>
+            </div>
+        </header>
+        <div class="home-archive-card">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 7h14v12H5V7Zm2-3h10l1 3H6l1-3Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M9 11v4m3-4v4m3-4v4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+            <span>废纸篓功能尚未启用，当前没有可恢复的班级。</span>
+        </div>
     </section>
 
     <div class="home-search-empty" data-home-search-empty hidden>
@@ -180,9 +264,11 @@
     </div>
     <div id="batch-copy-modal" class="modal-overlay batch-copy-modal" style="display:none"><div class="modal-content batch-copy-dialog"><h3>复制布局并批量创建</h3><p id="batch-copy-source"></p><textarea id="batch-copy-names" rows="7" placeholder="每行一个班级名称"></textarea><div class="modal-actions"><button class="btn btn-secondary" type="button" data-close-batch>取消</button><button class="btn btn-primary" type="button" id="batch-copy-submit">创建班级</button></div></div></div>
 </div>
+</div>
 {% endblock %}
 
 {% block extra_scripts %}
+<script src="{% static 'js/create-menu.js' %}?v=1" defer></script>
 <script>
 document.addEventListener('DOMContentLoaded', function () {
     var searchInput = document.querySelector('[data-home-search]');
@@ -222,6 +308,54 @@ document.addEventListener('DOMContentLoaded', function () {
         window.clearTimeout(filterTimer);
         filterTimer = window.setTimeout(filterCards, 150);
     });
+
+    function initSidebarNavigation() {
+        var sidebarLinks = Array.from(document.querySelectorAll('.home-sidebar-item'));
+        var hashLinks = sidebarLinks.filter(function (link) {
+            return String(link.getAttribute('href') || '').indexOf('#') === 0;
+        });
+
+        function setActive(link) {
+            sidebarLinks.forEach(function (item) {
+                var active = item === link;
+                item.classList.toggle('is-active', active);
+                if (active) item.setAttribute('aria-current', 'page');
+                else item.removeAttribute('aria-current');
+            });
+        }
+
+        hashLinks.forEach(function (link) {
+            link.addEventListener('click', function (event) {
+                var targetId = String(link.getAttribute('href') || '').slice(1);
+                var target = targetId ? document.getElementById(targetId) : null;
+                if (!target) return;
+                event.preventDefault();
+                setActive(link);
+                target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                if (window.history && window.history.replaceState) {
+                    window.history.replaceState(null, '', '#' + targetId);
+                }
+            });
+        });
+
+        var observedSections = hashLinks.map(function (link) {
+            return document.getElementById(String(link.getAttribute('href') || '').slice(1));
+        }).filter(Boolean);
+        if ('IntersectionObserver' in window && observedSections.length) {
+            var observer = new IntersectionObserver(function (entries) {
+                var visible = entries.filter(function (entry) { return entry.isIntersecting; });
+                if (!visible.length) return;
+                var current = visible.sort(function (a, b) { return b.intersectionRatio - a.intersectionRatio; })[0].target;
+                var link = hashLinks.find(function (item) {
+                    return item.getAttribute('href') === '#' + current.id;
+                });
+                if (link) setActive(link);
+            }, { rootMargin: '-72px 0px -55% 0px', threshold: [0.1, 0.35, 0.7] });
+            observedSections.forEach(function (section) { observer.observe(section); });
+        }
+    }
+
+    initSidebarNavigation();
 
     document.addEventListener('click', function (event) {
         [createMenu].forEach(function (details) {

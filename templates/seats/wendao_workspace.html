@@ -1,0 +1,38 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}闻道 AI 工作区{% endblock %}
+{% block body_class %}wendao-picker-body{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/wendao-picker.css' %}?v=1.0">{% endblock %}
+{% block ai_titlebar_link %}{% endblock %}
+{% block native_menu %}{% endblock %}
+{% block content %}
+<header class="wendao-picker-heading">
+    <h1>闻道 AI 工作区</h1>
+    <a class="btn btn-secondary" href="{% url 'settings' %}#wendao">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M4 7h16M4 17h16" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><rect x="7" y="4" width="4" height="6" rx="2" fill="var(--card-bg)" stroke="currentColor" stroke-width="1.7"/><rect x="14" y="14" width="4" height="6" rx="2" fill="var(--card-bg)" stroke="currentColor" stroke-width="1.7"/></svg>
+        连接设置与额度
+    </a>
+</header>
+<section aria-labelledby="wendao-classrooms-title">
+    <div class="wendao-picker-section-head">
+        <h2 id="wendao-classrooms-title">选择班级</h2>
+        <span>{{ classrooms|length }} 个班级</span>
+    </div>
+    <div class="wendao-classroom-grid">
+        {% for item in classrooms %}
+        <a class="wendao-classroom-card" href="{% url 'ai_workspace' item.pk %}" aria-label="打开 {{ item.name }} 的 AI 工作区">
+            <span class="wendao-classroom-icon" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none"><rect x="3" y="4" width="18" height="13" rx="2" stroke="currentColor" stroke-width="1.6"/><path d="M7 21v-4m10 4v-4M7 8h10M7 12h6" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+            <h3>{{ item.name }}</h3>
+            <p>{{ item.student_count }} 名学生<span aria-hidden="true"> · </span>{{ item.rows }} 行 × {{ item.cols }} 列</p>
+            <span class="wendao-classroom-enter">进入工作区<svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5 12h14m-5-5 5 5-5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        </a>
+        {% empty %}
+        <div class="wendao-picker-empty">
+            <h3>还没有班级</h3>
+            <p>创建班级后，即可打开对应的 AI 工作区。</p>
+            <a class="btn btn-primary" href="{% url 'create_classroom' %}">创建班级</a>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}

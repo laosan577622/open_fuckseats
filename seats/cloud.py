@@ -11,7 +11,7 @@ import urllib.request
 from contextlib import contextmanager
 from datetime import timedelta
 
-from django.db import models
+from django.db import models, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
@@ -63,15 +63,28 @@ def _get_ssl_context():
 
 
 def get_cloud_server_url():
-    return OFFICIAL_CLOUD_SERVER_URL
+    return FrontendKVStore.objects.filter(key=CLOUD_SERVER_URL_KEY).values_list('value', flat=True).first() or OFFICIAL_CLOUD_SERVER_URL
 
 
 def set_cloud_server_url(url):
-    FrontendKVStore.objects.update_or_create(
-        key=CLOUD_SERVER_URL_KEY,
-        defaults={'value': OFFICIAL_CLOUD_SERVER_URL},
-    )
-    return OFFICIAL_CLOUD_SERVER_URL
+    target = str(url or OFFICIAL_CLOUD_SERVER_URL).strip().rstrip('/')
+    parsed = urllib.parse.urlsplit(target)
+    if (not parsed.hostname or parsed.username or parsed.password or parsed.query or parsed.fragment
+            or parsed.scheme not in {'https', 'http'}
+            or parsed.scheme == 'http' and parsed.hostname not in {'localhost', '127.0.0.1', '::1'}):
+        raise CloudAPIError('请输入 HTTPS 云服务器地址；本机调试可使用 HTTP。', status_code=400)
+    if target == get_cloud_server_url():
+        return target
+    from .models import ClassroomGroup, SyncBaseline
+    # A different service must never receive the previous service's session or baseline.
+    with transaction.atomic():
+        CloudSession.objects.all().delete()
+        LocalCloudKeyMaterial.objects.all().delete()
+        SyncBaseline.objects.all().delete()
+        SyncMeta.objects.update(cloud_version=0, last_sync_at=None, last_error='')
+        ClassroomGroup.objects.update(cloud_version=0, last_sync_at=None, last_synced_fingerprint='')
+        FrontendKVStore.objects.update_or_create(key=CLOUD_SERVER_URL_KEY, defaults={'value': target})
+    return target
 
 
 def build_cloud_login_url(callback_url=None):

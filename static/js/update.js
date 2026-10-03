@@ -3,6 +3,8 @@
     const INSTALL_LAUNCH_DELAY_MS = 2000;
     const INSTALL_LAUNCH_DELAY_TEXT = '2 秒';
     const DEFAULT_UPDATE_DETAILS_URL = '/update.txt';
+    const STARTUP_CHECK_KEY = 'fuckseats_update_checked_this_window';
+    const STARTUP_PROMPT_WINDOW_MS = 10000;
     let updateDetailsRequestId = 0;
     const appPlatform = String(document.body && document.body.dataset.appPlatform || '').toLowerCase();
     const isMacosLocalUpdate = appPlatform === 'macos';
@@ -20,6 +22,17 @@
         return window.FUCKSEATS_ONBOARDING_ACTIVE === true || window.ONBOARDING_SHOULD_SHOW === true;
     }
 
+    function claimStartupCheck() {
+        if (!['/', '/welcome/'].includes(location.pathname) || window.FUCKSEATS_ONBOARDING_REDIRECTING === true) return false;
+        try {
+            if (sessionStorage.getItem(STARTUP_CHECK_KEY) === '1') return false;
+            sessionStorage.setItem(STARTUP_CHECK_KEY, '1');
+        } catch (_) {
+            // An unavailable session store should not prevent the launch check.
+        }
+        return true;
+    }
+
     async function checkUpdate() {
         // macOS is intentionally local-only: no manifest, release-note, or
         // package request is allowed from this automatic path.
@@ -27,17 +40,14 @@
             markUpdateCheckComplete();
             return;
         }
-        if (shouldDeferForOnboarding()) {
-            window.setTimeout(checkUpdate, 1000);
-            return;
-        }
+        const startedAt = Date.now();
         try {
             const response = await fetch('/api/update/check/');
             const data = await response.json();
 
             if (data.status === 'success' && data.update_available) {
                 window.updateInfo = data;
-                showUpdateModal();
+                if (Date.now() - startedAt <= STARTUP_PROMPT_WINDOW_MS) showUpdateModal(true);
             }
         } catch (error) {
             console.error('Update check error:', error);
@@ -118,10 +128,11 @@
         }
     }
 
-    function showUpdateModal() {
+    function showUpdateModal(automatic = false) {
         if (!window.updateInfo) return;
+        if (automatic && (shouldDeferForOnboarding() || (window.PopupManager && PopupManager.isAnyShowing()))) return;
         if (shouldDeferForOnboarding()) {
-            window.setTimeout(showUpdateModal, 1000);
+            window.setTimeout(() => showUpdateModal(false), 1000);
             return;
         }
         if (window.PopupManager) {
@@ -359,7 +370,7 @@
     };
 
     document.addEventListener('DOMContentLoaded', () => {
-        if (!isMacosLocalUpdate) checkUpdate();
+        if (!isMacosLocalUpdate && claimStartupCheck()) checkUpdate();
         else markUpdateCheckComplete();
 
         document.getElementById('close-update-modal').addEventListener('click', hideUpdateModal);

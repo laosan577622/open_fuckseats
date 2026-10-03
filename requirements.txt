@@ -1,9 +1,17 @@
+# 启动窗口依赖 tkinter（Python 标准库）和 Tcl/Tk 8.6+，不是 pip 包。
+# Windows：使用 python.org 安装器并勾选 Tcl/Tk and IDLE；应用安装包自带运行库。
+# macOS：使用包含 Tk 的 python.org Python；Homebrew Python 需安装匹配版本的
+# python-tk（例如 Python 3.14 对应 brew install python-tk@3.14）。
+# Linux：通过系统包管理器安装与 Python 匹配的 python3-tk。
+# 验证当前环境：python -m tkinter。鸿蒙黑体由应用资源提供，无需 pip 安装。
+
 Django
 PyYAML
 certifi
 cryptography
 pandas
 openai
+httpx>=0.27,<1
 openpyxl
 python-pptx
 xlrd

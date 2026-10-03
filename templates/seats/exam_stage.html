@@ -1,0 +1,99 @@
+{% extends 'seats/exam_base.html' %}
+{% block exam_content %}
+{{ plan_json|json_script:'exam-plan' }}
+<div class="exam-studio" id="exam-stage" data-stage="{{ stage }}">
+    <section class="exam-canvas" aria-label="教室布局">
+        <div class="exam-board-wrap" id="exam-map">
+            <svg id="exam-board" role="img" aria-label="教室布局与桌子移动" preserveAspectRatio="xMidYMid meet"></svg>
+            {% if stage == 'movement' %}<p class="exam-status-chip" id="exam-playing-status" aria-live="polite"></p>{% endif %}
+        </div>
+        {% if stage == 'movement' %}
+        <div class="exam-player" role="group" aria-label="播放控制">
+            <button class="exam-icon-btn" type="button" id="exam-previous" aria-label="上一步" title="上一步（←）"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M5 4v12M16 4.5 8 10l8 5.5z"/></svg></button>
+            <button class="exam-icon-btn is-primary" type="button" id="exam-play" aria-label="播放" title="播放（空格）"><svg viewBox="0 0 20 20" aria-hidden="true" class="exam-icon-play"><path d="M6 4.2v11.6L15.5 10z"/></svg><svg viewBox="0 0 20 20" aria-hidden="true" class="exam-icon-pause"><path d="M6 4.5h2.6v11H6zM11.4 4.5H14v11h-2.6z"/></svg></button>
+            <button class="exam-icon-btn" type="button" id="exam-next" aria-label="下一步" title="下一步（→）"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 4v12M4 4.5 12 10 4 15.5z"/></svg></button>
+            <input id="exam-progress" type="range" min="0" max="{{ plan.metrics.duration }}" value="0" step="0.01" aria-label="搬运进度">
+            <span class="exam-time" id="exam-time">0 / {{ plan.metrics.duration }}</span>
+            <select id="exam-speed" aria-label="播放速度"><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select>
+            <button class="exam-icon-btn" type="button" id="exam-finish" aria-label="跳到最终布局" title="最终布局（End）"><svg viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 10h11M10.5 5.5 15 10l-4.5 4.5"/></svg></button>
+        </div>
+        {% endif %}
+        {% if stage == 'print' %}
+        <section id="exam-labels" hidden aria-label="桌号标签"></section>
+        {% include 'seats/partials/exam_list.html' %}
+        {% endif %}
+    </section>
+
+    <aside class="exam-side">
+        <div class="exam-side-scroll">
+            <header class="exam-side-head">
+                <h1>{% if stage == 'movement' %}{% if plan.kind == 'restore' %}考后恢复演示{% else %}搬运演示{% endif %}{% elif stage == 'numbering' %}设置桌号{% elif stage == 'print' %}打印{% else %}{% if plan.kind == 'restore' %}应用恢复布局{% else %}应用考场布局{% endif %}{% endif %}</h1>
+                <p>{{ saved.name }}</p>
+            </header>
+            {% if stale %}<p class="exam-warning" role="alert">教室或门设置已变化，本方案只能查看。{% if plan.kind != 'restore' %}<a href="{% url 'exam_setup' classroom.pk %}">重新生成</a>{% endif %}</p>{% endif %}
+            <dl class="exam-stats">
+                <div><dt>单独搬运</dt><dd>{{ plan.metrics.carried }}</dd></div>
+                <div><dt>{% if plan.kind == 'restore' %}桌数{% else %}考场座位{% endif %}</dt><dd>{{ plan.metrics.target }}</dd></div>
+                {% if plan.metrics.exported %}<div><dt>搬出</dt><dd>{{ plan.metrics.exported }}</dd></div>{% endif %}
+                {% if plan.metrics.imported %}<div><dt>搬入</dt><dd>{{ plan.metrics.imported }}</dd></div>{% endif %}
+            </dl>
+
+            {% if stage == 'movement' %}
+            {% if plan.instructions %}<ol class="exam-steps-list">{% for instruction in plan.instructions %}<li>{{ instruction }}</li>{% endfor %}</ol>{% endif %}
+            <ul class="exam-legend" aria-label="图例">
+                <li><i class="is-keep"></i>不用单独搬</li><li><i class="is-carry"></i>单独搬运</li>
+                {% if plan.metrics.exported %}<li><i class="is-export"></i>搬出</li>{% endif %}
+                {% if plan.metrics.imported %}<li><i class="is-import"></i>搬入</li>{% endif %}
+            </ul>
+            {% elif stage == 'numbering' %}
+            <form id="exam-numbering" class="exam-form" data-url="{% url 'exam_numbering' classroom.pk saved.pk %}">
+                {% csrf_token %}
+                <div class="exam-segment" role="radiogroup" aria-label="编号方式">
+                    <label><input type="radio" name="mode" value="column" checked><span>按组</span></label>
+                    <label><input type="radio" name="mode" value="row"><span>按排</span></label>
+                    <label><input type="radio" name="mode" value="snake"><span>S 型</span></label>
+                </div>
+                <label class="exam-row" id="exam-snake-label">S 型方向<select name="snake_axis"><option value="column">竖向往返</option><option value="row">横向往返</option></select></label>
+                <label class="exam-row exam-toggle">从后向前<input name="reverse_rows" type="checkbox" role="switch"></label>
+                <label class="exam-row exam-toggle">从右向左<input name="reverse_cols" type="checkbox" role="switch"></label>
+                <p id="exam-start-label" class="exam-hint"></p>
+            </form>
+            {% elif stage == 'result' %}
+            <div class="exam-callout">
+                {% if applied %}
+                    {% if plan.kind == 'restore' %}<p><strong>已恢复日常布局。</strong>原座位与学生已还原。</p>
+                    {% else %}<p><strong>考场布局已应用。</strong>教室页每张桌子会显示考场桌号。考试结束后生成搬回路线即可还原。</p>
+                    <button type="button" class="btn btn-primary exam-wide" id="exam-restore" data-url="{% url 'exam_restore' classroom.pk saved.pk %}">考后恢复：生成搬回路线</button>{% endif %}
+                {% else %}
+                    <p>{% if plan.kind == 'restore' %}桌子搬回原位后，应用即可还原原座位与学生。{% else %}现场搬完后应用，教室切换为考场布局。原布局已存为快照，考后可一键还原。{% endif %}</p>
+                    <button type="button" class="btn btn-primary exam-wide" id="exam-apply" data-url="{% url 'exam_apply' classroom.pk saved.pk %}" {% if stale %}disabled{% endif %}>{% if plan.kind == 'restore' %}应用恢复布局{% else %}应用考场布局{% endif %}</button>
+                {% endif %}
+            </div>
+            {% elif stage == 'print' %}
+            <div class="exam-segment exam-segment-stack" role="radiogroup" aria-label="打印内容">
+                {% if plan.kind != 'restore' %}<label><input type="radio" name="exam-print-kind" value="labels" checked><span>桌号标签</span></label>{% endif %}
+                <label><input type="radio" name="exam-print-kind" value="map" {% if plan.kind == 'restore' %}checked{% endif %}><span>{% if plan.kind == 'restore' %}恢复布局图{% else %}考场桌号图{% endif %}</span></label>
+                <label><input type="radio" name="exam-print-kind" value="list"><span>搬运清单</span></label>
+            </div>
+            <button class="btn btn-primary exam-wide" id="exam-print" type="button">打印</button>
+            {% endif %}
+
+            {% if stage != 'print' %}{% include 'seats/partials/exam_list.html' %}{% endif %}
+        </div>
+        <footer class="exam-side-foot">
+            {% if stage == 'movement' %}
+                {% if plan.kind == 'restore' %}<a class="btn btn-primary" href="{% url 'exam_stage' classroom.pk saved.pk 'result' %}">下一步：应用恢复</a>
+                {% else %}<a class="btn btn-secondary" href="{% url 'exam_setup' classroom.pk %}">调整行列</a><a class="btn btn-primary" href="{% url 'exam_stage' classroom.pk saved.pk 'numbering' %}">下一步：桌号</a>{% endif %}
+            {% elif stage == 'numbering' %}
+                <a class="btn btn-secondary" href="{% url 'exam_stage' classroom.pk saved.pk 'movement' %}">上一步</a>
+                <button class="btn btn-primary" type="submit" form="exam-numbering">保存，下一步</button>
+            {% elif stage == 'result' %}
+                {% if plan.kind == 'restore' %}<a class="btn btn-secondary" href="{% url 'exam_stage' classroom.pk saved.pk 'movement' %}">上一步</a>{% if applied %}<a class="btn btn-primary" href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return">完成，返回教室</a>{% endif %}
+                {% else %}<a class="btn btn-secondary" href="{% url 'exam_stage' classroom.pk saved.pk 'numbering' %}">上一步</a><a class="btn btn-secondary" href="{% url 'exam_stage' classroom.pk saved.pk 'print' %}">打印</a>{% endif %}
+            {% elif stage == 'print' %}
+                <a class="btn btn-secondary" href="{% url 'exam_stage' classroom.pk saved.pk 'result' %}">返回</a>
+            {% endif %}
+        </footer>
+    </aside>
+</div>
+{% endblock %}
