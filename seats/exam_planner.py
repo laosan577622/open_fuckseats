@@ -23,6 +23,7 @@ MAX_DESKS = 1600
 MAX_DIMENSION = 128
 MAX_SEARCH_NODES = 2_000_000
 MAX_SCHEDULE_COMPARISONS = 10_000_000
+MAX_SCHEDULE_ROUTE_POINTS = 200_000
 CORNERS = ('front_left', 'front_right', 'back_left', 'back_right')
 
 
@@ -98,6 +99,7 @@ class Router:
         self.obstacles = set(obstacles)
         self.doors = {}
         self.expansions = 0
+        self._edges = {}
         for door in doors:
             y = 1 if door['offset'] == 0 else 2 + 2 * door['offset']
             if door['corner'].startswith('back'):
@@ -134,6 +136,14 @@ class Router:
         return [(start[0] + dx * step, start[1] + dy * step)
                 for step in range(1, _distance(start, goal) + 1)]
 
+    def edges(self, point):
+        # Floor geometry is fixed for this plan; only desk occupancy changes.
+        # Reuse the swept cells rather than rebuilding them at every A* visit.
+        if point not in self._edges:
+            self._edges[point] = tuple((following, tuple(self.segment(point, following)))
+                                      for following in self.neighbors(point))
+        return self._edges[point]
+
     def _visit(self):
         self.expansions += 1
         if self.expansions > MAX_SEARCH_NODES:
@@ -153,6 +163,7 @@ class Router:
             return [start]
         blocked = occupied | self.obstacles
         heuristic = (lambda p: _distance(p, goal)) if goal is not None else (lambda p: 0)
+        infinity = float('inf')
         queue = [(heuristic(start), 0, start)]
         parents, costs = {}, {start: 0}
         while queue:
@@ -161,18 +172,17 @@ class Router:
             if cost != costs[pos]:
                 continue
             if pos in goals:
-                path = [pos]
+                segments = []
                 while pos != start:
-                    pos = parents[pos]
-                    path.append(pos)
-                points = path[::-1]
-                return [start] + [p for a, b in zip(points, points[1:]) for p in self.segment(a, b)]
+                    pos, segment = parents[pos]
+                    segments.append(segment)
+                return [start] + [p for segment in reversed(segments) for p in segment]
             self._visit()
-            for nxt in self.neighbors(pos):
-                following = cost + _distance(pos, nxt)
-                if any(point in blocked for point in self.segment(pos, nxt)) or following >= costs.get(nxt, float('inf')):
+            for nxt, segment in self.edges(pos):
+                following = cost + len(segment)
+                if following >= costs.get(nxt, infinity) or not blocked.isdisjoint(segment):
                     continue
-                parents[nxt], costs[nxt] = pos, following
+                parents[nxt], costs[nxt] = (pos, segment), following
                 # Prefer deeper equal-f nodes: breadth-first ties exhaust huge
                 # empty rectangles in long-row/long-column conversions.
                 heappush(queue, (following + heuristic(nxt), -following, nxt))
@@ -264,6 +274,12 @@ def schedule(tasks, desks):
     conservative_schedule(tasks)
     baseline = [{key: t[key] for key in ('index', 'start', 'end', 'after')} for t in tasks]
     baseline_end = max((t['end'] for t in tasks), default=0)
+    # Very long routes can exhaust the comparison budget after repeatedly
+    # scanning hundreds of thousands of swept cells. Keep the already valid
+    # baseline directly, bounding the input to this optional optimization too.
+    if sum(len(task['path']) for task in tasks) > MAX_SCHEDULE_ROUTE_POINTS:
+        return {'method': 'conservative', 'comparisons': 0, 'baseline_duration': baseline_end,
+                'budget_reached': True}
     occupied = defaultdict(list)
     holds, desk_end = {}, {}
     for desk in desks:

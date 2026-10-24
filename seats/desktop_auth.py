@@ -14,9 +14,11 @@ def desktop_mode_enabled():
     return settings.APP_SHELL == 'webview'
 
 
-def _private_response(response):
+def _private_response(response, *, referrer_policy='same-origin'):
     patch_cache_control(response, private=True, no_store=True)
-    response['Referrer-Policy'] = 'no-referrer'
+    # Native form POSTs need their real Origin; no-referrer turns it into null.
+    # same-origin still prevents desktop page URLs from reaching external sites.
+    response['Referrer-Policy'] = referrer_policy
     response['X-Content-Type-Options'] = 'nosniff'
     return response
 
@@ -64,7 +66,7 @@ class DesktopAuthMiddleware:
             target, credential = grant
             response = HttpResponseRedirect(target)
             response.set_cookie(DESKTOP_COOKIE, credential, httponly=True, samesite='Strict')
-            return _private_response(response)
+            return _private_response(response, referrer_policy='no-referrer')
 
         if not any(desktop_session.authorized(value) for value in (
             request.headers.get(DESKTOP_HEADER, ''), request.COOKIES.get(DESKTOP_COOKIE, ''),
