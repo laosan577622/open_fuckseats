@@ -3,19 +3,11 @@
 
 {% block title %}{{ classroom.name }} - 布局轮换选项{% endblock %}
 {% block body_class %}workflow-page-body transform-options-body{% endblock %}
-{% block global_back_button %}{% endblock %}
+{% block back_href %}{% url 'classroom_detail' classroom.pk %}?cloud_sync=return{% endblock %}{% block back_label %}返回班级{% endblock %}
 
-{% block actions %}
-<div class="context-toolbar-row">
-    <div class="toolbar-group">
-        <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return" class="btn btn-secondary">返回班级</a>
-        <span class="toolbar-group-label">导航</span>
-    </div>
-</div>
-{% endblock %}
 
 {% block content %}
-<main class="form-page animate-fade-in">
+<div class="form-page animate-fade-in">
     <div class="form-card card" style="max-width: 500px;">
         <h2 class="mb-4 text-center">高级布局轮换</h2>
         <form method="post" action="{% url 'shift_layout' classroom.pk %}" id="shiftForm">
@@ -57,7 +49,7 @@
             <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 16px;">执行轮换</button>
         </form>
     </div>
-</main>
+</div>
 <script>
 const SHIFT_USE_LARGE_GROUPS_KEY = 'seats_shift_use_large_groups';
 const shiftFormUseLargeGroups = document.getElementById('shiftFormUseLargeGroups');

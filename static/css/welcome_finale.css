@@ -7,7 +7,7 @@
 .wf-square:nth-child(2), .wf-square:nth-child(3) { background: #548bf9; }
 .wf-square:nth-child(4) { left: 56px; top: 56px; }
 .wf-particle { position: absolute; width: 10px; height: 10px; border: 2px solid #0a59f7; border-radius: 3px; left: calc(50% - 5px); top: calc(48% - 5px); opacity: 0; box-sizing: border-box; }
-.wf-wordmark { position: absolute; left: 50%; top: 48%; transform: translate(76px,-50%); font-size: clamp(24px,4vw,44px); font-weight: 600; letter-spacing: -.03em; white-space: nowrap; opacity: 0; margin: 0; }
+.wf-wordmark { position: absolute; left: 50%; top: 48%; transform: translate(76px,-50%); font-size: clamp(24px,4vw,44px); line-height: 1.2; font-weight: 600; letter-spacing: -.03em; white-space: nowrap; opacity: 0; margin: 0; }
 .wf-three-stage { position: absolute; width: min(32vw,350px); aspect-ratio:1122 / 1402; max-height: calc(100svh - 140px); left: 60%; top: 48%; transform: translate(-50%,-50%); transform-origin:50% 66%; opacity:0; isolation:isolate; }
 .wf-three { display:block; width:100%; height:100%; object-fit:contain; filter:drop-shadow(0 18px 20px #0040aa12); }
 .wf-three-light { position:absolute; inset:-15% -35%; background:radial-gradient(ellipse,#a4d3ff80 0,#d4e9ff35 38%,transparent 70%); filter:blur(24px); opacity:0; z-index:-2; }

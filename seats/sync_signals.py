@@ -57,11 +57,12 @@ def classroom_deleted(sender, instance, **kwargs):
 
 
 def _register_classroom_child(model):
-    @receiver(post_save, sender=model)
+    # 接收器只存在于本函数内，必须保留强引用，避免生产模式下被回收而漏记改动。
+    @receiver(post_save, sender=model, weak=False)
     def child_saved(sender, instance, **kwargs):
         _safe_bump(getattr(instance, 'classroom_id', None))
 
-    @receiver(post_delete, sender=model)
+    @receiver(post_delete, sender=model, weak=False)
     def child_deleted(sender, instance, **kwargs):
         _safe_bump(getattr(instance, 'classroom_id', None))
 

@@ -17,22 +17,12 @@
         button.disabled = true;
         button.classList.add('is-loading');
         try {
-            const platform = String(document.body.dataset.appPlatform || '').toLowerCase();
-            if (platform === 'macos' && typeof window.selectLocalMacUpdate === 'function') {
-                await window.selectLocalMacUpdate();
-                return;
+            if (typeof window.checkForUpdates !== 'function') {
+                throw new Error('更新组件尚未准备完成，请重新打开应用');
             }
-            const response = await fetch('/api/update/check/', { cache: 'no-store' });
-            const data = await response.json().catch(function () { return {}; });
-            if (!response.ok) throw new Error(data.message || '检查更新失败');
-            if (data.status === 'success' && data.update_available) {
-                window.updateInfo = data;
-                if (typeof window.showUpdateModal === 'function') window.showUpdateModal();
-            } else if (typeof window.showToast === 'function') {
-                window.showToast(data.message || '当前已是最新版本');
-            }
+            await window.checkForUpdates();
         } catch (error) {
-            if (typeof window.showToast === 'function') window.showToast(error.message || '检查更新失败');
+            if (typeof window.showToast === 'function') window.showToast('检查更新失败：' + (error && error.message || String(error)));
         } finally {
             button.disabled = false;
             button.classList.remove('is-loading');

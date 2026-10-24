@@ -1,0 +1,378 @@
+/* 首页与班级卡片（班级组详情页共用卡片部分）
+   一级导航按窗口宽度换形态：lg 及以上 SideBar，md NavRail，sm 底部悬浮 TabBar。 */
+
+body.home-dashboard-body { background: var(--bg); }
+
+/* ===================================================================== */
+/* 一级导航                                                               */
+/* ===================================================================== */
+.home-shell {
+    --home-nav-w: var(--sidebar, 240px);
+    min-height: calc(100vh - var(--header-height));
+}
+.home-sidebar,
+.home-rail { position: fixed; z-index: var(--z-nav, 100); top: var(--header-height); bottom: 0; left: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }
+.home-sidebar::-webkit-scrollbar,
+.home-rail::-webkit-scrollbar { display: none; }
+
+/* 固定在窗口左侧，用 surface 底，与内容区之间不画分隔线 */
+.home-sidebar {
+    width: var(--home-nav-w);
+    border-radius: 0;
+    background: var(--surface);
+}
+.home-sidebar .lc-side__item { flex: none; height: var(--app-row, 36px); }
+.home-sidebar .lc-side__item > span { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.home-side-spacer { flex: 1 0 var(--space-4, 16px); }
+
+.home-rail { display: none; background: var(--surface); }
+.home-rail .lc-rail__item { flex: none; }
+.home-rail-end { margin-top: auto; }
+
+.home-tabbar { display: none; }
+.home-tabbar .lc-tab { text-decoration: none; }
+.home-tabbar .lc-tab[aria-current="page"] { background: var(--surface); color: var(--brand-text); font-weight: 500; box-shadow: var(--shadow-2); }
+
+/* ===================================================================== */
+/* 内容区                                                                 */
+/* ===================================================================== */
+.home-dashboard-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-8, 32px);
+    min-width: 0;
+    margin-left: var(--home-nav-w);
+    padding: var(--space-6, 24px) var(--space-8, 32px) calc(32px + var(--space-12, 48px));
+}
+.home-dashboard-page [hidden] { display: none !important; }
+
+/* 视图切换：只显示选中的分区 */
+[data-view="groups"] [data-home-section="recent"],
+[data-view="groups"] [data-home-section="classrooms"],
+[data-view="groups"] .home-archive-section,
+[data-view="classrooms"] [data-home-section="recent"],
+[data-view="classrooms"] [data-home-section="groups"],
+[data-view="classrooms"] .home-archive-section { display: none; }
+
+.home-dashboard-hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4, 16px);
+}
+.home-dashboard-heading h1 {
+    margin: 0;
+    font-size: 28px;
+    line-height: 36px;
+    font-weight: 700;
+    letter-spacing: -.01em;
+    color: var(--ink);
+}
+.home-dashboard-tools { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-3, 12px); }
+.home-seg { position: relative; flex: none; }
+.home-seg .lc-seg__item { position: relative; z-index: 1; min-width: 56px; padding: 0 var(--space-3, 12px); white-space: nowrap; }
+.home-seg .lc-seg__item.active { background: var(--surface-raised); color: var(--ink); box-shadow: var(--shadow-2); }
+.home-seg.is-app-liquid .lc-seg__item.active { background: transparent; box-shadow: none; }
+.home-seg > .app-liquid { border-radius: 6px; background: var(--surface-raised) !important; box-shadow: var(--shadow-2) !important; }
+.home-search-box { width: 240px; margin: 0; }
+.home-create-host { flex: none; }
+
+/* 分区标题 */
+.home-section-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3, 12px);
+    min-height: 32px;
+    margin: 0 0 var(--space-3, 12px);
+}
+.home-section-title { display: flex; align-items: center; gap: var(--space-2, 8px); min-width: 0; }
+.home-section-icon { display: inline-flex; color: var(--ink-secondary); }
+.home-section-icon svg { width: var(--icon-md, 20px); height: var(--icon-md, 20px); }
+.home-section-title h2 { margin: 0; font-size: 17px; line-height: 24px; font-weight: 600; color: var(--ink); }
+.home-section-count { font-size: 14px; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
+
+/* 文字按钮：分区标题右侧的次要入口 */
+.home-section-more,
+.home-outline-action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1, 4px);
+    height: var(--app-control, 32px);
+    padding: 0 var(--space-3, 12px);
+    border-radius: var(--radius-full, 9999px);
+    color: var(--brand-text);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.home-section-more:hover,
+.home-outline-action:hover { background: var(--fill-hover); }
+.home-section-more:active,
+.home-outline-action:active { background: var(--fill-pressed); }
+.home-outline-action svg { width: 16px; height: 16px; }
+
+/* 最近使用：一张列表卡片 */
+.home-recent-item { gap: var(--space-3, 12px); }
+.home-recent-thumb {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 36px;
+    border-radius: var(--radius-sm, 8px);
+    background: var(--brand-tint);
+    color: var(--brand-text);
+}
+.home-recent-thumb svg { width: 40px; height: 28px; }
+.home-recent-copy .lc-list__title { font-size: 15px; line-height: 22px; }
+.home-recent-copy .lc-list__sub { font-size: 13px; line-height: 18px; }
+.home-recent-item em {
+    flex: none;
+    max-width: 30%;
+    padding: 2px var(--space-2, 8px);
+    overflow: hidden;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--brand-tint);
+    color: var(--brand-text);
+    font-size: 12px;
+    line-height: 16px;
+    font-style: normal;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.home-recent-item em.is-muted { background: var(--fill-control); color: var(--ink-secondary); }
+.home-recent-chevron { flex: none; width: 16px; height: 16px; color: var(--ink-tertiary); }
+
+/* ===================================================================== */
+/* 卡片：surface 底、圆角 20、内边距 16，同一行结构一致                       */
+/* ===================================================================== */
+.home-group-grid,
+.home-classroom-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: var(--space-4, 16px);
+}
+.home-group-card,
+.home-classroom-card,
+.home-archive-card,
+.home-section-empty,
+.home-search-empty {
+    border: 0;
+    border-radius: var(--radius-lg, 20px);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+}
+.home-group-card,
+.home-classroom-card { transition: box-shadow var(--duration-base) var(--ease-standard); }
+.home-group-card:hover,
+.home-classroom-card:hover { box-shadow: var(--shadow-2); }
+
+.home-group-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-3, 12px);
+    padding: var(--space-4, 16px);
+}
+.home-card-leading { display: flex; align-items: center; gap: var(--space-3, 12px); min-width: 0; }
+.home-card-leading > div { min-width: 0; }
+.home-card-icon {
+    flex: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border-radius: var(--radius-md, 12px);
+    background: var(--tone-soft, var(--brand-tint));
+    color: var(--tone-text, var(--brand-text));
+}
+.home-card-icon svg { width: var(--icon-md, 20px); height: var(--icon-md, 20px); }
+.home-card-icon-folder { --tone-soft: var(--accent-amber-soft); --tone-text: var(--accent-amber-text); }
+.home-group-card h3,
+.home-classroom-card h3 {
+    margin: 0;
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 16px;
+    line-height: 22px;
+    font-weight: 600;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+}
+.home-group-card p { margin: 2px 0 0; color: var(--ink-secondary); font-size: 13px; line-height: 18px; }
+
+.home-classroom-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3, 12px);
+    min-width: 0;
+    padding: var(--space-2, 8px) var(--space-2, 8px) var(--space-4, 16px);
+}
+/* 缩略图与卡片同心：卡片圆角 20、内缩 8，缩略图圆角 12 */
+.home-lc-thumb {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 112px;
+    border-radius: var(--radius-md, 12px);
+    background: var(--tone-soft, var(--brand-tint));
+    color: var(--tone-main, var(--brand));
+}
+.home-lc-thumb svg { width: 56px; height: 56px; }
+.home-classroom-card-head,
+.home-classroom-metrics,
+.home-classroom-card > .home-enter-classroom { margin: 0 var(--space-2, 8px); }
+.home-classroom-card .home-card-icon { width: 28px; height: 28px; border-radius: var(--radius-sm, 8px); }
+.home-classroom-card .home-card-icon svg { width: 16px; height: 16px; }
+.home-classroom-card .home-card-leading { gap: var(--space-2, 8px); }
+.home-sample-badge {
+    flex: none;
+    padding: 2px var(--space-2, 8px);
+    border-radius: var(--radius-full, 9999px);
+    background: var(--brand-tint);
+    color: var(--brand-text);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+}
+.home-classroom-metrics {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1, 4px) var(--space-3, 12px);
+    color: var(--ink-secondary);
+    font-size: 13px;
+    line-height: 18px;
+    font-variant-numeric: tabular-nums;
+}
+.home-classroom-metrics span { display: inline-flex; align-items: center; gap: var(--space-1, 4px); }
+.home-classroom-metrics svg { width: 14px; height: 14px; }
+.home-classroom-metrics i { display: none; }
+
+/* 卡片色调：取规范的强调色，缩略图用 soft 底、图形用主色 */
+[data-tone="sky"]    { --tone-soft: var(--accent-sky-soft);    --tone-text: var(--accent-sky-text);    --tone-main: var(--accent-sky); }
+[data-tone="teal"]   { --tone-soft: var(--accent-teal-soft);   --tone-text: var(--accent-teal-text);   --tone-main: var(--accent-teal); }
+[data-tone="amber"]  { --tone-soft: var(--accent-amber-soft);  --tone-text: var(--accent-amber-text);  --tone-main: var(--accent-amber); }
+[data-tone="rose"]   { --tone-soft: var(--accent-rose-soft);   --tone-text: var(--accent-rose-text);   --tone-main: var(--accent-rose); }
+[data-tone="green"]  { --tone-soft: var(--accent-green-soft);  --tone-text: var(--accent-green-text);  --tone-main: var(--accent-green); }
+[data-tone="orange"] { --tone-soft: var(--accent-orange-soft); --tone-text: var(--accent-orange-text); --tone-main: var(--accent-orange); }
+
+/* 卡片按钮：主操作实心胶囊，管理入口用 fill-control 胶囊 */
+.home-enter-classroom,
+.home-manage-action {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1, 4px);
+    height: var(--app-control, 32px);
+    padding: 0 var(--space-4, 16px);
+    border-radius: var(--radius-full, 9999px);
+    font-size: 14px;
+    font-weight: 500;
+    text-decoration: none;
+    white-space: nowrap;
+}
+.home-enter-classroom { margin-top: auto; background: var(--brand); color: var(--on-brand); }
+.home-enter-classroom:hover { background: var(--brand-hover); color: var(--on-brand); }
+.home-enter-classroom:active { background: var(--brand-pressed); }
+.home-manage-action { flex: none; background: var(--fill-control); color: var(--ink); }
+.home-manage-action:hover { background: var(--fill-hover); color: var(--ink); }
+.home-manage-action:active { background: var(--fill-pressed); }
+.home-enter-classroom svg,
+.home-manage-action svg { width: 16px; height: 16px; }
+
+/* 空状态与废纸篓 */
+.home-section-empty,
+.home-archive-card,
+.home-search-empty {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-3, 12px);
+    min-height: 96px;
+    padding: var(--space-6, 24px);
+    color: var(--ink-secondary);
+    font-size: 14px;
+    text-align: center;
+}
+.home-archive-card svg { width: var(--icon-lg, 24px); height: var(--icon-lg, 24px); color: var(--ink-tertiary); }
+.home-search-empty strong { color: var(--ink); font-weight: 500; }
+
+/* 底部状态栏：玻璃，与侧栏之间不画分隔线 */
+.home-statusbar {
+    position: fixed;
+    z-index: var(--z-sticky, 20);
+    left: var(--home-nav-w);
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+    height: 32px;
+    padding: 0 var(--space-8, 32px);
+    background: var(--glass-fill-strong);
+    -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+    backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+    color: var(--ink-secondary);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+}
+
+/* 入场：错位上浮，填充用 backwards，结束后不残留 transform */
+.home-stagger-in {
+    animation: home-stagger-in var(--duration-spring, 500ms) var(--ease-spring-soft, ease-out) backwards;
+    animation-delay: calc(var(--stagger-i, 0) * 40ms);
+}
+@keyframes home-stagger-in {
+    from { opacity: 0; transform: translateY(12px); }
+}
+
+/* ===================================================================== */
+/* 断点                                                                   */
+/* ===================================================================== */
+/* md：侧栏收为 80 宽导航轨 */
+@media (max-width: 839px) {
+    .home-shell { --home-nav-w: var(--nav-rail, 80px); }
+    .home-sidebar { display: none; }
+    .home-rail { display: flex; width: var(--home-nav-w); }
+    .home-dashboard-page { padding-left: var(--space-6, 24px); padding-right: var(--space-6, 24px); }
+    .home-statusbar { padding: 0 var(--space-6, 24px); }
+}
+/* sm：导航换成底部悬浮标签栏，内容占满宽度，底部预留 88 */
+@media (max-width: 599px) {
+    .home-shell { --home-nav-w: 0px; }
+    .home-rail,
+    .home-statusbar { display: none; }
+    .home-tabbar {
+        position: fixed;
+        z-index: var(--z-nav, 100);
+        left: 50%;
+        bottom: calc(var(--space-4, 16px) + env(safe-area-inset-bottom, 0px));
+        display: inline-flex;
+        transform: translateX(-50%);
+    }
+    .home-tabbar .lc-tab { width: 64px; }
+    .home-dashboard-page {
+        gap: var(--space-6, 24px);
+        padding: var(--space-4, 16px) var(--space-4, 16px) calc(88px + env(safe-area-inset-bottom, 0px));
+    }
+    .home-dashboard-heading h1 { font-size: 24px; line-height: 32px; }
+    .home-dashboard-tools { width: 100%; }
+    .home-search-box { flex: 1 1 100%; width: auto; order: 3; }
+    .home-group-grid,
+    .home-classroom-grid { grid-template-columns: 1fr; gap: var(--space-3, 12px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .home-stagger-in { animation: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+    .home-statusbar,
+    .home-tabbar { background: var(--surface-raised); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}

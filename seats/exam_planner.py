@@ -1,7 +1,8 @@
 """Deterministic exam layout planning on an explicitly schematic floor grid.
 
-One desk occupies a .86-unit square; adjacent routing nodes are one unit apart.
-Coordinates are desk centres. This is not a survey of physical room dimensions.
+Adjacent desk cells touch. Routes connect cell centres through actual empty
+cells, aisles and the front/back passage; midpoints are animation samples only.
+Coordinates are schematic, not a survey of physical room dimensions.
 Routes are planned against changing occupancy, then compacted using swept-edge
 and stationary occupancy intervals. A conservative validated schedule remains
 the bounded fallback. No globally optimal multi-agent routing claim is made.
@@ -98,7 +99,7 @@ class Router:
         self.doors = {}
         self.expansions = 0
         for door in doors:
-            y = 2 + 2 * door['offset']
+            y = 1 if door['offset'] == 0 else 2 + 2 * door['offset']
             if door['corner'].startswith('back'):
                 y = height - y
             if not 1 <= y < height:
@@ -106,59 +107,117 @@ class Router:
             x = 0 if door['corner'].endswith('left') else width
             self.doors.setdefault((x, y), door['id'])
 
+    def neighbors(self, point):
+        x, y = point
+        if point in self.doors:
+            step = 1 if y in (1, self.height - 1) else 2
+            return [(step if x == 0 else self.width - step, y)]
+        if y in (1, self.height - 1):
+            result = [(nx, y) for nx in (x - 1, x + 1) if 0 < nx < self.width or (nx, y) in self.doors]
+            if x % 2 == 0:
+                result.append((x, 2 if y == 1 else self.height - 2))
+            return result
+        if x % 2 or y % 2:
+            return []
+        result = [(nx, ny) for nx, ny in ((x - 2, y), (x + 2, y), (x, y - 2), (x, y + 2))
+                  if (0 < nx < self.width and 0 < ny < self.height) or (nx, ny) in self.doors]
+        if y == 2:
+            result.append((x, 1))
+        if y == self.height - 2:
+            result.append((x, self.height - 1))
+        return result
+
+    @staticmethod
+    def segment(start, goal):
+        dx = (goal[0] > start[0]) - (goal[0] < start[0])
+        dy = (goal[1] > start[1]) - (goal[1] < start[1])
+        return [(start[0] + dx * step, start[1] + dy * step)
+                for step in range(1, _distance(start, goal) + 1)]
+
+    def _visit(self):
+        self.expansions += 1
+        if self.expansions > MAX_SEARCH_NODES:
+            raise PlanningError('路线搜索达到计算预算，请减少规模或增加通道后重试')
+
     def path(self, start, goal, occupied):
-        if goal in occupied or goal in self.obstacles:
+        return self._path(start, {goal}, occupied, goal)
+
+    def path_to_any(self, start, goals, occupied):
+        return self._path(start, set(goals), occupied)
+
+    def _path(self, start, goals, occupied, goal=None):
+        goals -= occupied | self.obstacles
+        if not goals:
             return None
-        if start == goal:
+        if start in goals:
             return [start]
         blocked = occupied | self.obstacles
-        queue = [(_distance(start, goal), 0, start)]
+        heuristic = (lambda p: _distance(p, goal)) if goal is not None else (lambda p: 0)
+        queue = [(heuristic(start), 0, start)]
         parents, costs = {}, {start: 0}
         while queue:
             _, negative_cost, pos = heappop(queue)
             cost = -negative_cost
             if cost != costs[pos]:
                 continue
-            if pos == goal:
+            if pos in goals:
                 path = [pos]
                 while pos != start:
                     pos = parents[pos]
                     path.append(pos)
-                return path[::-1]
-            self.expansions += 1
-            if self.expansions > MAX_SEARCH_NODES:
-                raise PlanningError('路线搜索达到计算预算，请减少规模或增加通道后重试')
-            x, y = pos
-            for nxt in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-                nx, ny = nxt
-                if not (0 < nx < self.width and 0 < ny < self.height) and nxt not in self.doors:
+                points = path[::-1]
+                return [start] + [p for a, b in zip(points, points[1:]) for p in self.segment(a, b)]
+            self._visit()
+            for nxt in self.neighbors(pos):
+                following = cost + _distance(pos, nxt)
+                if any(point in blocked for point in self.segment(pos, nxt)) or following >= costs.get(nxt, float('inf')):
                     continue
-                if nxt in blocked or cost + 1 >= costs.get(nxt, float('inf')):
-                    continue
-                parents[nxt], costs[nxt] = pos, cost + 1
+                parents[nxt], costs[nxt] = pos, following
                 # Prefer deeper equal-f nodes: breadth-first ties exhaust huge
                 # empty rectangles in long-row/long-column conversions.
-                heappush(queue, (cost + 1 + _distance(nxt, goal), -(cost + 1), nxt))
+                heappush(queue, (following + heuristic(nxt), -following, nxt))
         return None
 
     def door_distances(self, occupied):
-        """One reverse breadth-first search gives actual aisle distance to every desk."""
-        distances = {point: 0 for point in self.doors}
-        queue = deque(distances)
-        blocked = occupied | self.obstacles
+        return self._door_search(occupied)[0]
+
+    def export_order(self, desks, count):
+        """Clear reachable desks nearest a door before assigning any exam targets."""
+        if count <= 0:
+            return []
+        by_position = {tuple(desk['position']): desk for desk in desks}
+        _, order = self._door_search(set(by_position), count)
+        if len(order) < count:
+            raise PlanningError('需要搬出的桌子被阻挡，无法通过前后通道、走廊或空位到达门口')
+        return [by_position[point] for point in order]
+
+    def _door_search(self, occupied, export_count=0, seeds=None):
+        seeds = list(self.doors) if seeds is None else seeds
+        distances = {point: 0 for point in seeds}
+        queue = [(0, point) for point in seeds]
+        queue.sort()
+        remaining, order = set(occupied), []
         while queue:
-            x, y = queue.popleft()
-            self.expansions += 1
-            if self.expansions > MAX_SEARCH_NODES:
-                raise PlanningError('路线搜索达到计算预算，请减少规模或增加通道后重试')
-            for point in ((x - 1, y), (x + 1, y), (x, y - 1), (x, y + 1)):
-                nx, ny = point
-                if point in distances or point in self.obstacles or not (0 < nx < self.width and 0 < ny < self.height):
+            distance, pos = heappop(queue)
+            if distance != distances[pos]:
+                continue
+            self._visit()
+            if pos in remaining:
+                if not export_count:
                     continue
-                distances[point] = distances[(x, y)] + 1
-                if point not in blocked:
-                    queue.append(point)
-        return distances
+                order.append(pos)
+                remaining.remove(pos)
+                if len(order) == export_count:
+                    break
+            for point in self.neighbors(pos):
+                segment = self.segment(pos, point)
+                if any(p in self.obstacles or p in remaining for p in segment[:-1]) or point in self.obstacles:
+                    continue
+                following = distance + len(segment)
+                if following < distances.get(point, float('inf')):
+                    distances[point] = following
+                    heappush(queue, (following, point))
+        return distances, order
 
     def nearest_door(self, pos, occupied, entering=False, reserved=None):
         best = None
@@ -434,32 +493,35 @@ def plan_exam(snapshot, rows, cols, doors=None):
                for c in range(cols) for r in range(rows)]
     if any(tuple(t['position']) in obstacles for t in targets):
         raise PlanningError('目标桌位与讲台重叠，请调整来源布局或考场行列')
-    distances = router.door_distances({tuple(d['position']) for d in desks}) if doors else {}
+    removal = router.export_order(desks, max(0, difference))
+    removal_ids = [desk['id'] for desk in removal]
+    removed = set(removal_ids)
+    columns = {c: [desk for desk in values if desk['id'] not in removed] for c, values in columns.items()}
+    columns = {c: values for c, values in columns.items() if values}
+    distances = router.door_distances({tuple(d['position']) for d in desks if d['id'] not in removed}) if doors else {}
     door_distance = lambda desk: distances.get(tuple(desk['position']), float('inf'))
     column_distance = {c: min(map(door_distance, ds)) for c, ds in columns.items()}
     centre = (min(columns, default=0) + max(columns, default=0)) / 2
     usable = lambda c: -min(rows, len(columns[c]))
-    # Carrying count is max(original, target) minus desks kept in column heads,
-    # so every candidate keeps the most usable columns; ties are broken several
-    # ways and each allocation is fully routed and scheduled before choosing.
+    # Exports are fixed by door accessibility. Only the remaining columns and
+    # target assignment compete on carrying count, duration and route length.
     candidates = []
     for order in ((lambda c: (usable(c), -column_distance[c], c)),
                   (lambda c: (usable(c), c)), (lambda c: (usable(c), -c)),
                   (lambda c: (usable(c), abs(c - centre), c)),
                   (lambda c: (usable(c), column_distance[c], c))):
         main = tuple(sorted(sorted(columns, key=order)[:cols]))
-        if ('assignment', main) not in candidates:
-            candidates.append(('assignment', main))
-    candidates.insert(1, ('door_order', None))
+        if main not in candidates:
+            candidates.append(main)
     if len(desks) + rows * cols > MAX_CANDIDATE_DESKS:
         # Large rooms: every extra candidate is a full route-and-schedule pass.
         candidates = candidates[:2]
     best, best_key, failure, nodes = None, None, None, 0
-    for strategy, main in candidates:
+    for main in candidates:
         trial = deepcopy(desks)
         try:
-            allocation = _allocate_candidate(trial, rows, cols, targets, strategy, main, distances,
-                                             list(router.doors), obstacles)
+            allocation = _allocate_candidate(trial, rows, cols, targets, main, distances,
+                                             list(router.doors), obstacles, removal_ids)
             trial_router = Router(width, height, doors, obstacles)
             result = _finish_plan(snapshot, rows, cols, trial + allocation['incoming'], doors, width, height,
                                   obstacles, allocation['removal'], router=trial_router)
@@ -478,7 +540,7 @@ def plan_exam(snapshot, rows, cols, doors=None):
     result = best
     result['row_offset'] = row_offset
     result['metrics']['minimum_carried'] = max(len(desks), rows * cols) - max(
-        sum(min(rows, len(columns[c])) for c in main) for _, main in candidates if main is not None)
+        sum(-usable(c) for c in main) for main in candidates)
     result['metrics']['candidates'] = len(candidates)
     removed = {d['id'] for d in chosen['removal']}
     surplus, main_columns = chosen['surplus'], chosen['main_columns']
@@ -499,7 +561,7 @@ def plan_exam(snapshot, rows, cols, doors=None):
     if main_columns:
         source_names = '、'.join(str(by_column[c][0]['source_col']) for c in main_columns)
         target_names = '、'.join(str(chosen['group_offset'] + c + 1) for c in range(len(main_columns)))
-        instructions.append(f'原第{source_names}列，搬运完成后整体拉开为第{target_names}组，列内桌子无需逐张搬运。')
+        instructions.append(f'原第{source_names}列，按搬运清单调整为第{target_names}组。')
     if surplus:
         if len({d['source_col'] for d in surplus}) == 1 and all(d['target']['row'] == rows for d in surplus):
             target_names = '、'.join(str(d['target']['col']) for d in surplus)
@@ -512,24 +574,16 @@ def plan_exam(snapshot, rows, cols, doors=None):
     return result
 
 
-def _allocate_candidate(desks, rows, cols, targets, strategy, main_columns, distances, door_points, obstacles):
+def _allocate_candidate(desks, rows, cols, targets, main_columns, distances, door_points, obstacles, removal_ids):
     """Assign targets on a private desk copy; returns exports, carried-in desks and fills."""
     door_distance = lambda desk: distances.get(tuple(desk['position']), float('inf'))
+    by_id = {desk['id']: desk for desk in desks}
+    removal = [by_id[key] for key in removal_ids]
+    removed = set(removal_ids)
     columns = defaultdict(list)
     for desk in desks:
-        columns[desk['source']['col']].append(desk)
-    if strategy == 'door_order':
-        # Previous rule: remove desks by aisle distance before choosing columns.
-        removal, difference = [], len(desks) - rows * cols
-        for column in sorted(columns, key=lambda c: (min(map(door_distance, columns[c])), c)):
-            if len(removal) >= difference:
-                break
-            ordered = sorted(columns[column], key=lambda d: (door_distance(d), d['source']['row']))
-            removal.extend(ordered[:difference - len(removal)])
-        removed = {d['id'] for d in removal}
-        columns = {c: [d for d in ds if d['id'] not in removed] for c, ds in columns.items()}
-        columns = {c: ds for c, ds in columns.items() if ds}
-        main_columns = sorted(sorted(columns, key=lambda c: (-min(rows, len(columns[c])), c))[:cols])
+        if desk['id'] not in removed:
+            columns[desk['source']['col']].append(desk)
     offset = _group_offset(main_columns, cols)
     base = offset or 0
     assigned, used_targets = set(), set()
@@ -543,17 +597,10 @@ def _allocate_candidate(desks, rows, cols, targets, strategy, main_columns, dist
     # as whole columns; other groups are filled directly at their final spot.
     staging_x = ({base + index + 1: 2 * source_col for index, source_col in enumerate(main_columns)}
                  if offset is not None else {})
-    if strategy == 'door_order':
-        surplus = [d for d in desks if d['id'] not in removed | assigned]
-        vacancies.sort(key=lambda t: (t['row'], t['col']))
-        fills = list(zip(surplus, vacancies))
-        incoming = vacancies[len(surplus):]
-    else:
-        extra = [d for d in desks if d['id'] not in assigned]
-        route_point = lambda t: (staging_x.get(t['col'], t['position'][0]), t['position'][1])
-        fills, removal, incoming = _allocate(extra, vacancies, door_distance, route_point, door_points)
-        incoming.sort(key=lambda t: (t['row'], t['col']))
-        removal.sort(key=lambda d: (door_distance(d), d['source']['col'], d['source']['row']))
+    extra = [d for d in desks if d['id'] not in removed | assigned]
+    route_point = lambda t: (staging_x.get(t['col'], t['position'][0]), t['position'][1])
+    fills, _, incoming = _allocate(extra, vacancies, door_distance, route_point, door_points)
+    incoming.sort(key=lambda t: (t['row'], t['col']))
     for desk, target in fills:
         desk['target'] = target
     for desk in removal:
@@ -614,7 +661,7 @@ def _group_offset(main_columns, cols):
     return None if best is None else best[1]
 
 
-def _finish_plan(snapshot, rows, cols, desks, doors, width, height, obstacles, removal=None, numbering=True, router=None):
+def _finish_plan(snapshot, rows, cols, desks, doors, width, height, obstacles, removal=None, numbering=True, router=None, replay=None):
     router = router or Router(width, height, doors, obstacles)
     if removal is None:
         removal = [d for d in desks if d['action'] == 'export']
@@ -622,6 +669,13 @@ def _finish_plan(snapshot, rows, cols, desks, doors, width, height, obstacles, r
     positions = {d['id']: tuple(d['position']) for d in desks if d['position']}
     tasks = []
     reservations, desk_finish = {}, {}
+    route_target = lambda desk: tuple(desk.get('routing_position', desk['target']['position']))
+    target_points = {route_target(d) for d in desks if d['target']}
+    parking = {(x, y) for y in (1, height - 1) for x in range(2, width, 2)}
+    floor_parking = {(x, y) for x in range(2, width, 2) for y in range(2, height, 2)} - target_points
+    parking |= floor_parking
+    parked, deferred, pending = set(), [], []
+    restoring = False
 
     def move(desk, path, action, door_id=None):
         tasks.append({'desk_id': desk['id'], 'action': action, 'path': [list(p) for p in path],
@@ -636,53 +690,175 @@ def _finish_plan(snapshot, rows, cols, desks, doors, width, height, obstacles, r
         else:
             positions[desk['id']] = path[-1]
 
-    for desk in removal:
-        pos = positions[desk['id']]
-        result = router.nearest_door(pos, set(positions.values()) - {pos}, reserved=reservations)
-        if result is None:
-            raise PlanningError(f"原第{desk['source']['col']}列第{desk['source']['row']}排无法到达门口")
-        move(desk, result[0], 'export', result[1])
-    route_target = lambda desk: tuple(desk.get('routing_position', desk['target']['position']))
-    pending = [d for d in desks if d['target'] and d['action'] != 'import'
-               and positions[d['id']] != route_target(d)]
-    parked = set()
-    target_points = {route_target(d) for d in desks if d['target']}
-    while pending:
-        progress = False
-        for desk in list(pending):
-            pos = positions[desk['id']]
-            route = router.path(pos, route_target(desk), set(positions.values()) - {pos})
-            if route:
-                move(desk, route, 'move')
-                pending.remove(desk)
-                progress = True
-        if progress:
-            continue
-        # Break dependency cycles by moving a desk to a real reachable free spot.
-        staged = False
-        for desk in pending:
-            if desk['id'] in parked:
-                continue
-            pos = positions[desk['id']]
-            parking = [(x, y) for y in (1, height - 1) for x in range(1, width)]
-            parking += [(x, y) for x in (1, width - 1) for y in range(2, height - 1)]
-            for point in sorted(set(parking) - target_points, key=lambda p: (_distance(pos, p), p)):
-                route = router.path(pos, point, set(positions.values()) - {pos})
+    if replay is not None:
+        by_id = {desk['id']: desk for desk in desks}
+        for task in replay:
+            move(by_id[task['desk_id']], [tuple(point) for point in task['path']], task['action'], task.get('door_id'))
+    else:
+        def stage_one(focus):
+            candidates = [d for d in desks if d['target'] and d['id'] in positions and d['id'] not in parked]
+            candidates.sort(key=lambda d: (_distance(positions[d['id']], focus), d['id']))
+            for desk in candidates:
+                pos = positions[desk['id']]
+                occupied = set(positions.values()) - {pos}
+                route = router.path_to_any(pos, parking - {pos}, occupied)
                 if route:
                     move(desk, route, 'stage')
                     parked.add(desk['id'])
-                    staged = True
-                    break
-            if staged:
-                break
-        if not staged:
-            raise PlanningError('剩余搬运相互阻塞且无可达临时停放点，请调整布局或通道')
-    for desk in desks:
-        if desk['action'] == 'import':
-            result = router.nearest_door(route_target(desk), set(positions.values()), entering=True, reserved=reservations)
-            if not result:
-                raise PlanningError('新增桌子无法从门口到达目标位置')
-            move(desk, result[0], 'import', result[1])
+                    if desk not in pending:
+                        if restoring:
+                            pending.append(desk)
+                        else:
+                            deferred.append(desk)
+                    return True
+            return False
+
+        class _SlideFallback(Exception):
+            pass
+
+        def slide_remaining():
+            by_id = {desk['id']: desk for desk in desks}
+            vertices = {(x, y) for x in range(2, width, 2) for y in range(2, height, 2)}
+            vertices |= {(x, y) for y in (1, height - 1) for x in range(1, width)}
+            vertices -= obstacles
+            seeds = list(router.doors) or [(2, 1)]
+            depths = router._door_search(set(), seeds=seeds)[0]
+            locked = set()
+
+            def waypoints(path):
+                return [tuple(point) for point in path if point[1] in (1, height - 1)
+                        or (point[0] % 2 == 0 and point[1] % 2 == 0)]
+
+            ordered = sorted((d for d in desks if d['target']),
+                             key=lambda d: (-depths.get(route_target(d), float('inf')), d['id']))
+            visited_states = set()
+
+            def can_close(desk):
+                goal = route_target(desk)
+                needed = {route_target(other) for other in ordered if other is not desk}
+                needed |= {point for key, point in positions.items() if key != desk['id'] and point not in locked}
+                needed.discard(goal)
+                visited, queue = set(seeds), deque(seeds)
+                while queue:
+                    point = queue.popleft()
+                    for following in router.neighbors(point):
+                        if following in visited or following in locked or following == goal:
+                            continue
+                        if any(p in obstacles for p in router.segment(point, following)):
+                            continue
+                        visited.add(following)
+                        queue.append(following)
+                return needed <= visited
+            def unlock_path(path):
+                owners = {point: key for key, point in positions.items()}
+                for point in map(tuple, path):
+                    if point in locked:
+                        locked.remove(point)
+                        displaced = by_id[owners[point]]
+                        if displaced not in ordered:
+                            ordered.append(displaced)
+
+            while ordered:
+                state = (tuple(sorted(positions.items())), frozenset(locked), tuple(d['id'] for d in ordered))
+                if state in visited_states:
+                    raise PlanningError('搬运周转形成循环，请调整目标分配')
+                visited_states.add(state)
+                index = next((i for i, desk in enumerate(ordered) if can_close(desk)), 0)
+                desk = ordered.pop(index)
+                goal = route_target(desk)
+                entering = desk['id'] not in positions
+                if entering:
+                    result = router.nearest_door(goal, locked, entering=True)
+                    if not result:
+                        result = router.nearest_door(goal, set(), entering=True)
+                        if not result:
+                            raise PlanningError('新增桌子无法到达目标空位')
+                        unlock_path(result[0])
+                    path, door_id = result
+                else:
+                    path = router.path(positions[desk['id']], goal, locked)
+                    door_id = None
+                    if not path:
+                        path = router.path(positions[desk['id']], goal, set())
+                        if not path:
+                            raise PlanningError('目标桌位无法通过现有通道到达')
+                        unlock_path(path)
+                points = waypoints(path)
+                for current, following in zip(points, points[1:]):
+                    owners = {point: key for key, point in positions.items()}
+                    if following in owners:
+                        blank = router.path_to_any(following, vertices - set(owners), locked | {current})
+                        if not blank:
+                            blank = router.path_to_any(following, vertices - set(owners), {current})
+                            if not blank:
+                                raise PlanningError('没有可用于周转的可达空位')
+                            unlock_path(blank)
+                        chain = waypoints(blank)
+                        for origin, destination in reversed(list(zip(chain, chain[1:]))):
+                            key = owners.pop(origin, None)
+                            if key is not None:
+                                move(by_id[key], [origin] + router.segment(origin, destination), 'stage')
+                                owners[destination] = key
+                    action = 'import' if entering else 'move'
+                    move(desk, [current] + router.segment(current, following), action, door_id if entering else None)
+                    entering = False
+                locked.add(goal)
+
+        exports = list(removal)
+        while exports:
+            progress = False
+            for desk in list(exports):
+                pos = positions[desk['id']]
+                result = router.nearest_door(pos, set(positions.values()) - {pos}, reserved=reservations)
+                if result:
+                    move(desk, result[0], 'export', result[1])
+                    exports.remove(desk)
+                    progress = True
+            if not progress and not stage_one(positions[exports[0]['id']]):
+                raise PlanningError('待搬出的桌子无法到达门口，请调整布局或通道')
+        try:
+            pending = [d for d in desks if d['target'] and d['action'] != 'import'
+                       and positions[d['id']] != route_target(d) and d not in deferred]
+            pending.sort(key=lambda d: (-route_target(d)[1], route_target(d)[0], d['id']))
+            while pending:
+                progress = False
+                for desk in list(pending):
+                    pos = positions[desk['id']]
+                    route = router.path(pos, route_target(desk), set(positions.values()) - {pos})
+                    if route:
+                        move(desk, route, 'move')
+                        pending.remove(desk)
+                        progress = True
+                if progress:
+                    continue
+                if not stage_one(route_target(pending[0])):
+                    raise _SlideFallback
+            incoming = [desk for desk in desks if desk['action'] == 'import']
+            incoming_distances = router.door_distances(set(positions.values())) if incoming else {}
+            # Fill the deepest vacancies first so a desk placed near a door never
+            # seals the only route to another vacancy behind it.
+            for desk in sorted(incoming, key=lambda d: (-incoming_distances.get(route_target(d), float('inf')), d['id'])):
+                while True:
+                    result = router.nearest_door(route_target(desk), set(positions.values()), entering=True, reserved=reservations)
+                    if result:
+                        move(desk, result[0], 'import', result[1])
+                        break
+                    if not stage_one(route_target(desk)):
+                        raise _SlideFallback
+            restoring, pending = True, list(reversed(deferred))
+            while pending:
+                progress = False
+                for desk in list(pending):
+                    pos = positions[desk['id']]
+                    route = router.path(pos, route_target(desk), set(positions.values()) - {pos})
+                    if route:
+                        move(desk, route, 'move')
+                        pending.remove(desk)
+                        progress = True
+                if not progress and not stage_one(route_target(pending[0])):
+                    raise _SlideFallback
+        except _SlideFallback:
+            slide_remaining()
     scheduling = schedule(tasks, desks)
     alignment = [{'desk_id': d['id'], 'from': list(route_target(d)), 'to': d['target']['position']}
                  for d in desks if d['target'] and route_target(d) != tuple(d['target']['position'])]
@@ -700,8 +876,8 @@ def _finish_plan(snapshot, rows, cols, desks, doors, width, height, obstacles, r
                         'duration': duration,
                         'serial_duration': sum(t['end'] - t['start'] for t in tasks),
                         'search_nodes': router.expansions},
-            'geometry': 'schematic-unit-grid',
-            'notes': ['路线基于示意网格，单位时长不是现场秒数；未测量真实门宽和桌椅尺寸。']}
+            'geometry': 'desk-cell-grid',
+            'notes': []}
 
 
 def target_snapshot(source, plan):
@@ -728,7 +904,7 @@ def target_snapshot(source, plan):
 
 
 def plan_restore(current, original, previous):
-    """Replan reverse transport against current occupancy, never reverse the timeline."""
+    """Close the groups, then undo verified carrying routes in reverse order."""
     desks = []
     current_cells = {(s['row'], s['col']): s for s in current['seats']}
     # Undo the forward whole-column spacing first: close every exam group back
@@ -747,9 +923,14 @@ def plan_restore(current, original, previous):
                       'source': deepcopy(source if position else old['source']),
                       'source_col': old['target']['col'] if old['target'] else old.get('source_col'),
                       'target': target, 'action': 'import' if position is None else 'export' if target is None else 'retain'})
+    replay = None
+    if previous.get('geometry') == 'desk-cell-grid':
+        inverse = {'export': 'import', 'import': 'export', 'stage': 'move', 'move': 'move'}
+        replay = [{**task, 'path': list(reversed(task['path'])), 'action': inverse[task['action']]}
+                  for task in reversed(previous['tasks'])]
     result = _finish_plan(current, original['classroom']['rows'], original['classroom']['cols'],
                           desks, previous['doors'], previous['width'], previous['height'],
-                          {tuple(p) for p in previous['obstacles']}, numbering=False)
+                          {tuple(p) for p in previous['obstacles']}, numbering=False, replay=replay)
     result['kind'] = 'restore'
     closing = [{'desk_id': d['id'], 'from': spread[d['id']]['to'], 'to': spread[d['id']]['from']}
                for d in desks if d['id'] in spread]

@@ -115,7 +115,7 @@ def _preflight(base_dir, version):
                     errors.append(f'开发工具中找不到 {tool}。')
     if not any(identities) and not notarizing and not signing_required:
         print('当前为无开发者证书模式：App 使用 ad-hoc 签名，PKG 未签名，并跳过公证。')
-        print('未签名 PKG 可用于手动安装，不能作为应用内升级包。')
+        print('应用内下载更新时会核对官方 Release 的 SHA-256；本地自选升级包仍需有效签名。')
     for error in errors:
         print(f'未就绪：{error}', file=sys.stderr)
     print('仅检查本地配置；证书信任、公证凭据有效性及成品运行仍需正式构建时验证。')

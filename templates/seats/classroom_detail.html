@@ -3,31 +3,24 @@
 
 {% block title %}{{ classroom.name }} - 排座详情{% endblock %}
 {% block body_class %}classroom-detail-body{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/classroom-doors.css' %}?v=5">{% endblock %}
-{% block ai_titlebar_link %}
-<div class="wd-dock" id="wendao-dock">
-    <button type="button" class="btn wd-spectrum wd-launch" id="wd-launch" aria-expanded="false" aria-controls="wd-composer-panel"><span class="wd-brand-text">闻道智能</span><span class="wd-notice" hidden></span></button>
-    <button type="button" class="btn wd-spectrum wd-orb" id="wd-orb" hidden aria-label="排座建议" aria-expanded="false" aria-controls="wd-suggestions">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="url(#wd-suggestion-gradient)" stroke-width="1.7" aria-hidden="true"><defs><linearGradient id="wd-suggestion-gradient" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#5bd6c2"/><stop offset="1" stop-color="#e5bd28"/></linearGradient></defs><path d="M9 18h6M10 21h4M8.3 13.8a6 6 0 1 1 7.4 0c-1 .7-1.2 1.5-1.2 2.2h-5c0-.7-.2-1.5-1.2-2.2Z"/><path d="m10 9 2 2 2-2"/></svg>
-        <span class="wd-count" hidden></span>
-    </button>
-</div>
-{% endblock %}
-
-{% block titlebar_actions %}
+{# 菜单栏独占一行；macOS 桌面壳由系统菜单栏承接，不在窗口里重复绘制。 #}
+{% block native_menu %}{% if app_runtime.shell != 'webview' or app_runtime.platform != 'macos' %}{% include 'partials/native_menu.html' %}{% endif %}{% endblock %}
+{% block titlebar_title %}
 <div class="classroom-titlebar-meta" aria-label="当前班级">
     <strong>{{ classroom.name }}</strong>
     <small>{{ students|length }} 人</small>
 </div>
-<button type="button" class="btn btn-secondary" id="btn-open-tour-titlebar" title="新手引导"
-    onclick="startOnboarding(true)" style="padding: 6px 12px;">
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-        <circle cx="12" cy="12" r="9.2" stroke="currentColor" stroke-width="1.7"/>
-        <path d="M9.6 9.2a2.5 2.5 0 1 1 3.6 2.24c-.8.42-1.2.96-1.2 1.96" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-        <circle cx="12" cy="16.6" r="1" fill="currentColor"/>
-    </svg>
-    帮助
-</button>
+{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/classroom-doors.css' %}?v=5">
+<link rel="stylesheet" href="{% static 'css/classroom-workspace.css' %}?v=3.4">{% endblock %}
+{% block ai_titlebar_link %}
+<div class="wd-dock" id="wendao-dock">
+    <button type="button" class="btn wd-spectrum wd-launch" id="wd-launch" aria-label="闻道智能" aria-expanded="false" aria-controls="wd-side"><svg class="wd-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.8 9a1.5 1.5 0 0 0 1 1l5.7 1.9-5.7 1.9a1.5 1.5 0 0 0-1 1L12 20.5l-1.8-5.7a1.5 1.5 0 0 0-1-1L3.5 12l5.7-1.9a1.5 1.5 0 0 0 1-1z"/></svg><span class="wd-brand-text">闻道智能</span><span class="wd-notice" hidden></span></button>
+    <button type="button" class="btn wd-spectrum wd-orb" id="wd-orb" hidden aria-label="排座建议" aria-expanded="false" aria-controls="wd-suggestions">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M9 18h6M10 21h4M8.3 13.8a6 6 0 1 1 7.4 0c-1 .7-1.2 1.5-1.2 2.2h-5c0-.7-.2-1.5-1.2-2.2Z"/><path d="m10 9 2 2 2-2"/></svg>
+        <span class="wd-count" hidden></span>
+    </button>
+</div>
 {% endblock %}
 
 {% block actions %}
@@ -181,9 +174,9 @@
                 <div class="tab-panel active" data-tab-panel="students">
                     <div class="panel-header student-list-heading">
                         <h3>未入座学生 <span class="student-list-count">（{{ unseated_students|length }}）</span></h3>
-                        <div style="display: flex; align-items: center; gap: 8px;">
+                        <div class="panel-header-actions">
                             <span class="panel-meta" id="unseatedCount">{{ unseated_students|length }} 人</span>
-                            <button type="button" class="icon-btn" id="btn-add-student" title="添加学生" style="width:24px;height:24px;font-size:16px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;">+</button>
+                            <button type="button" class="icon-btn icon-btn-add" id="btn-add-student" title="添加学生" aria-label="添加学生"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
                         </div>
                     </div>
                     <input type="text" id="unseatedSearch" placeholder="搜索未入座学生（姓名）" aria-label="搜索未入座学生">
@@ -225,7 +218,7 @@
                             <h3>学生信息</h3>
                             <div class="student-detail-tools">
                                 <details class="student-display-menu">
-                                    <summary type="button">显示字段</summary>
+                                    <summary>显示字段</summary>
                                     <div class="student-display-options">
                                         <label><input type="checkbox" data-student-display-toggle="student_id" checked> 学号</label>
                                         <label><input type="checkbox" data-student-display-toggle="gender" checked> 性别</label>
@@ -328,12 +321,10 @@
                                 {% for group in groups %}
                                 <div class="group-item" data-group-id="{{ group.pk }}" data-group-name="{{ group.name }}">
                                     <span>{{ group.name }}</span>
-                                    <div style="display: flex; gap: 4px;">
-                                        <button type="button" class="btn btn-secondary"
-                                            style="padding: 2px 8px; font-size: 12px;" data-action="rename-group"
+                                    <div class="group-item-actions">
+                                        <button type="button" class="btn btn-secondary btn-xs" data-action="rename-group"
                                             data-url="{% url 'rename_group' classroom.pk group.pk %}">重命名</button>
-                                        <button type="button" class="btn btn-secondary"
-                                            style="padding: 2px 8px; font-size: 12px;" data-action="delete-group"
+                                        <button type="button" class="btn btn-secondary btn-xs" data-action="delete-group"
                                             data-url="{% url 'delete_group' classroom.pk group.pk %}">删除</button>
                                     </div>
                                 </div>
@@ -417,7 +408,7 @@
                 <div class="tab-panel" data-tab-panel="tags">
                     <div class="panel-header">
                         <h3>标签管理</h3>
-                        <button type="button" class="icon-btn" id="btn-create-tag" title="创建标签" style="width:24px;height:24px;font-size:16px;line-height:1;padding:0;display:flex;align-items:center;justify-content:center;">+</button>
+                        <button type="button" class="icon-btn icon-btn-add" id="btn-create-tag" title="创建标签" aria-label="创建标签"><svg viewBox="0 0 12 12" fill="none" aria-hidden="true"><path d="M6 1.5v9M1.5 6h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></button>
                     </div>
                     <div class="panel-note">给学生打标签，按标签设置排座规则。</div>
 
@@ -464,7 +455,7 @@
                                     <option value="separate_same_tag">同标签保持距离</option>
                                 </select>
                                 <div class="tag-rule-area-fields" id="tagRuleAreaFields">
-                                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+                                    <div class="tag-rule-area-grid">
                                         <input type="number" id="tagRuleRowMin" placeholder="起始行" min="1">
                                         <input type="number" id="tagRuleRowMax" placeholder="结束行" min="1">
                                         <input type="number" id="tagRuleColMin" placeholder="起始列" min="1">
@@ -491,23 +482,24 @@
                     <div class="panel-header">
                         <h3>文件导入导出</h3>
                     </div>
-                    <div class="panel-header" style="margin-top: 2px;">
+                    <div class="panel-header panel-subheader">
                         <h3>导入</h3>
                     </div>
-                    <div class="tool-row" style="margin-bottom: 8px;">
+                    <div class="tool-row tool-row-spaced">
                         <a href="{% url 'import_students_options_page' classroom.pk %}" class="btn btn-primary">导入 Excel
                             成绩表</a>
                         <a href="{% url 'import_layout_excel_options_page' classroom.pk %}"
                             class="btn btn-primary">导入座位表</a>
                         <button type="button" class="btn btn-primary" data-bsce-import-trigger="1">BSCE 导入</button>
+                        <a href="{% url 'import_sdes' classroom.pk %}" class="btn btn-primary">导入 SDES</a>
                         <button type="button" class="btn btn-primary" data-seats-import-trigger="1">导入
                             .seats（系统操作）</button>
                     </div>
 
-                    <div class="panel-header" style="margin-top: 4px;">
+                    <div class="panel-header panel-subheader">
                         <h3>导出（第三方软件）</h3>
                     </div>
-                    <div class="tool-row" style="margin-bottom: 8px;">
+                    <div class="tool-row tool-row-spaced">
                         <a href="{% url 'export_students_options_page' classroom.pk %}"
                             class="btn btn-primary">导出排座表</a>
                         <a href="{% url 'export_students_svg_options_page' classroom.pk %}" class="btn btn-primary">导出
@@ -515,23 +507,23 @@
                         <a href="{% url 'export_students_pptx_options_page' classroom.pk %}"
                             class="btn btn-primary">导出单页 PPT</a>
                     </div>
-                    <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-primary" style="width: 100%;"
+                    <a href="{% url 'export_group_report' classroom.pk %}" class="btn btn-primary btn-block"
                         data-system-save="1" data-default-filename="{{ classroom.name }}_小组作业表.xlsx"
                         data-accept-mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
                         data-accept-ext=".xlsx">导出小组登记表</a>
-                    <a href="{% url 'export_students_csis' classroom.pk %}" class="btn btn-primary"
-                        style="width: 100%; margin-top: 8px;" data-system-save="1"
+                    <a href="{% url 'export_students_csis' classroom.pk %}" class="btn btn-primary btn-block"
+                        data-system-save="1"
                         data-default-filename="{{ classroom.name }}_CSIS.csls"
                         data-accept-mime="application/json" data-accept-ext=".csls,.json">导出 CSIS（CSLS）</a>
 
-                    <div class="panel-header" style="margin-top: 8px;">
+                    <div class="panel-header panel-subheader">
                         <h3>导出（系统操作）</h3>
                     </div>
-                    <a href="{% url 'export_seats_file' classroom.pk %}" class="btn btn-primary" style="width: 100%;"
+                    <a href="{% url 'export_seats_file' classroom.pk %}" class="btn btn-primary btn-block"
                         data-system-save="1" data-default-filename="{{ classroom.name }}.seats"
                         data-accept-mime="application/octet-stream" data-accept-ext=".seats,.json">导出 .seats</a>
 
-                    <div class="panel-header" style="margin-top: 8px;">
+                    <div class="panel-header panel-subheader">
                         <h3>布局快照</h3>
                     </div>
                     <form method="post" action="{% url 'save_layout_snapshot' classroom.pk %}" class="inline-form">
@@ -556,6 +548,23 @@
                         {% empty %}
                         <div class="empty-hint">暂无快照</div>
                         {% endfor %}
+                        {% if local_sync_snapshots %}
+                        <div class="panel-header panel-subheader"><h3>同步前快照 · 仅本地</h3></div>
+                        {% for snap in local_sync_snapshots %}
+                        <div class="snapshot-item sync-snapshot-item">
+                            <span title="版本 {{ snap.source_version }}，保存于 {{ snap.created_at|date:'Y-m-d H:i:s' }}">{{ snap.get_source_display }}<br>{{ snap.operation_at|default:snap.created_at|date:'Y-m-d H:i:s' }}</span>
+                            <div class="snapshot-actions">
+                                <form method="post" action="{% url 'load_local_sync_snapshot' classroom.pk snap.pk %}" data-sync-snapshot-load="1">
+                                    {% csrf_token %}<button type="submit" class="btn btn-primary">恢复</button>
+                                </form>
+                                <a href="{% url 'export_local_sync_snapshot' classroom.pk snap.pk %}" class="btn btn-primary" data-system-save="1" data-default-filename="{{ classroom.name }}_同步前快照.seats" data-accept-ext=".seats">导出</a>
+                                <form method="post" action="{% url 'delete_local_sync_snapshot' classroom.pk snap.pk %}" data-snapshot-delete="1">
+                                    {% csrf_token %}<button type="submit" class="btn btn-primary">删除</button>
+                                </form>
+                            </div>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
                     </div>
                 </div>
 
@@ -588,22 +597,48 @@
         </div>
     </div>
 
-    <div id="generic-dialog-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="genericDialogTitle">
-        <div class="modal-content" style="max-width: 400px;">
-            <h3 id="genericDialogTitle" style="margin: 0 0 12px; font-size: 16px; font-weight: 600;"></h3>
-            <p id="genericDialogMessage" style="margin: 0 0 16px; font-size: 14px; color: var(--text-secondary); line-height: 1.5;"></p>
-            <input type="text" id="genericDialogInput" class="modal-field" style="display:none">
-            <div class="modal-actions">
-                <button type="button" class="btn btn-secondary" id="genericDialogCancel">取消</button>
-                <button type="button" class="btn btn-primary" id="genericDialogOk">确定</button>
+    {{ arrange_preferences|json_script:'arrange-preferences-data' }}
+    <div id="arrange-preferences-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="arrangePreferencesTitle" aria-describedby="arrangePreferencesHint">
+        <form id="arrange-preferences-form" class="modal-content arrange-preferences-content" action="{% url 'arrange_preferences' classroom.pk %}" method="post">
+            {% csrf_token %}
+            <h3 id="arrangePreferencesTitle">偏好选项</h3>
+            <div class="arrange-preferences-fields">
+                <div>
+                    <label for="arrangePreferenceGender" class="modal-field-label">同桌性别</label>
+                    <select id="arrangePreferenceGender" name="gender" class="modal-field">
+                        <option value="none">无偏好</option>
+                        <option value="same">同性优先</option>
+                        <option value="different">异性优先</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="arrangePreferenceScore" class="modal-field-label">成绩搭配</label>
+                    <select id="arrangePreferenceScore" name="score" class="modal-field">
+                        <option value="none">无偏好</option>
+                        <option value="similar">成绩相近优先</option>
+                        <option value="complementary">成绩互补优先</option>
+                    </select>
+                </div>
+                <label class="arrange-preferences-checkbox" for="arrangePreferenceAvoidPrevious">
+                    <input type="checkbox" id="arrangePreferenceAvoidPrevious" name="avoid_previous">
+                    <span>尽量更换同桌</span>
+                </label>
             </div>
-        </div>
+            <p id="arrangePreferencesHint" class="arrange-preferences-hint">仅对当前教室的自动排座生效。固定座位和约束优先；成绩模式保留前后排，小组模式保留分组。多项偏好依次考虑性别、更换同桌、成绩搭配。</p>
+            <p class="arrange-preferences-hint">同桌按每排连续座位从左到右两两配对，不跨走廊和小组边界。未填写性别或成绩的学生仍正常参与排座；人数不均衡时尽量满足偏好。</p>
+            <p id="arrangePreferencesError" class="arrange-preferences-error" role="alert" hidden></p>
+            <div class="modal-actions">
+                <button type="button" class="btn btn-secondary" id="arrangePreferencesReset">恢复默认</button>
+                <button type="button" class="btn btn-secondary" id="arrangePreferencesCancel">取消</button>
+                <button type="submit" class="btn btn-primary" id="arrangePreferencesSave">保存偏好</button>
+            </div>
+        </form>
     </div>
 
     <div id="student-form-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="studentFormTitle">
-        <div class="modal-content" style="max-width: 420px;">
-            <h3 id="studentFormTitle" style="margin: 0 0 16px; font-size: 16px; font-weight: 600;">添加学生</h3>
-            <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div class="modal-content modal-compact">
+            <h3 id="studentFormTitle" class="modal-title">添加学生</h3>
+            <div class="modal-stack">
                 <div>
                     <label for="studentFormName" class="modal-field-label">姓名 *</label>
                     <input type="text" id="studentFormName" placeholder="请输入姓名" class="modal-field">
@@ -624,81 +659,81 @@
                     <label for="studentFormScore" class="modal-field-label">成绩</label>
                     <input type="number" id="studentFormScore" step="any" placeholder="选填" class="modal-field">
                 </div>
+                <div id="studentFormTagsWrap">
+                    <span class="modal-field-label" id="studentFormTagsLabel">标签</span>
+                    <div id="studentFormTags" class="tag-picker" role="group" aria-labelledby="studentFormTagsLabel"></div>
+                </div>
             </div>
-            <div id="studentFormTagsWrap">
-                <label for="studentFormTags" class="modal-field-label">标签</label>
-                <div id="studentFormTags" class="tag-picker" style="margin-top:4px;"></div>
-            </div>
-            <div class="modal-actions" style="margin-top: 20px;">
+            <div class="modal-actions modal-actions-spaced">
                 <button type="button" class="btn btn-secondary" id="studentFormCancel">取消</button>
-                <button type="button" class="btn btn-primary" id="studentFormSubmit">确定</button>
+                <button type="button" class="btn btn-primary" id="studentFormSubmit">保存</button>
             </div>
         </div>
     </div>
 
     <div id="tag-form-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="tagFormTitle">
-        <div class="modal-content" style="max-width: 400px;">
-            <h3 id="tagFormTitle" style="margin: 0 0 16px; font-size: 16px; font-weight: 600;">创建标签</h3>
-            <div style="display: flex; flex-direction: column; gap: 12px;">
+        <div class="modal-content modal-compact">
+            <h3 id="tagFormTitle" class="modal-title">创建标签</h3>
+            <div class="modal-stack">
                 <div>
                     <label for="tagFormName" class="modal-field-label">标签名称 *</label>
                     <input type="text" id="tagFormName" placeholder="如：近视、班干部" class="modal-field">
                 </div>
                 <div>
                     <label for="tagFormColor" class="modal-field-label">颜色</label>
-                    <input type="color" id="tagFormColor" value="#0a59f7" class="modal-field" style="height:36px; padding:2px; cursor:pointer;">
+                    <input type="color" id="tagFormColor" value="#0a59f7" class="modal-field modal-field-color">
                 </div>
                 <div>
                     <label for="tagFormDesc" class="modal-field-label">描述</label>
                     <input type="text" id="tagFormDesc" placeholder="选填" class="modal-field">
                 </div>
             </div>
-            <div class="modal-actions" style="margin-top: 20px;">
+            <div class="modal-actions modal-actions-spaced">
                 <button type="button" class="btn btn-secondary" id="tagFormCancel">取消</button>
-                <button type="button" class="btn btn-primary" id="tagFormSubmit">确定</button>
+                <button type="button" class="btn btn-primary" id="tagFormSubmit">保存</button>
             </div>
         </div>
     </div>
 
     <div id="shift-options-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="shiftOptionsTitle">
-        <div class="modal-content" style="max-width: 460px;">
-            <h3 id="shiftOptionsTitle" style="margin: 0 0 20px; font-size: 17px; font-weight: 600;">高级布局轮换</h3>
+        <div class="modal-content modal-medium">
+            <h3 id="shiftOptionsTitle" class="modal-title">高级布局轮换</h3>
             <form id="shiftOptionsForm">
                 {% csrf_token %}
-                <div class="modal-block">
-                    <label class="modal-field-label">轮换方向</label>
-                    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px 20px; margin-top: 8px;">
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                <fieldset class="modal-block modal-fieldset">
+                    <legend class="modal-field-label">轮换方向</legend>
+                    <div class="modal-choice-grid">
+                        <label class="modal-choice">
                             <input type="radio" name="shift_direction" value="left" checked> 左移
                         </label>
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                        <label class="modal-choice">
                             <input type="radio" name="shift_direction" value="right"> 右移
                         </label>
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                        <label class="modal-choice">
                             <input type="radio" name="shift_direction" value="front"> 前移
                         </label>
-                        <label style="display: flex; align-items: center; gap: 6px; cursor: pointer; font-size: 14px;">
+                        <label class="modal-choice">
                             <input type="radio" name="shift_direction" value="back"> 后移
                         </label>
                     </div>
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">左右移动时，系统会自动识别布局模板（如 2+1+2），按座位块整体轮换并重建走廊位置。若无法识别模板则回退为普通按列移动。前后移动为循环轮换。</div>
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 4px;">前移表示朝讲台方向轮换，后移表示远离讲台方向轮换。</div>
-                </div>
+                    <p class="modal-hint">左右移动时，系统会自动识别布局模板（如 2+1+2），按座位块整体轮换并重建走廊位置。若无法识别模板则回退为普通按列移动。前后移动为循环轮换。</p>
+                    <p class="modal-hint">前移表示朝讲台方向轮换，后移表示远离讲台方向轮换。</p>
+                </fieldset>
                 <div class="modal-divider"></div>
-                <div class="modal-block">
-                    <label class="modal-field-label">左右移动分组</label>
-                    <label style="display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 14px; color: var(--text-primary); margin-top: 8px;">
+                <fieldset class="modal-block modal-fieldset">
+                    <legend class="modal-field-label">左右移动分组</legend>
+                    <label class="modal-choice">
                         <input type="checkbox" id="shiftOptionsUseLargeGroups" name="use_large_groups" checked>
                         按大组移动
                     </label>
-                    <div style="font-size: 12px; color: var(--text-secondary); margin-top: 8px;">勾选后沿用原有的大组模板轮换；取消勾选后，会把每个座位纵列当作独立单组轮换，走廊列保持不动。</div>
-                </div>
+                    <p class="modal-hint">勾选后沿用原有的大组模板轮换；取消勾选后，会把每个座位纵列当作独立单组轮换，走廊列保持不动。</p>
+                </fieldset>
                 <div class="modal-divider"></div>
                 <div class="modal-block">
                     <label for="shiftOptionsSteps" class="modal-field-label">移动步数</label>
                     <input type="number" id="shiftOptionsSteps" name="shift_steps" min="1" value="1" class="modal-field">
                 </div>
-                <div class="modal-actions">
+                <div class="modal-actions modal-actions-spaced">
                     <button type="button" class="btn btn-secondary" data-close-modal="shift-options-modal">取消</button>
                     <button type="submit" class="btn btn-primary" id="shiftOptionsSubmitBtn">执行轮换</button>
                 </div>
@@ -766,41 +801,42 @@
     </div>
 
     <div id="group-auto-config-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="groupAutoConfigTitle">
-        <div class="modal-content">
-            <h3 id="groupAutoConfigTitle" style="margin-bottom: 8px;">自动编组配置</h3>
-            <p style="color: var(--text-secondary); margin-bottom: 12px; font-size: 14px;">
-                请选择参考小组和“无法整除”时的处理策略。</p>
-            <div class="form-group" style="margin-bottom: 10px;">
-                <label for="groupAutoReferenceSelect">参考小组</label>
-                <select id="groupAutoReferenceSelect" class="group-select-control">
-                    <option value="">请选择参考小组</option>
-                    {% for group in groups %}
-                    <option value="{{ group.pk }}">{{ group.name }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-            <div class="form-group" style="margin-bottom: 8px;">
-                <label>余数处理策略</label>
-                <div class="stack-form">
-                    <label class="checkbox-row">
-                        <input type="radio" name="group_auto_remainder_strategy" value="merge_prev">
-                        最后一人与附近人/上一组编为一组
-                    </label>
-                    <label class="checkbox-row">
-                        <input type="radio" name="group_auto_remainder_strategy" value="new_group" checked>
-                        剩余人编为一组
-                    </label>
-                    <label class="checkbox-row">
-                        <input type="radio" name="group_auto_remainder_strategy" value="skip">
-                        不编组（仅整组人数）
-                    </label>
+        <div class="modal-content modal-medium">
+            <h3 id="groupAutoConfigTitle" class="modal-title">自动编组配置</h3>
+            <p class="modal-desc">请选择参考小组和“无法整除”时的处理策略。</p>
+            <div class="modal-stack">
+                <div>
+                    <label for="groupAutoReferenceSelect" class="modal-field-label">参考小组</label>
+                    <select id="groupAutoReferenceSelect" class="group-select-control modal-field">
+                        <option value="">请选择参考小组</option>
+                        {% for group in groups %}
+                        <option value="{{ group.pk }}">{{ group.name }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
+                <fieldset class="modal-fieldset">
+                    <legend class="modal-field-label">余数处理策略</legend>
+                    <div class="stack-form">
+                        <label class="modal-choice">
+                            <input type="radio" name="group_auto_remainder_strategy" value="merge_prev">
+                            最后一人与附近人/上一组编为一组
+                        </label>
+                        <label class="modal-choice">
+                            <input type="radio" name="group_auto_remainder_strategy" value="new_group" checked>
+                            剩余人编为一组
+                        </label>
+                        <label class="modal-choice">
+                            <input type="radio" name="group_auto_remainder_strategy" value="skip">
+                            不编组（仅整组人数）
+                        </label>
+                    </div>
+                </fieldset>
+                <label class="modal-choice">
+                    <input type="checkbox" id="groupAutoDetectStyleCheckbox" checked>
+                    自动识别编组样式（竖排/横排/附近几人）
+                </label>
             </div>
-            <label class="checkbox-row" style="margin-bottom: 8px;">
-                <input type="checkbox" id="groupAutoDetectStyleCheckbox" checked>
-                自动识别编组样式（竖排/横排/附近几人）
-            </label>
-            <div class="modal-actions">
+            <div class="modal-actions modal-actions-spaced">
                 <button type="button" class="btn btn-secondary" data-close-modal="group-auto-config-modal">取消</button>
                 <button type="button" class="btn btn-primary" id="groupAutoConfirmBtn">开始编组</button>
             </div>
@@ -808,34 +844,34 @@
     </div>
 
     <div id="bsce-import-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="bsceImportTitle">
-        <div class="modal-content" style="max-width: 480px;">
-            <h3 id="bsceImportTitle" style="margin: 0 0 8px; font-size: 17px; font-weight: 600;">BSCE 导入</h3>
-            <p style="margin: 0 0 20px; font-size: 13px; color: var(--text-secondary);">选择从本地文件或云端工作区导入座位数据。</p>
-            <div id="bsce-import-stage-choose" style="display: flex; gap: 12px; justify-content: center;">
+        <div class="modal-content modal-medium">
+            <h3 id="bsceImportTitle" class="modal-title">BSCE 导入</h3>
+            <p class="modal-desc">选择从本地文件或云端工作区导入座位数据。</p>
+            <div id="bsce-import-stage-choose" class="modal-choice-row">
                 <button type="button" class="btn btn-primary" id="bsce-choose-local">本地导入</button>
                 <button type="button" class="btn btn-primary" id="bsce-choose-cloud">云导入</button>
             </div>
-            <div id="bsce-import-stage-login" style="display: none;">
-                <div style="margin-bottom: 12px;">
-                    <label for="bsce-cloud-username" style="font-size: 13px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px;">BSCE 账号</label>
+            <div id="bsce-import-stage-login" class="modal-stack" style="display: none;">
+                <div>
+                    <label for="bsce-cloud-username" class="modal-field-label">BSCE 账号</label>
                     <input type="text" id="bsce-cloud-username" placeholder="请输入 BSCE 账号" autocomplete="username" class="modal-field">
                 </div>
-                <div style="margin-bottom: 16px;">
-                    <label for="bsce-cloud-password" style="font-size: 13px; font-weight: 500; color: var(--text-secondary); display: block; margin-bottom: 4px;">BSCE 密码</label>
+                <div>
+                    <label for="bsce-cloud-password" class="modal-field-label">BSCE 密码</label>
                     <input type="password" id="bsce-cloud-password" placeholder="请输入 BSCE 密码" autocomplete="current-password" class="modal-field">
                 </div>
-                <div style="display: flex; gap: 8px;">
+                <div class="modal-inline-actions">
                     <button type="button" class="btn btn-secondary" id="bsce-login-back">返回</button>
                     <button type="button" class="btn btn-primary" id="bsce-login-submit">登录并加载</button>
                 </div>
             </div>
-            <div id="bsce-import-stage-cloud" style="display: none;">
-                <div id="bsce-cloud-loading" style="text-align: center; padding: 24px 0; color: var(--text-secondary); font-size: 14px;">正在加载...</div>
-                <div id="bsce-cloud-list" style="display: none; max-height: 320px; overflow-y: auto;"></div>
-                <div id="bsce-cloud-empty" style="display: none; text-align: center; padding: 24px 0; color: var(--text-secondary); font-size: 14px;">暂无云端工作区</div>
-                <button type="button" class="btn btn-secondary" id="bsce-cloud-back" style="margin-top: 12px;">返回</button>
+            <div id="bsce-import-stage-cloud" class="modal-stack" style="display: none;">
+                <div id="bsce-cloud-loading" class="modal-empty-state">正在加载...</div>
+                <div id="bsce-cloud-list" class="modal-scroll-list" style="display: none;"></div>
+                <div id="bsce-cloud-empty" class="modal-empty-state" style="display: none;">暂无云端工作区</div>
+                <div><button type="button" class="btn btn-secondary" id="bsce-cloud-back">返回</button></div>
             </div>
-            <div class="modal-actions" style="margin-top: 20px;">
+            <div class="modal-actions modal-actions-spaced">
                 <button type="button" class="btn btn-secondary" data-close-modal="bsce-import-modal">取消</button>
             </div>
         </div>
@@ -931,596 +967,16 @@
     </div>
 </div>
 
-<script src="{% static 'js/wendao-workspace-transition.js' %}?v=2"></script>
-<script src="{% static 'js/wendao-dock.js' %}?v=23"></script>
+<script src="{% static 'js/wendao-dock.js' %}?v=24"></script>
 <script src="{% static 'js/ai_name_privacy.js' %}?v=1"></script>
-<script src="{% static 'js/ai_workspace.js' %}?v=8"></script>
-<script src="{% static 'js/classroom.js' %}?v=2026092901"></script>
+<script src="{% static 'js/ai_workspace.js' %}?v=9"></script>
+<script src="{% static 'js/classroom.js' %}?v=2026101701"></script>
+<script src="{% static 'js/arrange-preferences.js' %}?v=1"></script>
 <script src="{% static 'js/classroom-doors.js' %}?v=3"></script>
-<script>
-    function toggleFullScreen() {
-        const doc = document;
-        const root = document.documentElement;
-        const isFullscreen = doc.fullscreenElement || doc.webkitFullscreenElement || doc.mozFullScreenElement || doc.msFullscreenElement;
-        if (!isFullscreen) {
-            const enter = root.requestFullscreen || root.webkitRequestFullscreen || root.mozRequestFullScreen || root.msRequestFullscreen;
-            if (enter) {
-                enter.call(root).catch(() => { });
-            }
-            return;
-        }
-        const exit = doc.exitFullscreen || doc.webkitExitFullscreen || doc.mozCancelFullScreen || doc.msExitFullscreen;
-        if (exit) {
-            exit.call(doc).catch(() => { });
-        }
-    }
-
-    let currentScale = 1.0;
-    const gridContainer = document.getElementById('seat-grid-container');
-    const zoomLevelDisplay = document.getElementById('zoom-level');
-
-    function updateZoom() {
-        if (!gridContainer) return;
-        gridContainer.style.zoom = currentScale;
-
-        if (zoomLevelDisplay) {
-            zoomLevelDisplay.textContent = `${Math.round(currentScale * 100)}%`;
-        }
-    }
-
-    function zoomIn() {
-        currentScale = Math.min(currentScale + 0.1, 2.0);
-        updateZoom();
-    }
-
-    function zoomOut() {
-        currentScale = Math.max(currentScale - 0.1, 0.5);
-        updateZoom();
-    }
-
-    const stage = document.querySelector('.seat-stage');
-    if (stage) {
-        stage.addEventListener('wheel', function (e) {
-            if (e.ctrlKey || e.metaKey) {
-                e.preventDefault();
-                if (e.deltaY < 0) zoomIn();
-                else zoomOut();
-            }
-        });
-    }
-
-    (function () {
-
-        var snapshotList = document.querySelector('.snapshot-list');
-        if (snapshotList) snapshotList.addEventListener('click', function (e) {
-            var loadLink = e.target.closest('[data-snapshot-load]');
-            if (loadLink) {
-                e.preventDefault();
-                window.showConfirmModal('加载快照会用该快照覆盖当前全部排座，确定继续？', { title: '加载快照' })
-                    .then(function (confirmed) { if (confirmed) window.location.href = loadLink.href; });
-                return;
-            }
-            var deleteForm = e.target.closest('form[data-snapshot-delete]');
-            if (deleteForm) {
-                e.preventDefault();
-                window.showConfirmModal('删除后无法恢复，确定删除该快照？', { title: '删除快照' })
-                    .then(function (confirmed) {
-                        if (!confirmed) return;
-                        // programmatic submit() 不触发 submit 事件，改为派发让 ajaxifyForm 接管。
-                        deleteForm.dispatchEvent(new Event('submit', { cancelable: true, bubbles: true }));
-                    });
-            }
-        });
-    })();
-
-</script>
+<script src="{% static 'js/classroom-stage.js' %}?v=1"></script>
 
 {{ constraint_items|json_script:"constraint-initial-data" }}
 {{ sync_meta_payload|json_script:"classroom-sync-meta" }}
 
-<script>
-(function () {
-    var showToast = window.showToast || function () {};
-    var headerArea = document.getElementById('cloud-header-area');
-    if (!headerArea) return;
-    headerArea.dataset.cloudHeaderManaged = 'classroom';
-
-    var classroomRoot = document.getElementById('classroom-root');
-    var classroomId = Number(classroomRoot && classroomRoot.dataset.classroomId ? classroomRoot.dataset.classroomId : 0);
-    var classroomName = classroomRoot ? (classroomRoot.dataset.classroomName || '') : '';
-    var syncMeta = readInitialSyncMeta();
-    var cloudEntryScreen = document.getElementById('cloud-entry-sync-screen');
-    var isCloudBackedUp = classroomRoot && classroomRoot.dataset.cloudBackedUp === '1';
-    var currentUser = null;
-    var pillButton = null;
-    var autoOpenSyncStarted = false;
-    var usingLocalMode = false;
-    var skipAutoSyncOnce = consumeAutoSyncSkipFlag();
-    var entryMark = cloudEntryScreen ? cloudEntryScreen.querySelector('.cloud-entry-sync-mark') : null;
-    var entrySyncMarkHtml = entryMark ? entryMark.innerHTML : '';
-    var entryRetryButton = cloudEntryScreen ? cloudEntryScreen.querySelector('[data-cloud-entry-retry]') : null;
-    var entryLocalButton = cloudEntryScreen ? cloudEntryScreen.querySelector('[data-cloud-entry-local]') : null;
-
-    function readInitialSyncMeta() {
-        var node = document.getElementById('classroom-sync-meta');
-        if (!node) return {};
-        try {
-            return JSON.parse(node.textContent || '{}') || {};
-        } catch (error) {
-            return {};
-        }
-    }
-
-    function updateStatusbarSync(status) {
-        var statusbar = document.getElementById('classroom-sync-status');
-        if (!statusbar) return;
-        var state = status && status.state ? String(status.state) : 'checking';
-        var labels = {
-            checking: '检查中',
-            login: '未登录',
-            'not-backed-up': '未启用云同步',
-            syncing: '同步中',
-            synced: '已同步',
-            dirty: '待同步',
-            offline: '离线',
-            error: '同步失败',
-        };
-        statusbar.dataset.state = state;
-        var label = document.querySelector('[data-sync-status-label]');
-        if (label) label.textContent = '同步状态：' + (labels[state] || '检查中');
-    }
-
-    function consumeAutoSyncSkipFlag() {
-        var shouldSkip = false;
-        try {
-            var url = new URL(window.location.href);
-            var cloudSyncReason = url.searchParams.get('cloud_sync');
-            if (cloudSyncReason === 'return' || cloudSyncReason === 'pulled' || cloudSyncReason === 'import-return') {
-                shouldSkip = true;
-                url.searchParams.delete('cloud_sync');
-                window.history.replaceState(null, '', url.pathname + url.search + url.hash);
-            }
-        } catch (error) {
-            // URL 清理失败时继续尝试消费 sessionStorage 标记。
-        }
-        try {
-            var importReturnSyncKey = 'fuckseats_cloud_import_return_' + classroomId;
-            if (sessionStorage.getItem(importReturnSyncKey) === '1') {
-                sessionStorage.removeItem(importReturnSyncKey);
-                shouldSkip = true;
-            }
-        } catch (error) {}
-        try {
-            var referrerUrl = new URL(document.referrer);
-            var importOptionsPath = classroomRoot ? (classroomRoot.dataset.importOptionsPath || '') : '';
-            var importLayoutPath = classroomRoot ? (classroomRoot.dataset.importLayoutPath || '') : '';
-            if (
-                referrerUrl.origin === window.location.origin
-                && (
-                    referrerUrl.pathname === importOptionsPath
-                    || referrerUrl.pathname === importLayoutPath
-                )
-            ) {
-                shouldSkip = true;
-            }
-        } catch (error) {}
-        return shouldSkip;
-    }
-
-    function reloadAfterPull(options) {
-        if (options && options.auto) {
-            try {
-                var url = new URL(window.location.href);
-                url.searchParams.set('cloud_sync', 'pulled');
-                window.location.replace(url.pathname + url.search + url.hash);
-                return;
-            } catch (error) {}
-        }
-        window.location.reload();
-    }
-
-    function setCloudEntryStatus(title, subText, state) {
-        if (!cloudEntryScreen) return;
-        cloudEntryScreen.dataset.state = state || 'syncing';
-        var titleEl = cloudEntryScreen.querySelector('[data-cloud-entry-title]');
-        var subEl = cloudEntryScreen.querySelector('[data-cloud-entry-sub]');
-        if (titleEl && title) titleEl.textContent = title;
-        if (subEl && subText) subEl.textContent = subText;
-        if (entryMark) {
-            entryMark.innerHTML = state === 'offline'
-                ? CloudManager.getOfflineIconMarkup()
-                : entrySyncMarkHtml;
-        }
-        if (entryRetryButton) entryRetryButton.textContent = state === 'offline' ? '继续尝试' : '重试同步';
-    }
-
-    function showEntryFailure(message, state) {
-        var offline = state === 'offline';
-        setCloudEntryStatus(
-            offline ? '您似乎未联网' : '暂时无法同步云端数据',
-            message || (offline ? '是否仍要继续尝试云同步？' : '你可以重试，或先使用本地数据。'),
-            offline ? 'offline' : 'error'
-        );
-        setPillStatus({
-            state: offline ? 'offline' : 'error',
-            text: offline ? '离线使用' : '同步失败，点击重试',
-            title: message || '点击重试云同步',
-            offline: offline,
-        });
-    }
-
-    function useLocalClassroom() {
-        usingLocalMode = true;
-        setPillStatus({ state: 'offline', text: '离线使用', title: '当前使用本地数据，点击重试云同步', offline: true });
-        revealClassroomContent();
-    }
-
-    function revealClassroomContent() {
-        if (classroomRoot) {
-            classroomRoot.classList.remove('cloud-entry-pending');
-        }
-        if (cloudEntryScreen) {
-            cloudEntryScreen.classList.add('done');
-        }
-    }
-
-    function shouldGateCloudEntry() {
-        return Boolean(isCloudBackedUp && !skipAutoSyncOnce);
-    }
-
-    function normalizeSyncMeta(meta) {
-        var next = meta || {};
-        var localVersion = Number(next.local_version || 0);
-        var cloudVersion = Number(next.cloud_version || 0);
-        var backedUp = Boolean(next.backed_up || (next.last_sync_at && cloudVersion > 0));
-        var lastOperationAt = next.last_operation_at || next.local_operation_at || syncMeta.last_operation_at || null;
-        return {
-            uuid: next.uuid || syncMeta.uuid || '',
-            local_version: localVersion,
-            cloud_version: cloudVersion,
-            last_operation_at: lastOperationAt,
-            last_sync_at: next.last_sync_at || null,
-            last_error: next.last_error || '',
-            backed_up: backedUp,
-            has_local_changes: Boolean(backedUp && (next.has_local_changes || localVersion > cloudVersion)),
-            state: next.state || (!backedUp ? 'not_backed_up' : (localVersion > cloudVersion ? 'dirty' : 'synced')),
-        };
-    }
-
-    function statusForMeta(user, meta) {
-        if (!user || !user.logged_in) {
-            return { state: 'login', text: '登录后云同步', title: '登录老三账户后自动同步' };
-        }
-        if (!meta.backed_up) {
-            return { state: 'not-backed-up', text: '点击上云', title: '该班级还没有云端备份，点击同步到云端' };
-        }
-        if (meta.has_local_changes) {
-            return { state: 'dirty', text: '有更新，点击更新云端版本', title: '本地有新改动，点击更新云端版本' };
-        }
-        return { state: 'synced', text: '完成', title: '云端已是最新' };
-    }
-
-    function setPillStatus(status) {
-        updateStatusbarSync(status);
-        if (!pillButton) return;
-        pillButton.dataset.state = status.state;
-        // 不使用原生 disabled：disabled 按钮会强制使用 default 光标，
-        // 在 macOS 壳中会让“点击上云”看起来像不可点击。重复点击由
-        // handlePillClick 的状态守卫处理，同时保留无障碍状态提示。
-        var isSyncing = status.state === 'syncing';
-        pillButton.disabled = false;
-        pillButton.setAttribute('aria-busy', isSyncing ? 'true' : 'false');
-        pillButton.setAttribute('aria-disabled', isSyncing ? 'true' : 'false');
-        pillButton.title = status.title || status.text;
-        pillButton.querySelector('.cloud-sync-pill-text').textContent = status.text;
-        var icon = pillButton.querySelector('.cloud-sync-pill-icon');
-        var dot = pillButton.querySelector('.cloud-sync-dot');
-        if (icon) icon.innerHTML = status.offline ? CloudManager.getOfflineIconMarkup() : '';
-        if (dot) dot.style.display = status.offline ? 'none' : '';
-    }
-
-    function renderPill() {
-        if (usingLocalMode) {
-            setPillStatus({ state: 'offline', text: '离线使用', title: '当前使用本地数据，点击重试云同步', offline: true });
-            return;
-        }
-        setPillStatus(statusForMeta(currentUser, syncMeta));
-    }
-
-    function updateSyncMeta(meta) {
-        syncMeta = normalizeSyncMeta(meta);
-        renderPill();
-    }
-
-    function buildAvatarHtml(user) {
-        if (!user || !user.logged_in) {
-            return '<div class="cloud-header-avatar cloud-header-avatar-login" aria-hidden="true">' + CloudManager.getLoginIconMarkup() + '</div>';
-        }
-        return '<div class="cloud-header-avatar cloud-header-avatar-placeholder"><svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 12c2.7 0 5-2.3 5-5s-2.3-5-5-5-5 2.3-5 5 2.3 5 5 5zm0 2c-3.3 0-10 1.7-10 5v2h20v-2c0-3.3-6.7-5-10-5z" fill="currentColor"/></svg></div>';
-    }
-
-    function appendAvatar(target, user) {
-        if (user && user.logged_in && user.avatar_url) {
-            var img = document.createElement('img');
-            img.src = user.avatar_url;
-            img.className = 'cloud-header-avatar';
-            img.alt = '';
-            target.appendChild(img);
-            return;
-        }
-        target.innerHTML = buildAvatarHtml(user);
-    }
-
-    function buildCloudHeader(user) {
-        currentUser = user || { logged_in: false };
-        var cluster = document.createElement('div');
-        cluster.className = 'cloud-header-sync-cluster';
-
-        pillButton = document.createElement('button');
-        pillButton.type = 'button';
-        pillButton.className = 'cloud-sync-pill';
-        pillButton.setAttribute('aria-live', 'polite');
-        pillButton.innerHTML = '<span class="cloud-sync-dot"></span><span class="cloud-sync-pill-icon" aria-hidden="true"></span><span class="cloud-sync-pill-text"></span>';
-        pillButton.addEventListener('click', function (event) {
-            event.preventDefault();
-            handlePillClick();
-        });
-        cluster.appendChild(pillButton);
-
-        var wrapper = document.createElement('div');
-        wrapper.className = 'cloud-header-dropdown-wrap';
-        var trigger = document.createElement('button');
-        trigger.type = 'button';
-        trigger.className = 'cloud-header-trigger';
-        appendAvatar(trigger, currentUser);
-        trigger.title = currentUser.logged_in ? (currentUser.nickname || '云服务') + ' (' + (currentUser.tier_display || '') + ')' : '云服务';
-
-        var panel = document.createElement('div');
-        panel.className = 'cloud-header-panel';
-
-        var pullBtn = document.createElement('button');
-        pullBtn.type = 'button';
-        pullBtn.className = 'cloud-header-panel-action';
-        pullBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 4v12m0 0l4-4m-4 4l-4-4" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/><path d="M20 18H4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>从云恢复</span>';
-        pullBtn.addEventListener('click', function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            wrapper.classList.remove('open');
-            restoreFromCloud();
-        });
-        panel.appendChild(pullBtn);
-
-        var settingsBtn = document.createElement('button');
-        settingsBtn.type = 'button';
-        settingsBtn.className = 'cloud-header-panel-action cloud-header-panel-action-secondary';
-        settingsBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="3" stroke="currentColor" stroke-width="2"/><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg><span>云服务设置</span>';
-        settingsBtn.addEventListener('click', function () { window.location.href = '{% url "settings" %}'; });
-        panel.appendChild(settingsBtn);
-
-        wrapper.appendChild(trigger);
-        wrapper.appendChild(panel);
-        trigger.addEventListener('click', function (event) {
-            event.preventDefault();
-            event.stopPropagation();
-            if (!currentUser.logged_in) {
-                CloudManager.openLogin();
-                return;
-            }
-            wrapper.classList.toggle('open');
-        });
-        document.addEventListener('click', function (event) {
-            if (!event.target.closest('.cloud-header-dropdown-wrap')) {
-                wrapper.classList.remove('open');
-            }
-        });
-
-        cluster.appendChild(wrapper);
-        renderPill();
-        return cluster;
-    }
-
-    async function ensureLoggedIn(interactive) {
-        var user = await CloudManager.getUserInfo(true, { refreshSubscription: false });
-        currentUser = user || { logged_in: false };
-        if (!currentUser.logged_in) {
-            if (interactive !== false) {
-                showToast('请先登录云服务');
-                CloudManager.openLogin();
-            }
-            renderPill();
-            return false;
-        }
-        renderPill();
-        return true;
-    }
-
-    async function syncCurrentClass(options) {
-        options = options || {};
-        usingLocalMode = false;
-        // 先更新按钮状态，再等待登录态/网络，避免首次“点击上云”时界面没有任何反馈。
-        setPillStatus({ state: 'syncing', text: '同步中', title: '正在准备同步到云端' });
-        if (options.preflight) {
-            setCloudEntryStatus('正在同步云端数据', '进入班级前先确认云端是否有更新。', 'syncing');
-        }
-        try {
-            if (!(await ensureLoggedIn(!options.preflight))) {
-                if (options.preflight) revealClassroomContent();
-                return;
-            }
-        } catch (error) {
-            var loginError = (error && error.message) || '云服务登录状态检查失败';
-            setPillStatus({ state: 'error', text: '同步失败，点击重试', title: loginError });
-            if (options.preflight) showEntryFailure(loginError, 'error');
-            if (!options.silent) showToast(loginError);
-            return;
-        }
-        setPillStatus({ state: 'syncing', text: '同步中', title: '正在同步到云端' });
-        try {
-            var result = await CloudManager.sync([classroomId], options);
-            var rows = result && Array.isArray(result.results) ? result.results : [];
-            var row = rows.find(function(item) { return Number(item && item.classroom_id || 0) === Number(classroomId); });
-            if (!row) {
-                setPillStatus({ state: 'error', text: '同步失败，点击重试', title: '同步失败，点击重试' });
-                if (options.preflight) showEntryFailure('云端没有返回当前班级的同步结果。', 'error');
-                return;
-            }
-            if (row.status === 'ok' || row.status === 'up_to_date' || row.status === 'pulled') {
-                updateSyncMeta(row.sync_meta || row);
-                if (!options || !options.silent) {
-                    showToast(row.status === 'up_to_date' ? '云端已是最新' : (row.status === 'pulled' ? classroomName + ' 已从云端更新' : classroomName + ' 已同步到云端'));
-                }
-                if (row.status === 'pulled') {
-                    reloadAfterPull(options || {});
-                } else if (options.preflight) {
-                    revealClassroomContent();
-                }
-                return;
-            }
-            if (row.status === 'conflict') {
-                updateSyncMeta(row.sync_meta || row);
-                setPillStatus({ state: 'error', text: '云端有冲突', title: row.message || '本地与云端均有修改，请先导出本地副本再处理冲突' });
-                showToast('双方修改已保留，请先导出本地副本再处理冲突');
-                if (options.preflight) showEntryFailure(row.message || '本地与云端均有修改，请稍后处理冲突。', 'error');
-                return;
-            }
-            setPillStatus({ state: 'error', text: '同步失败，点击重试', title: row.message || '同步失败，点击重试' });
-            if (!options.silent) showToast(row.message || '同步失败');
-            if (options.preflight) showEntryFailure(row.message || '云同步失败，请重试。', 'error');
-        } catch (error) {
-            setPillStatus({ state: 'error', text: '同步失败，点击重试', title: (error && error.message) || '同步失败，点击重试' });
-            if (!options.silent) showToast((error && error.message) || '同步失败');
-            if (options.preflight) showEntryFailure((error && error.message) || '云同步失败，请重试。', 'error');
-        }
-    }
-
-    function handlePillClick() {
-        if (!currentUser || !currentUser.logged_in) {
-            CloudManager.openLogin();
-            return;
-        }
-        if (pillButton && pillButton.dataset.state === 'syncing') return;
-        if (!syncMeta.backed_up || syncMeta.has_local_changes || (pillButton && (pillButton.dataset.state === 'error' || pillButton.dataset.state === 'offline'))) {
-            syncCurrentClass({ force: false, deviceId: 'classroom-manual' }).catch(function (error) {
-                var message = (error && error.message) || '同步失败';
-                setPillStatus({ state: 'error', text: '同步失败，点击重试', title: message });
-                showToast(message);
-            });
-            return;
-        }
-        showToast('云端已是最新');
-    }
-
-    async function restoreFromCloud() {
-        if (!(await ensureLoggedIn(true))) return;
-        if (!syncMeta.backed_up || !syncMeta.uuid) {
-            showToast('该班级还没有云端记录，请先同步本地数据');
-            return;
-        }
-        if (!await window.showConfirmModal('从云恢复会覆盖本地当前班级 ' + classroomName + '，确定继续？', { title: '从云恢复' })) {
-            return;
-        }
-        showToast('正在恢复...');
-        try {
-            var pullResult = await CloudManager.pullClassroom(syncMeta.uuid);
-            if (pullResult && pullResult.status === 'success') {
-                updateSyncMeta(pullResult);
-                showToast((pullResult.name || classroomName) + ' 已从云恢复');
-                window.location.reload();
-                return;
-            }
-            showToast((pullResult && pullResult.message) || '恢复失败');
-        } catch (err) {
-            showToast((err && err.message) || '恢复失败');
-        }
-    }
-
-    window.FuckSeatsCloudSync = {
-        update: updateSyncMeta,
-        syncAfterLogin: function (loginResult) {
-            return CloudManager.getUserInfo(true, { refreshSubscription: false }).then(function (user) {
-                currentUser = user || { logged_in: false };
-                renderPill();
-                var rows = loginResult && Array.isArray(loginResult.results) ? loginResult.results : [];
-                var matched = null;
-                for (var i = 0; i < rows.length; i++) {
-                    if (Number(rows[i].classroom_id || 0) === Number(classroomId)) {
-                        matched = rows[i];
-                        break;
-                    }
-                }
-                if (matched && (matched.status === 'ok' || matched.status === 'up_to_date' || matched.status === 'pulled')) {
-                    updateSyncMeta(matched.sync_meta || matched);
-                    if (matched.status === 'pulled') {
-                        reloadAfterPull({ auto: true });
-                    }
-                    return null;
-                }
-                if (matched && matched.status === 'conflict') {
-                    updateSyncMeta(matched.sync_meta || matched);
-                    setPillStatus({ state: 'error', text: '云端有冲突', title: matched.message || '本地与云端均有修改，请先导出本地副本再处理冲突' });
-                    return null;
-                }
-                return syncCurrentClass({ auto: true, silent: true, deviceId: 'classroom-login' });
-            });
-        },
-        markDirty: function () {
-            if (!syncMeta.backed_up) return;
-            syncMeta.last_operation_at = new Date().toISOString();
-            syncMeta.has_local_changes = true;
-            syncMeta.state = 'dirty';
-            renderPill();
-        },
-    };
-
-    var cloudManagerWaitStartedAt = Date.now();
-    var CLOUD_MANAGER_WAIT_LIMIT_MS = 15000;
-
-    function startCloudHeader() {
-        if (!window.CloudManager) {
-            // 等待超过 15 秒说明 cloud.js 加载失败，放行本地数据，避免云班级永久停留在遮罩。
-            if (Date.now() - cloudManagerWaitStartedAt >= CLOUD_MANAGER_WAIT_LIMIT_MS) {
-                revealClassroomContent();
-                return;
-            }
-            setTimeout(startCloudHeader, 50);
-            return;
-        }
-        var shouldGate = shouldGateCloudEntry();
-        if (!shouldGate) {
-            revealClassroomContent();
-        }
-        var preflight = shouldGate
-            ? CloudManager.prepareEntrySync({ promptOffline: false })
-            : CloudManager.getUserInfo(false, { refreshSubscription: false }).then(function(user) {
-                return { shouldSync: false, reason: 'local_classroom', user: user };
-            });
-        preflight.then(function (context) {
-            var user = context && context.user ? context.user : { logged_in: false };
-            headerArea.innerHTML = '';
-            syncMeta = normalizeSyncMeta(syncMeta);
-            headerArea.appendChild(buildCloudHeader(user));
-            if (user && user.logged_in && syncMeta.backed_up && !autoOpenSyncStarted && shouldGate) {
-                autoOpenSyncStarted = true;
-                setCloudEntryStatus('正在检查网络', '检测到这是云班级，进入前先确认联网状态。', 'syncing');
-                if (!context.shouldSync && context.reason === 'offline') {
-                    showEntryFailure('当前系统未检测到可用网络，是否仍要继续尝试云同步？', 'offline');
-                    return;
-                }
-                syncCurrentClass({ auto: true, silent: true, preflight: true, deviceId: 'classroom-entry' });
-            } else {
-                revealClassroomContent();
-            }
-        }).catch(function () {
-            revealClassroomContent();
-        });
-    }
-
-    if (entryRetryButton) entryRetryButton.addEventListener('click', function() {
-        syncCurrentClass({ auto: true, silent: true, preflight: true, deviceId: 'classroom-entry-retry' });
-    });
-    if (entryLocalButton) entryLocalButton.addEventListener('click', useLocalClassroom);
-
-    startCloudHeader();
-})();
-</script>
+<script src="{% static 'js/classroom-cloud-sync.js' %}?v=1"></script>
 {% endblock %}

@@ -115,6 +115,7 @@ document.addEventListener('DOMContentLoaded', () => {
         file: [
             ['导入学生', '#btn-import-students'],
             ['导入座位布局', '#btn-open-layout-import-modal'],
+            ['导入 SDES', '#btn-import-sdes'],
             ['导入 .seats', '#btn-import-seats-file'],
             ['导出排座表', '#btn-export-excel'],
             ['导出 SVG', '#btn-export-svg'],
@@ -171,6 +172,78 @@ document.addEventListener('DOMContentLoaded', () => {
         help: [
             ['关于', '#native-menu-about'],
         ],
+    };
+
+    const initMenuPlacement = () => {
+        const roots = Array.from(document.querySelectorAll('.menu-dropdown[data-menu-root]'));
+        if (!roots.length) return;
+        let frame = 0;
+        const clamp = (value, min, max) => Math.max(min, Math.min(value, max));
+        const positionMenus = () => {
+            frame = 0;
+            const viewport = window.visualViewport;
+            const leftEdge = (viewport?.offsetLeft || 0) + 8;
+            const topEdge = (viewport?.offsetTop || 0) + 8;
+            const rightEdge = leftEdge + (viewport?.width || document.documentElement.clientWidth) - 16;
+            const bottomEdge = topEdge + (viewport?.height || window.innerHeight) - 16;
+
+            roots.forEach((root) => {
+                if (!root.classList.contains('open')) return;
+                // 按父子顺序定位，后续层级沿用父菜单的展开方向。
+                root.querySelectorAll('.menu-panel').forEach((panel) => {
+                    panel.style.removeProperty('left');
+                    panel.style.removeProperty('top');
+                    panel.parentElement.classList.remove('menu-opens-left');
+                    const style = getComputedStyle(panel);
+                    // 入场动画刚开始时 visibility 可能仍为 hidden，按交互状态提前定位。
+                    if (style.pointerEvents === 'none' || !panel.offsetParent) return;
+
+                    const anchor = panel.offsetParent;
+                    const rect = anchor.getBoundingClientRect();
+                    const originX = rect.left + anchor.clientLeft - anchor.scrollLeft;
+                    const originY = rect.top + anchor.clientTop - anchor.scrollTop;
+                    const width = panel.offsetWidth;
+                    const height = panel.offsetHeight;
+                    let left = parseFloat(style.left) || 0;
+                    let top = parseFloat(style.top) || 0;
+                    const sideways = panel.classList.contains('menu-panel-sub') && left >= anchor.clientWidth - 1;
+
+                    if (sideways) {
+                        const parentPanel = anchor.closest('.menu-panel');
+                        const preferLeft = parentPanel?.parentElement.classList.contains('menu-opens-left');
+                        const fitsLeft = originX - width >= leftEdge;
+                        const fitsRight = originX + left + width <= rightEdge;
+                        if (fitsLeft && (preferLeft || !fitsRight)) left = -width;
+                    }
+
+                    // 两侧都放不下时在窗口内平移；窄屏仍沿用原来的纵向展开。
+                    left = clamp(left, leftEdge - originX, rightEdge - originX - width);
+                    top = clamp(top, topEdge - originY, bottomEdge - originY - height);
+                    panel.style.left = `${left}px`;
+                    panel.style.top = `${top}px`;
+                    panel.parentElement.classList.toggle('menu-opens-left', sideways && left < 0);
+                });
+            });
+        };
+        const schedule = () => {
+            if (!frame) frame = window.requestAnimationFrame(positionMenus);
+        };
+        roots.forEach((root) => {
+            root.addEventListener('pointerover', schedule);
+            root.addEventListener('focusin', schedule);
+            // 菜单开关会停止冒泡，在捕获阶段登记，下一帧再读取展开后的尺寸。
+            root.addEventListener('click', schedule, true);
+            root.addEventListener('transitionend', (event) => {
+                if (event.target.matches('.menu-panel') && event.propertyName === 'transform') schedule();
+            });
+        });
+        window.addEventListener('resize', schedule);
+        document.addEventListener('scroll', schedule, true);
+        if (window.visualViewport) {
+            window.visualViewport.addEventListener('resize', schedule);
+            window.visualViewport.addEventListener('scroll', schedule);
+        }
+        if (header && 'ResizeObserver' in window) new ResizeObserver(schedule).observe(header);
     };
 
     const initNativeMenus = () => {
@@ -279,6 +352,40 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    // 传统 POST 表单防重复提交：双击或连按 Enter 不会重复创建班级、重复导入。
+    const initSubmitGuard = () => {
+        const release = (form) => {
+            delete form.dataset.submitting;
+            form.removeAttribute('aria-busy');
+            form.querySelectorAll('.is-submitting').forEach((button) => button.classList.remove('is-submitting'));
+        };
+        document.addEventListener('submit', (event) => {
+            const form = event.target;
+            if (!(form instanceof HTMLFormElement) || form.hasAttribute('data-allow-resubmit')) return;
+            if ((form.getAttribute('method') || 'get').toLowerCase() !== 'post') return;
+            if (form.target && form.target !== '_self') return;
+            if (form.dataset.submitting === 'true') {
+                event.preventDefault();
+                return;
+            }
+            const submitter = event.submitter;
+            // 等所有监听器跑完再判断：由脚本接管（preventDefault 后走 fetch）的表单不加锁。
+            // 也不能在 submit 事件里禁用按钮，否则它的 name/value 会从表单数据中丢失。
+            window.setTimeout(() => {
+                if (event.defaultPrevented) return;
+                form.dataset.submitting = 'true';
+                form.setAttribute('aria-busy', 'true');
+                if (submitter && form.contains(submitter)) submitter.classList.add('is-submitting');
+                // 下载文件等不会离开当前页的提交，稍后自动解锁。
+                window.setTimeout(() => release(form), 8000);
+            }, 0);
+        });
+        // 从往返缓存恢复的页面要解锁，否则返回后按钮一直处于提交中。
+        window.addEventListener('pageshow', (event) => {
+            if (event.persisted) document.querySelectorAll('form[data-submitting]').forEach(release);
+        });
+    };
+
     window.addEventListener('fuckseats:menus-changed', () => {
         document.querySelectorAll('[data-native-menu]').forEach(trigger => {
             trigger.hidden = !(nativeMenuItems[trigger.dataset.nativeMenu] || []).some(([, selector]) => menuTargetAvailable(selector));
@@ -287,9 +394,11 @@ document.addEventListener('DOMContentLoaded', () => {
         if (popover) popover.hidden = true;
         syncNativeMenu();
     });
+    initMenuPlacement();
     initNativeMenus();
     initExternalLinks();
     initAboutWindow();
+    initSubmitGuard();
     syncTouchMode();
     syncHeaderHeight();
     syncNativeMenu();
@@ -302,7 +411,20 @@ document.addEventListener('DOMContentLoaded', () => {
     document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') syncNativeMenu();
     });
-    window.addEventListener('resize', syncHeaderHeight);
+    // 工具栏换行、字体加载等都会改变顶栏高度，不只是窗口缩放；合并到下一帧统一测量。
+    let headerFrame = 0;
+    const scheduleHeaderHeight = () => {
+        if (headerFrame) return;
+        headerFrame = window.requestAnimationFrame(() => {
+            headerFrame = 0;
+            syncHeaderHeight();
+        });
+    };
+    if (header && 'ResizeObserver' in window) {
+        new ResizeObserver(scheduleHeaderHeight).observe(header);
+    } else {
+        window.addEventListener('resize', scheduleHeaderHeight);
+    }
     window.addEventListener('load', syncHeaderHeight);
     if (touchPointerQuery) {
         if (typeof touchPointerQuery.addEventListener === 'function') {

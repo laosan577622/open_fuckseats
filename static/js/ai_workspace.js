@@ -684,6 +684,7 @@ document.addEventListener('DOMContentLoaded', () => {
         deleteConversationBtn.addEventListener('click', async () => {
             if (!activeConversationId) return;
             if (busy || approvalState.token) return;
+            if (!window.confirm('删除当前对话？删除后无法恢复。')) return;
             try {
                 const result = await postJson({
                     action: 'conversation_delete',

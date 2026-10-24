@@ -19,6 +19,7 @@ OPENAI_ENV_NAMES = (
 )
 
 COMMON_HIDDEN_IMPORTS = (
+    'seats.desktop_auth',
     'tkinter',
     'tkinter.ttk',
     'tkinter.messagebox',

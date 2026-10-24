@@ -1,0 +1,730 @@
+/* 班级工作区 · Lucent 澄光 PC 规范
+   浏览器预览、Windows 桌面、macOS 桌面三端共用一套视觉：浅灰工作台 + 白色座位卡片、胶囊工具栏、
+   分段控件页签、玻璃状态栏。布局（顶栏高度、侧栏定位）仍由 styles.css 按各端处理，这里只管视觉。
+   前缀 :root body.classroom-detail-body[data-app-shell][data-app-platform] 的优先级高于 styles.css
+   中按端区分的旧规则，所以三端无需各写一遍；styles.css 里被这里覆盖的旧视觉声明已删除。
+   打印沿用同一套视觉，考场桌号的打印样式见 classroom-doors.css。 */
+
+/* ===================================================================== */
+/* 线性图标：24 画布、1.8 描边、圆头圆角，颜色继承文字                   */
+/* ===================================================================== */
+.cw-ico {
+    display: block;
+    flex: none;
+    width: 16px;
+    height: 16px;
+    fill: none;
+    stroke: currentColor;
+    stroke-width: 2;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+}
+
+/* ===================================================================== */
+/* 顶栏与工具栏                                                          */
+/* ===================================================================== */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] {
+    background: var(--bg);
+}
+
+/* 侧栏平时高于顶栏以保持并排布局；菜单展开时退到顶栏下方，
+   让跨过侧栏边界的子菜单完整显示，同时保持弹窗原有的显示层级。 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform]:has(.menu-dropdown.open) .side-panel {
+    z-index: 999;
+}
+
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-row {
+    gap: 8px;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-group {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+    gap: 4px;
+}
+/* 排座分体胶囊：原生 select 只作数据源，视觉上由算法菜单代替 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .quick-arrange-form {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+    margin: 0;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-arrange-select {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-method-trigger {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-method-menu {
+    position: absolute;
+    left: 0;
+    z-index: 1200;
+    display: flex;
+    flex-direction: column;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-method-menu[hidden] { display: none; }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-method-menu button { width: 100%; border: 0; background: transparent; text-align: left; cursor: pointer; }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-menu-divider { height: 0; border-top: 1px solid var(--divider); }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-menu-trigger::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    border-style: solid;
+    border-width: 0;
+    border-color: currentColor;
+    transform: translateY(-70%) rotate(45deg);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-menu.open .classroom-toolbar-menu-trigger::after { transform: translateY(-30%) rotate(225deg); }
+/* 扩展入口：靠右，空间不够时整组收起，不挤压主操作 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-overflow {
+    display: inline-flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+    margin-left: auto;
+    overflow: hidden;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .plugin-quick-launch-inline { display: inline-flex; align-items: center; gap: 8px; }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-overflow > *,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .plugin-quick-launch-inline > * { flex: none; }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .plugin-quick-launch-empty { color: var(--ink-tertiary); font-size: 12px; white-space: nowrap; }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-divider {
+    width: 1px;
+    height: 20px;
+    flex: 0 0 1px;
+    margin: 0 4px;
+    background: var(--divider);
+}
+
+/* 主操作：自动排座 + 算法选择，组成一颗分体胶囊 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] #btn-auto-arrange {
+    min-width: 0;
+    height: 32px;
+    min-height: 32px;
+    padding: 0 14px 0 16px;
+    gap: 6px;
+    border-radius: 999px 0 0 999px;
+    background: var(--brand);
+    color: var(--on-brand);
+    font-size: 14px;
+    font-weight: 500;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] #btn-auto-arrange:hover { background: var(--brand-hover); }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] #btn-auto-arrange:active { background: var(--brand-pressed); }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-arrange .arrange-method-trigger {
+    width: 32px;
+    height: 32px;
+    margin-left: 0;
+    padding: 0 4px 0 0;
+    border: 0;
+    border-radius: 0 999px 999px 0;
+    background: var(--brand);
+    box-shadow: inset 1px 0 0 rgba(255, 255, 255, .32);
+    color: var(--on-brand);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-arrange .arrange-method-trigger:hover,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-arrange .arrange-method-trigger[aria-expanded="true"] {
+    background: var(--brand-hover);
+}
+
+/* 算法菜单：玻璃面板，圆角 12、内缩 4；菜单项 36 高、圆角 8 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-method-menu {
+    top: calc(100% + 8px);
+    width: 224px;
+    padding: 4px;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--glass-fill-float);
+    -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    box-shadow: var(--shadow-float);
+    transform-origin: top left;
+    animation: cw-menu-in var(--duration-spring) var(--ease-spring-soft) backwards;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-method-menu button {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: var(--row-pc);
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    font-size: 14px;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-method-menu button:hover {
+    background: var(--fill-hover);
+    color: var(--ink);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-menu-divider {
+    margin: 4px 12px;
+    border-top-color: var(--divider);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-preferences-indicator {
+    color: var(--brand-text);
+    font-size: 12px;
+}
+
+/* 次要操作：无底色的胶囊按钮，悬停叠加 fill-hover */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    height: 32px;
+    min-height: 32px;
+    min-width: 0;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 500;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-button .cw-ico {
+    color: var(--ink-secondary);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-button:hover {
+    background: var(--fill-hover);
+    color: var(--ink);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-button:active {
+    background: var(--fill-pressed);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-button:disabled {
+    opacity: var(--opacity-disabled);
+    background: transparent;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-button.is-exam-active,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-menu.open .classroom-toolbar-menu-trigger {
+    background: var(--brand-tint);
+    color: var(--brand-text);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-button.is-exam-active .cw-ico,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-menu.open .classroom-toolbar-menu-trigger .cw-ico {
+    color: currentColor;
+}
+
+/* 下拉触发：右侧 6px 线性箭头 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-menu-trigger {
+    position: relative;
+    padding-right: 28px;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-menu-trigger::after {
+    right: 13px;
+    width: 6px;
+    height: 6px;
+    border-right-width: 1.5px;
+    border-bottom-width: 1.5px;
+    opacity: .6;
+    transition: transform var(--duration-base) var(--ease-spring);
+}
+
+/* 浏览器预览的扩展入口与插件快捷入口：次要按钮用 brand-tint，一屏只留一个实心主按钮 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-overflow .btn {
+    min-height: 28px;
+    padding: 3px 12px;
+    background: var(--fill-control);
+    color: var(--ink);
+    font-size: 13px;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .plugin-quick-launch-btn,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .plugin-quick-launch-btn.primary {
+    min-height: 28px;
+    padding: 0 12px;
+    border: 0;
+    background: var(--brand-tint);
+    color: var(--brand-text);
+    font-size: 13px;
+    font-weight: 500;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .plugin-quick-launch-btn:hover {
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), .16);
+}
+
+/* ===================================================================== */
+/* 座位工作台：bg 底 + surface 卡片，描边一律画在 box-shadow 上            */
+/* ===================================================================== */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-layout,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-stage {
+    background: var(--bg);
+}
+
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat {
+    border: 0;
+    border-radius: var(--radius-md);
+    background: transparent;
+    box-shadow: inset 0 0 0 1px rgba(0, 0, 0, .1);
+    transition: transform var(--duration-spring) var(--ease-spring),
+                box-shadow var(--duration-fast) var(--ease-standard),
+                background-color var(--duration-fast) var(--ease-standard);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.occupied {
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat:hover {
+    box-shadow: var(--shadow-2), inset 0 0 0 1px rgba(0, 0, 0, .06);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.is-fixed-seat {
+    box-shadow: var(--shadow-1), inset 0 0 0 1.5px var(--ink-tertiary);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.selected {
+    background: linear-gradient(var(--brand-tint), var(--brand-tint)), var(--surface);
+    box-shadow: var(--shadow-1), inset 0 0 0 2px var(--brand);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.multi-selected {
+    background: linear-gradient(rgba(var(--primary-color-rgb, 10, 89, 247), .16), rgba(var(--primary-color-rgb, 10, 89, 247), .16)), var(--surface) !important;
+    box-shadow: var(--shadow-1), inset 0 0 0 2px var(--brand);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.drop-preview-valid {
+    box-shadow: var(--shadow-2), inset 0 0 0 2px var(--brand);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.drop-preview-invalid {
+    background: linear-gradient(var(--danger-tint), var(--danger-tint)), var(--surface);
+    box-shadow: inset 0 0 0 2px var(--danger);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.drag-target {
+    box-shadow: var(--shadow-2), inset 0 0 0 2px var(--brand);
+}
+
+/* 讲台：sunken 底；走廊：只留文字，不画格子 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.cell-podium {
+    background: var(--surface-sunken);
+    box-shadow: none;
+    color: var(--ink-secondary);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.cell-aisle {
+    background: transparent;
+    box-shadow: none;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.cell-aisle .seat-placeholder {
+    color: var(--ink-tertiary);
+    font-size: calc(12px * var(--seat-density-scale, 1));
+    font-weight: 400;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.cell-podium.selected,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-grid .seat.cell-aisle.selected {
+    box-shadow: inset 0 0 0 2px var(--brand);
+}
+
+/* 座位文字只定颜色与字重；字号由 styles.css 按座位密度（--seat-density-scale）缩放，
+   人多格子小时自动收紧，这里写死字号会让大班座位显得拥挤。 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-name {
+    color: var(--ink);
+    font-weight: 500;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat.occupied.is-leader .seat-name {
+    color: var(--accent-rose-text, #bf1b3f);
+    font-weight: 700;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-info {
+    color: var(--ink-secondary);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-number {
+    color: var(--ink-tertiary);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-group-tag {
+    border: 0;
+    border-radius: 6px;
+    background: var(--fill-control);
+    color: var(--ink-secondary);
+    font-weight: 500;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-row-label,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .seat-column-labels {
+    color: var(--ink-tertiary);
+}
+
+/* 缩放：浮在座位上的玻璃胶囊 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .zoom-controls {
+    gap: 4px;
+    padding: 4px;
+    border: 0;
+    background: var(--glass-fill-strong);
+    -webkit-backdrop-filter: blur(var(--blur-md)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--blur-md)) saturate(var(--glass-saturate));
+    box-shadow: var(--shadow-glass);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .zoom-btn {
+    width: 28px;
+    height: 28px;
+    background: transparent;
+    color: var(--ink);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .zoom-btn:hover {
+    background: var(--fill-hover);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] #zoom-level {
+    color: var(--ink-secondary);
+}
+
+/* ===================================================================== */
+/* 侧栏                                                                  */
+/* ===================================================================== */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel {
+    border-left: 0;
+    background: var(--surface);
+    box-shadow: -1px 0 0 var(--divider);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel > .panel-card,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel > .panel-tabs {
+    background: var(--surface);
+    border-color: var(--divider);
+}
+
+/* 页签 → 分段控件：32 高轨道，28 高选中块（内缩 2，同心 8 → 6） */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .tab-header {
+    flex: 0 0 auto;
+    height: 32px;
+    margin: 12px 16px 4px;
+    padding: 2px;
+    gap: 0;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: var(--fill-control);
+    box-shadow: none;
+    overflow: hidden;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .tab-btn {
+    flex: 1 1 0;
+    height: 28px;
+    min-height: 28px;
+    min-width: 0;
+    padding: 0 4px;
+    border: 0;
+    border-radius: 6px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--ink-secondary);
+    font-size: 13px;
+    font-weight: 500;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .tab-btn:hover {
+    color: var(--ink);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .tab-btn.active {
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-2);
+    color: var(--ink);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .tab-header.is-app-liquid > .tab-btn.active {
+    background: transparent;
+    box-shadow: none;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .tab-header.is-app-liquid > .app-liquid {
+    border-radius: 6px;
+    background: var(--surface-raised);
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 2px 8px rgba(0, 0, 0, .08);
+}
+
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .tab-body {
+    padding: 12px 16px 24px;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .panel-header h3,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-heading h3 {
+    color: var(--ink);
+    font-size: 16px;
+    line-height: 24px;
+    font-weight: 700;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .panel-subheader h3 {
+    font-size: 14px;
+    line-height: 22px;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-list-count,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .panel-meta {
+    color: var(--ink-secondary);
+    font-weight: 400;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .panel-note {
+    color: var(--ink-secondary);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+/* 搜索框：胶囊、fill-control 底、前置 16 搜索图标 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] #unseatedSearch {
+    height: 32px;
+    min-height: 32px;
+    margin: 8px 0 12px;
+    padding: 0 12px 0 36px;
+    border: 1px solid transparent;
+    border-radius: 999px;
+    background: var(--fill-control) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23000' stroke-opacity='.6' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='11' cy='11' r='6.5'/%3E%3Cpath d='m20 20-4.2-4.2'/%3E%3C/svg%3E") no-repeat 12px center / 16px 16px;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] #unseatedSearch:hover {
+    border-color: var(--divider);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] #unseatedSearch:focus {
+    border-color: var(--brand);
+}
+
+/* 未入座学生：36 高的列表行，悬停 fill-hover，选中 brand-tint */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .unseated-item {
+    min-height: 40px;
+    padding: 6px 8px 6px 12px;
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: transparent;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .unseated-item:hover {
+    background: var(--fill-hover);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .unseated-item.selected {
+    background: var(--brand-tint);
+    color: var(--brand-text);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .unseated-info,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .empty-hint {
+    color: var(--ink-secondary);
+    font-size: 12px;
+}
+
+/* 小号胶囊按钮：28 高，fill-control 底；危险操作只用 danger 文字 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .icon-btn,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-edit,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-action,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-display-menu summary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 0 12px;
+    border: 0;
+    border-radius: 999px;
+    background: var(--fill-control);
+    color: var(--ink);
+    font-size: 13px;
+    font-weight: 500;
+    line-height: 20px;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .icon-btn:hover,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-edit:hover,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-action:hover,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-display-menu summary:hover {
+    background: rgba(0, 0, 0, .09);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .icon-btn.icon-btn-add {
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: var(--brand-tint);
+    color: var(--brand-text);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .icon-btn.delete-student,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-action.is-danger {
+    background: transparent;
+    color: var(--danger);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .icon-btn.delete-student:hover,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-action.is-danger:hover {
+    background: var(--danger-tint);
+}
+
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-panel {
+    border-top-color: var(--divider);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-grid dt,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-note {
+    color: var(--ink-secondary);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-grid dd,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-note span {
+    color: var(--ink);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-detail-note {
+    border-top-color: var(--divider);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-display-options {
+    padding: 4px;
+    gap: 0;
+    border: 0;
+    border-radius: var(--radius-md);
+    background: var(--glass-fill-float);
+    -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    box-shadow: var(--shadow-float);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-display-options label {
+    min-height: 36px;
+    margin: 0;
+    padding: 0 12px;
+    border-radius: var(--radius-sm);
+    color: var(--ink);
+    font-size: 14px;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel .student-display-options label:hover {
+    background: var(--fill-hover);
+}
+
+/* 快捷操作：删除班级退为危险文字按钮，不与主操作抢视线 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel #btn-delete-classroom {
+    background: transparent;
+    color: var(--danger);
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel #btn-delete-classroom:hover {
+    background: var(--danger-tint);
+}
+
+/* ===================================================================== */
+/* 状态栏：浮在工作台底部的玻璃条                                        */
+/* ===================================================================== */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-statusbar {
+    top: auto !important;
+    bottom: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: var(--space-4, 16px);
+    height: var(--cw-status-h, 32px) !important;
+    min-height: 0 !important;
+    padding: 0 var(--app-margin, 16px);
+    overflow: hidden;
+    border: 0;
+    background: var(--glass-fill-strong);
+    -webkit-backdrop-filter: blur(var(--blur-md)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--blur-md)) saturate(var(--glass-saturate));
+    box-shadow: none;
+    color: var(--ink-secondary);
+    font-size: 12px;
+    line-height: 16px;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-statusbar > span + span { padding-left: 0; border-left: 0; }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-sync i { width: 8px; height: 8px; }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-sync i { background: var(--success); }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-sync[data-state="checking"] i,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-sync[data-state="login"] i,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-sync[data-state="not-backed-up"] i,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-sync[data-state="offline"] i { background: var(--ink-tertiary); }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-sync[data-state="syncing"] i { background: var(--brand); }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-sync[data-state="dirty"] i { background: var(--warning); }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-sync[data-state="error"] i { background: var(--danger); }
+
+@keyframes cw-menu-in {
+    from { opacity: 0; transform: scale(.92) translateY(-4px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .arrange-method-menu { animation: none; }
+}
+
+/* 工具栏随窗口宽度收起：先收扩展入口（菜单栏“扩展”里都有），再收历史按钮文字 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-more { display: none; }
+@media (max-width: 1679px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-overflow { display: none; }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-more { display: block; }
+}
+
+
+/* 宽屏：侧栏从菜单栏下方开始，工具栏只占左侧工作区 */
+@media (min-width: 1101px) {
+    /* 菜单展开时顶栏会高于侧栏，玻璃与命中区域都必须避开右侧页签。 */
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .app-header {
+        background: transparent;
+        pointer-events: none;
+    }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .app-header::before {
+        background: var(--glass-fill-strong);
+        clip-path: polygon(0 0, 100% 0, 100% var(--cw-side-top), calc(100% - var(--classroom-side-w, 430px)) var(--cw-side-top), calc(100% - var(--classroom-side-w, 430px)) 100%, 0 100%);
+    }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] :is(.header-titlebar, .native-menu-bar, .context-toolbar-shell) {
+        pointer-events: auto;
+    }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .context-toolbar-shell {
+        margin-right: var(--classroom-side-w, 430px);
+        padding-right: var(--app-margin);
+    }
+}
+/* 工具栏按自身可用宽度逐级收起文字（容器查询，宽屏时已扣除侧栏）：
+   先收历史组，再收文件组与分隔线，最后主操作只留图标 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .header-actions { container: cw-toolbar / inline-size; }
+@container cw-toolbar (max-width: 780px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-history .classroom-toolbar-button { width: var(--app-control); padding: 0; gap: 0; justify-content: center; font-size: 0; }
+}
+@container cw-toolbar (max-width: 600px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-divider { display: none; }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-files .classroom-toolbar-menu-trigger { width: var(--app-control); padding: 0; gap: 0; justify-content: center; font-size: 0; }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-files .classroom-toolbar-menu-trigger::after { display: none; }
+}
+@container cw-toolbar (max-width: 400px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-row { gap: 4px; }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-group { gap: 0; }
+}
+@container cw-toolbar (max-width: 360px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] #btn-auto-arrange { width: 44px; padding: 0 0 0 4px; gap: 0; justify-content: center; font-size: 0; }
+}
+/* sm：控件换成触控尺寸 */
+@media (max-width: 599px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-button,
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] #btn-auto-arrange,
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-arrange .arrange-method-trigger { height: var(--app-control); min-height: var(--app-control); }
+}
+
+/* 宽屏工作台框架：三种外壳统一按顶栏实测高度排布，覆盖各平台遗留的硬编码偏移 */
+@media (min-width: 1101px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] {
+        --cw-side-top: calc(var(--app-titlebar-h) + var(--app-hdr-menu));
+    }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-layout {
+        /* 侧栏已经固定定位，只通过右内边距占位，不能再保留旧的第二列。 */
+        grid-template-columns: minmax(0, 1fr);
+        position: fixed !important;
+        top: var(--header-height) !important;
+        left: 0 !important;
+        right: 0 !important;
+        bottom: var(--cw-status-h) !important;
+        width: auto !important;
+        height: auto !important;
+        min-height: 0 !important;
+        padding-right: var(--classroom-side-w, 430px) !important;
+    }
+    /* fixed 的工作台自成层叠上下文：平时整体压在顶栏之上，让侧栏顶到菜单栏下方；
+       顶栏里的任一菜单展开时退到顶栏之下，让菜单完整显示 */
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-layout { z-index: 1001; }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform]:has(.app-header .menu-dropdown.open, .arrange-method-menu:not([hidden]), .native-menu-trigger.is-open) .classroom-layout { z-index: 999; }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel {
+        position: fixed !important;
+        top: var(--cw-side-top) !important;
+        right: 0 !important;
+        bottom: var(--cw-status-h) !important;
+        z-index: 1001;
+        width: var(--classroom-side-w, 430px) !important;
+        height: auto !important;
+        max-height: none !important;
+    }
+}
+
+/* 状态栏统一 32 高；窄窗口整页滚动，主体底部为状态栏留白，sm 只保留排座与同步状态 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] { --cw-status-h: 32px; }
+@media (max-width: 1100px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-layout { padding-bottom: calc(var(--cw-status-h) + var(--space-4, 16px)) !important; }
+}
+@media (max-width: 599px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] #classroom-unseated-status,
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-status-spacer ~ span { display: none; }
+}
+/* 缩放胶囊：浮在状态栏之上；窄窗口贴右下，不挡座位中线 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .zoom-controls {
+    bottom: calc(var(--cw-status-h) + var(--space-3, 12px)) !important;
+}
+@media (max-width: 1100px) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .zoom-controls {
+        left: auto !important;
+        right: var(--app-margin, 16px) !important;
+        transform: none !important;
+    }
+}

@@ -3,9 +3,8 @@
 
 {% block title %}{% if constraint %}编辑约束{% else %}新建约束{% endif %} - {{ classroom.name }}{% endblock %}
 {% block body_class %}constraint-editor-body{% endblock %}
-{% block global_back_button %}{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/constraint-editor.css' %}?v=3">{% endblock %}
-{% block actions %}<a class="btn btn-secondary" href="{% url 'classroom_detail' classroom.pk %}?tab=constraints&amp;cloud_sync=return">返回约束列表</a>{% endblock %}
+{% block back_href %}{% url 'classroom_detail' classroom.pk %}?tab=constraints&amp;cloud_sync=return{% endblock %}{% block back_label %}返回约束列表{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/constraint-editor.css' %}?v=4">{% endblock %}
 
 {% block content %}
 <div class="constraint-editor-layout">

@@ -3,18 +3,8 @@
 
 {% block title %}{{ classroom.name }} - 导出 PPTX{% endblock %}
 {% block body_class %}workflow-page-body export-options-body{% endblock %}
-{% block global_back_button %}{% endblock %}
+{% block back_href %}{% url 'classroom_detail' classroom.pk %}?cloud_sync=return{% endblock %}{% block back_label %}返回班级{% endblock %}
 
-{% block actions %}
-<div class="context-toolbar-panels">
-    <div class="context-toolbar-row context-toolbar-panel active" data-toolbar-panel="export">
-        <div class="toolbar-group">
-            <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return" class="btn btn-secondary">返回班级</a>
-            <span class="toolbar-group-label">导航</span>
-        </div>
-    </div>
-</div>
-{% endblock %}
 
 {% block content %}
 <section class="options-workspace">

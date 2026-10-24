@@ -518,6 +518,28 @@ class SyncBaseline(models.Model):
     updated_at = models.DateTimeField(auto_now=True)
 
 
+class LocalSyncSnapshot(models.Model):
+    class Source(models.TextChoices):
+        LOCAL = 'local', '本地旧版'
+        CLOUD = 'cloud', '云端旧版'
+
+    classroom = models.ForeignKey(Classroom, on_delete=models.CASCADE, related_name='local_sync_snapshots')
+    source = models.CharField(max_length=8, choices=Source.choices)
+    source_version = models.BigIntegerField(default=0)
+    operation_at = models.DateTimeField(null=True, blank=True)
+    content_hash = models.CharField(max_length=64)
+    data = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at', '-pk']
+        verbose_name = '本地同步快照'
+        verbose_name_plural = verbose_name
+        constraints = [
+            models.UniqueConstraint(fields=['classroom', 'source', 'content_hash'], name='local_sync_snapshot_unique'),
+        ]
+
+
 class CloudSession(models.Model):
     uid = models.CharField(max_length=64, unique=True, verbose_name="老三账户 UID")
     nickname = models.CharField(max_length=100, blank=True, default='', verbose_name="昵称")

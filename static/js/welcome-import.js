@@ -55,7 +55,7 @@ window.WelcomeImport = (() => {
         let chooser=form.querySelector('.student-import-file-button');
         if(chooser){const button=document.createElement('button');button.type='button';button.className=chooser.className;button.innerHTML=chooser.innerHTML;chooser.replaceWith(button);chooser=button;}
         else{chooser=document.createElement('button');chooser.type='button';chooser.className='btn btn-secondary';chooser.textContent='选择文件';nativeFile.after(chooser);const label=document.createElement('span');label.className='welcome-fixture-name';label.textContent='未选择文件';chooser.after(label);}
-        const filename=()=>{const label=root.querySelector('#student-import-file-name,.welcome-fixture-name');if(label)label.textContent=lesson.fileSelected?file:'未选择文件';};
+        const filename=()=>{const label=root.querySelector('#student-import-file-name,#layout-import-file-name,.welcome-fixture-name');if(label)label.textContent=lesson.fileSelected?file:'未选择文件';};
         const choose=event=>{event?.preventDefault();chooseFile(kind,()=>{if(!active)return;lesson.fileSelected=true;filename();save();},tell);};
         chooser.onclick=choose;nativeFile.onclick=choose;
         controller=(grades?window.StudentImportPage:window.LayoutImportPage)({fetch:transport,onExit:exit});

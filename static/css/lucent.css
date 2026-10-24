@@ -1,0 +1,291 @@
+/* Lucent 澄光：项目桥接层。
+   规范原件在 static/vendor/lucent/（tokens.css、bundle.css、bundle.js），原样移植、不在原件里改动；
+   这里只做三件事：让 token 跟随应用主题色、把旧变量与旧组件接到 token 上、按端补齐规范行为。
+   加载顺序：tokens.css → bundle.css → styles.css → 各页面样式 → 本文件。 */
+
+/* ===================================================================== */
+/* Token：主色跟随应用主题（星河蓝 / 澎湃橙），其余档位由主色推导         */
+/* ===================================================================== */
+:root {
+    --brand: var(--primary-color, #0a59f7);
+    --brand-hover: color-mix(in srgb, var(--brand), #000 14%);
+    --brand-pressed: color-mix(in srgb, var(--brand), #000 28%);
+    --brand-text: color-mix(in srgb, var(--brand), #000 10%);
+    --brand-tint: rgba(var(--primary-color-rgb, 10, 89, 247), 0.1);
+    --glass-fill-brand: rgba(var(--primary-color-rgb, 10, 89, 247), 0.92);
+    --ai-1: var(--brand);
+    --ai-tint: rgba(var(--primary-color-rgb, 10, 89, 247), 0.07);
+    --danger-hover: color-mix(in srgb, var(--danger), #000 16%);
+
+    /* 旧变量映射到 token */
+    --bg-color: var(--bg);
+    --card-bg: var(--surface);
+    --text-primary: var(--ink);
+    --text-secondary: var(--ink-secondary);
+    --border-color: var(--divider);
+    --border-hairline: var(--divider);
+    --radius-control: var(--radius-sm);
+    --radius-card: var(--radius-lg);
+    --radius-block: var(--radius-lg);
+    --radius-modal: var(--radius-xl);
+    --dur-micro: var(--duration-instant);
+    --dur-ui: var(--duration-base);
+    --dur-scene: var(--duration-slow);
+    /* 旧材质变量：规范里玻璃不描边、不加光泽，统一收为透明 */
+    --glass-fill: var(--glass-fill-strong);
+    --glass-rim: transparent;
+    --glass-edge: transparent;
+    --glass-sheen: transparent;
+
+    /* 旧的三条自定义弹簧接到规范的两条弹簧上 */
+    --spring-default: var(--ease-spring-soft);
+    --spring-fast: var(--ease-spring);
+    --spring-gentle: var(--ease-spring-soft);
+
+    /* 旧的 --lc-* 别名，供页面内联样式继续使用 */
+    --lc-duration-instant: var(--duration-instant);
+    --lc-duration-base: var(--duration-base);
+    --lc-duration-slow: var(--duration-slow);
+    --lc-duration-spring: var(--duration-spring);
+    --lc-ease-standard: var(--ease-standard);
+    --lc-ease-emphasized: var(--ease-emphasized);
+    --lc-ease-exit: var(--ease-exit);
+    --lc-ease-spring: var(--ease-spring);
+    --lc-ease-spring-soft: var(--ease-spring-soft);
+
+    /* 当前端的控件尺寸：PC 指针用 32 / 36，触控改用 40 / 48（见下方 pointer: coarse） */
+    --app-control: var(--control-pc);
+    --app-row: var(--row-pc);
+    --app-margin: var(--margin-lg);
+}
+
+/* 断点只看窗口宽度：sm 16 页边距，md 24，lg 及以上 32 */
+@media (max-width: 839px) { :root { --app-margin: var(--margin-md); } }
+@media (max-width: 599px) { :root { --app-margin: var(--margin-sm); } }
+/* 触控设备（平板、2in1 平板模式、手机）：控件 40、行高 48 */
+@media (pointer: coarse) { :root { --app-control: var(--control-md); --app-row: var(--row-1); } }
+
+/* ===================================================================== */
+/* 基础：字体、等宽数字、焦点环                                           */
+/* ===================================================================== */
+* { font-family: var(--font-sans); }
+body {
+    background: var(--bg);
+    color: var(--ink);
+    font-variant-numeric: tabular-nums;
+}
+:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 2px;
+}
+
+/* 规范的果冻按压会在按下时放大按钮；本应用的按钮不做放大、上浮，
+   只保留颜色与叠加层变化。bundle.js 写的是独立的 scale / translate 属性，这里统一收回。 */
+.lc-jelly { scale: none !important; translate: none !important; }
+.lc-card--action:hover,
+.lc-card--action:active { transform: none; }
+
+/* ===================================================================== */
+/* 按压：触控按下轻压 0.96 并用液态弹簧回弹；PC 指针按下不缩放           */
+/* ===================================================================== */
+.btn,
+.tab-btn,
+.modal-close-btn,
+.desktop-window-button {
+    transition: background-color var(--duration-fast) var(--ease-standard),
+                color var(--duration-fast) var(--ease-standard),
+                box-shadow var(--duration-fast) var(--ease-standard),
+                transform var(--duration-spring) var(--ease-spring);
+}
+.btn:active,
+.tab-btn:active {
+    transform: scale(0.96);
+    transition-duration: var(--duration-fast), var(--duration-fast), var(--duration-fast), var(--duration-instant);
+    transition-timing-function: var(--ease-standard);
+}
+.modal-close-btn:active,
+.desktop-window-button:active {
+    transform: scale(0.9);
+    transition-duration: var(--duration-fast), var(--duration-fast), var(--duration-fast), var(--duration-instant);
+    transition-timing-function: var(--ease-standard);
+}
+
+/* 可点卡片与工具按钮：列表行、卡片只叠加 fill-pressed，不缩放 */
+.create-choice,
+.home-classroom-card,
+.home-group-card,
+.home-recent-item,
+.home-sidebar-item,
+.settings-nav-item,
+.tool-btn,
+.zoom-btn,
+.exam-icon-btn,
+.modal-choice,
+.export-option-item,
+.classroom-toolbar-button {
+    transition-property: border-color, background, background-color, box-shadow, color, transform;
+    transition-duration: var(--duration-fast), var(--duration-fast), var(--duration-fast), var(--duration-base), var(--duration-fast), var(--duration-spring);
+    transition-timing-function: var(--ease-standard), var(--ease-standard), var(--ease-standard), var(--ease-standard), var(--ease-standard), var(--ease-spring);
+}
+.tool-btn:active,
+.zoom-btn:active,
+.exam-icon-btn:active,
+.classroom-toolbar-button:active {
+    transform: scale(0.94);
+    transition-duration: var(--duration-fast), var(--duration-fast), var(--duration-fast), var(--duration-base), var(--duration-fast), var(--duration-instant);
+    transition-timing-function: var(--ease-standard);
+}
+
+@media (hover: hover) and (pointer: fine) {
+    .btn:active,
+    .tab-btn:active,
+    .modal-close-btn:active,
+    .desktop-window-button:active,
+    .tool-btn:active,
+    .zoom-btn:active,
+    .exam-icon-btn:active,
+    .classroom-toolbar-button:active { transform: none; }
+}
+
+/* ===================================================================== */
+/* 玻璃凝结：遮罩淡入，弹窗用柔和弹簧放大到位                             */
+/* ===================================================================== */
+@keyframes lc-blur-in { from { -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); } }
+
+.modal-overlay {
+    animation: lc-fade-in var(--duration-slow) var(--ease-standard),
+               lc-blur-in var(--duration-slow) var(--ease-standard);
+}
+.modal-overlay > .modal-content,
+#data-sharing-prompt-overlay .ds-prompt-card,
+#qq-group-overlay .qq-group-card {
+    animation: lc-pop-in var(--duration-spring) var(--ease-spring-soft) backwards;
+}
+
+/* 菜单从触发点展开 */
+.menu-panel-root { transform-origin: top left; transition-timing-function: var(--ease-standard); }
+.menu-dropdown.open > .menu-panel-root {
+    transition: opacity var(--duration-fast) var(--ease-standard),
+                transform var(--duration-spring) var(--ease-spring-soft),
+                filter var(--duration-fast) var(--ease-standard),
+                visibility 0s;
+}
+
+/* 进度条长度用柔和弹簧过渡 */
+.progress-fill { transition: width var(--duration-spring) var(--ease-spring-soft); }
+
+/* ===================================================================== */
+/* 液态玻璃：只有一种配方——纯色半透明底 + 模糊 + 柔和投影，                */
+/* 不描边、不加光泽渐变、导航与内容之间不画分隔线。                         */
+/* ===================================================================== */
+/* 顶栏的玻璃见 app-shell.css。 */
+/* 菜单的玻璃画在 ::before 上：若直接写在面板上，嵌套的二级菜单只能模糊一级菜单。 */
+.menu-panel {
+    background: transparent;
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    border: 0;
+    box-shadow: var(--shadow-float);
+}
+.menu-panel::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: var(--glass-fill-float);
+    -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    pointer-events: none;
+}
+.toast-notification {
+    background: var(--glass-fill-float);
+    -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    border: 0;
+    box-shadow: var(--shadow-float);
+}
+/* 浮层玻璃：弹窗、提示卡 */
+.modal-overlay > .modal-content,
+.modal > .modal-content,
+#data-sharing-prompt-overlay .ds-prompt-card,
+#qq-group-overlay .qq-group-card {
+    background: var(--glass-fill-float);
+    -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    border: 0;
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-float);
+}
+
+/* ===================================================================== */
+/* 开关：按住时滑块拉长，松手后弹到位                                     */
+/* ===================================================================== */
+.settings-switch-thumb {
+    transition: transform var(--duration-spring) var(--ease-spring), width var(--duration-base) var(--ease-spring-soft);
+}
+.settings-switch-track { transition: background var(--duration-fast) var(--ease-standard); }
+.settings-switch:active .settings-switch-thumb { width: 30px; }
+.settings-switch:active input:checked + .settings-switch-track .settings-switch-thumb { transform: translateX(14px); }
+
+/* ===================================================================== */
+/* 液态选中胶囊（旧结构）：由 base.html 中的脚本接管 .tab-header 与设置导航 */
+/* 新结构直接用规范的 data-liquid（Lucent.liquid）。                        */
+/* ===================================================================== */
+.is-app-liquid { position: relative; isolation: isolate; }
+.is-app-liquid > .app-liquid {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 0;
+    pointer-events: none;
+    border-radius: var(--radius-full);
+    background: var(--brand-tint);
+    will-change: transform, width, height;
+}
+.settings-nav.is-app-liquid > .app-liquid { border-radius: var(--radius-md); }
+.is-app-liquid > .tab-btn,
+.is-app-liquid > .settings-nav-item { position: relative; z-index: 1; }
+.is-app-liquid > .tab-btn.active,
+.is-app-liquid > .settings-nav-item.active { background: transparent; box-shadow: none; border-color: transparent; }
+
+/* ===================================================================== */
+/* 依次进入：每项间隔 40ms，从下方 12px 浮入，最多错开 10 个               */
+/* ===================================================================== */
+/* 只在延迟期间保持起始帧（backwards）：动画结束后不再保留层叠上下文与 transform，
+   否则 main 里的弹窗会被困在顶栏之下，fixed 子元素也会错位。 */
+main { animation: lc-fade-in var(--duration-slow) var(--ease-standard) backwards; }
+.create-choice-grid > *,
+.settings-list > *,
+.options-card,
+.panel-card,
+.exam-step { animation: lc-rise var(--duration-slow) var(--ease-emphasized) backwards; }
+.lc-stagger > * { animation-fill-mode: backwards; }
+.create-choice-grid > :nth-child(2), .settings-list > :nth-child(2) { animation-delay: 40ms; }
+.create-choice-grid > :nth-child(3), .settings-list > :nth-child(3) { animation-delay: 80ms; }
+.create-choice-grid > :nth-child(4), .settings-list > :nth-child(4) { animation-delay: 120ms; }
+.create-choice-grid > :nth-child(5), .settings-list > :nth-child(5) { animation-delay: 160ms; }
+.create-choice-grid > :nth-child(6), .settings-list > :nth-child(6) { animation-delay: 200ms; }
+.create-choice-grid > :nth-child(7), .settings-list > :nth-child(7) { animation-delay: 240ms; }
+.create-choice-grid > :nth-child(8), .settings-list > :nth-child(8) { animation-delay: 280ms; }
+.create-choice-grid > :nth-child(9), .settings-list > :nth-child(9) { animation-delay: 320ms; }
+.create-choice-grid > :nth-child(n+10), .settings-list > :nth-child(n+10) { animation-delay: 360ms; }
+
+/* ===================================================================== */
+/* 系统设置：减少动态效果、降低透明度                                     */
+/* ===================================================================== */
+@media (prefers-reduced-motion: reduce) {
+    .btn:active, .tab-btn:active, .modal-close-btn:active, .desktop-window-button:active,
+    .tool-btn:active, .zoom-btn:active, .exam-icon-btn:active, .classroom-toolbar-button:active { transform: none; }
+    main, .lc-stagger > *, .create-choice-grid > *, .settings-list > *, .options-card, .panel-card, .exam-step { animation: none; }
+}
+@media (prefers-reduced-transparency: reduce) {
+    .menu-panel::before, .toast-notification,
+    .modal-overlay > .modal-content, .modal > .modal-content,
+    #data-sharing-prompt-overlay .ds-prompt-card, #qq-group-overlay .qq-group-card {
+        background: var(--surface-raised);
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+    }
+    .modal-overlay { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(0, 0, 0, 0.6); }
+}

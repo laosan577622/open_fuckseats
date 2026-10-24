@@ -1,0 +1,204 @@
+/* 新建班级、新建班级组、添加班级、自定义排序共用的分步向导
+   结构：标题 → 步骤条（lc-steps） → 选项卡片（lc-card--action） → 表单（lc-field） */
+
+.create-classroom-page {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-6, 24px);
+    width: 100%;
+    max-width: 760px;
+    margin: 0 auto;
+    padding: var(--space-8, 32px) var(--app-margin, 24px) var(--space-16, 64px);
+}
+
+.create-classroom-hero h1 {
+    margin: var(--space-1, 4px) 0 0;
+    color: var(--ink);
+    font-size: 28px;
+    line-height: 36px;
+    font-weight: 700;
+    letter-spacing: -.01em;
+}
+.create-classroom-hero p { margin: var(--space-1, 4px) 0 0; color: var(--ink-secondary); font-size: 14px; line-height: 20px; }
+.create-classroom-eyebrow,
+.create-classroom-hero p.create-classroom-eyebrow { margin: 0; color: var(--brand-text); font-size: 13px; line-height: 18px; font-weight: 500; }
+
+.create-classroom-error {
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    border-radius: var(--radius-md, 12px);
+    background: var(--danger-tint);
+    color: var(--danger);
+    font-size: 14px;
+    line-height: 20px;
+}
+
+/* 步骤条：24 圆点 + 标签，连接线 2px；当前步实心品牌色，已完成用 brand-tint */
+.create-flow-progress {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 12px);
+    color: var(--ink-secondary);
+    font-size: 14px;
+    line-height: 20px;
+}
+.create-flow-progress > span { display: inline-flex; flex: none; align-items: center; gap: var(--space-2, 8px); white-space: nowrap; }
+.create-flow-progress > span b {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--fill-control);
+    color: var(--ink-secondary);
+    font-size: 12px;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    transition: background-color var(--duration-base) var(--ease-standard), color var(--duration-base) var(--ease-standard);
+}
+.create-flow-progress > span.is-active { color: var(--ink); font-weight: 500; }
+.create-flow-progress > span.is-active b { background: var(--brand); color: var(--on-brand); }
+.create-flow-progress > span.is-complete b { background: var(--brand-tint); color: var(--brand-text); }
+.create-flow-progress > i { flex: 1 1 24px; min-width: 16px; height: 2px; border-radius: 1px; background: var(--divider); }
+
+.create-flow-stage { display: flex; flex-direction: column; gap: var(--space-4, 16px); animation: create-stage-in var(--duration-base, 250ms) var(--ease-standard) backwards; }
+.create-flow-stage[hidden] { display: none; }
+@keyframes create-stage-in { from { opacity: 0; transform: translateY(8px); } }
+.create-flow-stage-heading > span { color: var(--ink-secondary); font-size: 12px; line-height: 16px; }
+.create-flow-stage-heading h2 { margin: 2px 0 0; color: var(--ink); font-size: 20px; line-height: 28px; font-weight: 600; }
+
+.create-flow-back {
+    display: inline-flex;
+    align-items: center;
+    align-self: flex-start;
+    gap: var(--space-1, 4px);
+    height: var(--app-control, 32px);
+    padding: 0 var(--space-3, 12px) 0 var(--space-2, 8px);
+    border: 0;
+    border-radius: var(--radius-full, 9999px);
+    background: transparent;
+    color: var(--brand-text);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+}
+.create-flow-back:hover { background: var(--fill-hover); }
+.create-flow-back:active { background: var(--fill-pressed); }
+.create-flow-back svg { width: 16px; height: 16px; }
+
+/* 选项卡片：整卡可点，悬停加深投影，按下缩到 0.98 */
+.create-choice-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: var(--space-3, 12px); }
+.create-choice {
+    display: flex;
+    align-items: center;
+    gap: var(--space-4, 16px);
+    width: 100%;
+    min-height: 80px;
+    padding: var(--space-4, 16px);
+    border: 0;
+    border-radius: var(--radius-lg, 20px);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    text-decoration: none;
+    cursor: pointer;
+    transition: transform var(--duration-fast) var(--ease-standard), box-shadow var(--duration-fast) var(--ease-standard);
+}
+.create-choice:hover { box-shadow: var(--shadow-2); }
+.create-choice:active { transform: scale(.98); }
+.create-choice:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.create-choice-icon {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-md, 12px);
+    background: var(--brand-tint);
+    color: var(--brand-text);
+}
+.create-choice-icon svg { width: 28px; height: 28px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+.create-choice-copy { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.create-choice-copy strong { color: var(--ink); font-size: 15px; line-height: 22px; font-weight: 500; }
+.create-choice-copy > small,
+.create-choice-copy > span:not(.create-choice-title-row) { color: var(--ink-secondary); font-size: 13px; line-height: 18px; }
+.create-choice-title-row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2, 8px); }
+.create-choice-title-row small {
+    padding: 2px var(--space-2, 8px);
+    border-radius: var(--radius-full, 9999px);
+    background: var(--brand-tint);
+    color: var(--brand-text);
+    font-size: 12px;
+    line-height: 16px;
+    font-weight: 500;
+}
+.create-choice-arrow { flex: none; width: 20px; height: 20px; color: var(--ink-tertiary); }
+
+/* 表单：对应 lc-field，输入框 fill-control 底，聚焦时描边画在 box-shadow 上 */
+.create-final-form {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4, 16px);
+    padding: var(--space-5, 20px);
+    border-radius: var(--radius-lg, 20px);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+}
+.create-final-form[hidden] { display: none; }
+.create-final-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3, 12px); }
+.create-final-fields-three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.create-final-form label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 8px);
+    min-width: 0;
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 20px;
+    font-weight: 500;
+}
+.create-final-form input:not([type="checkbox"]):not([type="radio"]):not([type="hidden"]),
+.create-final-form select,
+.create-final-form textarea {
+    width: 100%;
+    min-height: var(--app-control, 32px);
+    padding: 0 var(--space-3, 12px);
+    border: 0;
+    border-radius: var(--radius-sm, 8px);
+    outline: none;
+    background: var(--fill-control);
+    box-shadow: none;
+    color: var(--ink);
+    font: inherit;
+    font-size: 14px;
+    font-weight: 400;
+    transition: box-shadow var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard);
+}
+.create-final-form textarea { min-height: 120px; padding: var(--space-2, 8px) var(--space-3, 12px); line-height: 20px; resize: vertical; }
+.create-final-form input:not([type="checkbox"]):not([type="radio"]):hover,
+.create-final-form select:hover,
+.create-final-form textarea:hover { box-shadow: inset 0 0 0 1px var(--divider); }
+.create-final-form input:not([type="checkbox"]):not([type="radio"]):focus,
+.create-final-form select:focus,
+.create-final-form textarea:focus { background: var(--surface); box-shadow: inset 0 0 0 1.5px var(--brand); }
+.create-final-form input::placeholder,
+.create-final-form textarea::placeholder { color: var(--ink-tertiary); }
+.create-final-form > .btn { align-self: flex-start; }
+
+@media (max-width: 599px) {
+    .create-classroom-page { gap: var(--space-5, 20px); padding: var(--space-5, 20px) var(--app-margin, 16px) var(--space-12, 48px); }
+    .create-classroom-hero h1 { font-size: 24px; line-height: 32px; }
+    .create-flow-progress { gap: var(--space-2, 8px); }
+    .create-flow-progress > span:not(.is-active) { font-size: 0; gap: 0; }
+    .create-choice-grid { grid-template-columns: 1fr; }
+    .create-final-fields,
+    .create-final-fields-three { grid-template-columns: 1fr; }
+    .create-final-form > .btn { align-self: stretch; justify-content: center; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .create-flow-stage { animation: none; }
+}

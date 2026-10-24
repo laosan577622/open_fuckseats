@@ -5,17 +5,8 @@
 
 {% block actions %}{% endblock %}
 
-{% block titlebar_actions %}
-<a href="{% url 'index' %}" class="create-titlebar-back">
-    <svg viewBox="0 0 20 20" fill="none" aria-hidden="true">
-        <path d="m12 5-5 5 5 5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
-    </svg>
-    返回首页
-</a>
-{% endblock %}
-
 {% block content %}
-<main class="create-classroom-page create-classroom-group-page">
+<div class="create-classroom-page create-classroom-group-page">
     <header class="create-classroom-hero">
         <div>
             <p class="create-classroom-eyebrow">新建班级组</p>
@@ -141,7 +132,7 @@
             <button type="submit" class="btn btn-primary">创建班级组和班级</button>
         </form>
     </section>
-</main>
+</div>
 
 <div class="modal-overlay classroom-sequence-modal" id="classroom-sequence-modal" hidden aria-hidden="true">
     <div class="modal-card classroom-sequence-dialog" role="dialog" aria-modal="true" aria-labelledby="classroom-sequence-title">

@@ -1,20 +1,9 @@
 .about-page-body {
-    background:
-        radial-gradient(circle at 12% 8%, rgba(10, 89, 247, 0.055), transparent 24%),
-        linear-gradient(180deg, #f8faff 0%, #f4f7fb 56%, #f8fafc 100%);
+    background: var(--bg, #f5f6f8);
 }
 
 .about-page-body main {
     min-height: calc(100vh - var(--header-height));
-}
-
-.about-toolbar-back {
-    text-decoration: none;
-}
-
-.about-toolbar-back svg {
-    width: 15px;
-    height: 15px;
 }
 
 .about-page {
@@ -78,9 +67,8 @@
 }
 
 .about-action:hover {
-    transform: translateY(-1px);
     border-color: rgba(10, 89, 247, 0.28);
-    box-shadow: 0 10px 24px rgba(10, 89, 247, 0.1);
+    box-shadow: var(--shadow-2, 0 4px 16px rgba(0, 0, 0, 0.08));
 }
 
 .about-action-primary {
@@ -112,7 +100,7 @@
     position: relative;
     min-height: 230px;
     border-radius: 18px;
-    background: linear-gradient(145deg, rgba(242, 247, 255, .95), rgba(255,255,255,.78));
+    background: var(--brand-tint, rgba(10, 89, 247, .07));
     overflow: hidden;
     isolation: isolate;
 }
@@ -234,7 +222,7 @@
     height: 42px;
     border: 1px solid rgba(10,89,247,.2);
     border-radius: 7px;
-    background: linear-gradient(180deg, #fff, #dce9ff);
+    background: var(--surface, #fff);
     box-shadow: 0 8px 12px rgba(10,89,247,.12);
 }
 

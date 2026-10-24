@@ -2,15 +2,15 @@
 {% load static %}
 {% block title %}{{ classroom.name }} · 考场模式{% endblock %}
 {% block body_class %}workflow-page-body exam-body{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/exam.css' %}?v=9">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/exam.css' %}?v=10">{% endblock %}
+{% block back_href %}{% url 'classroom_detail' classroom.pk %}?cloud_sync=return{% endblock %}{% block back_label %}返回班级{% endblock %}
 {% block actions %}
 <div class="context-toolbar-panels"><div class="context-toolbar-row context-toolbar-panel active">
-    <a class="btn btn-secondary" href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return">返回教室</a>
     <a class="btn btn-secondary" href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return#classroom-door-stage">门设置</a>
 </div></div>
 {% endblock %}
 {% block content %}
-<main class="exam-workspace">
+<div class="exam-workspace">
     <nav class="exam-steps" aria-label="考场流程">
         {% if plan.kind == 'restore' %}
         <a class="exam-step {% if stage == 'movement' %}is-current{% else %}is-done{% endif %}" href="{% url 'exam_stage' classroom.pk saved.pk 'movement' %}"><b>1</b>恢复演示</a>
@@ -31,6 +31,6 @@
     </nav>
     <p id="exam-error" role="alert" hidden></p>
     {% block exam_content %}{% endblock %}
-</main>
-<script src="{% static 'js/exam.js' %}?v=13" defer></script>
+</div>
+<script src="{% static 'js/exam.js' %}?v=14" defer></script>
 {% endblock %}

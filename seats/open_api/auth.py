@@ -7,6 +7,7 @@ from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 
 import desktop_access
+from seats.desktop_auth import desktop_mode_enabled
 from seats.models import FrontendKVStore
 
 
@@ -82,6 +83,8 @@ def is_authorized(request):
 
 
 def is_trusted_browser_request(request):
+    if desktop_mode_enabled():
+        return False
     origin = str(request.headers.get('origin') or '').strip().rstrip('/')
     return bool(origin and origin in allowed_browser_origins())
 

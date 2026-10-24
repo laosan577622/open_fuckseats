@@ -2,7 +2,13 @@
 {% load static %}
 {% block title %}欢迎 - 不想排座位{% endblock %}
 {% block body_class %}welcome-body{% endblock %}
-{% block extra_head %}<link rel="stylesheet" href="{% static 'css/onboarding.css' %}?v=4.7">{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/onboarding.css' %}?v=4.9">{% endblock %}
+{% block global_back_button %}
+<a href="#" class="global-back-button" id="welcome-layout-done" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
+    <span>返回排座</span>
+</a>
+{% endblock %}
 {% block ai_titlebar_link %}{% endblock %}
 {% block titlebar_actions %}{% endblock %}
 {% block actions %}
@@ -27,9 +33,9 @@
 <script src="{% static 'js/cloud.js' %}?v=3.0"></script>
 <script src="{% static 'js/toast.js' %}?v=2.0"></script>
 <script src="{% static 'js/desktop_bridge.js' %}?v=20260810"></script>
-<script src="{% static 'js/main.js' %}?v=3.0"></script>
+<script src="{% static 'js/main.js' %}?v=3.1"></script>
 <script src="{% static 'js/import_students_options.js' %}?v=11"></script>
-<script src="{% static 'js/import_layout_options.js' %}?v=4"></script>
+<script src="{% static 'js/import_layout_options.js' %}?v=5"></script>
 <script src="{% static 'js/welcome-import-fixtures.js' %}?v=1"></script>
 {% endblock %}
-{% block extra_scripts %}<script src="{% static 'js/welcome-import.js' %}?v=4.6"></script><script src="{% static 'js/welcome-lessons.js' %}?v=4.6"></script><script src="{% static 'js/welcome.js' %}?v=4.7"></script>{% endblock %}
+{% block extra_scripts %}<script src="{% static 'js/welcome-import.js' %}?v=4.7"></script><script src="{% static 'js/welcome-lessons.js' %}?v=4.6"></script><script src="{% static 'js/welcome.js' %}?v=4.8"></script>{% endblock %}

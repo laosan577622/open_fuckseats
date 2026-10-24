@@ -7,12 +7,18 @@
     <title>{% block title %}不想排座位{% endblock %}</title>
     {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
-    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=4.75">
-    <link rel="stylesheet" href="{% static 'css/wendao-dock.css' %}?v=20">
+    <link rel="stylesheet" href="{% static 'vendor/lucent/tokens.css' %}?v=1">
+    <link rel="stylesheet" href="{% static 'vendor/lucent/bundle.css' %}?v=1">
+    <link rel="stylesheet" href="{% static 'css/styles.css' %}?v=5.8">
+    <link rel="stylesheet" href="{% static 'css/home.css' %}?v=2">
+    <link rel="stylesheet" href="{% static 'css/create.css' %}?v=1">
+    <link rel="stylesheet" href="{% static 'css/wendao-dock.css' %}?v=23">
     <link rel="stylesheet" href="{% static 'css/vendor/driver.css' %}?v=1.0.1">
-    <link rel="stylesheet" href="{% static 'css/welcome_finale.css' %}?v=4.13">
+    <link rel="stylesheet" href="{% static 'css/welcome_finale.css' %}?v=4.14">
     <link rel="stylesheet" href="{% static 'css/data_sharing_prompt.css' %}?v=1.0">
     <link rel="stylesheet" href="{% static 'css/qq_group.css' %}?v=1.0">
+    <link rel="stylesheet" href="{% static 'css/lucent.css' %}?v=2.2">
+    <script src="{% static 'vendor/lucent/bundle.js' %}?v=1" defer></script>
     {% if app_runtime.shell != 'webview' %}
     <style>
         @view-transition {
@@ -22,9 +28,10 @@
     {% endif %}
     {% block extra_head %}{% endblock %}
     {% if app_runtime.shell == 'webview' %}
-    <link rel="stylesheet" href="{% static 'css/desktop-frame.css' %}?v=1.2">
+    <link rel="stylesheet" href="{% static 'css/desktop-frame.css' %}?v=2.0">
     <script src="{% static 'js/desktop-frame.js' %}?v=1.2" defer></script>
     {% endif %}
+    <link rel="stylesheet" href="{% static 'css/app-shell.css' %}?v=2.3">
     <meta name="csrf-token" content="{{ csrf_token }}">
     <link rel="stylesheet" href="{% static 'css/welcome-transitions.css' %}?v=5">
     <script src="{% static 'js/welcome-transitions.js' %}?v=5"></script>
@@ -34,46 +41,42 @@
     <script src="{% url 'frontend_store_js' %}?v=1.0"></script>{% endif %}
 </head>
 
-<body class="{% block body_class %}{% endblock %}" data-app-shell="{{ app_runtime.shell }}" data-app-platform="{{ app_runtime.platform }}" data-app-version="{{ app_runtime.version }}">
+<body class="lc-page lc-page--desktop {% block body_class %}{% endblock %}" data-app-shell="{{ app_runtime.shell }}" data-app-platform="{{ app_runtime.platform }}" data-app-version="{{ app_runtime.version }}">
+    {% comment %}顶栏：一块玻璃，三行——标题栏（窗口控制、品牌、返回、页面标题、全局操作）、菜单栏（仅工作区页面）、上下文工具栏。
+       桌面壳的窗口控制按平台放置：macOS 在左（交通灯），Windows / Linux 在右；浏览器不绘制窗口控制。{% endcomment %}
     <header class="app-header">
         <div class="header-content" data-header-host>
             <div class="header-titlebar">
-                <div style="display: flex; align-items: center; gap: 16px;">
-                    <a href="{% url 'index' %}" class="logo">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="logo-svg">
-                            <rect x="3" y="3" width="7" height="7" rx="2" fill="currentColor" />
-                            <rect x="14" y="3" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.7" />
-                            <rect x="3" y="14" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.7" />
-                            <rect x="14" y="14" width="7" height="7" rx="2" fill="currentColor" />
-                        </svg>
-                        <div class="logo-meta">
-                            <span>不想排座位</span>
-                            <small>教室排座工作区</small>
-                        </div>
-                    </a>
-                </div>
-                {% block global_back_button %}{% if request.path != '/' %}
-                <a href="{% url 'index' %}" class="global-back-button" aria-label="返回首页">返回首页</a>
-                {% endif %}{% endblock %}
-                {% block ai_titlebar_link %}<a href="{% if classroom %}{% url 'ai_workspace' classroom.pk %}{% elif ai_context_classroom %}{% url 'ai_workspace' ai_context_classroom.pk %}{% else %}{% url 'wendao_workspace' %}{% endif %}" class="btn wd-spectrum wd-global-link"><span class="wd-brand-text">闻道智能</span></a>{% endblock %}
-                {% block titlebar_actions %}<button type="button" class="btn btn-secondary" id="btn-open-tour-titlebar" onclick="startOnboarding(true)">使用帮助</button>{% endblock %}
-                {% block titlebar_menu %}{% if app_runtime.shell == 'webview' and app_runtime.platform == 'windows' %}{% include 'partials/native_menu.html' %}{% endif %}{% endblock %}
-                <div class="cloud-header-area" id="cloud-header-area" data-settings-url="{% url 'settings' %}"></div>
                 {% if app_runtime.shell == 'webview' %}
                 <section class="desktop-window-controls" aria-label="窗口控制">
                     <button type="button" class="desktop-window-button" data-window-action="minimize" aria-label="最小化" title="最小化"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="M1 6h10"/></svg></button>
                     <button type="button" class="desktop-window-button" data-window-action="maximize" aria-label="最大化" title="最大化"><svg viewBox="0 0 12 12" aria-hidden="true"><path class="window-maximize-icon" d="M1.5 1.5h9v9h-9z"/><path class="window-restore-icon" d="M3.5 1.5h7v7M1.5 3.5h7v7h-7z"/></svg></button>
                     <button type="button" class="desktop-window-button" data-window-action="close" aria-label="关闭窗口" title="关闭窗口"><svg viewBox="0 0 12 12" aria-hidden="true"><path d="m2 2 8 8M10 2l-8 8"/></svg></button>
                 </section>
-                {% else %}
-                <div class="browser-window-controls" aria-hidden="true">
-                    <span class="browser-window-control browser-window-minimize"></span>
-                    <span class="browser-window-control browser-window-maximize"></span>
-                    <span class="browser-window-control browser-window-close"></span>
-                </div>
                 {% endif %}
+                <a href="{% url 'index' %}" class="logo" aria-label="不想排座位首页">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" class="logo-svg" aria-hidden="true">
+                        <rect x="3" y="3" width="7" height="7" rx="2" fill="currentColor" />
+                        <rect x="14" y="3" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.6" />
+                        <rect x="3" y="14" width="7" height="7" rx="2" fill="currentColor" fill-opacity="0.6" />
+                        <rect x="14" y="14" width="7" height="7" rx="2" fill="currentColor" />
+                    </svg>
+                    <span class="logo-meta">不想排座位</span>
+                </a>
+                {% block global_back_button %}{% if request.path != '/' %}
+                <a href="{% block back_href %}{% url 'index' %}{% endblock %}" class="global-back-button">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg>
+                    <span>{% block back_label %}返回首页{% endblock %}</span>
+                </a>
+                {% endif %}{% endblock %}
+                {% block titlebar_title %}{% endblock %}
+                {% block titlebar_menu %}{% endblock %}
+                <div class="header-spacer" aria-hidden="true"></div>
+                {% block ai_titlebar_link %}<a href="{% if classroom %}{% url 'ai_workspace' classroom.pk %}{% elif ai_context_classroom %}{% url 'ai_workspace' ai_context_classroom.pk %}{% else %}{% url 'wendao_workspace' %}{% endif %}" class="btn wd-spectrum wd-global-link" aria-label="闻道智能"><svg class="wd-glyph" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3.5 13.8 9a1.5 1.5 0 0 0 1 1l5.7 1.9-5.7 1.9a1.5 1.5 0 0 0-1 1L12 20.5l-1.8-5.7a1.5 1.5 0 0 0-1-1L3.5 12l5.7-1.9a1.5 1.5 0 0 0 1-1z"/></svg><span class="wd-brand-text">闻道智能</span></a>{% endblock %}
+                {% block titlebar_actions %}{% include 'partials/titlebar_help.html' %}{% endblock %}
+                <div class="cloud-header-area" id="cloud-header-area" data-settings-url="{% url 'settings' %}"></div>
             </div>
-            {% block native_menu %}{% if app_runtime.shell != 'webview' or app_runtime.platform != 'windows' %}{% include 'partials/native_menu.html' %}{% endif %}{% endblock %}
+            {% block native_menu %}{% endblock %}
             <div class="context-toolbar-shell">
                 <div class="header-actions">
                     {% block actions %}{% endblock %}
@@ -156,22 +159,70 @@
         </div>
     </div>
 
+    <script>
+    /* Lucent 液态选中：前沿先走，后沿晚 50ms 用更弹的曲线跟上，胶囊被拉长后收回并轻微压扁 */
+    (function () {
+        var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+        var LEAD = 'var(--lc-duration-base) var(--lc-ease-spring-soft)';
+        var TRAIL = 'var(--lc-duration-spring) var(--lc-ease-spring) 50ms';
+        function liquid(root, itemSel) {
+            if (!root || root.__lcLiquid) return;
+            root.__lcLiquid = true;
+            var pill = document.createElement('span');
+            pill.className = 'app-liquid';
+            pill.setAttribute('aria-hidden', 'true');
+            root.insertBefore(pill, root.firstChild);
+            root.classList.add('is-app-liquid');
+            var last = null;
+            function current() { return root.querySelector(itemSel + '.active'); }
+            function place(animate) {
+                var el = current();
+                if (!el || !el.offsetWidth) { pill.style.opacity = '0'; return; }
+                pill.style.opacity = '1';
+                var x = el.offsetLeft, y = el.offsetTop, w = el.offsetWidth, h = el.offsetHeight;
+                var vertical = last && Math.abs(y - last.y) > Math.abs(x - last.x);
+                if (animate && last && !reduce) {
+                    var down = vertical ? y > last.y : x > last.x;
+                    pill.style.transition = 'transform ' + (down ? LEAD : TRAIL) + ', width ' + (down ? LEAD : TRAIL) + ', height ' + (down ? LEAD : TRAIL);
+                    if (pill.animate) pill.animate(vertical
+                        ? [{ scale: '1 1' }, { scale: '0.86 1', offset: 0.35 }, { scale: '1 1' }]
+                        : [{ scale: '1 1' }, { scale: '1 0.86', offset: 0.35 }, { scale: '1 1' }], { duration: 480, easing: 'ease-out' });
+                } else {
+                    pill.style.transition = 'none';
+                }
+                pill.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+                pill.style.width = w + 'px';
+                pill.style.height = h + 'px';
+                last = { x: x, y: y };
+            }
+            place(false);
+            new MutationObserver(function () { place(true); }).observe(root, { attributes: true, attributeFilter: ['class'], subtree: true });
+            if (window.ResizeObserver) new ResizeObserver(function () { place(false); }).observe(root);
+        }
+        window.lcLiquid = liquid;
+        function init() {
+            document.querySelectorAll('.tab-header').forEach(function (r) { liquid(r, '.tab-btn'); });
+            document.querySelectorAll('.settings-nav').forEach(function (r) { liquid(r, '.settings-nav-item'); });
+        }
+        if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init); else init();
+    })();
+    </script>
     <template id="cloud-login-icon-template">{% include "login.svg" %}</template>
     <template id="cloud-offline-icon-template">{% include "wifi.exclamationmark.circle.fill.svg" %}</template>
     <script src="{% static 'js/seat-interactions.js' %}?v=1.0"></script>
     <script src="{% static 'js/welcome-finale.js' %}?v=4.13"></script>
     {% block app_scripts %}
     <script src="{% static 'js/vendor/driver.js' %}?v=1.0.2"></script>
-    <script src="{% static 'js/popup_manager.js' %}?v=1.1"></script>
-    <script src="{% static 'js/dialog.js' %}?v=1.0"></script>
+    <script src="{% static 'js/popup_manager.js' %}?v=1.2"></script>
+    <script src="{% static 'js/dialog.js' %}?v=1.2"></script>
     <script src="{% static 'js/cloud.js' %}?v=2.1"></script>
     <script src="{% static 'js/data_sharing.js' %}?v=1.0"></script>
     <script src="{% static 'js/toast.js' %}?v=2.0"></script>
-    <script src="{% static 'js/update.js' %}?v=3.3"></script>
+    <script src="{% static 'js/update.js' %}?v=3.5"></script>
     <script src="{% static 'js/client_control.js' %}?v=1.1"></script>
-    <script src="{% static 'js/effects.js' %}?v=2.1"></script>
+    <script src="{% static 'js/effects.js' %}?v=2.2"></script>
     <script src="{% static 'js/desktop_bridge.js' %}?v=20260810"></script>
-    <script src="{% static 'js/main.js' %}?v=1.12"></script>
+    <script src="{% static 'js/main.js' %}?v=1.15"></script>
     <script src="{% static 'js/realtime.js' %}?v=1.1"></script>
 
     <div id="data-sharing-prompt-overlay" style="display:none">

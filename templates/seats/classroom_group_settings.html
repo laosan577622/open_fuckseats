@@ -2,18 +2,8 @@
 
 {% block title %}{{ classroom_group.name }} - 班级组设置{% endblock %}
 {% block body_class %}group-workspace-body group-settings-body{% endblock %}
-{% block global_back_button %}{% endblock %}
+{% block back_href %}{% url 'classroom_group_detail' classroom_group.pk %}{% endblock %}{% block back_label %}返回班级管理{% endblock %}
 
-{% block actions %}
-<div class="context-toolbar-panels">
-    <div class="context-toolbar-row context-toolbar-panel active" data-toolbar-panel="group-settings">
-        <div class="toolbar-group">
-            <a href="{% url 'classroom_group_detail' classroom_group.pk %}" class="btn btn-secondary">返回班级管理</a>
-            <span class="toolbar-group-label">导航</span>
-        </div>
-    </div>
-</div>
-{% endblock %}
 
 {% block content %}
 <section class="classroom-group-settings-page">

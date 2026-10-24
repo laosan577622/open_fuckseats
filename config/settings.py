@@ -17,8 +17,9 @@ from app_paths import database_path, plugin_directories
 from database_security import database_encryption_enabled
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+APP_SHELL = os.getenv('FUCKSEATS_APP_SHELL', 'browser').strip() or 'browser'
 SECRET_KEY = 'django-insecure-1bux7tnh9ubww-d(pohhj#nw=n5ndw-&8tvns(!yx-pb*sn3xz'
-DEBUG = True
+DEBUG = APP_SHELL != 'webview'
 
 ALLOWED_HOSTS = ['*']
 
@@ -33,10 +34,9 @@ INSTALLED_APPS = [
     'seats.apps.SeatsConfig',
 ]
 
-APP_SHELL = os.getenv('FUCKSEATS_APP_SHELL', 'browser').strip() or 'browser'
-
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'seats.desktop_auth.DesktopAuthMiddleware',
     'whitenoise.middleware.WhiteNoiseMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -111,6 +111,8 @@ STATIC_ROOT = BASE_DIR / 'staticfiles'
 STATICFILES_STORAGE = 'whitenoise.storage.CompressedManifestStaticFilesStorage'
 STATIC_URL = 'static/'
 STATICFILES_DIRS = [BASE_DIR / 'static']
+# Source and packaged desktop apps both ship static/ without requiring collectstatic.
+WHITENOISE_USE_FINDERS = True
 
 
 PLUGIN_DIRS = plugin_directories()

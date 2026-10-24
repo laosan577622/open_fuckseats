@@ -1,20 +1,7 @@
 /* 班级选择页：各平台共享内容布局，窗口控件继续使用平台样式。 */
 body.wendao-picker-body {
-    --header-base-height: 52px;
-    --header-height: 52px;
     padding-top: var(--header-height);
 }
-body.wendao-picker-body .app-header {
-    min-height: 52px;
-    background: rgba(255, 255, 255, .86);
-    box-shadow: 0 1px 0 rgba(20, 30, 50, .04);
-}
-body.wendao-picker-body .header-content { display: block; }
-body.wendao-picker-body .header-titlebar { min-height: 39px; justify-content: flex-start; }
-body.wendao-picker-body .context-toolbar-shell { display: none; }
-body.wendao-picker-body .cloud-header-area { margin-left: auto; }
-body.wendao-picker-body .desktop-window-controls,
-body.wendao-picker-body .browser-window-controls { margin-left: 12px; }
 body.wendao-picker-body main {
     width: 100%;
     max-width: none;
@@ -56,6 +43,5 @@ body.wendao-picker-body main {
     body.wendao-picker-body main { padding: 24px 16px; }
     .wendao-picker-heading { align-items: flex-start; flex-direction: column; gap: 16px; margin-bottom: 24px; }
     .wendao-classroom-grid { grid-template-columns: repeat(auto-fill, minmax(min(260px, 100%), 1fr)); }
-    body.wendao-picker-body .browser-window-controls { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .wendao-classroom-card { transition: none; } }

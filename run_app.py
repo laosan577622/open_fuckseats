@@ -14,6 +14,7 @@ from io import StringIO
 from runtime_bootstrap import ensure_runtime_dependencies
 from desktop_access import ReadAccessRequest, forward_read_access_request, read_access_broker
 from desktop_instance import DesktopInstanceGuard, ExistingInstanceError
+from desktop_security import desktop_session
 from startup_dialogs import StartupSplash, prompt_read_access, show_message
 
 HOST = '127.0.0.1'
@@ -228,6 +229,7 @@ def _build_macos_menu(window_ref, context='classroom'):
             menu_group('座位表', [
                 menu_action('导入座位表', '#btn-open-layout-import-modal'),
                 menu_action('BSCE 导入', '[data-bsce-import-trigger="1"]'),
+                menu_action('导入 SDES', '#btn-import-sdes'),
             ]),
             menu_group('其他表格', [menu_action('导入 Excel 成绩表', '#btn-import-students')]),
         ]),
@@ -321,7 +323,7 @@ def _start_desktop_window(url, on_ready=None):
         })
     window = webview.create_window(
         '不想排座位',
-        url,
+        desktop_session.window_url(url),
         js_api=bridge,
         **window_options,
     )
@@ -330,7 +332,7 @@ def _start_desktop_window(url, on_ready=None):
     if on_ready is not None:
         window.events.loaded += on_ready
 
-    start_kwargs = {'debug': False}
+    start_kwargs = {'debug': False, 'private_mode': True}
     if sys.platform.startswith('win'):
         start_kwargs['gui'] = 'edgechromium'
 
@@ -367,6 +369,10 @@ def _prepare_application(dev_mode):
     from database_security import prepare_desktop_database
 
     os.environ['FUCKSEATS_APP_SHELL'] = 'browser' if dev_mode else 'webview'
+    if dev_mode:
+        desktop_session.close()
+    else:
+        desktop_session.start(f'http://{HOST}:{PORT}')
     os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
     logging.getLogger('waitress').setLevel(logging.ERROR)
     prepare_desktop_database()
@@ -469,6 +475,7 @@ def main(argv=None):
     finally:
         splash.close()
         read_access_broker.close()
+        desktop_session.close()
         app_lock.release()
         guard.release()
 

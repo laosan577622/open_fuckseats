@@ -3,18 +3,12 @@
 
 {% block title %}{{ about.page_title }}{% endblock %}
 {% block body_class %}about-page-body{% endblock %}
-{% block global_back_button %}{% endblock %}
+{% block back_href %}{% url 'settings' %}{% endblock %}{% block back_label %}返回设置{% endblock %}
 
 {% block extra_head %}
-<link rel="stylesheet" href="{% static 'css/about.css' %}?v=1.0">
+<link rel="stylesheet" href="{% static 'css/about.css' %}?v=1.3">
 {% endblock %}
 
-{% block actions %}
-<a href="{% url 'settings' %}" class="btn btn-secondary about-toolbar-back">
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="m14 6-6 6 6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    返回设置
-</a>
-{% endblock %}
 
 {% block content %}
 <div class="about-page" data-about-layout-variant="{{ about_layout_variant }}" data-client-control-source="{{ client_control_source }}">
@@ -29,7 +23,7 @@
                     <path d="M19 7v4h-4M5 17v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                     <path d="M18.1 10A7 7 0 0 0 6.4 6.4L5 8m.9 6A7 7 0 0 0 17.6 17.6L19 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
                 </svg>
-                <span>{% if app_runtime.platform == 'macos' %}选择升级包{% else %}检查更新{% endif %}</span>
+                <span>检查更新</span>
             </button>
             <button type="button" class="about-action about-action-primary" data-external-url="{{ about.contact.feedback_url }}" data-client-feature="feedback" data-client-feature-mode="hide">
                 <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M5.5 5.5h13A2.5 2.5 0 0 1 21 8v8a2.5 2.5 0 0 1-2.5 2.5H10L5 21v-2.5A2.5 2.5 0 0 1 3 16V8a2.5 2.5 0 0 1 2.5-2.5Z" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>
@@ -123,7 +117,7 @@
             </dl>
             <button type="button" class="about-panel-button" id="about-panel-check-update" data-client-feature="check_update">
                 <svg viewBox="0 0 24 24" fill="none"><path d="M19 7v4h-4M5 17v-4h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M18.1 10A7 7 0 0 0 6.4 6.4L5 8m.9 6A7 7 0 0 0 17.6 17.6L19 16" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                {% if app_runtime.platform == 'macos' %}选择升级包{% else %}检查更新{% endif %}
+                检查更新
             </button>
         </article>
 
@@ -175,5 +169,5 @@
 {% endblock %}
 
 {% block extra_scripts %}
-<script src="{% static 'js/about.js' %}?v=1.0"></script>
+<script src="{% static 'js/about.js' %}?v=1.1"></script>
 {% endblock %}

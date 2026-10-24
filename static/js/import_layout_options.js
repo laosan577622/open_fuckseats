@@ -232,6 +232,14 @@ window.LayoutImportPage = (options = {}) => {
         });
     }
 
+    const fileInput = document.getElementById('layout-import-file');
+    const fileName = document.getElementById('layout-import-file-name');
+    if (fileInput && fileName) {
+        fileInput.addEventListener('change', () => {
+            fileName.textContent = fileInput.files?.[0]?.name || '未选择文件';
+        });
+    }
+
     if (uploadForm) {
         uploadForm.addEventListener('submit', async (event) => {
             event.preventDefault();

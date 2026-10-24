@@ -9,9 +9,16 @@
                 <div class="panel-card options-card">
                     <form id="seat-layout-upload-form" method="post" action="{% url 'import_layout_excel' classroom.pk %}" enctype="multipart/form-data">
                         {% csrf_token %}
-                        <div class="form-group">
-                            <label>座位表文件</label>
-                            <input type="file" name="layout_excel_file" accept=".xlsx,.xls,.xlsm" required>
+                        <div class="form-group student-import-file-group">
+                            <label for="layout-import-file">座位表文件</label>
+                            <div class="student-import-file-control">
+                                <input id="layout-import-file" type="file" name="layout_excel_file" accept=".xlsx,.xls,.xlsm" required>
+                                <label for="layout-import-file" class="student-import-file-button">
+                                    <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 13V3m0 0L6.5 6.5M10 3l3.5 3.5M4 12v3.5A1.5 1.5 0 0 0 5.5 17h9a1.5 1.5 0 0 0 1.5-1.5V12"/></svg>
+                                    选择文件
+                                </label>
+                                <span id="layout-import-file-name">未选择文件</span>
+                            </div>
                         </div>
                         <div class="options-actions">
                             <button type="button" class="btn btn-secondary" id="layout-import-cancel-btn">取消</button>

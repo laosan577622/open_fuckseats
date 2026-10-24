@@ -1,0 +1,7 @@
+.sdes-workspace [hidden] { display: none !important; }
+.sdes-workspace .options-shell { grid-template-rows: auto minmax(0, 1fr); }
+.sdes-workspace .options-preview-card { min-width: 0; }
+.sdes-workspace .table-container { overflow: auto; }
+.sdes-workspace .table-container:empty { display: none; }
+.sdes-warnings { padding-left: 20px; color: var(--text-secondary); font-size: 13px; }
+#sdes-guards { margin-bottom: 8px; }

@@ -30,12 +30,16 @@
         // 触屏设备没有 hover 光晕可谈，跳过全局 mousemove 监听。
         if (window.matchMedia && window.matchMedia('(hover: none)').matches) return;
         let pending = null;
-        document.addEventListener('mousemove', (e) => {
+        let latest = null;
+        document.addEventListener('mousemove', (event) => {
+            latest = event;
             if (pending) return;
-            // rAF 节流：每帧最多计算一次，避免高频 mousemove 引发强制布局。
+            // rAF 节流：每帧最多计算一次，避免高频 mousemove 引发强制布局；
+            // 计算时取本帧最后一次指针位置，光晕不会落后于鼠标。
             pending = window.requestAnimationFrame(() => {
                 pending = null;
-                const el = e.target.closest(target);
+                const e = latest;
+                const el = e.target instanceof Element ? e.target.closest(target) : null;
                 if (!el) return;
                 const rect = el.getBoundingClientRect();
                 const x = ((e.clientX - rect.left) / rect.width * 100).toFixed(1);

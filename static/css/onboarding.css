@@ -5,11 +5,7 @@
 }
 .welcome-body main { max-width: none; width: 100%; margin: 0; padding: 0; }
 .welcome-body [hidden] { display: none !important; }
-.welcome-body .app-header { background: rgba(255,255,255,.9); backdrop-filter: blur(18px); box-shadow: none; border-color: transparent; }
-.welcome-body .logo-meta small, .welcome-body .global-back-button, .welcome-body .cloud-header-area { display: none; }
-.welcome-body .logo { color: #1d1d1f; pointer-events: none; }
-.welcome-body:not(.welcome-has-toolbar) .native-menu-bar,
-.welcome-body:not(.welcome-has-toolbar) .context-toolbar-shell { display: none; }
+.welcome-body #welcome-layout-done:not([hidden]) { display: inline-flex; }
 .welcome-body .btn { border-radius: 999px; }
 .welcome-body .btn-primary { background: #0a59f7; color: #fff; }
 .welcome-body .btn-secondary { background: #f2f2f4; color: #1d1d1f; border-color: transparent; }
@@ -126,8 +122,6 @@
     .welcome-copy { text-align: center; max-width: none; }
     .welcome-copy .welcome-text { margin-left: auto; margin-right: auto; }
     .welcome-footer { padding: 12px 16px; }
-    .welcome-body .header-content { padding-left: 16px; padding-right: 16px; }
-    .welcome-body .context-toolbar-row { flex-wrap: wrap; }
 }
 @media (prefers-reduced-motion: reduce) {
     .welcome-enter, .welcome-success svg, .welcome-hint .seat:first-child, #welcome-confetti i { animation: none; }

@@ -1,0 +1,1338 @@
+/* Lucent 澄光 — component stylesheet. Loaded after tokens.css; every value is a token (var(--…)).
+   Alignment contract: every control height is a 4px multiple, single-line controls centre text with
+   flex + fixed height (never padding), borders and rims are drawn with box-shadow so they never shift
+   layout, nested radii are concentric (inner = outer − inset). */
+
+/* ===================================================================== */
+/* Base                                                                   */
+/* ===================================================================== */
+.lc-page {
+  --lc-aura-base: var(--bg);
+  background: var(--lc-aura, var(--bg));
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 14px; line-height: 20px;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+.lc-page--desktop { --lc-aura-base: var(--bg-desktop); }
+.lc-page *, .lc-page *::before, .lc-page *::after { box-sizing: border-box; }
+.lc-ico { display: block; flex: none; width: var(--icon-lg, 24px); height: var(--icon-lg, 24px); fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.lc-ico--sm { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; }
+.lc-ico--md { width: var(--icon-md, 20px); height: var(--icon-md, 20px); }
+.lc-ico--xl { width: var(--icon-xl, 32px); height: var(--icon-xl, 32px); stroke-width: 1.6; }
+.lc-muted { color: var(--ink-secondary); }
+
+/* Focus — keyboard, remote control and rotary crown share one ring. */
+.lc-focusable:focus-visible,
+.lc-btn:focus-visible, .lc-iconbtn:focus-visible, .lc-tab:focus-visible, .lc-tabs__tab:focus-visible,
+.lc-seg__item:focus-visible, .lc-side__item:focus-visible, .lc-rail__item:focus-visible,
+.lc-list__item:focus-visible, .lc-menu__item:focus-visible, .lc-card--action:focus-visible,
+.lc-field__input:focus-visible, .lc-search:focus-within,
+.lc-check input:focus-visible + .lc-check__box,
+.lc-radio input:focus-visible + .lc-radio__dot,
+.lc-switch input:focus-visible + .lc-switch__track,
+.lc-slider:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* ===================================================================== */
+/* Material — liquid glass                                                */
+/* ===================================================================== */
+.lc-glass {
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+  backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-glass);
+}
+.lc-glass--strong { background: var(--glass-fill-strong); }
+.lc-glass--float {
+  background: var(--glass-fill-float);
+  -webkit-backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-float);
+}
+@media (prefers-reduced-transparency: reduce) {
+  .lc-glass, .lc-glass--strong, .lc-glass--float, .lc-btn--glass, .lc-search--glass { background: var(--surface-raised); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* ===================================================================== */
+/* Button                                                                 */
+/* ===================================================================== */
+.lc-btn {
+  --lc-h: var(--control-md, 40px);
+  appearance: none; border: 0; margin: 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2, 8px);
+  height: var(--lc-h); min-width: 72px;
+  padding: 0 var(--space-5, 20px);
+  border-radius: var(--radius-full, 9999px);
+  font-family: var(--font-sans); font-size: 16px; line-height: 22px; font-weight: 500;
+  white-space: nowrap; text-decoration: none;
+  cursor: pointer;
+  background-color: var(--lc-ctl, var(--fill-control)); color: var(--ink);
+  transition: background-color var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), transform var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-btn .lc-ico { width: var(--icon-md, 20px); height: var(--icon-md, 20px); }
+.lc-btn:hover { background-image: linear-gradient(var(--fill-hover), var(--fill-hover)); }
+.lc-btn:active { background-image: linear-gradient(var(--fill-pressed), var(--fill-pressed)); transform: scale(.96); }
+.lc-btn--sm { --lc-h: var(--control-sm, 28px); min-width: 56px; padding: 0 var(--space-3, 12px); font-size: 14px; line-height: 20px; gap: var(--space-1, 4px); }
+.lc-btn--sm .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); }
+.lc-btn--lg { --lc-h: var(--control-lg, 48px); padding: 0 var(--space-6, 24px); }
+.lc-btn--pc { --lc-h: var(--control-pc, 32px); min-width: 64px; padding: 0 var(--space-4, 16px); font-size: 14px; line-height: 20px; font-weight: 500; }
+.lc-btn--pc:active { transform: none; }
+.lc-btn--xl { --lc-h: var(--control-xl, 64px); min-width: 160px; padding: 0 var(--space-8, 32px); font-size: 24px; line-height: 34px; }
+.lc-btn--block { display: flex; width: 100%; }
+
+.lc-btn--primary { background-color: var(--brand); color: var(--on-brand); }
+.lc-btn--primary:hover { background-image: none; background-color: var(--brand-hover); }
+.lc-btn--primary:active { background-image: none; background-color: var(--brand-pressed); }
+.lc-btn--secondary { background-color: var(--brand-tint); color: var(--brand-text); }
+.lc-btn--text { background-color: transparent; color: var(--brand-text); min-width: 0; padding: 0 var(--space-3, 12px); }
+.lc-btn--danger { background-color: var(--danger); color: var(--on-danger); }
+.lc-btn--danger-text { background-color: transparent; color: var(--danger); min-width: 0; padding: 0 var(--space-3, 12px); }
+.lc-btn--glass {
+  background-color: var(--glass-fill-strong); color: var(--ink);
+  -webkit-backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%));
+  backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-glass);
+}
+.lc-btn--glass-brand {
+  background-color: var(--glass-fill-brand); color: var(--on-brand);
+  -webkit-backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%));
+  backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-glass);
+}
+.lc-btn:disabled, .lc-btn[aria-disabled="true"] { opacity: var(--opacity-disabled, 0.4); cursor: not-allowed; transform: none; background-image: none; }
+
+/* Icon button — 24 icon centred in a 40 box (pc: 20 in 32). */
+.lc-iconbtn {
+  appearance: none; border: 0; margin: 0; padding: 0;
+  display: inline-flex; align-items: center; justify-content: center; flex: none;
+  width: var(--control-md, 40px); height: var(--control-md, 40px);
+  border-radius: var(--radius-full, 9999px);
+  background-color: var(--lc-ctl, var(--fill-control)); color: var(--ink);
+  cursor: pointer;
+  transition: background-color var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-iconbtn:hover { background-image: linear-gradient(var(--fill-hover), var(--fill-hover)); }
+.lc-iconbtn:active { background-image: linear-gradient(var(--fill-pressed), var(--fill-pressed)); }
+.lc-iconbtn--ghost { background-color: transparent; }
+.lc-iconbtn--primary { background-color: var(--brand); color: var(--on-brand); }
+.lc-iconbtn--glass { background-color: var(--glass-fill-strong); -webkit-backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-glass); }
+.lc-iconbtn--pc { width: var(--control-pc, 32px); height: var(--control-pc, 32px); border-radius: var(--radius-sm, 8px); }
+.lc-iconbtn--pc .lc-ico { width: var(--icon-md, 20px); height: var(--icon-md, 20px); }
+.lc-iconbtn--lg { width: var(--control-lg, 48px); height: var(--control-lg, 48px); }
+.lc-iconbtn:disabled { opacity: var(--opacity-disabled, 0.4); cursor: not-allowed; }
+
+/* ===================================================================== */
+/* Text field                                                             */
+/* ===================================================================== */
+.lc-field { display: flex; flex-direction: column; gap: var(--space-2, 8px); font-family: var(--font-sans); min-width: 0; }
+.lc-field__label { padding: 0 var(--space-4, 16px); font-size: 14px; line-height: 20px; font-weight: 500; color: var(--ink); }
+.lc-field__input {
+  appearance: none; border: 0; margin: 0; width: 100%;
+  height: var(--control-md, 40px);
+  padding: 0 var(--space-4, 16px);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--lc-ctl, var(--fill-control));
+  -webkit-backdrop-filter: var(--lc-ctl-blur, none); backdrop-filter: var(--lc-ctl-blur, none);
+  box-shadow: inset 0 0 0 1px transparent;
+  font: inherit; font-size: 16px; line-height: 22px; color: var(--ink);
+  transition: box-shadow var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+textarea.lc-field__input { height: auto; min-height: 96px; padding: var(--space-3, 12px) var(--space-4, 16px); border-radius: var(--radius-md, 12px); resize: vertical; line-height: 24px; }
+.lc-field__input::placeholder { color: var(--ink-secondary); }
+.lc-field__input:hover { box-shadow: inset 0 0 0 1px var(--divider); }
+.lc-field__help { padding: 0 var(--space-4, 16px); font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+.lc-field--outlined .lc-field__input { background: transparent; box-shadow: inset 0 0 0 1px var(--stroke-control); }
+.lc-field--error .lc-field__input { box-shadow: inset 0 0 0 1px var(--danger); }
+.lc-field--error .lc-field__help { color: var(--danger); display: flex; align-items: center; gap: var(--space-1, 4px); }
+.lc-field--pc .lc-field__input { height: var(--control-pc, 32px); border-radius: var(--radius-sm, 8px); padding: 0 var(--space-3, 12px); font-size: 14px; line-height: 20px; }
+.lc-field--pc .lc-field__label, .lc-field--pc .lc-field__help { padding: 0 var(--space-3, 12px); }
+.lc-field__input:disabled { opacity: var(--opacity-disabled, 0.4); }
+
+/* Search field */
+.lc-search {
+  display: flex; align-items: center; gap: var(--space-2, 8px);
+  height: var(--control-md, 40px);
+  padding: 0 var(--space-4, 16px) 0 var(--space-3, 12px);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--lc-ctl, var(--fill-control));
+  -webkit-backdrop-filter: var(--lc-ctl-blur, none); backdrop-filter: var(--lc-ctl-blur, none);
+  box-shadow: var(--lc-ctl-shadow, none);
+  color: var(--ink-secondary);
+  font-family: var(--font-sans);
+}
+.lc-search .lc-ico { width: var(--icon-md, 20px); height: var(--icon-md, 20px); stroke-width: 2; }
+.lc-search input { flex: 1; min-width: 0; height: 100%; border: 0; outline: 0; background: transparent; padding: 0; font: inherit; font-size: 16px; line-height: 22px; color: var(--ink); }
+.lc-search input::placeholder { color: var(--ink-secondary); }
+.lc-search input::-webkit-search-cancel-button { display: none; }
+.lc-search--glass { background: var(--glass-fill-strong); -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-glass); }
+.lc-search--pc { height: var(--control-pc, 32px); border-radius: var(--radius-sm, 8px); padding: 0 var(--space-3, 12px) 0 var(--space-2, 8px); }
+.lc-search--pc .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); }
+.lc-search--pc input { font-size: 14px; line-height: 20px; }
+
+/* ===================================================================== */
+/* Selection controls — checkbox, radio, switch, slider, segmented       */
+/* ===================================================================== */
+.lc-check, .lc-radio, .lc-switch {
+  position: relative;
+  display: inline-flex; align-items: center; gap: var(--space-3, 12px);
+  min-height: var(--control-md, 40px);
+  font-family: var(--font-sans); font-size: 16px; line-height: 22px; color: var(--ink);
+  cursor: pointer;
+}
+.lc-check input, .lc-radio input, .lc-switch input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; }
+
+.lc-check__box {
+  flex: none; position: relative;
+  width: 20px; height: 20px;
+  border-radius: 6px;
+  box-shadow: inset 0 0 0 2px var(--stroke-control);
+  transition: background-color var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-check__box::after {
+  content: ""; position: absolute; left: 7px; top: 3px;
+  width: 6px; height: 11px;
+  border: solid var(--on-brand); border-width: 0 2px 2px 0;
+  transform: rotate(45deg) scale(0); transition: transform var(--duration-base, 250ms) var(--ease-spring, cubic-bezier(0.3, 1.4, 0.5, 1));
+}
+.lc-check input:checked + .lc-check__box { background: var(--brand); box-shadow: none; }
+.lc-check input:checked + .lc-check__box::after { transform: rotate(45deg) scale(1); }
+.lc-check input:disabled + .lc-check__box, .lc-radio input:disabled + .lc-radio__dot { opacity: var(--opacity-disabled, 0.4); }
+
+.lc-radio__dot {
+  flex: none; position: relative;
+  width: 20px; height: 20px; border-radius: var(--radius-full, 9999px);
+  box-shadow: inset 0 0 0 2px var(--stroke-control);
+}
+.lc-radio__dot::after {
+  content: ""; position: absolute; inset: 6px; border-radius: var(--radius-full, 9999px);
+  background: var(--on-brand); transform: scale(0); transition: transform var(--duration-base, 250ms) var(--ease-spring, cubic-bezier(0.3, 1.4, 0.5, 1));
+}
+.lc-radio input:checked + .lc-radio__dot { background: var(--brand); box-shadow: none; }
+.lc-radio input:checked + .lc-radio__dot::after { transform: scale(1); }
+
+.lc-switch__track {
+  flex: none; position: relative;
+  width: 44px; height: 24px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--surface-sunken);
+  box-shadow: inset 0 0 0 1px var(--stroke-control);
+  transition: background-color var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-switch__track::after {
+  content: ""; position: absolute; top: 2px; left: 2px;
+  width: 20px; height: 20px; border-radius: var(--radius-full, 9999px);
+  background: #ffffff;
+  box-shadow: var(--shadow-2);
+  transition: transform var(--duration-base, 250ms) var(--ease-spring, cubic-bezier(0.3, 1.4, 0.5, 1)), width var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-switch:active .lc-switch__track::after { width: 26px; }
+.lc-switch input:checked + .lc-switch__track { background: var(--brand); box-shadow: none; }
+.lc-switch input:checked + .lc-switch__track::after { transform: translateX(20px); }
+.lc-switch:active input:checked + .lc-switch__track::after { transform: translateX(14px); }
+.lc-switch input:disabled + .lc-switch__track { opacity: var(--opacity-disabled, 0.4); }
+
+/* Slider — set --lc-value (0–100%) inline. */
+.lc-slider {
+  --lc-value: 50%;
+  appearance: none; -webkit-appearance: none;
+  width: 100%; height: 24px; margin: 0; background: transparent; cursor: pointer;
+}
+.lc-slider::-webkit-slider-runnable-track { height: 4px; border-radius: var(--radius-full, 9999px); background: linear-gradient(to right, var(--brand) var(--lc-value), var(--surface-sunken) var(--lc-value)); }
+.lc-slider::-moz-range-track { height: 4px; border-radius: var(--radius-full, 9999px); background: linear-gradient(to right, var(--brand) var(--lc-value), var(--surface-sunken) var(--lc-value)); }
+.lc-slider::-webkit-slider-thumb { -webkit-appearance: none; width: 20px; height: 20px; margin-top: -8px; border-radius: var(--radius-full, 9999px); background: #ffffff; box-shadow: var(--shadow-2); transition: transform var(--duration-fast, 150ms) var(--ease-spring, cubic-bezier(0.3, 1.4, 0.5, 1)); }
+.lc-slider::-moz-range-thumb { width: 20px; height: 20px; border: 0; border-radius: var(--radius-full, 9999px); background: #ffffff; box-shadow: var(--shadow-2); }
+.lc-slider:active::-webkit-slider-thumb { transform: scale(1.2); }
+.lc-slider--thick::-webkit-slider-runnable-track { height: 40px; border-radius: var(--radius-lg, 20px); }
+.lc-slider--thick { height: 40px; }
+.lc-slider--thick::-webkit-slider-thumb { width: 0; height: 40px; margin-top: 0; box-shadow: none; }
+
+/* Segmented control — track 40, item 36, inset 2: concentric capsules. */
+.lc-seg {
+  display: inline-flex; padding: 2px; gap: 2px;
+  height: var(--control-md, 40px);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--lc-ctl, var(--surface-sunken));
+  -webkit-backdrop-filter: var(--lc-ctl-blur, none); backdrop-filter: var(--lc-ctl-blur, none);
+  box-shadow: var(--lc-ctl-shadow, none);
+  font-family: var(--font-sans);
+}
+.lc-seg__item {
+  appearance: none; border: 0; margin: 0;
+  flex: 1 1 0; min-width: 64px; height: 36px; padding: 0 var(--space-4, 16px);
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: var(--radius-full, 9999px);
+  background: transparent; color: var(--ink-secondary);
+  font: inherit; font-size: 14px; line-height: 20px; font-weight: 500;
+  cursor: pointer;
+  transition: background-color var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), color var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-seg__item[aria-selected="true"], .lc-seg__item[aria-checked="true"] { background: var(--surface-raised); color: var(--ink); box-shadow: var(--shadow-2); }
+.lc-seg--pc { height: var(--control-pc, 32px); border-radius: var(--radius-sm, 8px); }
+.lc-seg--pc .lc-seg__item { height: 28px; border-radius: 6px; font-size: 14px; }
+
+/* ===================================================================== */
+/* Navigation                                                             */
+/* ===================================================================== */
+/* Title bar — side inset 8 so a 24 icon in a 40 button lands on the 16 keyline. */
+.lc-titlebar {
+  position: relative;
+  display: flex; align-items: center; gap: var(--space-2, 8px);
+  height: var(--titlebar, 56px);
+  padding: 0 var(--space-2, 8px);
+  font-family: var(--font-sans); color: var(--ink);
+}
+.lc-titlebar__title { flex: 1; min-width: 0; margin: 0; padding-left: var(--space-2, 8px); font-size: 20px; line-height: 28px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-titlebar__iconbtn + .lc-titlebar__title, .lc-iconbtn + .lc-titlebar__title { padding-left: 0; }
+.lc-titlebar__actions { display: flex; gap: var(--space-2, 8px); }
+.lc-titlebar--glass { /* alias kept for compatibility: every title bar is the liquid (progressive) bar */ }
+.lc-largetitle { margin: 0; height: 56px; display: flex; align-items: center; padding: 0 var(--space-4, 16px); font-family: var(--font-sans); font-size: 30px; line-height: 40px; font-weight: 700; color: var(--ink); }
+.lc-titlebar--pc { height: var(--titlebar-pc, 40px); padding: 0 var(--space-2, 8px) 0 var(--space-4, 16px); }
+.lc-titlebar--pc .lc-titlebar__title { padding-left: 0; font-size: 14px; line-height: 20px; font-weight: 500; }
+
+/* Tab bar — floating glass capsule (inset 4, tab 48). */
+.lc-tabbar {
+  display: inline-flex; gap: 0;
+  padding: var(--space-1, 4px);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+  backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-glass);
+}
+.lc-tab {
+  appearance: none; border: 0; margin: 0; background: transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  width: 72px; height: 48px; padding: 0;
+  border-radius: var(--radius-full, 9999px);
+  font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 400;
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: background-color var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), color var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-tab .lc-ico { width: var(--icon-lg, 24px); height: var(--icon-lg, 24px); }
+.lc-tab[aria-selected="true"] { background: var(--surface); color: var(--brand-text); font-weight: 500; box-shadow: var(--shadow-2); }
+.lc-tabbar--docked { display: flex; justify-content: space-around; width: 100%; height: var(--tabbar, 56px); padding: var(--space-1, 4px) var(--space-2, 8px); border-radius: 0; box-shadow: 0 -8px 24px rgba(0, 0, 0, .04); }
+.lc-tabbar--docked .lc-tab[aria-selected="true"] { background: transparent; }
+
+/* Tabs — top text tabs with a 24×3 indicator centred under the label. */
+.lc-tabs { display: flex; gap: var(--space-6, 24px); height: var(--control-lg, 48px); padding: 0 var(--space-4, 16px); align-items: stretch; font-family: var(--font-sans); }
+.lc-tabs__tab {
+  appearance: none; border: 0; margin: 0; padding: 0; background: transparent;
+  position: relative; display: flex; align-items: center;
+  font: inherit; font-size: 16px; line-height: 22px; font-weight: 500; color: var(--ink-secondary);
+  cursor: pointer;
+}
+.lc-tabs__tab[aria-selected="true"] { color: var(--ink); font-weight: 700; }
+.lc-tabs__tab[aria-selected="true"]::after { content: ""; position: absolute; left: 50%; bottom: 6px; width: 24px; height: 3px; margin-left: -12px; border-radius: var(--radius-full, 9999px); background: var(--brand); }
+
+/* Side bar — panel radius 20, inset 8, item radius 12 (concentric). */
+.lc-side {
+  display: flex; flex-direction: column; gap: 2px;
+  width: var(--sidebar, 240px);
+  padding: var(--space-2, 8px);
+  border-radius: var(--radius-lg, 20px);
+  font-family: var(--font-sans);
+}
+.lc-side--glass { background: var(--glass-fill-strong); -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-glass); }
+.lc-side__heading { height: 32px; display: flex; align-items: flex-end; padding: 0 var(--space-3, 12px) var(--space-1, 4px); font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+.lc-side__item {
+  appearance: none; border: 0; margin: 0; background: transparent; text-align: left; text-decoration: none;
+  display: flex; align-items: center; gap: var(--space-3, 12px);
+  height: var(--control-md, 40px); padding: 0 var(--space-3, 12px);
+  border-radius: var(--radius-md, 12px);
+  font: inherit; font-size: 14px; line-height: 20px; color: var(--ink);
+  cursor: pointer;
+}
+.lc-side__item .lc-ico { width: var(--icon-md, 20px); height: var(--icon-md, 20px); color: var(--ink-secondary); }
+.lc-side__item:hover { background: var(--fill-hover); }
+.lc-side__item:active { background: var(--fill-pressed); }
+.lc-side__item[aria-current="page"] { background: var(--brand-tint); color: var(--brand-text); font-weight: 500; }
+.lc-side__item[aria-current="page"] .lc-ico { color: var(--brand-text); }
+.lc-side__count { margin-left: auto; font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+
+/* Navigation rail — 80 wide, 56×32 indicator behind the icon. */
+.lc-rail { display: flex; flex-direction: column; align-items: center; gap: var(--space-3, 12px); width: var(--nav-rail, 80px); padding: var(--space-3, 12px) 0; font-family: var(--font-sans); }
+.lc-rail__item {
+  appearance: none; border: 0; margin: 0; padding: 0; background: transparent;
+  display: flex; flex-direction: column; align-items: center; gap: var(--space-1, 4px);
+  width: 64px; font: inherit; font-size: 12px; line-height: 16px; color: var(--ink-secondary); text-decoration: none; cursor: pointer;
+}
+.lc-rail__pill { display: flex; align-items: center; justify-content: center; width: 56px; height: 32px; border-radius: var(--radius-full, 9999px); transition: background-color var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lc-rail__item[aria-current="page"] { color: var(--brand-text); font-weight: 500; }
+.lc-rail__item[aria-current="page"] .lc-rail__pill { background: var(--brand-tint); }
+
+/* ===================================================================== */
+/* Containers — list, card                                               */
+/* ===================================================================== */
+/* List group — radius 20, inset 4, row radius 16; content keyline 16, text keyline 56 with a 24 icon. */
+.lc-list { margin: 0; padding: var(--space-1, 4px); list-style: none; border-radius: var(--radius-lg, 20px); background: var(--lc-sf, var(--surface)); -webkit-backdrop-filter: var(--lc-sf-blur, none); backdrop-filter: var(--lc-sf-blur, none); box-shadow: var(--lc-sf-shadow, var(--shadow-1)); font-family: var(--font-sans); }
+.lc-list__item {
+  --lc-keyline: var(--space-3, 12px);
+  position: relative;
+  display: flex; align-items: center; gap: var(--space-4, 16px);
+  min-height: var(--row-1, 48px); padding: 0 var(--space-3, 12px);
+  border-radius: 16px;
+  color: var(--ink); text-decoration: none;
+}
+.lc-list__item--icon { --lc-keyline: 52px; }
+.lc-list__item--avatar { --lc-keyline: 68px; min-height: var(--row-2, 64px); }
+.lc-list__item--two { min-height: var(--row-2, 64px); }
+a.lc-list__item, button.lc-list__item, label.lc-list__item { cursor: pointer; }
+a.lc-list__item:hover, button.lc-list__item:hover, label.lc-list__item:hover { background: var(--fill-hover); }
+a.lc-list__item:active, button.lc-list__item:active, label.lc-list__item:active { background: var(--fill-pressed); }
+button.lc-list__item { appearance: none; border: 0; margin: 0; width: 100%; background: transparent; font: inherit; text-align: left; }
+.lc-list__item + .lc-list__item::before { content: ""; position: absolute; top: 0; left: var(--lc-keyline); right: var(--space-3, 12px); height: 1px; background: var(--divider); }
+.lc-list__lead { flex: none; display: flex; align-items: center; justify-content: center; width: var(--icon-lg, 24px); height: var(--icon-lg, 24px); color: var(--ink); }
+.lc-list__lead--tile { width: 24px; height: 24px; border-radius: 7px; color: var(--on-brand); background: var(--brand); }
+.lc-list__lead--tile .lc-ico { width: 16px; height: 16px; stroke-width: 2; }
+.lc-list__avatar { flex: none; width: 40px; height: 40px; border-radius: var(--radius-full, 9999px); background: var(--surface-sunken); display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 22px; font-weight: 500; color: var(--ink-secondary); }
+.lc-list__text { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; padding: var(--space-3, 12px) 0; }
+.lc-list__title { font-size: 16px; line-height: 22px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-list__sub { margin-top: 2px; font-size: 14px; line-height: 20px; color: var(--ink-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-list__trail { flex: none; display: flex; align-items: center; gap: var(--space-1, 4px); font-size: 14px; line-height: 20px; color: var(--ink-secondary); }
+.lc-list__trail .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; }
+.lc-list__trail .lc-switch, .lc-list__trail .lc-check, .lc-list__trail .lc-radio { min-height: 0; }
+.lc-list-heading { margin: 0; padding: var(--space-6, 24px) var(--space-4, 16px) var(--space-2, 8px); font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 500; color: var(--ink-secondary); }
+.lc-list--pc { padding: var(--space-1, 4px); border-radius: var(--radius-md, 12px); }
+.lc-list--pc .lc-list__item { min-height: var(--row-pc, 36px); border-radius: var(--radius-sm, 8px); padding: 0 var(--space-3, 12px); gap: var(--space-3, 12px); }
+.lc-list--pc .lc-list__title { font-size: 14px; line-height: 20px; font-weight: 400; }
+.lc-list--pc .lc-list__text { padding: var(--space-2, 8px) 0; }
+.lc-list--pc .lc-list__lead { width: var(--icon-md, 20px); height: var(--icon-md, 20px); }
+.lc-list--pc .lc-list__item--icon { --lc-keyline: 44px; }
+
+/* Card — radius 20, padding 16; footer pinned with margin-top:auto so siblings in a grid align. */
+.lc-card {
+  display: flex; flex-direction: column;
+  padding: var(--space-4, 16px);
+  border-radius: var(--radius-lg, 20px);
+  background: var(--lc-sf, var(--surface));
+  -webkit-backdrop-filter: var(--lc-sf-blur, none); backdrop-filter: var(--lc-sf-blur, none);
+  box-shadow: var(--lc-sf-shadow, var(--shadow-1));
+  font-family: var(--font-sans); color: var(--ink);
+  min-width: 0;
+}
+.lc-card--glass { background: var(--glass-fill-strong); -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-glass); }
+.lc-card--action { cursor: pointer; transition: transform var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), box-shadow var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lc-card--action:hover { box-shadow: var(--shadow-2); }
+.lc-card--action:active { transform: scale(.98); }
+.lc-card__head { display: flex; align-items: center; gap: var(--space-2, 8px); min-height: 24px; }
+.lc-card__eyebrow { display: flex; align-items: center; gap: var(--space-1, 4px); font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+.lc-card__eyebrow .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; }
+.lc-card__head > :last-child:not(:first-child) { margin-left: auto; }
+.lc-card__title { margin: var(--space-2, 8px) 0 0; font-size: 18px; line-height: 24px; font-weight: 500; color: var(--ink); }
+.lc-card__value { margin: var(--space-2, 8px) 0 0; font-size: 30px; line-height: 40px; font-weight: 700; color: var(--ink); }
+.lc-card__value small { margin-left: var(--space-1, 4px); font-size: 14px; line-height: 20px; font-weight: 400; color: var(--ink-secondary); }
+.lc-card__body { margin: var(--space-1, 4px) 0 0; font-size: 14px; line-height: 20px; color: var(--ink-secondary); }
+.lc-card__foot { margin-top: auto; padding-top: var(--space-4, 16px); display: flex; align-items: center; gap: var(--space-2, 8px); }
+.lc-card__media { margin: calc(var(--space-4, 16px) * -1) calc(var(--space-4, 16px) * -1) var(--space-4, 16px); aspect-ratio: 16 / 9; border-radius: var(--radius-lg, 20px) var(--radius-lg, 20px) 0 0; background: var(--surface-sunken); }
+
+/* ===================================================================== */
+/* Display — tag, badge, progress                                         */
+/* ===================================================================== */
+.lc-tag {
+  display: inline-flex; align-items: center; gap: var(--space-1, 4px);
+  height: 24px; padding: 0 var(--space-2, 8px);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--fill-control); color: var(--ink-secondary);
+  font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 500;
+  white-space: nowrap;
+}
+.lc-tag .lc-ico { width: 12px; height: 12px; stroke-width: 2.4; }
+.lc-tag--brand { background: var(--brand-tint); color: var(--brand-text); }
+.lc-tag--success { background: var(--success-tint); color: var(--success); }
+.lc-tag--warning { background: var(--warning-tint); color: var(--warning); }
+.lc-tag--danger { background: var(--danger-tint); color: var(--danger); }
+
+.lc-badge {
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 16px; height: 16px; padding: 0 4px;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--danger); color: var(--on-danger);
+  font-family: var(--font-sans); font-size: 10px; line-height: 16px; font-weight: 500;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+.lc-badge--dot { min-width: 8px; width: 8px; height: 8px; padding: 0; }
+.lc-badge-anchor { position: relative; display: inline-flex; }
+.lc-badge-anchor > .lc-badge { position: absolute; top: 0; right: 0; transform: translate(35%, -35%); }
+.lc-badge-anchor > .lc-badge--dot { transform: translate(25%, -25%); }
+
+.lc-progress { position: relative; height: 4px; border-radius: var(--radius-full, 9999px); background: var(--surface-sunken); overflow: hidden; }
+.lc-progress > i { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--brand); }
+.lc-progress--thick { height: 8px; }
+.lc-ring { --lc-value: 60; --lc-size: 48px; position: relative; width: var(--lc-size); height: var(--lc-size); flex: none; }
+.lc-ring svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+.lc-ring circle { fill: none; stroke-width: 4; stroke-linecap: round; }
+.lc-ring .lc-ring__track { stroke: var(--surface-sunken); }
+.lc-ring .lc-ring__bar { stroke: var(--brand); stroke-dasharray: 100 100; stroke-dashoffset: calc(100 - var(--lc-value)); }
+.lc-ring__label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-family: var(--font-sans); font-size: 12px; line-height: 16px; font-weight: 500; color: var(--ink); }
+
+/* ===================================================================== */
+/* Overlays — dialog, sheet, menu, toast                                  */
+/* ===================================================================== */
+.lc-scrim { position: absolute; inset: 0; background: var(--scrim); }
+.lc-dialog {
+  width: 100%; max-width: 400px;
+  padding: var(--space-6, 24px) var(--space-6, 24px) var(--space-4, 16px);
+  border-radius: var(--radius-xl, 28px);
+  background: var(--glass-fill-float);
+  -webkit-backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-float);
+  font-family: var(--font-sans); color: var(--ink);
+}
+.lc-dialog__title { margin: 0; font-size: 20px; line-height: 28px; font-weight: 700; }
+.lc-dialog__body { margin: var(--space-2, 8px) 0 0; font-size: 14px; line-height: 20px; color: var(--ink-secondary); }
+.lc-dialog__actions { display: flex; gap: var(--space-2, 8px); margin-top: var(--space-6, 24px); }
+.lc-dialog__actions > .lc-btn { flex: 1 1 0; }
+
+.lc-sheet {
+  position: relative;
+  padding: var(--space-6, 24px) var(--space-4, 16px) var(--space-4, 16px);
+  border-radius: var(--radius-xl, 28px) var(--radius-xl, 28px) 0 0;
+  background: var(--glass-fill-float);
+  -webkit-backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-float);
+  font-family: var(--font-sans); color: var(--ink);
+}
+.lc-sheet::before { content: ""; position: absolute; top: var(--space-2, 8px); left: 50%; width: 32px; height: 4px; margin-left: -16px; border-radius: var(--radius-full, 9999px); background: var(--ink-tertiary); }
+.lc-sheet__title { margin: 0 0 var(--space-4, 16px); padding: 0 var(--space-2, 8px); font-size: 20px; line-height: 28px; font-weight: 700; }
+
+/* Menu — radius 12, inset 4, item radius 8 (concentric). */
+.lc-menu {
+  display: flex; flex-direction: column; gap: 0;
+  min-width: 200px; padding: var(--space-1, 4px);
+  border-radius: var(--radius-md, 12px);
+  background: var(--glass-fill-float);
+  -webkit-backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-float);
+  font-family: var(--font-sans);
+}
+.lc-menu__item {
+  appearance: none; border: 0; margin: 0; background: transparent; text-align: left;
+  display: flex; align-items: center; gap: var(--space-3, 12px);
+  height: var(--row-pc, 36px); padding: 0 var(--space-3, 12px);
+  border-radius: var(--radius-sm, 8px);
+  font: inherit; font-size: 14px; line-height: 20px; color: var(--ink);
+  cursor: pointer;
+}
+.lc-menu__item .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; color: var(--ink-secondary); }
+.lc-menu__item:hover { background: var(--fill-hover); }
+.lc-menu__item:active { background: var(--fill-pressed); }
+.lc-menu__item--danger, .lc-menu__item--danger .lc-ico { color: var(--danger); }
+.lc-menu__key { margin-left: auto; font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+.lc-menu__sep { height: 1px; margin: var(--space-1, 4px) var(--space-3, 12px); background: var(--divider); }
+
+.lc-toast {
+  display: inline-flex; align-items: center; gap: var(--space-2, 8px);
+  height: var(--control-md, 40px); padding: 0 var(--space-5, 20px) 0 var(--space-4, 16px);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--glass-fill-float); color: var(--ink);
+  -webkit-backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-float);
+  font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 500;
+}
+.lc-toast .lc-ico { width: var(--icon-md, 20px); height: var(--icon-md, 20px); }
+
+/* ===================================================================== */
+/* Large-screen focus — smart screen & car (remote, rotary, D-pad)       */
+/* ===================================================================== */
+.lc-tvfocus { transition: transform var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), box-shadow var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lc-tvfocus:focus-visible, .lc-tvfocus.is-focused { transform: scale(1.06); box-shadow: var(--shadow-focus-tv), 0 0 0 3px var(--focus-ring); outline: none; }
+
+/* ===================================================================== */
+/* Grid — 4 / 8 / 12 columns with margin + gutter per breakpoint         */
+/* ===================================================================== */
+.lc-grid { display: grid; grid-template-columns: repeat(var(--columns-sm, 4), minmax(0, 1fr)); column-gap: var(--gutter-sm, 12px); row-gap: var(--gutter-sm, 12px); padding: 0 var(--margin-sm, 16px); }
+@media (min-width: 600px) { .lc-grid { grid-template-columns: repeat(var(--columns-md, 8), minmax(0, 1fr)); column-gap: var(--gutter-md, 16px); row-gap: var(--gutter-md, 16px); padding: 0 var(--margin-md, 24px); } }
+@media (min-width: 840px) { .lc-grid { grid-template-columns: repeat(var(--columns-lg, 12), minmax(0, 1fr)); column-gap: var(--gutter-lg, 24px); row-gap: var(--gutter-lg, 24px); padding: 0 var(--margin-lg, 32px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-btn, .lc-iconbtn, .lc-tab, .lc-seg__item, .lc-switch__track, .lc-switch__track::after, .lc-check__box::after, .lc-radio__dot::after, .lc-card--action, .lc-tvfocus { transition: none; }
+  .lc-btn:active, .lc-card--action:active { transform: none; }
+  .lc-switch:active .lc-switch__track::after { width: 20px; }
+}
+
+/* ===================================================================== */
+/* v3 additions                                                           */
+/* ===================================================================== */
+
+/* FAB — 56 circle, extended capsule; sits 16 above the tab bar. */
+.lc-fab {
+  appearance: none; border: 0; margin: 0;
+  display: inline-flex; align-items: center; justify-content: center; gap: var(--space-2, 8px);
+  width: 56px; height: 56px; padding: 0;
+  border-radius: var(--radius-full, 9999px);
+  background: var(--brand); color: var(--on-brand);
+  box-shadow: var(--shadow-2);
+  font-family: var(--font-sans); font-size: 16px; line-height: 22px; font-weight: 500;
+  cursor: pointer;
+  transition: transform var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), background-color var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-fab:hover { background: var(--brand-hover); }
+.lc-fab:active { background: var(--brand-pressed); transform: scale(.94); }
+.lc-fab--extended { width: auto; padding: 0 var(--space-6, 24px) 0 var(--space-5, 20px); }
+.lc-fab--sm { width: var(--control-md, 40px); height: var(--control-md, 40px); }
+.lc-fab--glass { background: var(--glass-fill-strong); color: var(--brand-text); -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-glass); }
+.lc-fab--glass:hover, .lc-fab--glass:active { background: var(--glass-fill-strong); }
+.lc-fab:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* Chip — 32 capsule, selectable / removable. */
+.lc-chips { display: flex; gap: var(--space-2, 8px); flex-wrap: wrap; }
+.lc-chips--scroll { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.lc-chip {
+  appearance: none; border: 0; margin: 0;
+  display: inline-flex; align-items: center; gap: var(--space-1, 4px); flex: none;
+  height: 32px; padding: 0 var(--space-3, 12px);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--lc-ctl, var(--fill-control)); color: var(--ink);
+  -webkit-backdrop-filter: var(--lc-ctl-blur, none); backdrop-filter: var(--lc-ctl-blur, none);
+  font-family: var(--font-sans); font-size: 14px; line-height: 20px; font-weight: 400;
+  white-space: nowrap; cursor: pointer;
+  transition: background-color var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), color var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-chip .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; }
+.lc-chip:hover { background-image: linear-gradient(var(--fill-hover), var(--fill-hover)); }
+.lc-chip[aria-pressed="true"], .lc-chip[aria-selected="true"] { background: var(--brand-tint); color: var(--brand-text); font-weight: 500; }
+.lc-chip--removable { padding-right: var(--space-1, 4px); }
+.lc-chip__remove { display: inline-flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--radius-full, 9999px); color: var(--ink-secondary); }
+.lc-chip__remove:hover { background: var(--fill-hover); }
+.lc-chip:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* Select — field-shaped trigger + menu with a check on the chosen item. */
+.lc-select {
+  appearance: none; border: 0; margin: 0; width: 100%;
+  display: flex; align-items: center; gap: var(--space-2, 8px);
+  height: var(--control-md, 40px); padding: 0 var(--space-3, 12px) 0 var(--space-4, 16px);
+  border-radius: var(--radius-full, 9999px);
+  background: var(--lc-ctl, var(--fill-control)); color: var(--ink);
+  -webkit-backdrop-filter: var(--lc-ctl-blur, none); backdrop-filter: var(--lc-ctl-blur, none);
+  box-shadow: var(--lc-ctl-shadow, none);
+  font-family: var(--font-sans); font-size: 16px; line-height: 22px; text-align: left;
+  cursor: pointer;
+}
+.lc-select__value { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-select__value:empty::before { content: attr(data-placeholder); color: var(--ink-secondary); }
+.lc-select .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; color: var(--ink-secondary); transition: transform var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lc-select[aria-expanded="true"] .lc-ico { transform: rotate(180deg); }
+.lc-select:hover { box-shadow: inset 0 0 0 1px var(--divider); }
+.lc-select:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.lc-select--pc { height: var(--control-pc, 32px); padding: 0 var(--space-2, 8px) 0 var(--space-3, 12px); border-radius: var(--radius-sm, 8px); font-size: 14px; line-height: 20px; }
+.lc-menu__item[aria-selected="true"] { color: var(--brand-text); font-weight: 500; }
+.lc-menu__check { margin-left: auto; color: var(--brand-text); }
+.lc-menu__check .lc-ico { color: var(--brand-text); }
+
+/* Counter (number stepper) — 40 capsule track, 40 ghost buttons. */
+.lc-counter { display: inline-flex; align-items: center; height: var(--control-md, 40px); border-radius: var(--radius-full, 9999px); background: var(--lc-ctl, var(--fill-control)); -webkit-backdrop-filter: var(--lc-ctl-blur, none); backdrop-filter: var(--lc-ctl-blur, none); box-shadow: var(--lc-ctl-shadow, none); font-family: var(--font-sans); }
+.lc-counter .lc-iconbtn { background: transparent; }
+.lc-counter .lc-iconbtn .lc-ico { width: var(--icon-md, 20px); height: var(--icon-md, 20px); }
+.lc-counter__value { min-width: 40px; text-align: center; font-size: 16px; line-height: 22px; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+.lc-counter--pc { height: var(--control-pc, 32px); border-radius: var(--radius-sm, 8px); }
+.lc-counter--pc .lc-iconbtn { width: var(--control-pc, 32px); height: var(--control-pc, 32px); border-radius: var(--radius-sm, 8px); }
+.lc-counter--pc .lc-counter__value { font-size: 14px; line-height: 20px; min-width: 32px; }
+
+/* Calendar — 7 × 40 cells, 4 gap; range band is full-bleed between ends. */
+.lc-cal { display: inline-block; padding: var(--space-3, 12px) var(--space-3, 12px) var(--space-4, 16px); border-radius: var(--radius-lg, 20px); background: var(--lc-sf, var(--surface)); -webkit-backdrop-filter: var(--lc-sf-blur, none); backdrop-filter: var(--lc-sf-blur, none); box-shadow: var(--lc-sf-shadow, var(--shadow-1)); font-family: var(--font-sans); }
+.lc-cal__head { display: flex; align-items: center; height: var(--control-md, 40px); padding-left: var(--space-2, 8px); margin-bottom: var(--space-2, 8px); }
+.lc-cal__title { flex: 1; font-size: 18px; line-height: 24px; font-weight: 500; color: var(--ink); }
+.lc-cal__grid { display: grid; grid-template-columns: repeat(7, 40px); row-gap: var(--space-1, 4px); }
+.lc-cal__wd { height: 32px; display: flex; align-items: center; justify-content: center; font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+.lc-cal__day {
+  appearance: none; border: 0; margin: 0; padding: 0; background: transparent;
+  position: relative; height: 40px;
+  display: flex; align-items: center; justify-content: center;
+  font: inherit; font-size: 16px; line-height: 22px; color: var(--ink); font-variant-numeric: tabular-nums;
+  cursor: pointer; isolation: isolate;
+}
+.lc-cal__day::before { content: ""; position: absolute; inset: 0; margin: auto; width: 40px; height: 40px; border-radius: var(--radius-full, 9999px); z-index: -1; }
+.lc-cal__day:hover::before { background: var(--fill-hover); }
+.lc-cal__day--out { color: var(--ink-tertiary); }
+.lc-cal__day--today { color: var(--brand-text); font-weight: 700; }
+.lc-cal__day--in { background: var(--brand-tint); }
+.lc-cal__day--start { background: linear-gradient(to right, transparent 50%, var(--brand-tint) 50%); }
+.lc-cal__day--end { background: linear-gradient(to left, transparent 50%, var(--brand-tint) 50%); }
+.lc-cal__day[aria-selected="true"] { color: var(--on-brand); font-weight: 500; }
+.lc-cal__day[aria-selected="true"]::before { background: var(--brand); }
+.lc-cal__day:focus-visible { outline: none; }
+.lc-cal__day:focus-visible::before { box-shadow: 0 0 0 2px var(--focus-ring); }
+
+/* Wheel picker — 5 rows × 40, centre band, edge fade. */
+.lc-wheel { position: relative; display: flex; justify-content: center; gap: var(--space-2, 8px); height: 200px; padding: 0 var(--space-4, 16px); font-family: var(--font-sans); -webkit-mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent); mask-image: linear-gradient(to bottom, transparent, #000 30%, #000 70%, transparent); }
+.lc-wheel::before { content: ""; position: absolute; left: var(--space-2, 8px); right: var(--space-2, 8px); top: 80px; height: 40px; border-radius: var(--radius-md, 12px); background: var(--fill-control); }
+.lc-wheel__col { position: relative; display: flex; flex-direction: column; width: 72px; }
+.lc-wheel__item { height: 40px; display: flex; align-items: center; justify-content: center; font-size: 16px; line-height: 22px; color: var(--ink-secondary); font-variant-numeric: tabular-nums; }
+.lc-wheel__item[aria-selected="true"] { font-size: 20px; line-height: 28px; font-weight: 500; color: var(--brand-text); }
+.lc-wheel__sep { position: relative; display: flex; align-items: center; font-size: 20px; line-height: 28px; font-weight: 500; color: var(--ink); }
+
+/* Toolbar — bottom action bar in edit mode (actions, not destinations). */
+.lc-toolbar { display: flex; justify-content: space-around; align-items: center; height: var(--tabbar, 56px); padding: 0 var(--space-2, 8px); font-family: var(--font-sans); }
+.lc-toolbar--glass { background: var(--glass-fill-strong); -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); box-shadow: none; }
+.lc-toolbar__item {
+  appearance: none; border: 0; margin: 0; background: transparent;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  min-width: 64px; height: 48px; padding: 0 var(--space-2, 8px);
+  border-radius: var(--radius-md, 12px);
+  font: inherit; font-size: 12px; line-height: 16px; color: var(--ink);
+  cursor: pointer;
+}
+.lc-toolbar__item:active { background: var(--fill-pressed); }
+.lc-toolbar__item--danger { color: var(--danger); }
+.lc-toolbar__item:disabled { opacity: var(--opacity-disabled, 0.4); cursor: not-allowed; }
+.lc-toolbar__item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+
+/* Breadcrumb */
+.lc-crumbs { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-1, 4px); height: 32px; margin: 0; padding: 0; list-style: none; font-family: var(--font-sans); font-size: 14px; line-height: 20px; }
+.lc-crumbs li { display: flex; align-items: center; gap: var(--space-1, 4px); }
+.lc-crumbs a { display: flex; align-items: center; height: 28px; padding: 0 var(--space-2, 8px); border-radius: var(--radius-sm, 8px); color: var(--ink-secondary); text-decoration: none; }
+.lc-crumbs a:hover { background: var(--fill-hover); color: var(--ink); }
+.lc-crumbs a:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 0; }
+.lc-crumbs .lc-ico { width: 12px; height: 12px; stroke-width: 2.4; color: var(--ink-tertiary); }
+.lc-crumbs [aria-current="page"] { padding: 0 var(--space-2, 8px); color: var(--ink); font-weight: 500; }
+
+/* Pagination (PC) — 32 squares, radius 8. */
+.lc-pager { display: flex; align-items: center; gap: var(--space-1, 4px); font-family: var(--font-sans); }
+.lc-pager__btn {
+  appearance: none; border: 0; margin: 0; padding: 0 var(--space-2, 8px);
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 32px; height: 32px; border-radius: var(--radius-sm, 8px);
+  background: transparent; color: var(--ink);
+  font: inherit; font-size: 14px; line-height: 20px; font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+.lc-pager__btn .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; }
+.lc-pager__btn:hover { background: var(--fill-hover); }
+.lc-pager__btn[aria-current="page"] { background: var(--brand); color: var(--on-brand); font-weight: 500; }
+.lc-pager__btn:disabled { color: var(--ink-tertiary); cursor: not-allowed; background: transparent; }
+.lc-pager__btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.lc-pager__gap { width: 32px; text-align: center; color: var(--ink-secondary); }
+.lc-pager__total { margin-right: var(--space-3, 12px); font-size: 12px; line-height: 18px; color: var(--ink-secondary); }
+
+/* Steps — 24 nodes, 2px connectors through the node centre (y = 12). */
+.lc-steps { display: flex; margin: 0; padding: 0; list-style: none; font-family: var(--font-sans); counter-reset: lc-step; }
+.lc-step { position: relative; flex: 1 1 0; display: flex; flex-direction: column; align-items: center; gap: var(--space-2, 8px); text-align: center; counter-increment: lc-step; }
+.lc-step + .lc-step::before { content: ""; position: absolute; top: 11px; right: calc(50% + 20px); left: calc(-50% + 20px); height: 2px; border-radius: var(--radius-full, 9999px); background: var(--divider); }
+.lc-step--done + .lc-step::before { background: var(--brand); }
+.lc-step__dot { display: flex; align-items: center; justify-content: center; width: 24px; height: 24px; border-radius: var(--radius-full, 9999px); box-shadow: inset 0 0 0 2px var(--stroke-control); font-size: 12px; line-height: 16px; font-weight: 500; color: var(--ink-secondary); }
+.lc-step__dot::before { content: counter(lc-step); }
+.lc-step--done .lc-step__dot { background: var(--brand); box-shadow: none; color: var(--on-brand); }
+.lc-step--done .lc-step__dot::before { content: ""; width: 5px; height: 9px; margin-top: -2px; border: solid var(--on-brand); border-width: 0 2px 2px 0; transform: rotate(45deg); }
+.lc-step--current .lc-step__dot { box-shadow: inset 0 0 0 2px var(--brand); color: var(--brand-text); }
+.lc-step__label { font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+.lc-step--current .lc-step__label { color: var(--ink); font-weight: 500; }
+
+/* Index bar — 16 rows, active letter on a 16 brand disc; bubble 56 glass. */
+.lc-index { display: flex; flex-direction: column; align-items: center; width: 24px; margin: 0; padding: 0; list-style: none; font-family: var(--font-sans); }
+.lc-index li { position: relative; display: flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: var(--radius-full, 9999px); font-size: 12px; line-height: 16px; font-weight: 500; color: var(--ink-secondary); }
+.lc-index li[aria-current="true"] { background: var(--brand); color: var(--on-brand); }
+.lc-index__bubble { position: absolute; right: 40px; top: 50%; transform: translateY(-50%); display: flex; align-items: center; justify-content: center; width: 56px; height: 56px; border-radius: var(--radius-full, 9999px); background: var(--glass-fill-float); -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-float); font-size: 24px; line-height: 32px; font-weight: 700; color: var(--brand-text); }
+
+/* Page indicator — 6 dots, active stretches to a 16 capsule. */
+.lc-dots { display: inline-flex; align-items: center; gap: 6px; height: 16px; }
+.lc-dots i { width: 6px; height: 6px; border-radius: var(--radius-full, 9999px); background: var(--ink-tertiary); transition: width var(--duration-base, 250ms) var(--ease-spring, cubic-bezier(0.3, 1.4, 0.5, 1)), background-color var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lc-dots i[aria-current="true"] { width: 16px; background: var(--brand); }
+.lc-dots--media { height: 20px; padding: 0 var(--space-2, 8px); border-radius: var(--radius-full, 9999px); background: var(--glass-fill-strong); -webkit-backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%)); }
+.lc-dots--media i[aria-current="true"] { background: var(--ink); }
+
+/* Avatar — 24 / 32 / 40 / 56 / 72; group overlaps by a quarter. */
+.lc-avatar { position: relative; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-full, 9999px); background: linear-gradient(var(--brand-tint), var(--brand-tint)), var(--surface); color: var(--brand-text); font-family: var(--font-sans); font-size: 16px; line-height: 22px; font-weight: 500; }
+.lc-avatar--xs { width: 24px; height: 24px; font-size: 12px; line-height: 16px; }
+.lc-avatar--sm { width: 32px; height: 32px; font-size: 14px; line-height: 20px; }
+.lc-avatar--lg { width: 56px; height: 56px; font-size: 20px; line-height: 28px; }
+.lc-avatar--xl { width: 72px; height: 72px; font-size: 24px; line-height: 32px; }
+.lc-avatar--neutral { background: var(--surface-sunken); color: var(--ink-secondary); }
+.lc-avatar--photo { background: var(--brand); color: var(--on-brand); }
+.lc-avatar__status { position: absolute; right: 0; bottom: 0; width: 25%; height: 25%; min-width: 8px; min-height: 8px; border-radius: var(--radius-full, 9999px); background: var(--success); box-shadow: 0 0 0 2px var(--surface); }
+.lc-avatars { display: inline-flex; }
+.lc-avatars > .lc-avatar { box-shadow: 0 0 0 2px var(--surface); }
+.lc-avatars > .lc-avatar + .lc-avatar { margin-left: -8px; }
+.lc-avatars--sm > .lc-avatar + .lc-avatar { margin-left: -6px; }
+
+/* Table (PC) — 36 rows inside a 20-radius panel, numbers right-aligned. */
+.lc-table-wrap { border-radius: var(--radius-lg, 20px); background: var(--lc-sf, var(--surface)); -webkit-backdrop-filter: var(--lc-sf-blur, none); backdrop-filter: var(--lc-sf-blur, none); box-shadow: var(--lc-sf-shadow, var(--shadow-1)); padding: var(--space-1, 4px) var(--space-2, 8px); overflow-x: auto; }
+.lc-table { width: 100%; border-collapse: separate; border-spacing: 0; font-family: var(--font-sans); font-size: 14px; line-height: 20px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.lc-table th { height: 36px; padding: 0 var(--space-3, 12px); text-align: left; font-size: 12px; line-height: 18px; font-weight: 500; color: var(--ink-secondary); border-bottom: 1px solid var(--divider); white-space: nowrap; }
+.lc-table td { height: var(--row-pc, 36px); padding: 0 var(--space-3, 12px); border-bottom: 1px solid var(--divider); white-space: nowrap; }
+.lc-table tr:last-child td { border-bottom: 0; }
+.lc-table tbody tr:hover td { background: var(--fill-hover); }
+.lc-table tbody tr:hover td:first-child { border-radius: var(--radius-sm, 8px) 0 0 var(--radius-sm, 8px); }
+.lc-table tbody tr:hover td:last-child { border-radius: 0 var(--radius-sm, 8px) var(--radius-sm, 8px) 0; }
+.lc-table tr[aria-selected="true"] td { background: var(--brand-tint); }
+.lc-table .num { text-align: right; }
+.lc-table .cell-check { width: 20px; padding-right: 0; }
+.lc-table .cell-check .lc-check { min-height: 0; }
+.lc-table .cell-name { display: flex; align-items: center; gap: var(--space-2, 8px); height: var(--row-pc, 36px); }
+.lc-table .cell-name .lc-ico { width: var(--icon-md, 20px); height: var(--icon-md, 20px); color: var(--ink-secondary); }
+.lc-table th[aria-sort] { color: var(--ink); }
+
+/* Accordion — native <details>, 48 summary row, chevron turns 180°. */
+.lc-acc { padding: var(--space-1, 4px); border-radius: var(--radius-lg, 20px); background: var(--lc-sf, var(--surface)); -webkit-backdrop-filter: var(--lc-sf-blur, none); backdrop-filter: var(--lc-sf-blur, none); box-shadow: var(--lc-sf-shadow, var(--shadow-1)); font-family: var(--font-sans); }
+.lc-acc details { position: relative; }
+.lc-acc details + details::before { content: ""; position: absolute; top: 0; left: var(--space-3, 12px); right: var(--space-3, 12px); height: 1px; background: var(--divider); }
+.lc-acc summary { display: flex; align-items: center; gap: var(--space-4, 16px); min-height: var(--row-1, 48px); padding: 0 var(--space-3, 12px); border-radius: 16px; list-style: none; cursor: pointer; font-size: 16px; line-height: 22px; font-weight: 500; color: var(--ink); }
+.lc-acc summary::-webkit-details-marker { display: none; }
+.lc-acc summary:hover { background: var(--fill-hover); }
+.lc-acc summary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.lc-acc summary > span { flex: 1; }
+.lc-acc summary .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; color: var(--ink-secondary); transition: transform var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lc-acc details[open] summary .lc-ico { transform: rotate(180deg); }
+.lc-acc__body { padding: 0 var(--space-3, 12px) var(--space-4, 16px); font-size: 14px; line-height: 20px; color: var(--ink-secondary); }
+
+/* Banner — inline notice; 20 icon on the first 20px line. */
+.lc-banner { display: flex; align-items: flex-start; gap: var(--space-3, 12px); padding: var(--space-3, 12px) var(--space-3, 12px) var(--space-3, 12px) var(--space-4, 16px); border-radius: var(--radius-md, 12px); background: var(--brand-tint); font-family: var(--font-sans); }
+.lc-banner > .lc-ico { width: var(--icon-md, 20px); height: var(--icon-md, 20px); color: var(--brand-text); }
+.lc-banner__text { flex: 1; min-width: 0; font-size: 14px; line-height: 20px; color: var(--ink); }
+.lc-banner__text b { font-weight: 500; }
+.lc-banner__text span { color: var(--ink-secondary); }
+.lc-banner__action { flex: none; display: flex; align-items: center; gap: var(--space-1, 4px); margin: -6px 0; }
+.lc-banner__action .lc-btn { height: 32px; }
+.lc-banner__action .lc-iconbtn { width: 32px; height: 32px; background: transparent; color: var(--ink-secondary); }
+.lc-banner__action .lc-iconbtn .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; }
+.lc-banner--success { background: var(--success-tint); }
+.lc-banner--success > .lc-ico { color: var(--success); }
+.lc-banner--warning { background: var(--warning-tint); }
+.lc-banner--warning > .lc-ico { color: var(--warning); }
+.lc-banner--danger { background: var(--danger-tint); }
+.lc-banner--danger > .lc-ico { color: var(--danger); }
+
+/* Empty state */
+.lc-empty { display: flex; flex-direction: column; align-items: center; text-align: center; padding: var(--space-10, 40px) var(--space-6, 24px); font-family: var(--font-sans); }
+.lc-empty__art { display: flex; align-items: center; justify-content: center; width: 96px; height: 96px; border-radius: var(--radius-full, 9999px); background: var(--surface-sunken); color: var(--ink-secondary); }
+.lc-empty__art .lc-ico { width: 48px; height: 48px; stroke-width: 1.4; }
+.lc-empty__title { margin: var(--space-4, 16px) 0 0; font-size: 18px; line-height: 24px; font-weight: 500; color: var(--ink); }
+.lc-empty__body { margin: var(--space-1, 4px) 0 var(--space-6, 24px); max-width: 280px; font-size: 14px; line-height: 20px; color: var(--ink-secondary); }
+.lc-empty .lc-btn { margin-top: auto; }
+
+/* Loading — spinner, skeleton, inline. */
+.lc-spinner { --lc-s: 24px; display: inline-block; flex: none; width: var(--lc-s); height: var(--lc-s); border-radius: var(--radius-full, 9999px); border: 2.5px solid var(--surface-sunken); border-top-color: var(--brand); animation: lc-spin 0.8s linear infinite; box-sizing: border-box; }
+.lc-spinner--sm { --lc-s: 16px; border-width: 2px; }
+.lc-spinner--lg { --lc-s: 40px; border-width: 3px; }
+.lc-spinner--on-brand { border-color: rgba(255, 255, 255, 0.35); border-top-color: var(--on-brand); }
+@keyframes lc-spin { to { transform: rotate(360deg); } }
+.lc-skel { border-radius: var(--radius-sm, 8px); background: var(--surface-sunken); animation: lc-skel-pulse 1.4s var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)) infinite; }
+.lc-skel--text { height: 12px; margin: 4px 0; border-radius: var(--radius-xs, 4px); }
+.lc-skel--title { height: 16px; margin: 4px 0; border-radius: var(--radius-xs, 4px); }
+.lc-skel--circle { border-radius: var(--radius-full, 9999px); }
+@keyframes lc-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+.lc-loading { display: inline-flex; align-items: center; gap: var(--space-2, 8px); font-family: var(--font-sans); font-size: 14px; line-height: 20px; color: var(--ink-secondary); }
+
+/* Tooltip & popover — arrow is a rotated 8 square of the same fill. */
+.lc-tip { position: relative; display: inline-flex; align-items: center; height: 28px; padding: 0 var(--space-2, 8px); border-radius: var(--radius-sm, 8px); background: var(--glass-fill-float); color: var(--ink); -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-glass); font-family: var(--font-sans); font-size: 12px; line-height: 16px; white-space: nowrap; }
+.lc-tip::after { content: ""; position: absolute; left: 50%; bottom: -4px; width: 8px; height: 8px; margin-left: -4px; background: var(--glass-fill-float); border-radius: 0 0 2px 0; transform: rotate(45deg); }
+.lc-pop { position: relative; width: 264px; padding: var(--space-4, 16px); border-radius: var(--radius-lg, 20px); background: var(--glass-fill-float); -webkit-backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-float); font-family: var(--font-sans); }
+.lc-pop::before { content: ""; position: absolute; top: -6px; left: var(--lc-arrow, 24px); width: 12px; height: 12px; background: var(--glass-fill-strong); -webkit-backdrop-filter: blur(var(--blur-lg, 50px)); backdrop-filter: blur(var(--blur-lg, 50px)); border-radius: 3px 0 0 0; transform: rotate(45deg); clip-path: polygon(0 0, 100% 0, 0 100%); box-shadow: none; }
+.lc-pop__title { margin: 0; font-size: 16px; line-height: 22px; font-weight: 500; color: var(--ink); }
+.lc-pop__body { margin: var(--space-1, 4px) 0 0; font-size: 14px; line-height: 20px; color: var(--ink-secondary); }
+.lc-pop__actions { display: flex; justify-content: flex-end; gap: var(--space-2, 8px); margin-top: var(--space-4, 16px); }
+
+/* Notification — system banner card, glass float. */
+.lc-notice { width: 100%; max-width: 400px; padding: var(--space-3, 12px) var(--space-4, 16px) var(--space-4, 16px); border-radius: var(--radius-lg, 20px); background: var(--glass-fill-float); -webkit-backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-float); font-family: var(--font-sans); }
+.lc-notice__head { display: flex; align-items: center; gap: var(--space-2, 8px); height: 24px; font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+.lc-notice__app { display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; background: var(--brand); color: var(--on-brand); }
+.lc-notice__app .lc-ico { width: 12px; height: 12px; stroke-width: 2.4; }
+.lc-notice__time { margin-left: auto; }
+.lc-notice__title { margin: var(--space-2, 8px) 0 0; font-size: 16px; line-height: 22px; font-weight: 500; color: var(--ink); }
+.lc-notice__body { margin: 2px 0 0; font-size: 14px; line-height: 20px; color: var(--ink-secondary); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.lc-notice__actions { display: flex; gap: var(--space-2, 8px); margin-top: var(--space-3, 12px); }
+.lc-notice__actions .lc-btn { flex: 1 1 0; }
+
+/* Grid menu — 4 per row on sm; 48 icon tile + 12px label in an 80 cell. */
+.lc-gridmenu { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: var(--space-2, 8px); padding: var(--space-3, 12px) var(--space-2, 8px); border-radius: var(--radius-lg, 20px); background: var(--lc-sf, var(--surface)); -webkit-backdrop-filter: var(--lc-sf-blur, none); backdrop-filter: var(--lc-sf-blur, none); box-shadow: var(--lc-sf-shadow, var(--shadow-1)); font-family: var(--font-sans); }
+.lc-gridmenu__item { appearance: none; border: 0; margin: 0; background: transparent; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: var(--space-2, 8px); height: 80px; border-radius: var(--radius-md, 12px); color: var(--ink); text-decoration: none; font: inherit; font-size: 12px; line-height: 16px; cursor: pointer; }
+.lc-gridmenu__item:active { background: var(--fill-pressed); }
+.lc-gridmenu__item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.lc-gridmenu__icon { display: flex; align-items: center; justify-content: center; width: 48px; height: 48px; border-radius: var(--radius-md, 12px); background: var(--brand-tint); color: var(--brand-text); }
+.lc-gridmenu__icon .lc-ico { width: var(--icon-lg, 24px); height: var(--icon-lg, 24px); }
+.lc-gridmenu__icon--solid { background: var(--brand); color: var(--on-brand); }
+@media (min-width: 600px) { .lc-gridmenu--auto { grid-template-columns: repeat(auto-fill, minmax(88px, 1fr)); } }
+
+/* Widget (service card) — 2×2 / 2×4 / 4×4 on the 4-column phone grid; padding 12, radius 20. */
+.lc-widget { position: relative; display: flex; flex-direction: column; padding: var(--space-3, 12px); border-radius: var(--radius-lg, 20px); background: var(--lc-sf, var(--surface)); -webkit-backdrop-filter: var(--lc-sf-blur, none); backdrop-filter: var(--lc-sf-blur, none); box-shadow: var(--lc-sf-shadow, var(--shadow-1)); font-family: var(--font-sans); color: var(--ink); overflow: hidden; aspect-ratio: 1 / 1; }
+.lc-widget--2x4 { aspect-ratio: auto; height: 100%; min-height: 0; }
+.lc-widget--glass { background: var(--glass-fill-strong); -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-glass); }
+.lc-widget__head { display: flex; align-items: center; gap: var(--space-1, 4px); height: 16px; font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+.lc-widget__head .lc-ico { width: 12px; height: 12px; stroke-width: 2.4; }
+.lc-widget__big { margin-top: auto; font-size: 30px; line-height: 40px; font-weight: 700; color: var(--ink); font-variant-numeric: tabular-nums; }
+.lc-widget__big small { margin-left: 2px; font-size: 14px; line-height: 20px; font-weight: 400; color: var(--ink-secondary); }
+.lc-widget__line { font-size: 14px; line-height: 20px; color: var(--ink-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lc-widget__title { font-size: 16px; line-height: 22px; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-fab, .lc-chip, .lc-select .lc-ico, .lc-dots i, .lc-acc summary .lc-ico { transition: none; }
+  .lc-fab:active { transform: none; }
+  .lc-spinner { animation-duration: 2.4s; }
+  .lc-skel { animation: none; }
+}
+
+/* ===================================================================== */
+/* v4 — colour accents, liquid motion                                     */
+/* ===================================================================== */
+
+/* Accent scope: set once on a tile, card, avatar, tag, ring… children read --lc-accent*. */
+.lc-accent--brand  { --lc-accent: var(--brand); --lc-accent-soft: var(--brand-tint); --lc-accent-text: var(--brand-text); }
+.lc-accent--sky    { --lc-accent: var(--accent-sky); --lc-accent-soft: var(--accent-sky-soft); --lc-accent-text: var(--accent-sky-text); }
+.lc-accent--teal   { --lc-accent: var(--accent-teal); --lc-accent-soft: var(--accent-teal-soft); --lc-accent-text: var(--accent-teal-text); }
+.lc-accent--green  { --lc-accent: var(--accent-green); --lc-accent-soft: var(--accent-green-soft); --lc-accent-text: var(--accent-green-text); }
+.lc-accent--amber  { --lc-accent: var(--accent-amber); --lc-accent-soft: var(--accent-amber-soft); --lc-accent-text: var(--accent-amber-text); }
+.lc-accent--orange { --lc-accent: var(--accent-orange); --lc-accent-soft: var(--accent-orange-soft); --lc-accent-text: var(--accent-orange-text); }
+.lc-accent--rose   { --lc-accent: var(--accent-rose); --lc-accent-soft: var(--accent-rose-soft); --lc-accent-text: var(--accent-rose-text); }
+.lc-accent--violet { --lc-accent: var(--accent-violet); --lc-accent-soft: var(--accent-violet-soft); --lc-accent-text: var(--accent-violet-text); }
+
+.lc-list__lead--tile { background: var(--lc-accent, var(--brand)); }
+.lc-gridmenu__icon { background: var(--lc-accent-soft, var(--brand-tint)); color: var(--lc-accent-text, var(--brand-text)); }
+.lc-gridmenu__icon--solid { background: var(--lc-accent, var(--brand)); color: var(--on-brand); }
+.lc-avatar { background: linear-gradient(var(--lc-accent-soft, var(--brand-tint)), var(--lc-accent-soft, var(--brand-tint))), var(--surface); color: var(--lc-accent-text, var(--brand-text)); }
+.lc-avatar--photo { background: var(--lc-accent, var(--brand)); color: var(--on-brand); }
+.lc-tag[class*="lc-accent--"] { background: var(--lc-accent-soft); color: var(--lc-accent-text); }
+.lc-notice__app { background: var(--lc-accent, var(--brand)); }
+.lc-ring .lc-ring__bar { stroke: var(--lc-accent, var(--brand)); }
+.lc-card[class*="lc-accent--"] .lc-card__eyebrow, .lc-widget[class*="lc-accent--"] .lc-widget__head { color: var(--lc-accent-text); }
+.lc-card__icon { display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-md, 12px); background: var(--lc-accent-soft, var(--brand-tint)); color: var(--lc-accent-text, var(--brand-text)); }
+
+/* Brand gradient — "highlight moments" only. */
+.lc-gradient { background: var(--brand); color: var(--on-brand); } /* kept for compatibility: solid brand, no gradient */
+.lc-fab:not(.lc-fab--glass) { background: var(--brand); }
+.lc-fab:not(.lc-fab--glass):hover { background: var(--brand-hover); }
+.lc-progress > i { background: var(--brand); transition: width var(--duration-spring, 560ms) var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)); }
+.lc-progress[class*="lc-accent--"] > i { background: var(--lc-accent); }
+.lc-progress--indeterminate > i { width: 40%; animation: lc-indeterminate 1.4s var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)) infinite; }
+@keyframes lc-indeterminate { from { left: -40%; } to { left: 100%; } }
+
+/* ---------- Tactile press: fast in, springy out ---------- */
+.lc-btn, .lc-iconbtn, .lc-fab, .lc-chip, .lc-tab, .lc-toolbar__item, .lc-gridmenu__item, .lc-seg__item, .lc-card--action, .lc-side__item, .lc-rail__item, .lc-cal__day {
+  transition-property: background-color, color, box-shadow, transform;
+  transition-duration: var(--duration-fast, 150ms), var(--duration-fast, 150ms), var(--duration-fast, 150ms), var(--duration-spring, 560ms);
+  transition-timing-function: var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)), var(--ease-spring, linear(0, 0.06, 0.206, 0.397, 0.597, 0.78, 0.932, 1.044, 1.117, 1.154, 1.163, 1.15, 1.125, 1.093, 1.061, 1.032, 1.008, 0.991, 0.98, 0.974, 0.974, 0.976, 0.98, 0.986, 0.991, 1));
+}
+.lc-btn:active, .lc-iconbtn:active, .lc-fab:active, .lc-chip:active, .lc-tab:active, .lc-toolbar__item:active, .lc-seg__item:active, .lc-card--action:active, .lc-cal__day:active {
+  transition-duration: var(--duration-instant, 100ms); transition-timing-function: var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-iconbtn:active, .lc-tab:active, .lc-toolbar__item:active { transform: scale(.9); }
+.lc-chip:active, .lc-seg__item:active { transform: scale(.95); }
+.lc-gridmenu__item .lc-gridmenu__icon { transition: transform var(--duration-spring, 560ms) var(--ease-spring, linear(0, 0.06, 0.206, 0.397, 0.597, 0.78, 0.932, 1.044, 1.117, 1.154, 1.163, 1.15, 1.125, 1.093, 1.061, 1.032, 1.008, 0.991, 0.98, 0.974, 0.974, 0.976, 0.98, 0.986, 0.991, 1)); }
+.lc-gridmenu__item:active .lc-gridmenu__icon { transform: scale(.88); transition-duration: var(--duration-instant, 100ms); }
+.lc-btn--pc:active, .lc-iconbtn--pc:active { transform: none; }
+@media (hover: hover) and (pointer: fine) {
+  .lc-card--action:hover { transform: translateY(-2px); }
+}
+
+/* Switch / check / radio ride the spring for the full spring duration. */
+.lc-switch__track::after { transition: transform var(--duration-spring, 560ms) var(--ease-spring, linear(0, 0.06, 0.206, 0.397, 0.597, 0.78, 0.932, 1.044, 1.117, 1.154, 1.163, 1.15, 1.125, 1.093, 1.061, 1.032, 1.008, 0.991, 0.98, 0.974, 0.974, 0.976, 0.98, 0.986, 0.991, 1)), width var(--duration-base, 250ms) var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)); }
+.lc-check__box::after, .lc-radio__dot::after { transition: transform var(--duration-spring, 560ms) var(--ease-spring, linear(0, 0.06, 0.206, 0.397, 0.597, 0.78, 0.932, 1.044, 1.117, 1.154, 1.163, 1.15, 1.125, 1.093, 1.061, 1.032, 1.008, 0.991, 0.98, 0.974, 0.974, 0.976, 0.98, 0.986, 0.991, 1)); }
+.lc-dots i { transition: width var(--duration-spring, 560ms) var(--ease-spring, linear(0, 0.06, 0.206, 0.397, 0.597, 0.78, 0.932, 1.044, 1.117, 1.154, 1.163, 1.15, 1.125, 1.093, 1.061, 1.032, 1.008, 0.991, 0.98, 0.974, 0.974, 0.976, 0.98, 0.986, 0.991, 1)), background-color var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lc-select .lc-ico, .lc-acc summary .lc-ico { transition: transform var(--duration-spring, 560ms) var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)); }
+.lc-acc details[open] .lc-acc__body { animation: lc-rise var(--duration-base, 250ms) var(--ease-emphasized, cubic-bezier(0.05, 0.7, 0.1, 1)) both; }
+
+/* ---------- Liquid selection pill (Lucent.liquid) ----------
+   The pill's leading edge moves first and the trailing edge follows on a
+   bouncier spring, so it stretches like a droplet and settles back. */
+.is-liquid { position: relative; isolation: isolate; }
+.lc-liquid { position: absolute; z-index: -1; pointer-events: none; border-radius: var(--radius-full, 9999px); will-change: left, right; }
+.lc-tabbar.is-liquid .lc-tab[aria-selected="true"] { background: transparent; box-shadow: none; }
+.lc-tabbar .lc-liquid { background: var(--surface); box-shadow: var(--shadow-2); }
+.lc-seg.is-liquid .lc-seg__item[aria-selected="true"] { background: transparent; box-shadow: none; }
+.lc-seg .lc-liquid { background: var(--surface-raised); box-shadow: var(--shadow-2); }
+.lc-seg--pc .lc-liquid { border-radius: 6px; }
+.lc-tabs.is-liquid .lc-tabs__tab[aria-selected="true"]::after { display: none; }
+.lc-tabs .lc-liquid { top: auto !important; bottom: 6px !important; height: 3px; background: var(--brand); }
+.lc-chips.is-liquid .lc-chip[aria-selected="true"] { background: transparent; }
+.lc-chips .lc-liquid { background: var(--brand-tint); }
+.lc-tabbar--docked .lc-tab[aria-selected="true"] { box-shadow: none; }
+
+/* ---------- Overlays: glass condenses in, falls away out ---------- */
+@keyframes lc-fade-in { from { opacity: 0; } }
+@keyframes lc-fade-out { to { opacity: 0; } }
+@keyframes lc-pop-in { from { opacity: 0; transform: scale(.88); -webkit-backdrop-filter: blur(0) saturate(100%); backdrop-filter: blur(0) saturate(100%); } }
+@keyframes lc-pop-out { to { opacity: 0; transform: scale(.94); } }
+@keyframes lc-sheet-in { from { transform: translateY(100%); } }
+@keyframes lc-sheet-out { to { transform: translateY(100%); } }
+@keyframes lc-drop-in { from { opacity: 0; transform: translateY(-8px) scale(.9); } }
+@keyframes lc-toast-in { from { opacity: 0; transform: translateY(16px) scale(.9); } }
+@keyframes lc-notice-in { from { opacity: 0; transform: translateY(-32px) scale(.96); -webkit-backdrop-filter: blur(0); backdrop-filter: blur(0); } }
+@keyframes lc-rise { from { opacity: 0; transform: translateY(12px); } }
+.lc-scrim { animation: lc-fade-in var(--duration-slow, 400ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)) both; }
+.lc-dialog { animation: lc-pop-in var(--duration-spring, 560ms) var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)) both; }
+.lc-sheet { animation: lc-sheet-in var(--duration-spring, 560ms) var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)) both; }
+.lc-menu, .lc-pop { transform-origin: var(--lc-origin, top left); animation: lc-drop-in var(--duration-spring, 560ms) var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)) both; }
+.lc-toast { animation: lc-toast-in var(--duration-spring, 560ms) var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)) both; }
+.lc-notice { animation: lc-notice-in var(--duration-spring, 560ms) var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)) both; }
+.lc-scrim.is-leaving { animation: lc-fade-out var(--duration-base, 250ms) var(--ease-exit, cubic-bezier(0.3, 0, 0.8, 0.15)) both; }
+.lc-dialog.is-leaving, .lc-menu.is-leaving, .lc-pop.is-leaving, .lc-toast.is-leaving, .lc-notice.is-leaving { animation: lc-pop-out var(--duration-base, 250ms) var(--ease-exit, cubic-bezier(0.3, 0, 0.8, 0.15)) both; }
+.lc-sheet.is-leaving { animation: lc-sheet-out var(--duration-base, 250ms) var(--ease-exit, cubic-bezier(0.3, 0, 0.8, 0.15)) both; }
+
+/* Staggered entrance for lists and card grids (first 10 children). */
+.lc-stagger > * { animation: lc-rise var(--duration-slow, 400ms) var(--ease-emphasized, cubic-bezier(0.05, 0.7, 0.1, 1)) both; }
+.lc-stagger > :nth-child(2) { animation-delay: 40ms; } .lc-stagger > :nth-child(3) { animation-delay: 80ms; }
+.lc-stagger > :nth-child(4) { animation-delay: 120ms; } .lc-stagger > :nth-child(5) { animation-delay: 160ms; }
+.lc-stagger > :nth-child(6) { animation-delay: 200ms; } .lc-stagger > :nth-child(7) { animation-delay: 240ms; }
+.lc-stagger > :nth-child(8) { animation-delay: 280ms; } .lc-stagger > :nth-child(9) { animation-delay: 320ms; }
+.lc-stagger > :nth-child(n+10) { animation-delay: 360ms; }
+
+/* Spinner: variable speed reads as "working", not "stuck". */
+.lc-spinner { animation: lc-spin 1s cubic-bezier(.55, .15, .45, .85) infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-page *, .lc-page *::before, .lc-page *::after { animation-duration: 1ms !important; animation-delay: 0ms !important; transition-duration: 1ms !important; }
+  .lc-spinner { animation-duration: 2.4s !important; }
+  .lc-btn:active, .lc-iconbtn:active, .lc-fab:active, .lc-chip:active, .lc-tab:active, .lc-card--action:active { transform: none; }
+}
+
+/* ---------- MorphMenu — one liquid glass that is the button when closed and the menu when open ----------
+   Lucent.morph(root) computes the outline every frame (a smooth union of the
+   button drop and the menu body) and clips the glass to it. */
+.lc-morph { position: relative; display: inline-block; }
+.lc-morph__panel {
+  position: absolute; top: 0; right: 0; z-index: var(--z-modal, 400);
+  border-radius: var(--radius-xl, 28px);
+  background: var(--glass-fill-float);
+  -webkit-backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  backdrop-filter: blur(var(--blur-lg, 50px)) saturate(var(--glass-saturate, 200%));
+  font-family: var(--font-sans);
+  will-change: clip-path;
+}
+.lc-morph:not(.is-morph) .lc-morph__panel { display: none; }
+.lc-morph:not(.is-morph) .lc-morph__trigger[aria-expanded="true"] + .lc-morph__panel { display: block; }
+.is-morph .lc-morph__panel { border-radius: 0; pointer-events: none; }
+.is-morph .lc-morph__panel.is-open { pointer-events: auto; }
+.is-morph .lc-morph__trigger { position: relative; z-index: calc(var(--z-modal, 400) + 1); background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; color: transparent; }
+.is-morph .lc-morph__trigger[aria-expanded="true"] { pointer-events: none; }
+.is-morph .lc-morph__trigger .lc-ico { opacity: 0; }
+.lc-morph__shadow, .lc-morph__rim { position: absolute; top: 0; right: 0; pointer-events: none; overflow: visible; }
+.lc-morph__shadow { z-index: calc(var(--z-modal, 400) - 1); }
+.lc-morph__rim { z-index: calc(var(--z-modal, 400) + 1); }
+[data-theme="dark"] .lc-morph__rim { opacity: .35; }
+.lc-morph__inner { position: absolute; top: 0; right: 0; width: var(--lc-morph-w, 248px); padding: var(--space-2, 8px); transform-origin: top right; will-change: transform, filter, opacity; }
+.lc-morph__glyph { position: absolute; top: 0; right: 0; width: var(--control-md, 40px); height: var(--control-md, 40px); display: flex; align-items: center; justify-content: center; color: var(--ink); pointer-events: none; }
+.lc-morph__glyph .lc-ico { width: var(--icon-lg, 24px); height: var(--icon-lg, 24px); }
+.lc-morph__item {
+  appearance: none; border: 0; margin: 0; background: transparent; width: 100%; text-align: left;
+  display: flex; align-items: center; gap: var(--space-3, 12px);
+  min-height: var(--row-1, 48px); padding: var(--space-2, 8px) var(--space-3, 12px);
+  border-radius: 20px;
+  font: inherit; font-size: 16px; line-height: 22px; color: var(--ink); cursor: pointer;
+  will-change: transform;
+}
+.lc-morph__item .lc-ico { width: var(--icon-md, 20px); height: var(--icon-md, 20px); flex: none; }
+.lc-morph__item small { display: block; font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+.lc-morph__item > span { flex: 1; }
+.lc-morph__item > .lc-ico:last-child { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); color: var(--ink-secondary); }
+.lc-morph__item:hover { background: var(--fill-hover); }
+.lc-morph__item:active { background: var(--fill-pressed); }
+.lc-morph__item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }
+.lc-morph__sep { height: 1px; margin: var(--space-1, 4px) var(--space-3, 12px); background: var(--divider); }
+
+/* ---------- MorphMenu · sizes per device ---------- */
+.lc-morph { --lc-morph-r: 28px; --lc-morph-default-w: 248px; }
+.lc-morph--pc { --lc-morph-r: 12px; --lc-morph-default-w: 220px; }
+.lc-morph--pc .lc-morph__inner { padding: var(--space-1, 4px); }
+.lc-morph--pc .lc-morph__item { min-height: var(--row-pc, 36px); padding: var(--space-1, 4px) var(--space-3, 12px); border-radius: var(--radius-sm, 8px); font-size: 14px; line-height: 20px; gap: var(--space-2, 8px); }
+.lc-morph--pc .lc-morph__item .lc-ico { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); stroke-width: 2; }
+.lc-morph--pc .lc-morph__item small { font-size: 12px; line-height: 16px; }
+.lc-morph--pc .lc-morph__sep { margin: var(--space-1, 4px) var(--space-2, 8px); }
+.lc-morph--tablet { --lc-morph-default-w: 280px; }
+.lc-morph--tv { --lc-morph-r: 32px; --lc-morph-default-w: 420px; }
+.lc-morph--tv .lc-morph__inner { padding: var(--space-3, 12px); }
+.lc-morph--tv .lc-morph__item { min-height: 72px; padding: var(--space-3, 12px) var(--space-5, 20px); border-radius: 24px; font-size: 24px; line-height: 34px; gap: var(--space-4, 16px); }
+.lc-morph--tv .lc-morph__item .lc-ico { width: var(--icon-xl, 32px); height: var(--icon-xl, 32px); }
+.lc-morph--tv .lc-morph__item small { font-size: 18px; line-height: 26px; }
+.lc-morph--tv .lc-morph__item:focus-visible, .lc-morph--tv .lc-morph__item.is-focused { outline: none; background: var(--brand-tint); color: var(--brand-text); box-shadow: inset 0 0 0 3px var(--focus-ring); }
+.lc-morph--car { --lc-morph-r: 28px; --lc-morph-default-w: 360px; }
+.lc-morph--car .lc-morph__inner { padding: var(--space-2, 8px); }
+.lc-morph--car .lc-morph__item { min-height: var(--control-xl, 64px); padding: var(--space-2, 8px) var(--space-4, 16px); border-radius: 20px; font-size: 22px; line-height: 30px; gap: var(--space-4, 16px); }
+.lc-morph--car .lc-morph__item .lc-ico { width: 28px; height: 28px; }
+.lc-morph--car .lc-morph__item small { font-size: 18px; line-height: 24px; }
+.lc-iconbtn--xl { width: var(--control-xl, 64px); height: var(--control-xl, 64px); }
+.lc-iconbtn--xl .lc-ico { width: var(--icon-xl, 32px); height: var(--icon-xl, 32px); }
+
+/* ===================================================================== */
+/* AI — light, not robots                                                 */
+/* ===================================================================== */
+@property --lc-ai-a { syntax: '<angle>'; inherits: true; initial-value: 0deg; }
+@property --lc-reveal { syntax: '<percentage>'; inherits: false; initial-value: 120%; }
+@keyframes lc-ai-spin { to { --lc-ai-a: 360deg; } }
+@keyframes lc-ai-breathe { 0%, 100% { opacity: .35; transform: scale(1); } 50% { opacity: .8; transform: scale(1.015); } }
+@keyframes lc-ai-blink { 0%, 100% { opacity: 1; } 50% { opacity: .25; } }
+@keyframes lc-ai-tok { from { opacity: 0; filter: blur(4px); } to { opacity: 1; filter: none; } }
+@keyframes lc-ai-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+@keyframes lc-ai-dot { 0%, 80%, 100% { transform: translateY(0); opacity: .35; } 40% { transform: translateY(-4px); opacity: 1; } }
+@keyframes lc-ai-bar { 0%, 100% { transform: scaleY(.25); } 50% { transform: scaleY(1); } }
+@keyframes lc-ai-morph {
+  0%, 100% { border-radius: 50% 50% 50% 50% / 50% 50% 50% 50%; }
+  25% { border-radius: 58% 42% 52% 48% / 46% 56% 44% 54%; }
+  50% { border-radius: 44% 56% 46% 54% / 56% 44% 58% 42%; }
+  75% { border-radius: 52% 48% 58% 42% / 44% 58% 42% 56%; }
+}
+@keyframes lc-reveal { from { --lc-reveal: 0%; } to { --lc-reveal: 120%; } }
+
+.lc-ai-aurora { background: var(--ai-1); }
+.lc-ai-text { color: var(--brand-text); }
+
+/* AIGlow — an aurora rim around whatever the AI is working on. data-state: idle | listening | thinking | responding */
+.lc-ai-glow { position: relative; isolation: isolate; border-radius: var(--lc-ai-r, var(--radius-xl, 28px)); }
+.lc-ai-glow::before, .lc-ai-glow::after {
+  content: ""; position: absolute; pointer-events: none; border-radius: inherit;
+  background: var(--ai-1);
+  opacity: 0; transition: opacity var(--duration-slow, 400ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1));
+}
+.lc-ai-glow::before { inset: -2px; padding: 2px; z-index: 2; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); }
+.lc-ai-glow::after { inset: -40px; border: 30px solid transparent; padding: 10px; background-clip: padding-box; z-index: -1; border-radius: calc(var(--lc-ai-r, 28px) + 40px); filter: blur(12px); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0) border-box; -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0) border-box; }
+.lc-ai-glow[data-state="idle"]::before, .lc-ai-glow:focus-within::before { opacity: .7; }
+.lc-ai-glow[data-state="listening"]::before { opacity: 1; animation: lc-ai-spin 6s linear infinite; }
+.lc-ai-glow[data-state="listening"]::after { opacity: .5; animation: lc-ai-spin 6s linear infinite, lc-ai-breathe 1.6s var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)) infinite; }
+.lc-ai-glow[data-state="thinking"]::before { opacity: 1; animation: lc-ai-spin 1.8s linear infinite; }
+.lc-ai-glow[data-state="thinking"]::after { opacity: .5; animation: lc-ai-spin 1.8s linear infinite; }
+.lc-ai-glow[data-state="responding"]::before { opacity: 1; animation: lc-ai-spin 4s linear infinite; }
+.lc-ai-glow[data-state="responding"]::after { opacity: .3; animation: lc-ai-spin 4s linear infinite; }
+
+/* Edge light — the whole screen glows while the assistant listens (voice, watch, car, TV). */
+.lc-ai-edge { position: absolute; inset: 0; pointer-events: none; border-radius: inherit; opacity: 0; transition: opacity var(--duration-slow, 400ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lc-ai-edge::before, .lc-ai-edge::after { content: ""; position: absolute; inset: 0; border-radius: inherit; background: var(--ai-1); -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0); animation: lc-ai-spin 4s linear infinite; }
+.lc-ai-edge::before { padding: 3px; }
+.lc-ai-edge::after { padding: 18px; filter: blur(18px); opacity: .7; }
+.lc-ai-edge.is-on { opacity: 1; }
+
+/* Orb — the assistant's face: a soft blob of light that changes with its state. */
+.lc-ai-orb { --s: 32px; position: relative; flex: none; width: var(--s); height: var(--s); border-radius: 50%; animation: lc-ai-spin 8s linear infinite, lc-ai-morph 8s ease-in-out infinite; background: var(--ai-1); box-shadow: inset 0 0 calc(var(--s) * .25) rgba(255, 255, 255, .55); }
+.lc-ai-orb::after { content: none; }
+.lc-ai-orb--sm { --s: 24px; } .lc-ai-orb--lg { --s: 64px; } .lc-ai-orb--xl { --s: 120px; }
+.lc-ai-orb[data-state="listening"] { animation: lc-ai-spin 5s linear infinite, lc-ai-morph 2.4s ease-in-out infinite, lc-ai-breathe 1.6s ease-in-out infinite; }
+.lc-ai-orb[data-state="thinking"] { animation: lc-ai-spin 1.4s linear infinite, lc-ai-morph 1.4s ease-in-out infinite; }
+.lc-ai-orb[data-state="responding"] { animation: lc-ai-spin 3s linear infinite, lc-ai-morph 3s ease-in-out infinite; }
+
+/* Status: shimmer text, dots, voice wave */
+.lc-ai-status { display: inline-flex; align-items: center; gap: var(--space-2, 8px); font-family: var(--font-sans); font-size: 14px; line-height: 20px; color: var(--ink-secondary); }
+.lc-ai-shimmer { color: var(--ink-secondary); animation: lc-skel-pulse 1.4s ease-in-out infinite; }
+.lc-ai-dots { display: inline-flex; gap: 4px; }
+.lc-ai-dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--brand-text); animation: lc-ai-dot 1.2s var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)) infinite; }
+.lc-ai-dots i:nth-child(2) { animation-delay: .15s; } .lc-ai-dots i:nth-child(3) { animation-delay: .3s; }
+.lc-ai-wave { display: inline-flex; align-items: center; gap: 3px; height: 24px; }
+.lc-ai-wave i { width: 3px; height: 100%; border-radius: 2px; background: var(--ai-1); transform-origin: center; animation: lc-ai-bar .9s var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)) infinite; }
+.lc-ai-wave i:nth-child(2) { animation-delay: .1s; } .lc-ai-wave i:nth-child(3) { animation-delay: .25s; } .lc-ai-wave i:nth-child(4) { animation-delay: .05s; } .lc-ai-wave i:nth-child(5) { animation-delay: .2s; }
+.lc-ai-badge { display: inline-flex; align-items: center; gap: var(--space-1, 4px); height: 20px; padding: 0 var(--space-2, 8px); border-radius: var(--radius-full, 9999px); background: var(--ai-tint); color: var(--brand-text); font-family: var(--font-sans); font-size: 11px; line-height: 16px; font-weight: 500; }
+.lc-ai-badge .lc-ico { width: 12px; height: 12px; stroke-width: 2.2; }
+
+/* Composer */
+.lc-ai-composer { --lc-ai-r: 26px; display: flex; align-items: flex-end; gap: var(--space-1, 4px); min-height: 52px; padding: 6px; border-radius: 26px; background: var(--glass-fill-strong); -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); box-shadow: var(--shadow-glass); font-family: var(--font-sans); }
+.lc-ai-composer textarea { flex: 1; min-width: 0; min-height: 40px; max-height: 144px; margin: 0; padding: 8px 6px; border: 0; outline: 0; resize: none; background: transparent; font: inherit; font-size: 16px; line-height: 24px; color: var(--ink); }
+.lc-ai-composer textarea::placeholder { color: var(--ink-secondary); }
+.lc-ai-composer .lc-iconbtn { background: transparent; }
+.lc-ai-send { appearance: none; border: 0; margin: 0; padding: 0; flex: none; display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: var(--radius-full, 9999px); background: var(--brand); color: var(--on-brand); cursor: pointer; transition: transform var(--duration-spring, 560ms) var(--ease-spring, linear(0, 0.06, 0.206, 0.397, 0.597, 0.78, 0.932, 1.044, 1.117, 1.154, 1.163, 1.15, 1.125, 1.093, 1.061, 1.032, 1.008, 0.991, 0.98, 0.974, 0.974, 0.976, 0.98, 0.986, 0.991, 1)), background-color var(--duration-fast, 150ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+.lc-ai-send .lc-ico { width: 20px; height: 20px; stroke-width: 2.2; }
+.lc-ai-send:active { transform: scale(.88); transition-duration: var(--duration-instant, 100ms); }
+.lc-ai-send:disabled { background: var(--fill-control); color: var(--ink-tertiary); cursor: default; }
+.lc-ai-send .is-stop { display: none; }
+[data-state="thinking"] .lc-ai-send .is-go, [data-state="responding"] .lc-ai-send .is-go { display: none; }
+[data-state="thinking"] .lc-ai-send .is-stop, [data-state="responding"] .lc-ai-send .is-stop { display: block; }
+.lc-ai-send .is-stop rect { fill: currentColor; stroke: none; }
+.lc-ai-suggest { display: flex; gap: var(--space-2, 8px); overflow-x: auto; scrollbar-width: none; padding: 2px 0; }
+.lc-ai-suggest button { appearance: none; border: 0; margin: 0; flex: none; display: inline-flex; align-items: center; gap: var(--space-1, 4px); height: 32px; padding: 0 var(--space-3, 12px); border-radius: var(--radius-full, 9999px); background: var(--ai-tint); color: var(--brand-text); font-family: var(--font-sans); font-size: 14px; line-height: 20px; cursor: pointer; }
+.lc-ai-suggest .lc-ico { width: 14px; height: 14px; stroke-width: 2.2; }
+
+/* Thread */
+.lc-ai-thread { display: flex; flex-direction: column; gap: var(--space-5, 20px); font-family: var(--font-sans); }
+.lc-ai-msg--user { align-self: flex-end; max-width: 80%; padding: 10px 14px; border-radius: 20px 20px 6px 20px; background: var(--brand); color: var(--on-brand); font-size: 16px; line-height: 24px; }
+.lc-ai-msg--ai { display: flex; gap: var(--space-3, 12px); align-items: flex-start; }
+.lc-ai-msg--ai > .lc-ai-orb { margin-top: 2px; }
+.lc-ai-msg__body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: var(--space-3, 12px); }
+.lc-ai-msg__text { font-size: 16px; line-height: 26px; color: var(--ink); white-space: pre-wrap; }
+.lc-ai-tok { animation: lc-ai-tok 260ms var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)) both; }
+.lc-ai-caret { display: inline-block; width: 8px; height: 18px; margin-left: 2px; vertical-align: -3px; border-radius: 4px; background: var(--ai-1); animation: lc-ai-blink .9s ease-in-out infinite; }
+.lc-ai-think { border-radius: var(--radius-md, 12px); background: var(--ai-tint); }
+.lc-ai-think summary { display: flex; align-items: center; gap: var(--space-2, 8px); height: 36px; padding: 0 var(--space-3, 12px); list-style: none; cursor: pointer; font-size: 13px; line-height: 20px; color: var(--ink-secondary); }
+.lc-ai-think summary::-webkit-details-marker { display: none; }
+.lc-ai-think summary .lc-ico { width: 14px; height: 14px; stroke-width: 2.2; transition: transform var(--duration-spring, 560ms) var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)); }
+.lc-ai-think[open] summary .lc-ico:last-child { transform: rotate(180deg); }
+.lc-ai-think__body { padding: 0 var(--space-3, 12px) var(--space-3, 12px); font-size: 13px; line-height: 22px; color: var(--ink-secondary); }
+.lc-ai-sources { display: flex; flex-wrap: wrap; gap: var(--space-2, 8px); }
+.lc-ai-sources a { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 var(--space-3, 12px) 0 4px; border-radius: var(--radius-full, 9999px); background: var(--fill-control); color: var(--ink-secondary); font-size: 12px; line-height: 16px; text-decoration: none; }
+.lc-ai-sources a b { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 50%; background: var(--surface); color: var(--brand-text); font-weight: 500; }
+.lc-ai-actions { display: flex; gap: var(--space-1, 4px); margin-left: -8px; }
+.lc-ai-actions .lc-iconbtn { width: 32px; height: 32px; background: transparent; color: var(--ink-secondary); }
+.lc-ai-actions .lc-iconbtn .lc-ico { width: 18px; height: 18px; }
+.lc-ai-note { font-size: 12px; line-height: 16px; color: var(--ink-secondary); }
+
+/* Summary card — the answer is revealed by a soft wipe, not typed */
+.lc-ai-summary { position: relative; display: flex; flex-direction: column; gap: var(--space-3, 12px); padding: var(--space-4, 16px); border-radius: var(--radius-lg, 20px); background: linear-gradient(var(--ai-tint), var(--ai-tint)), var(--surface); box-shadow: var(--shadow-1); font-family: var(--font-sans); }
+.lc-ai-summary__head { display: flex; align-items: center; gap: var(--space-2, 8px); height: 24px; font-size: 14px; line-height: 20px; font-weight: 500; color: var(--ink); }
+.lc-ai-summary__head > :last-child { margin-left: auto; }
+.lc-ai-summary__body { font-size: 15px; line-height: 24px; color: var(--ink); }
+.lc-ai-summary__body li { margin: 2px 0; }
+.lc-ai-summary__body ul { margin: 0; padding-left: 20px; }
+.lc-reveal { -webkit-mask-image: linear-gradient(180deg, #000 calc(var(--lc-reveal) - 30%), transparent var(--lc-reveal)); mask-image: linear-gradient(180deg, #000 calc(var(--lc-reveal) - 30%), transparent var(--lc-reveal)); }
+.lc-reveal.is-revealing { animation: lc-reveal 1.1s var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)) both; }
+
+/* ===================================================================== */
+/* Page transitions                                                       */
+/* ===================================================================== */
+.lc-stack { position: relative; overflow: hidden; isolation: isolate; }
+.lc-stack > .lc-screen { position: absolute; inset: 0; overflow: hidden; background: var(--lc-aura, var(--bg)); transform-origin: 50% 50%; }
+.lc-stack > .lc-screen[hidden] { display: none; }
+/* View Transitions API (same-document) — wire the system's curves into it */
+::view-transition-old(root) { animation: 90ms var(--ease-exit, cubic-bezier(0.3, 0, 0.8, 0.15)) both lc-fade-out; }
+::view-transition-new(root) { animation: 210ms var(--ease-emphasized, cubic-bezier(0.05, 0.7, 0.1, 1)) 90ms both lc-fade-in; }
+::view-transition-group(*) { animation-duration: var(--duration-spring, 560ms); animation-timing-function: var(--ease-spring-soft, linear(0, 0.039, 0.136, 0.267, 0.411, 0.554, 0.685, 0.8, 0.893, 0.966, 1.018, 1.054, 1.074, 1.083, 1.083, 1.076, 1.067, 1.055, 1.043, 1.031, 1.021, 1.012, 1.006, 1, 0.997, 1)); }
+
+@media (prefers-reduced-motion: reduce) {
+  .lc-ai-glow::before, .lc-ai-glow::after, .lc-ai-edge::before, .lc-ai-edge::after, .lc-ai-orb, .lc-ai-shimmer, .lc-ai-dots i, .lc-ai-wave i, .lc-ai-caret, .lc-ai-tok { animation: none !important; }
+  .lc-ai-shimmer { color: var(--ink-secondary); animation: lc-skel-pulse 1.4s ease-in-out infinite; }
+  .lc-reveal { -webkit-mask-image: none; mask-image: none; }
+}
+
+
+/* ---------- MorphMenu v2 — compact sizes, single-line items, icon-only closed state ---------- */
+.lc-morph { --lc-morph-r: 22px; --lc-morph-default-w: 232px; }
+.lc-morph__inner { padding: 6px; }
+.lc-morph__item { min-height: 44px; padding: 0 var(--space-3, 12px); gap: var(--space-3, 12px); border-radius: 16px; font-size: 15px; line-height: 20px; }
+.lc-morph__item .lc-ico { width: 18px; height: 18px; }
+.lc-morph__item > span { display: flex; align-items: baseline; gap: var(--space-3, 12px); min-width: 0; white-space: nowrap; }
+.lc-morph__item small { display: block; margin-left: auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; font-size: 14px; line-height: 20px; color: var(--ink-secondary); white-space: nowrap; }
+.lc-morph__item > .lc-ico:last-child:not(:first-child) { width: 14px; height: 14px; margin-left: calc(var(--space-1, 4px) * -1); }
+.lc-morph__sep { margin: 4px var(--space-3, 12px); }
+.lc-morph--tablet { --lc-morph-r: 22px; --lc-morph-default-w: 248px; }
+.lc-morph--pc { --lc-morph-r: 10px; --lc-morph-default-w: 200px; }
+.lc-morph--pc .lc-morph__inner { padding: 4px; }
+.lc-morph--pc .lc-morph__item { min-height: 30px; padding: 0 var(--space-2, 8px); gap: var(--space-2, 8px); border-radius: 6px; font-size: 13px; line-height: 18px; }
+.lc-morph--pc .lc-morph__item .lc-ico { width: 15px; height: 15px; stroke-width: 2; }
+.lc-morph--pc .lc-morph__item small { font-size: 12px; line-height: 18px; }
+.lc-morph--pc .lc-morph__sep { margin: 4px var(--space-2, 8px); }
+.lc-morph--tv { --lc-morph-r: 26px; --lc-morph-default-w: 340px; }
+.lc-morph--tv .lc-morph__inner { padding: var(--space-2, 8px); }
+.lc-morph--tv .lc-morph__item { min-height: 60px; padding: 0 var(--space-4, 16px); gap: var(--space-4, 16px); border-radius: 18px; font-size: 22px; line-height: 30px; }
+.lc-morph--tv .lc-morph__item .lc-ico { width: 26px; height: 26px; }
+.lc-morph--tv .lc-morph__item small { font-size: 18px; line-height: 30px; }
+.lc-morph--car { --lc-morph-r: 24px; --lc-morph-default-w: 300px; }
+.lc-morph--car .lc-morph__inner { padding: var(--space-2, 8px); }
+.lc-morph--car .lc-morph__item { min-height: 56px; padding: 0 var(--space-4, 16px); gap: var(--space-3, 12px); border-radius: 16px; font-size: 20px; line-height: 28px; }
+.lc-morph--car .lc-morph__item .lc-ico { width: 24px; height: 24px; }
+.lc-morph--car .lc-morph__item small { font-size: 17px; line-height: 28px; }
+/* icon-only closed state: the trigger is just a glyph in its bar */
+.is-morph.is-ghost .lc-morph__trigger:hover { background: var(--fill-hover); }
+.is-morph.is-ghost .lc-morph__trigger[aria-expanded="true"] { background: transparent; }
+
+/* A glass bar that hosts a MorphMenu keeps its blur on a separate layer.
+   A backdrop-filter on an ancestor would otherwise become the menu's backdrop
+   root — the menu could only blur the bar itself and would turn flat grey. */
+.lc-glass:has(.lc-morph), .lc-glass--strong:has(.lc-morph), .lc-toolbar--glass:has(.lc-morph), .lc-side--glass:has(.lc-morph), .lc-tabbar:has(.lc-morph) {
+  background: none; -webkit-backdrop-filter: none; backdrop-filter: none;
+}
+.lc-glass:has(.lc-morph)::before, .lc-glass--strong:has(.lc-morph)::before, .lc-toolbar--glass:has(.lc-morph)::before, .lc-side--glass:has(.lc-morph)::before, .lc-tabbar:has(.lc-morph)::before {
+  content: ""; position: absolute; inset: 0; z-index: 0; pointer-events: none; border-radius: inherit;
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+}
+.lc-glass--strong:has(.lc-morph)::before, .lc-side--glass:has(.lc-morph)::before { background: var(--glass-fill-strong); }
+:where(.lc-glass:has(.lc-morph), .lc-glass--strong:has(.lc-morph), .lc-toolbar--glass:has(.lc-morph), .lc-side--glass:has(.lc-morph), .lc-tabbar:has(.lc-morph)) { position: relative; }
+.lc-glass:has(.lc-morph) > :not(.lc-liquid), .lc-glass--strong:has(.lc-morph) > :not(.lc-liquid), .lc-toolbar--glass:has(.lc-morph) > :not(.lc-liquid), .lc-side--glass:has(.lc-morph) > :not(.lc-liquid), .lc-tabbar:has(.lc-morph) > :not(.lc-liquid) { position: relative; z-index: 1; }
+
+/* A trigger inside a bar never draws its own disc (no glass-on-glass stacking) */
+.is-morph.is-ghost .lc-morph__trigger { background: transparent; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* ---------- Liquid touch: pointer highlight · jelly press · refraction · progressive blur · theme reveal ---------- */
+:where(.lc-spec) { position: relative; }
+.lc-spec::after { content: none; } /* no gradient light: glass stays flat, interaction is shown by the jelly press */
+@media (hover: hover) { .lc-spec:hover::after { opacity: 1; } }
+.lc-spec.is-pressed::after { opacity: 1; transition-duration: var(--duration-instant, 100ms); }
+
+.lc-jelly { -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+.lc-jelly--drag { touch-action: pan-y; }
+.lc-jelly:active, .lc-btn.lc-jelly:active, .lc-card--action.lc-jelly:active { transform: none; }
+.lc-jelly { transition: box-shadow var(--duration-base, 250ms) var(--ease-standard, cubic-bezier(0.2, 0, 0, 1)); }
+:where(.lc-jelly.is-lifted) { position: relative; }
+.lc-jelly.is-lifted { z-index: 2; box-shadow: var(--shadow-float); }
+
+/* Refraction: base blur stays in CSS as the fallback; JS swaps in url(#…) on Chromium only. */
+.is-refract { background-color: var(--glass-fill-strong); }
+
+/* Progressive blur bar: blurriest at the top, fading out --pblur-extend below the bar. */
+.lc-titlebar, [data-progressive] { background: none; box-shadow: none; isolation: isolate; }
+/* In-flow bars (not overlaying content) don't extend below themselves. */
+.lc-titlebar.is-inflow { --pblur-extend: 0px; }
+/* No-JS fallback: one masked blur layer + tint until bundle.js adds the three-layer stack. */
+.lc-titlebar:not(:has(> .lc-pblur))::before { content: ""; position: absolute; inset: 0 0 calc(-1 * var(--pblur-extend, 36px)); z-index: -1; pointer-events: none;
+  -webkit-backdrop-filter: blur(var(--blur-md, 30px)); backdrop-filter: blur(var(--blur-md, 30px));
+  -webkit-mask-image: linear-gradient(to bottom, #000 40%, transparent 100%); mask-image: linear-gradient(to bottom, #000 40%, transparent 100%); }
+.lc-pblur { position: absolute; left: 0; right: 0; top: 0; bottom: calc(-1 * var(--pblur-extend, 36px)); z-index: -1; pointer-events: none; }
+.lc-pblur i { position: absolute; inset: 0; -webkit-backdrop-filter: blur(var(--pblur, 10px)); backdrop-filter: blur(var(--pblur, 10px)); }
+.lc-pblur i:nth-child(1) { -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 45%, transparent 100%); mask-image: linear-gradient(to bottom, #000 0%, #000 45%, transparent 100%); }
+.lc-pblur i:nth-child(2) { -webkit-mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 70%); mask-image: linear-gradient(to bottom, #000 0%, #000 30%, transparent 70%); }
+.lc-pblur i:nth-child(3) { -webkit-mask-image: linear-gradient(to bottom, #000 0%, transparent 40%); mask-image: linear-gradient(to bottom, #000 0%, transparent 40%); }
+@media (prefers-reduced-transparency: reduce) {
+  .lc-pblur i { -webkit-backdrop-filter: none; backdrop-filter: none; }
+  .lc-pblur { bottom: 0; background: var(--surface-raised); }
+}
+
+/* Circular theme reveal (Lucent.theme). */
+html.lc-vt-reveal::view-transition-old(root), html.lc-vt-reveal::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.lc-vt-reveal::view-transition-new(root) { z-index: 1; }
+
+/* ---------- Unified glass: no strokes. Edges come from blur, fill and soft shadow; highlights only on interaction. ---------- */
+.lc-morph__rim { display: none; }
+
+/* ================= Unified glass: one recipe for every component =================
+   Flat page background, no gradients: glass = translucent fill + blur + soft shadow.
+   Containers (cards, lists, tables…) = strong glass + blur-md + soft shadow.
+   Controls on the page (buttons, chips, inputs, search, segmented…) = thin glass + blur-sm.
+   Anything already sitting on glass drops its own blur and uses a tint instead,
+   so glass never stacks on glass (max two layers). */
+.lc-page [data-theme] { --lc-aura-base: var(--bg); }
+.lc-page, .lc-page [data-theme] {
+  --lc-aura: var(--lc-aura-base, var(--bg));
+  --lc-sf: var(--glass-fill-strong);
+  --lc-sf-blur: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+  --lc-sf-shadow: var(--shadow-glass);
+  --lc-ctl: var(--glass-fill-strong);
+  --lc-ctl-blur: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%));
+  --lc-ctl-shadow: var(--shadow-glass);
+}
+:is(.lc-card, .lc-list, .lc-table-wrap, .lc-acc, .lc-cal, .lc-widget, .lc-gridmenu, .lc-glass, .lc-glass--strong, .lc-glass--float, .lc-dialog, .lc-sheet, .lc-menu, .lc-pop, .lc-notice, .lc-toast, .lc-tip, .lc-banner, .lc-side, .lc-rail, .lc-tabbar, .lc-toolbar, .lc-search, .lc-counter, .lc-seg, .lc-ai-composer, .lc-ai-summary, .lc-morph, [data-bar]) * {
+  --lc-sf-blur: none; --lc-sf-shadow: none;
+  --lc-ctl: var(--fill-control); --lc-ctl-blur: none; --lc-ctl-shadow: none;
+}
+/* Default (grey) buttons pick up blur + shadow; coloured, text and glass variants keep their own. */
+.lc-btn:not(.lc-btn--primary, .lc-btn--secondary, .lc-btn--text, .lc-btn--danger, .lc-btn--danger-text, .lc-btn--glass, .lc-btn--glass-brand),
+.lc-iconbtn:not(.lc-iconbtn--ghost, .lc-iconbtn--glass, .lc-iconbtn--primary) {
+  -webkit-backdrop-filter: var(--lc-ctl-blur, none); backdrop-filter: var(--lc-ctl-blur, none);
+  box-shadow: var(--lc-ctl-shadow, none);
+}
+.lc-chip[aria-pressed="true"], .lc-chip[aria-selected="true"], .lc-field--outlined .lc-field__input { -webkit-backdrop-filter: none; backdrop-filter: none; }
+/* Lite: watch, smart screen and low-end devices keep the translucent fill but drop content blur. */
+.lc-page--lite { --lc-sf-blur: none; --lc-ctl-blur: none; }
+@media (prefers-reduced-transparency: reduce) {
+  .lc-page { --lc-aura: var(--lc-aura-base, var(--bg)); --lc-sf: var(--surface); --lc-sf-blur: none; --lc-ctl: var(--fill-control); --lc-ctl-blur: none; }
+  .lc-toast, .lc-tip { background: var(--surface-raised); -webkit-backdrop-filter: none; backdrop-filter: none; }
+}
+
+/* Resting MorphMenu: the closed button draws its own round glass, so no clip-path is
+   left on screen (some GPUs draw a clipped backdrop-filter as its bounding box). */
+.is-morph.is-rest .lc-morph__panel, .is-morph.is-rest .lc-morph__shadow, .is-morph.is-rest .lc-morph__rim { visibility: hidden; }
+.is-morph.is-rest .lc-morph__trigger { color: var(--ink); }
+.is-morph.is-rest .lc-morph__trigger .lc-ico { opacity: 1; }
+.is-morph.is-rest:not(.is-ghost) .lc-morph__trigger {
+  background: var(--glass-fill-strong);
+  -webkit-backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-glass);
+}
+
+/* Title bar buttons: one look everywhere — the round glass button. (PC window controls stay plain icons.) */
+.lc-titlebar:not(.lc-titlebar--pc) .lc-iconbtn:not(.lc-iconbtn--primary),
+[data-progressive] .lc-iconbtn:not(.lc-iconbtn--primary) {
+  background-color: var(--glass-fill-strong); color: var(--ink);
+  -webkit-backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%)); backdrop-filter: blur(var(--blur-sm, 16px)) saturate(var(--glass-saturate, 200%));
+  box-shadow: var(--shadow-glass);
+}
+
+/* Readability: tinted tags sit on a solid surface; heads on glass widgets use ink. */
+.lc-tag { background-color: var(--surface) !important; }
+.lc-tag--brand { background-image: linear-gradient(var(--brand-tint), var(--brand-tint)); }
+.lc-tag--success { background-image: linear-gradient(var(--success-tint), var(--success-tint)); }
+.lc-tag--warning { background-image: linear-gradient(var(--warning-tint), var(--warning-tint)); }
+.lc-tag--danger { background-image: linear-gradient(var(--danger-tint), var(--danger-tint)); }
+.lc-tag[class*="lc-accent--"] { background-image: linear-gradient(var(--lc-accent-soft), var(--lc-accent-soft)); }
+.lc-widget--glass .lc-widget__head, .lc-widget--glass[class*="lc-accent--"] .lc-widget__head { color: var(--ink); }
+.lc-widget--glass[class*="lc-accent--"] .lc-widget__head .lc-ico { color: var(--lc-accent-text); }
+
+@keyframes lc-skel-pulse { 50% { opacity: .5; } }

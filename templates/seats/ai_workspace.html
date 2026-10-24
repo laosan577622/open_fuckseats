@@ -1,88 +1,140 @@
-<!DOCTYPE html>
-<html lang="zh-CN">
+{% extends 'base.html' %}
+{% load static %}
+{% block title %}闻道智能 - {{ classroom.name }}{% endblock %}
+{% block body_class %}wendao-ws-body{% endblock %}
+{% block extra_head %}<link rel="stylesheet" href="{% static 'css/ai_workspace.css' %}?v=4">{% endblock %}
+{% block back_href %}{% url 'classroom_detail' classroom.pk %}?cloud_sync=return{% endblock %}{% block back_label %}返回班级{% endblock %}
+{% block titlebar_title %}
+<div class="classroom-titlebar-meta" aria-label="当前班级">
+    <strong>{{ classroom.name }}</strong>
+    <small>闻道智能</small>
+</div>
+{% endblock %}
+{% block ai_titlebar_link %}{% endblock %}
+{% block content %}
+<div id="future-mode-root" hidden data-chat-url="{% url 'wendao_chat' classroom.pk %}"
+    data-chat-stream-url="{% url 'wendao_chat_stream' classroom.pk %}"
+    data-state-url="{% url 'classroom_state' classroom.pk %}"
+    data-detail-url="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return" data-classroom-id="{{ classroom.pk }}" data-classroom-name="{{ classroom.name }}"
+    data-csrf="{{ csrf_token }}"></div>
+{# 对话引擎用这个节点上的类名报告“思考中”，这里只作状态来源，不绘制任何效果 #}
+<div id="glowContainer" hidden></div>
 
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Window Inteligence ｜ 闻道智能 - {{ classroom.name }}</title>
-    {% load static %}
-    <link rel="stylesheet" href="{% static 'css/ai_workspace.css' %}?v=3.4">
-    <script src="{% url 'frontend_store_js' %}?v=1.0"></script>
-</head>
-
-<body>
-    <div id="future-mode-root" style="display:none;" data-chat-url="{% url 'wendao_chat' classroom.pk %}"
-        data-chat-stream-url="{% url 'wendao_chat_stream' classroom.pk %}"
-        data-state-url="{% url 'classroom_state' classroom.pk %}"
-        data-detail-url="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return" data-classroom-id="{{ classroom.pk }}" data-classroom-name="{{ classroom.name }}"
-        data-csrf="{{ csrf_token }}">
-    </div>
-
-
-    <svg style="display: none;" aria-hidden="true">
-        <defs>
-            <filter id="fluid-noise">
-                <feTurbulence type="fractalNoise" baseFrequency="0.015" numOctaves="3" result="noise" />
-                <feDisplacementMap in="SourceGraphic" in2="noise" scale="50" xChannelSelector="R"
-                    yChannelSelector="G" />
-            </filter>
-        </defs>
-    </svg>
-
-    <div class="fluid-glow-container" id="glowContainer">
-        <div class="fluid-glow"></div>
-    </div>
-
-    <div class="app-screen" id="appScreen">
-
-        <div class="startup-ripple"></div>
-
-        <div class="topbar">
-            <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return" class="btn-capsule back-btn">
-                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor" style="margin-right: 4px;">
-                    <path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"></path>
-                </svg>
-                返回
-            </a>
-            <div class="header-title">{{ classroom.name }} ｜ 闻道智能</div>
-            <a id="configBtn" class="btn-capsule config-btn" href="{% url 'settings' %}?classroom={{ classroom.pk }}#wendao">连接设置</a>
-        </div>
-
-        <div class="main-layout">
-            <div class="chat-section">
-                <div class="conversation-toolbar">
-                    <select id="conversationSelect" class="conversation-select" aria-label="选择对话"></select>
-                    <select id="wendao-model" class="conversation-select" aria-label="模型" disabled></select>
-                    <button id="newConversationBtn" type="button" class="btn-capsule">新对话</button>
-                    <button id="deleteConversationBtn" type="button" class="btn-capsule"
-                        style="background:#E5E5EA; color:#1f2937;">删除</button>
-                </div>
-                <p id="wendao-status" role="status" class="wendao-status">正在读取授权与模型…</p>
-                <div class="chat-container" id="chatContainer">
-                    <div class="message ai">
-                        你好，我是 {{ classroom.name }} 的 Window Inteligence ｜
-                        闻道智能。<br>输入指令即可调度各项功能，例如：交换座位、查询小组评分等。<br>遇到需要数据操作时，我会先向你请求授权。
-                    </div>
-                </div>
-
-                <div class="input-wrapper">
-                    <div class="prompt-chips" id="promptChips">
-                        <button class="future-prompt-chip" data-prompt="帮我统计当前小组评分排行">小组评分排行</button>
-                        <button class="future-prompt-chip" data-prompt="有哪些人还没有排座位？">未排座名单</button>
-                        <button class="future-prompt-chip" data-prompt="按成绩降序给我前10名学生列表">成绩Top10</button>
-                        <button class="future-prompt-chip" data-prompt="给我发送一张班级报告图卡片">班级报告图</button>
-                    </div>
-
-                    <form id="future-chat-form" class="input-box" onsubmit="event.preventDefault();">
-                        <input type="text" id="userInput" placeholder="向闻道智能发送消息..." autocomplete="off">
-                        <button type="submit" class="send-btn btn-capsule" id="sendBtn">
-                            发送
-                        </button>
-                    </form>
-                </div>
+<div class="ws" id="appScreen">
+    {# 左栏：新对话、对话列表、模型与连接状态 #}
+    <aside class="ws-side" id="ws-side" aria-label="对话">
+        <button id="newConversationBtn" type="button" class="ws-new">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            新对话
+        </button>
+        <div class="ws-side-label">对话记录</div>
+        <nav class="ws-conv-list" id="ws-conv-list" aria-label="对话列表"></nav>
+        <select id="conversationSelect" class="ws-hidden-select" aria-hidden="true" tabindex="-1"></select>
+        <div class="ws-side-foot">
+            <label class="ws-side-label" for="wendao-model">模型</label>
+            <div class="ws-model">
+                <select id="wendao-model" aria-label="模型" disabled></select>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
             </div>
+            <p id="wendao-status" role="status" class="ws-status">正在读取授权与模型…</p>
+            <a class="ws-link" href="{% url 'settings' %}?classroom={{ classroom.pk }}#wendao">连接设置与额度</a>
         </div>
-    </div>
+    </aside>
+    <div class="ws-scrim" id="ws-scrim" hidden></div>
+
+    <section class="ws-main" aria-label="对话">
+        <header class="ws-main-head">
+            <button type="button" class="ws-icon ws-side-toggle" id="ws-side-toggle" aria-label="对话列表" aria-controls="ws-side" aria-expanded="false">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15"/></svg>
+            </button>
+            <span class="lc-ai-orb lc-ai-orb--sm" id="ws-orb" aria-hidden="true"></span>
+            <strong class="ws-title" id="ws-title">新对话</strong>
+            <button id="deleteConversationBtn" type="button" class="ws-icon" aria-label="删除当前对话" title="删除当前对话">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.5 7h15M10 11v6M14 11v6M6.5 7l.8 11.2A2 2 0 0 0 9.3 20h5.4a2 2 0 0 0 2-1.8L17.5 7M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/></svg>
+            </button>
+        </header>
+
+        <div class="ws-thread chat-container" id="chatContainer" role="log" aria-live="polite" aria-label="对话记录">
+            <div class="message ai">你好，我是 {{ classroom.name }} 的闻道智能。
+输入指令即可调度各项功能，例如交换座位、查询小组评分。需要改动数据时，我会先请求你的授权。</div>
+        </div>
+
+        <div class="ws-input">
+            <div class="lc-ai-suggest ws-suggest" id="promptChips">
+                <button type="button" class="future-prompt-chip" data-prompt="帮我统计当前小组评分排行">小组评分排行</button>
+                <button type="button" class="future-prompt-chip" data-prompt="有哪些人还没有排座位？">未排座名单</button>
+                <button type="button" class="future-prompt-chip" data-prompt="按成绩降序给我前10名学生列表">成绩前 10 名</button>
+                <button type="button" class="future-prompt-chip" data-prompt="给我发送一张班级报告图卡片">班级报告卡片</button>
+            </div>
+            <form id="future-chat-form" class="lc-ai-glow lc-ai-composer ws-composer" data-state="idle" aria-label="向闻道智能提问">
+                <textarea id="userInput" rows="1" placeholder="问问闻道，或输入 / 调用班级命令" aria-label="向闻道智能提问" autocomplete="off" maxlength="16000"></textarea>
+                <button type="submit" class="lc-ai-send" id="sendBtn" aria-label="发送">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+                </button>
+            </form>
+            <p class="ws-note">内容由 AI 生成，请核对后使用</p>
+        </div>
+    </section>
+</div>
 <script src="{% static 'js/ai_name_privacy.js' %}?v=1"></script>
-<script src="{% static 'js/ai_workspace.js' %}?v=8"></script>
-</body></html>
+<script src="{% static 'js/ai_workspace.js' %}?v=9"></script>
+<script>
+(() => {
+    'use strict';
+    // 工作区外壳：对话列表镜像隐藏的 select；思考状态驱动输入框光边；窄窗口抽屉开合
+    const select = document.getElementById('conversationSelect');
+    const list = document.getElementById('ws-conv-list');
+    const title = document.getElementById('ws-title');
+    const form = document.getElementById('future-chat-form');
+    const input = document.getElementById('userInput');
+    const orb = document.getElementById('ws-orb');
+    const glow = document.getElementById('glowContainer');
+    const side = document.getElementById('ws-side');
+    const scrim = document.getElementById('ws-scrim');
+    const toggle = document.getElementById('ws-side-toggle');
+    function renderList() {
+        list.replaceChildren(...[...select.options].map(option => {
+            const item = document.createElement('button');
+            item.type = 'button';
+            item.className = 'ws-conv';
+            item.textContent = option.textContent;
+            if (option.value === select.value) item.setAttribute('aria-current', 'true');
+            item.addEventListener('click', () => {
+                if (option.value !== select.value) { select.value = option.value; select.dispatchEvent(new Event('change')); renderList(); }
+                setDrawer(false);
+            });
+            return item;
+        }));
+        title.textContent = select.selectedOptions[0]?.textContent || '新对话';
+        if (!select.options.length) {
+            const empty = document.createElement('p');
+            empty.className = 'ws-empty';
+            empty.textContent = '还没有对话记录';
+            list.append(empty);
+        }
+    }
+    new MutationObserver(renderList).observe(select, {childList: true, subtree: true, attributes: true});
+    select.addEventListener('change', renderList);
+    renderList();
+    new MutationObserver(() => {
+        const thinking = glow.classList.contains('animating');
+        form.dataset.state = thinking ? 'thinking' : 'idle';
+        if (thinking) orb.dataset.state = 'thinking'; else orb.removeAttribute('data-state');
+    }).observe(glow, {attributes: true, attributeFilter: ['class']});
+    function autosize() { input.style.height = 'auto'; input.style.height = `${Math.min(input.scrollHeight, 144)}px`; }
+    input.addEventListener('input', autosize);
+    input.addEventListener('keydown', event => {
+        if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) { event.preventDefault(); form.requestSubmit(); setTimeout(autosize); }
+    });
+    function setDrawer(open) {
+        side.classList.toggle('is-open', open);
+        scrim.hidden = !open;
+        toggle.setAttribute('aria-expanded', String(open));
+    }
+    toggle.addEventListener('click', () => setDrawer(!side.classList.contains('is-open')));
+    scrim.addEventListener('click', () => setDrawer(false));
+    document.getElementById('newConversationBtn').addEventListener('click', () => setDrawer(false));
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && side.classList.contains('is-open')) setDrawer(false); });
+})();
+</script>
+{% endblock %}

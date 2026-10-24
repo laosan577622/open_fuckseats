@@ -48,22 +48,6 @@ select {
     -webkit-user-select: text;
 }
 
-.app-header {
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    min-height: var(--header-base-height);
-    height: auto;
-    background: linear-gradient(180deg, rgba(249, 251, 255, 0.95) 0%, rgba(241, 246, 255, 0.86) 100%);
-    backdrop-filter: saturate(170%) blur(18px);
-    -webkit-backdrop-filter: saturate(170%) blur(18px);
-    border-bottom: 1px solid #e4e4e9;
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.08);
-    z-index: 1000;
-    padding: 6px 10px 6px;
-}
-
 .app-footer {
     padding: 16px 24px 24px;
     display: flex;
@@ -73,151 +57,15 @@ select {
     font-size: 12px;
 }
 
-.header-content {
-    width: 100%;
-    display: grid;
-    grid-template-rows: 34px 1fr;
-    gap: 4px;
-    min-width: 0;
-}
-
-.header-titlebar {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 8px;
-    min-width: 0;
-}
-
-/* 原生菜单层：桌面壳与浏览器预览共用。 */
-.native-menu-bar {
-    position: absolute;
-    top: 6px;
-    left: 250px;
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    z-index: 12;
-}
-
-.native-menu-brand {
-    display: none;
-    align-items: center;
-    min-height: 28px;
-    padding: 3px 12px 3px 0;
-    color: var(--text-primary);
-    font-size: 12px;
-    font-weight: 650;
-    white-space: nowrap;
-}
-
-
-.native-menu-trigger {
-    min-height: 26px;
-    padding: 3px 10px;
-    border: 0;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--text-primary);
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-}
-
-.native-menu-trigger:hover,
-.native-menu-trigger.is-open {
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), .1);
-    color: var(--primary-color);
-}
-
-.native-menu-popover {
-    position: fixed;
-    min-width: 190px;
-    padding: 5px;
-    border: 1px solid rgba(15, 23, 42, .12);
-    border-radius: 10px;
-    background: rgba(255, 255, 255, .98);
-    box-shadow: 0 14px 35px rgba(15, 23, 42, .18);
-    z-index: 5000;
-}
-
-.native-menu-item {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    justify-content: flex-start;
-    min-height: 32px;
-    padding: 6px 10px;
-    border: 0;
-    border-radius: 7px;
-    background: transparent;
-    color: var(--text-primary);
-    font-size: 13px;
-    text-align: left;
-    cursor: pointer;
-}
-
-.native-menu-item:hover:not(:disabled) {
-    background: var(--primary-color);
-    color: #fff;
-}
-
-.native-menu-item:disabled {
-    color: var(--text-secondary);
-    opacity: .55;
-    cursor: not-allowed;
-}
-
-body[data-app-shell="webview"] .native-menu-bar {
-    display: inline-flex;
-}
-
-/* 桌面壳中，菜单栏承接系统级菜单，页面动作保留在上下文工具栏。 */
-body[data-app-shell="webview"] .context-toolbar-shell {
-    border-color: transparent;
-    background: transparent;
-    box-shadow: none;
-}
-
-body[data-app-shell="webview"] .header-actions {
-    padding-left: 2px;
-}
-
-body[data-app-shell="webview"] .app-header {
-    background: rgba(249, 251, 255, .94);
-}
-
-body[data-app-platform="macos"] .native-menu-bar {
-    left: 260px;
-}
-
-body[data-app-platform="windows"] .native-menu-bar {
-    left: 210px;
-}
-
-/* macOS 桌面端使用 pywebview 提供的系统菜单栏，不在窗口内容里重复绘制一份。 */
-body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar {
-    display: none !important;
-}
-
-body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-titlebar-sync,
-body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-titlebar-settings,
-body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
-    display: none !important;
-}
-
 /* 平台调性：同一套业务布局使用不同的窗口密度和圆角语言。 */
-body[data-app-shell="webview"][data-app-platform="windows"] .settings-app,
 body[data-app-shell="webview"][data-app-platform="windows"] .classroom-layout {
     border-radius: 0;
 }
 
-body[data-app-shell="webview"][data-app-platform="windows"] .settings-rail,
 body[data-app-shell="webview"][data-app-platform="windows"] .panel-card {
     border-radius: 6px;
 }
 
-body[data-app-shell="webview"][data-app-platform="macos"] .settings-rail,
 body[data-app-shell="webview"][data-app-platform="macos"] .panel-card {
     border-radius: 12px;
 }
@@ -236,15 +84,7 @@ body[data-app-shell="webview"][data-app-platform="windows"] .layout-editor-body 
     border-radius: 6px;
 }
 
-body[data-app-shell="webview"][data-app-platform="macos"] .settings-page-body .settings-canvas {
-    padding-right: 28px;
-}
-
-body[data-app-shell="webview"][data-app-platform="windows"] .settings-page-body .settings-canvas {
-    padding-right: 20px;
-}
-
-body[data-app-shell="webview"] .workflow-page-body main.form-page {
+body[data-app-shell="webview"] .workflow-page-body .form-page {
     min-height: calc(100vh - var(--header-height) - 12px);
     padding-top: 18px;
 }
@@ -296,426 +136,22 @@ body[data-app-shell="webview"][data-app-platform="macos"] .plugin-ui-page-body .
     border-radius: 14px;
 }
 
-@media (max-width: 760px) {
-    .native-menu-bar {
-        display: none !important;
-    }
-}
-
 /* 浏览器预览也采用 Windows 桌面版的三段式标题栏，避免班级标题与菜单重叠。 */
 body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] {
     overflow: hidden;
-    --header-height: 130px;
-    padding-top: 130px;
-    background: #f5f6f8;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .app-header {
-    height: 130px;
-    min-height: 130px;
-    padding: 0;
-    background: #fff;
-    border-bottom: 1px solid #dfe3e8;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .header-content {
-    display: grid;
-    grid-template-rows: 38px 28px 64px;
-    gap: 0;
-    height: 100%;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .header-titlebar {
-    grid-row: 1;
-    height: 38px;
-    padding: 0 16px;
-    border-bottom: 1px solid #edf0f4;
-    background: #fbfcfd;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .logo {
-    gap: 8px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-    color: #172033;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .logo-svg {
-    width: 20px;
-    height: 20px;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .logo-meta small,
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] #btn-open-tour-titlebar,
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .cloud-header-area {
-    display: none !important;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    min-width: 190px;
-    margin-left: 10px;
-    margin-right: auto;
-    line-height: 1.2;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta strong {
-    font-size: 13px;
-    font-weight: 650;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta small {
-    display: block;
-    margin-top: 2px;
-    color: #7b8493;
-    font-size: 10px;
-}
-
-/* Windows 标题栏使用参考图的应用名 + 当前班级标题，不重复显示旧版品牌胶囊。 */
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .logo-meta,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .logo-meta {
-    display: none !important;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta strong::before,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta strong::before {
-    content: "不想排座位 - ";
-    font-weight: 650;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta small,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta small {
-    display: none;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-bar {
-    top: 38px;
-    left: 16px;
-    right: 0;
-    height: 28px;
-    padding-left: 0;
-    gap: 0;
-    align-items: stretch;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-brand {
-    display: inline-flex;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-trigger {
-    min-height: 28px;
-    padding: 3px 12px;
-    border-radius: 0;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .context-toolbar-shell {
-    grid-row: 3;
-    min-height: 64px;
-    height: 64px;
-    padding: 0 20px;
-    border: 0;
-    border-top: 1px solid #e8ebf0;
-    border-radius: 0;
-    background: #fff;
-    box-shadow: none;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .header-actions {
-    gap: 0;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-row {
-    height: 63px;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-arrange .quick-arrange-form {
-    display: inline-flex;
-    align-items: center;
-    gap: 0;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-arrange-select {
-    width: 170px;
-    min-width: 170px;
-    min-height: 38px;
-    padding: 0 28px 0 12px;
-    border: 1px solid #d6dce5;
-    border-radius: 6px;
-    background: #fff;
-    color: #243047;
-    font-size: 13px;
-    font-weight: 550;
-    cursor: pointer;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 34px;
-    padding: 0 14px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: #243047;
-    font-size: 13px;
-    font-weight: 550;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-button:hover {
-    background: #edf3ff;
-    color: #0a59f7;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-menu-trigger {
-    min-width: 78px;
-    padding-right: 28px;
-    border: 1px solid #d6dce5;
-    background: #fff;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-menu-trigger:hover,
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-menu.open .classroom-toolbar-menu-trigger {
-    border-color: rgba(10, 89, 247, .34);
-    background: #eef5ff;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] #btn-auto-arrange {
-    min-height: 38px;
-    padding: 0 22px;
-    border-radius: 6px;
-    font-size: 14px;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-divider {
-    width: 1px;
-    height: 28px;
-    flex: 0 0 1px;
-    background: #e0e4ea;
 }
 
 /* 班级工作区：以参考图中的桌面应用结构为基线，保留原有座位网格与业务 DOM。 */
 body.classroom-detail-body[data-app-shell="webview"] {
     overflow: hidden;
-    --header-height: 130px;
-    padding-top: 130px;
-    background: #f5f6f8;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .app-header {
-    height: 130px;
-    min-height: 130px;
-    padding: 0;
-    background: rgba(255, 255, 255, .97);
-    border-bottom: 1px solid #dfe3e8;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .header-content {
-    display: grid;
-    grid-template-rows: 38px 28px 64px;
-    gap: 0;
-    height: 100%;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .header-titlebar {
-    grid-row: 1;
-    height: 38px;
-    padding: 0 16px;
-    border-bottom: 1px solid #edf0f4;
-    background: #fbfcfd;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .logo {
-    gap: 8px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-    color: #172033;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .logo-svg {
-    width: 20px;
-    height: 20px;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .logo-meta small,
-body.classroom-detail-body[data-app-shell="webview"] #btn-open-tour-titlebar,
-body.classroom-detail-body[data-app-shell="webview"] .cloud-header-area {
-    display: none !important;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-titlebar-meta {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    min-width: 190px;
-    margin-left: 10px;
-    margin-right: auto;
-    line-height: 1.2;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-titlebar-meta strong {
-    font-size: 13px;
-    font-weight: 650;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-titlebar-meta small {
-    display: block;
-    margin-top: 2px;
-    color: #7b8493;
-    font-size: 10px;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .native-menu-bar {
-    top: 38px;
-    left: 142px;
-    right: 0;
-    height: 28px;
-    padding-left: 0;
-    gap: 0;
-    align-items: stretch;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .native-menu-trigger {
-    min-height: 28px;
-    padding: 3px 12px;
-    border-radius: 0;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .context-toolbar-shell {
-    grid-row: 3;
-    min-height: 64px;
-    height: 64px;
-    padding: 0 20px;
-    border: 0;
-    border-top: 1px solid #e8ebf0;
-    border-radius: 0;
-    background: #fff;
-    box-shadow: none;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .header-actions {
-    gap: 0;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-row {
-    height: 63px;
-    gap: 14px;
-    overflow: visible;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-group {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    flex: 0 0 auto;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange .quick-arrange-form {
-    display: inline-flex;
-    align-items: center;
-    gap: 0;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-arrange-select {
-    width: 170px;
-    min-width: 170px;
-    min-height: 38px;
-    padding: 0 28px 0 12px;
-    border: 1px solid #d6dce5;
-    border-radius: 6px;
-    opacity: 1;
-    pointer-events: auto;
-    background: #fff;
-    color: #243047;
-    font-size: 13px;
-    font-weight: 550;
-    cursor: pointer;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 34px;
-    padding: 0 14px;
-    border: 0;
-    border-radius: 6px;
-    background: transparent;
-    color: #243047;
-    font-size: 13px;
-    font-weight: 550;
-    text-decoration: none;
-    cursor: pointer;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-button:hover {
-    background: #edf3ff;
-    color: #0a59f7;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-menu-trigger {
-    min-width: 78px;
-    padding-right: 28px;
-    border: 1px solid #d6dce5;
-    background: #fff;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-menu-trigger:hover,
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-menu.open .classroom-toolbar-menu-trigger {
-    border-color: rgba(10, 89, 247, .34);
-    background: #eef5ff;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] #btn-auto-arrange {
-    min-height: 38px;
-    padding: 0 22px;
-    border-radius: 6px;
-    font-size: 14px;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-divider {
-    width: 1px;
-    height: 28px;
-    flex: 0 0 1px;
-    background: #e0e4ea;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-overflow {
-    display: none;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .classroom-layout {
     grid-template-columns: minmax(0, 1fr) minmax(330px, 27vw);
     gap: 0;
-    height: calc(100vh - 130px);
+    height: calc(100vh - var(--header-height));
     margin: 0;
     padding: 0;
-    background: #fff;
     border: 0;
 }
 
@@ -723,7 +159,6 @@ body.classroom-detail-body[data-app-shell="webview"] .seat-stage {
     justify-content: center;
     align-items: flex-start;
     padding: 28px 28px 44px;
-    background: #fff;
     overflow: auto;
 }
 
@@ -741,7 +176,6 @@ body.classroom-detail-body[data-app-shell="webview"] .seat-row {
 
 body.classroom-detail-body[data-app-shell="webview"] .seat-column-labels {
     margin-bottom: -2px;
-    color: #727c8b;
     font-size: 11px;
     text-align: center;
 }
@@ -759,7 +193,6 @@ body.classroom-detail-body[data-app-shell="webview"] .seat-column-labels .seat-c
 body.classroom-detail-body[data-app-shell="webview"] .seat-row-label {
     width: 56px;
     flex: 0 0 56px;
-    color: #727c8b;
     font-size: 11px;
     text-align: right;
     white-space: nowrap;
@@ -769,39 +202,28 @@ body.classroom-detail-body[data-app-shell="webview"] .seat {
     width: clamp(72px, 6.5vw, 102px);
     height: clamp(62px, 6vw, 82px);
     flex: 0 0 clamp(72px, 6.5vw, 102px);
-    border: 1px solid #d6dce5;
-    border-radius: 6px;
-    background: #fff;
-    box-shadow: none;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .seat.occupied {
     border-color: #d6dce5;
-    background: #fff;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .seat.selected {
     border: 2px solid #0a59f7;
-    background: #eef5ff;
-    box-shadow: 0 0 0 1px rgba(10, 89, 247, .12);
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .seat.cell-podium {
-    background: #dfe3e8;
     border: 0;
     border-radius: 3px;
-    color: #434c59;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .seat.cell-aisle {
-    background: #e9edf2;
     border: 0;
     border-radius: 3px;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .seat-name {
     font-size: 13px;
-    font-weight: 600;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .seat-group-tag {
@@ -809,7 +231,6 @@ body.classroom-detail-body[data-app-shell="webview"] .seat-group-tag {
     bottom: 3px;
     font-size: 9px;
     padding: 1px 4px;
-    border-radius: 3px;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .side-panel {
@@ -818,8 +239,6 @@ body.classroom-detail-body[data-app-shell="webview"] .side-panel {
     height: 100%;
     padding: 0;
     overflow: hidden;
-    border-left: 1px solid #e0e4ea;
-    background: #fff;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-card:first-child {
@@ -864,43 +283,19 @@ body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-tabs .
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .tab-header {
-    height: 48px;
-    flex: 0 0 48px;
     position: sticky;
     top: 0;
     z-index: 3;
-    padding: 5px 12px;
-    gap: 4px;
-    overflow-x: auto;
-    overflow-y: hidden;
     flex-wrap: nowrap;
     scrollbar-width: none;
-    border-bottom: 1px solid #e4e8ed;
-    background: #fff;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .tab-header::-webkit-scrollbar {
     display: none;
 }
 
-body.classroom-detail-body[data-app-shell="webview"] .tab-btn {
-    height: 36px;
-    min-width: 56px;
-    flex: 0 0 auto;
-    padding: 0 8px;
-    border: 1px solid #dfe4ec;
-    border-radius: 8px;
-    background: #f7f9fc;
-    border-bottom: 1px solid #dfe4ec;
-    color: #586273;
-    font-size: 13px;
-}
-
 body.classroom-detail-body[data-app-shell="webview"] .tab-btn.active {
     border-color: rgba(10, 89, 247, .34);
-    color: #0a59f7;
-    background: #eef5ff;
-    box-shadow: 0 2px 5px rgba(10, 89, 247, .08);
 }
 
 /* 窄窗口响应式：座位区与侧栏上下排列，侧栏内部独立滚动，避免 Tab 被固定顶栏或长列表覆盖。 */
@@ -929,7 +324,6 @@ body.classroom-detail-body[data-app-shell="webview"] .tab-btn.active {
         max-height: none;
         overflow: visible;
         border-top: 1px solid #e0e4ea;
-        border-left: 0;
     }
 
     body.classroom-detail-body[data-app-shell="webview"] .side-panel > .panel-card:first-child {
@@ -951,13 +345,6 @@ body.classroom-detail-body[data-app-shell="webview"] .tab-btn.active {
     }
 }
 
-/* Windows 参考图的侧栏从工具栏下方开始，工具栏只占左侧工作区。 */
-body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
-body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
-    width: calc(100% - 430px);
-    margin-right: 430px;
-}
-
 body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
 body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .classroom-layout {
     grid-template-columns: minmax(0, 1fr);
@@ -968,22 +355,16 @@ body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"
 body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
     position: fixed;
     z-index: 1001;
-    top: 76px;
+    top: calc(var(--app-titlebar-h) + var(--app-hdr-menu));
     right: 0;
     bottom: 0;
     width: min(430px, 32vw);
     height: auto;
     max-height: none;
     border-top: 0;
-    border-left: 1px solid #e0e4ea;
 }
 
 @media (max-width: 1100px) {
-    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
-    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
-        width: auto;
-        margin-right: 0;
-    }
 
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .classroom-layout {
@@ -995,14 +376,10 @@ body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"
         position: static;
         width: auto;
         border-top: 1px solid #e0e4ea;
-        border-left: 0;
     }
 }
 
 @media (max-width: 760px) {
-    body.classroom-detail-body[data-app-shell="webview"] .native-menu-bar {
-        display: none !important;
-    }
 
     body.classroom-detail-body[data-app-shell="webview"] .classroom-layout {
         padding-bottom: max(20px, env(safe-area-inset-bottom));
@@ -1023,13 +400,7 @@ body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"
 
     body.classroom-detail-body[data-app-shell="webview"] .tab-header {
         top: 0;
-        padding-left: 10px;
-        padding-right: 10px;
     }
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .tab-body {
-    padding: 18px 20px 28px;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .tab-panel[data-tab-panel="students"] {
@@ -1040,26 +411,6 @@ body.classroom-detail-body[data-app-shell="webview"] .student-list-heading h3,
 body.classroom-detail-body[data-app-shell="webview"] .student-detail-heading h3 {
     font-size: 15px;
     font-weight: 650;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .student-list-count {
-    color: #596477;
-    font-weight: 500;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] #unseatedSearch {
-    min-height: 34px;
-    margin: 10px 0;
-    border-radius: 6px;
-    border-color: #d6dce5;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .unseated-item {
-    min-height: 38px;
-    padding: 8px 10px;
-    border-bottom: 1px solid #edf0f3;
-    border-radius: 0;
-    background: transparent;
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .student-detail-panel {
@@ -1109,12 +460,6 @@ body.classroom-detail-body[data-app-shell="webview"] .student-display-options {
     right: 0;
     display: grid;
     min-width: 116px;
-    gap: 7px;
-    padding: 10px;
-    border: 1px solid #dfe4eb;
-    border-radius: 10px;
-    background: #fff;
-    box-shadow: 0 10px 26px rgba(15, 23, 42, .14);
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .student-display-options label {
@@ -1127,12 +472,6 @@ body.classroom-detail-body[data-app-shell="webview"] .student-display-options la
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .student-detail-edit {
-    min-height: 30px;
-    padding: 0 12px;
-    border: 1px solid #d6dce5;
-    border-radius: 6px;
-    background: #f7f9fc;
-    color: #415066;
     cursor: pointer;
 }
 
@@ -1176,18 +515,7 @@ body.classroom-detail-body[data-app-shell="webview"] .student-detail-actions {
 }
 
 body.classroom-detail-body[data-app-shell="webview"] .student-detail-action {
-    min-height: 32px;
-    padding: 0 10px;
-    border: 1px solid #d6dce5;
-    border-radius: 6px;
-    background: #fff;
-    color: #354256;
-    font-size: 12px;
     cursor: pointer;
-}
-
-body.classroom-detail-body[data-app-shell="webview"] .student-detail-action.is-danger {
-    color: #a13737;
 }
 
 /* 详情页使用同一套卡片圆角，避免 Windows 直角与 macOS 小圆角混用。 */
@@ -1199,138 +527,8 @@ body.classroom-detail-body .student-display-menu summary {
     border-radius: 14px;
 }
 
-body.classroom-detail-body .tab-header {
-    border-radius: 12px;
-}
-
 body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-layout {
     border-radius: 0;
-}
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] {
-    --header-height: 72px;
-    padding-top: 72px;
-    background: #e9eef5;
-}
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
-    height: 72px;
-    min-height: 72px;
-    background: rgba(255, 255, 255, .84);
-    border: 0;
-    border-radius: 14px 14px 0 0;
-    box-shadow: 0 8px 24px rgba(31, 41, 55, .12);
-    backdrop-filter: saturate(160%) blur(18px);
-    -webkit-backdrop-filter: saturate(160%) blur(18px);
-}
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-content {
-    display: block;
-}
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
-    height: 72px;
-    padding: 0 24px;
-    border: 0;
-    background: transparent;
-}
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar {
-    display: none;
-}
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell {
-    position: absolute;
-    top: 0;
-    left: 350px;
-    right: 24px;
-    height: 72px;
-    min-height: 72px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-}
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout {
-    height: calc(100vh - 72px);
-    border-radius: 0 0 14px 14px;
-    box-shadow: 0 12px 32px rgba(31, 41, 55, .14);
-}
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-toolbar-row {
-    justify-content: flex-start;
-}
-
-.logo {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    text-decoration: none;
-    color: var(--text-primary);
-    font-weight: 600;
-    font-size: 15px;
-    padding: 5px 8px;
-    border-radius: 12px;
-    border: 1px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.16);
-    background: rgba(255, 255, 255, 0.92);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.72), 0 4px 16px rgba(var(--primary-color-rgb, 10, 89, 247), 0.08);
-    flex: 0 0 auto;
-    transition: border-color 0.2s ease, box-shadow 0.2s ease;
-}
-
-.logo:hover {
-    border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.24);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8), 0 6px 20px rgba(var(--primary-color-rgb, 10, 89, 247), 0.12);
-}
-
-.logo svg {
-    flex: 0 0 auto;
-    color: var(--primary-color);
-}
-
-.logo-meta {
-    display: flex;
-    flex-direction: column;
-    line-height: 1.1;
-    gap: 3px;
-}
-
-.logo-meta small {
-    font-size: 10px;
-    color: var(--text-secondary);
-    font-weight: 500;
-    display: none;
-}
-
-.context-toolbar-shell {
-    border: 1px solid rgba(15, 23, 42, 0.08);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, 0.86);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
-    display: grid;
-    grid-template-columns: 1fr;
-    align-items: center;
-    gap: 8px;
-    padding: 4px 6px;
-    min-width: 0;
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    justify-content: flex-start;
-    gap: 10px;
-    flex: 1 1 auto;
-    min-width: 0;
-    flex-wrap: nowrap;
-    white-space: nowrap;
-    overflow: visible;
-    scrollbar-width: none;
-    padding-right: 2px;
-}
-
-.header-actions::-webkit-scrollbar {
-    display: none;
 }
 
 .app-header .btn {
@@ -1340,123 +538,60 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] 
     font-weight: 600;
 }
 
-.context-toolbar-row {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    min-width: 0;
-}
-
-.context-toolbar-row {
-    align-items: center;
-}
-
-.context-toolbar-panels {
-    width: 100%;
-    min-width: 0;
-    display: grid;
-}
-
-.context-toolbar-panel {
-    grid-area: 1 / 1;
-    display: flex;
-    align-items: center;
-    width: 100%;
-    overflow-x: auto;
-    overflow-y: hidden;
-    scrollbar-width: none;
-    opacity: 0;
-    visibility: hidden;
-    filter: blur(6px);
-    transform: translateY(6px) scale(0.97);
-    transition: opacity 0.35s var(--spring-default),
-                filter 0.35s var(--spring-default),
-                transform 0.45s var(--spring-default),
-                visibility 0.35s;
-    pointer-events: none;
-    z-index: 1;
-}
-
-.context-toolbar-panel::-webkit-scrollbar {
-    display: none;
-}
-
-.context-toolbar-panel.active {
-    opacity: 1;
-    visibility: visible;
-    filter: blur(0px);
-    transform: translateY(0) scale(1);
-    pointer-events: auto;
-    z-index: 2;
-}
-
-.context-toolbar-panel[data-toolbar-panel="file"] {
-    overflow: visible;
-}
-
-.toolbar-group {
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    gap: 8px;
-    padding-right: 8px;
-    margin-right: 0;
-    border-right: 1px solid rgba(15, 23, 42, 0.12);
-}
-
-.toolbar-group:last-child {
-    border-right: none;
-    margin-right: 0;
-    padding-right: 0;
-}
-
-.toolbar-group>*:not(.toolbar-group-label) {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.toolbar-group-label {
-    display: none;
-}
-
-.toolbar-group-danger .toolbar-group-label {
-    color: #c6423a;
-}
-
+/* Lucent Button：胶囊、无描边，PC 高 32（control-pc），正文 14/22 中粗。 */
 .btn {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    padding: 8px 16px;
+    min-height: var(--control-pc, 32px);
+    padding: 5px 16px;
     border-radius: 999px;
     font-size: 14px;
+    line-height: 22px;
     font-weight: 500;
     text-decoration: none;
+    white-space: nowrap;
     cursor: pointer;
     border: none;
-    gap: 6px;
+    gap: 8px;
     position: relative;
     overflow: hidden;
-    transition: background-color 0.2s ease, color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+    transition: background-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.2s ease;
 }
 
-.btn:active {
-    transform: scale(0.97);
+.btn:disabled,
+.btn[aria-disabled="true"] {
+    opacity: var(--opacity-disabled, 0.4);
+    cursor: not-allowed;
+}
+
+/* 表单已提交、等待页面跳转：给出明确的“处理中”反馈。 */
+form[aria-busy="true"] {
+    cursor: progress;
+}
+
+.is-submitting {
+    opacity: 0.72;
+    pointer-events: none;
 }
 
 .btn-primary {
-    background-color: var(--primary-color);
-    color: white;
+    background-color: var(--brand, var(--primary-color));
+    color: var(--on-brand, #fff);
 }
 
 .btn-primary:hover {
-    background-color: #0044cc;
+    background-color: var(--brand-hover, #0848cc);
 }
 
+.btn-primary:active {
+    background-color: var(--brand-pressed, #063ba8);
+}
+
+/* 中性操作（取消、稍后）：fill-control 底，悬停叠加 fill-hover。 */
 .btn-secondary {
-    background-color: rgba(0, 0, 0, 0.05);
-    color: var(--text-primary);
+    background-color: var(--fill-control, rgba(0, 0, 0, 0.05));
+    color: var(--ink, var(--text-primary));
     border: none;
 }
 
@@ -1464,19 +599,24 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] 
     background-color: rgba(0, 0, 0, 0.08);
 }
 
+.btn-secondary:active {
+    background-color: rgba(0, 0, 0, 0.12);
+}
+
+/* 选中态：brand-tint 底 + brand-text，不加描边。 */
 .btn.active {
-    background-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.12);
-    color: var(--primary-color);
-    box-shadow: inset 0 0 0 1px rgba(var(--primary-color-rgb, 10, 89, 247), 0.4);
+    background-color: var(--brand-tint, rgba(var(--primary-color-rgb, 10, 89, 247), 0.1));
+    color: var(--brand-text, var(--primary-color));
+    box-shadow: none;
 }
 
 .btn-danger {
-    background-color: #ff3b30;
-    color: white;
+    background-color: var(--danger, #c42b1c);
+    color: var(--on-danger, #fff);
 }
 
 .btn-danger:hover {
-    background-color: #e5342d;
+    background-color: var(--danger-hover, #a52417);
 }
 
 .btn .ripple {
@@ -1511,17 +651,12 @@ main {
     margin: 0 auto;
 }
 
+/* Lucent Card：surface 底、圆角 20、shadow-1；内容卡不做悬停抬起。 */
 .card {
     background: var(--card-bg);
-    border-radius: 18px;
+    border-radius: var(--radius-lg, 20px);
     padding: 24px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
-}
-
-.card:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-1, 0 1px 4px rgba(0, 0, 0, 0.04), 0 2px 12px rgba(0, 0, 0, 0.04));
 }
 
 .form-group {
@@ -1535,22 +670,37 @@ label {
     color: var(--text-secondary);
 }
 
+/* Lucent TextField（PC）：32 高、圆角 8、fill-control 填充；描边画在 box-shadow 上，不占位。 */
 input[type="text"],
 input[type="number"],
 input[type="file"],
 select {
     width: 100%;
-    padding: 12px 16px;
-    border-radius: 12px;
-    border: 1px solid var(--border-color);
-    font-size: 16px;
-    background: white;
-    transition: border-color 0.2s;
+    min-height: var(--control-pc, 32px);
+    padding: 4px 12px;
+    border-radius: var(--radius-sm, 8px);
+    border: 1px solid transparent;
+    font-size: 14px;
+    line-height: 22px;
+    color: var(--ink, var(--text-primary));
+    background: var(--fill-control, rgba(0, 0, 0, 0.05));
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
     outline: none;
+}
+
+input[type="text"]:hover,
+input[type="number"]:hover,
+select:hover {
+    border-color: var(--divider, rgba(0, 0, 0, 0.1));
 }
 
 input:focus {
     border-color: var(--primary-color);
+}
+
+input::placeholder,
+textarea::placeholder {
+    color: var(--ink-secondary, rgba(0, 0, 0, 0.6));
 }
 
 ::-webkit-scrollbar {
@@ -1596,17 +746,17 @@ input:focus {
     align-items: center;
 }
 
+/* 入场动画只使用 opacity / transform，交给合成线程处理；大面积 filter: blur 会逐帧重绘，
+   座位多时明显掉帧。结束帧保留 transform，维持原有的层叠上下文语义。 */
 @keyframes fadeIn {
     from {
         opacity: 0;
-        transform: translateY(10px);
-        filter: blur(4px);
+        transform: translateY(8px);
     }
 
     to {
         opacity: 1;
         transform: translateY(0);
-        filter: blur(0px);
     }
 }
 
@@ -1614,12 +764,10 @@ input:focus {
     from {
         opacity: 0;
         transform: translateX(-24px);
-        filter: blur(6px);
     }
     to {
         opacity: 1;
         transform: translateX(0);
-        filter: blur(0);
     }
 }
 
@@ -1627,12 +775,10 @@ input:focus {
     from {
         opacity: 0;
         transform: translateX(24px);
-        filter: blur(6px);
     }
     to {
         opacity: 1;
         transform: translateX(0);
-        filter: blur(0);
     }
 }
 
@@ -1640,12 +786,10 @@ input:focus {
     from {
         opacity: 0;
         transform: scale(0.96);
-        filter: blur(6px);
     }
     to {
         opacity: 1;
         transform: scale(1);
-        filter: blur(0);
     }
 }
 
@@ -1653,12 +797,10 @@ input:focus {
     from {
         opacity: 0;
         transform: translateY(16px) scale(0.97);
-        filter: blur(4px);
     }
     to {
         opacity: 1;
         transform: translateY(0) scale(1);
-        filter: blur(0);
     }
 }
 
@@ -1691,11 +833,6 @@ input:focus {
     animation-delay: calc(var(--card-index, 0) * 0.06s + 0.1s);
 }
 
-.context-toolbar-panels {
-    opacity: 0;
-    animation: fadeIn 0.4s var(--spring-gentle) 0.08s forwards;
-}
-
 .classroom-layout {
     display: grid;
     grid-template-columns: minmax(0, 1fr) 300px;
@@ -1726,9 +863,7 @@ input:focus {
     justify-content: center;
     gap: 14px;
     color: #1d1d1f;
-    background:
-        radial-gradient(circle at 50% 40%, rgba(10, 89, 247, 0.08), rgba(10, 89, 247, 0) 34%),
-        #f5f5f7;
+    background: var(--bg, #f5f5f7);
 }
 
 .cloud-entry-sync-screen.done {
@@ -1990,7 +1125,7 @@ input:focus {
     align-items: center;
     justify-content: center;
     z-index: 10000;
-    animation: fadeIn 0.2s var(--spring-fast);
+    animation: overlayFadeIn 0.2s var(--spring-fast);
 }
 
 .quick-swap-content {
@@ -2030,7 +1165,6 @@ input:focus {
 .quick-swap-item:hover {
     background: var(--primary-color);
     color: #fff;
-    transform: translateX(4px);
 }
 
 .quick-swap-num {
@@ -2051,9 +1185,9 @@ input:focus {
     color: #fff;
 }
 
-@keyframes fadeIn {
-    from { opacity: 0; filter: blur(4px); }
-    to { opacity: 1; filter: blur(0px); }
+@keyframes overlayFadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
 }
 
 .seat.drag-origin {
@@ -2496,10 +1630,10 @@ input:focus {
 
 .panel-card {
     background: var(--card-bg);
-    border-radius: 18px;
+    border-radius: var(--radius-lg, 20px);
     padding: 16px;
-    border: 1px solid rgba(0, 0, 0, 0.04);
-    box-shadow: 0 1px 6px rgba(0, 0, 0, 0.04);
+    border: 1px solid transparent;
+    box-shadow: var(--shadow-1, 0 1px 6px rgba(0, 0, 0, 0.04));
     display: flex;
     flex-direction: column;
     gap: 12px;
@@ -2726,6 +1860,15 @@ input:focus {
     flex: 0 0 auto;
 }
 
+.sync-snapshot-item {
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.sync-snapshot-item .snapshot-actions {
+    align-self: flex-end;
+}
+
 .constraint-form {
     display: flex;
     flex-direction: column;
@@ -2811,8 +1954,7 @@ input:focus {
 }
 
 .constraint-item:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    box-shadow: var(--shadow-2, 0 4px 16px rgba(0, 0, 0, 0.08));
 }
 
 .constraint-item-warning {
@@ -2999,19 +2141,23 @@ input:focus {
     flex-wrap: wrap;
 }
 
+/* 页内切换胶囊：28 高，未选中 ink-secondary，选中 brand-tint + brand-text，不加描边。 */
 .tab-btn {
-    padding: 6px 12px;
+    min-height: var(--control-sm, 28px);
+    padding: 4px 12px;
     border-radius: 999px;
-    border: 1px solid rgba(0, 0, 0, 0.08);
-    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid transparent;
+    background: var(--fill-control, rgba(0, 0, 0, 0.05));
+    color: var(--ink-secondary, var(--text-secondary));
     font-size: 12px;
+    line-height: 18px;
+    font-weight: 500;
     cursor: pointer;
 }
 
 .tab-btn.active {
-    border-color: var(--primary-color);
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.12);
-    color: var(--primary-color);
+    background: var(--brand-tint, rgba(var(--primary-color-rgb, 10, 89, 247), 0.1));
+    color: var(--brand-text, var(--primary-color));
 }
 
 .tab-body {
@@ -3038,10 +2184,6 @@ input:focus {
     color: var(--text-secondary);
 }
 
-.file-toolbar-group {
-    overflow: visible;
-}
-
 .group-export-toolbar-panel {
     overflow: visible;
 }
@@ -3053,8 +2195,8 @@ input:focus {
 
 .menu-panel {
     position: absolute;
-    min-width: 196px;
-    padding: 6px;
+    min-width: 200px;
+    padding: 4px;
     border-radius: 12px;
     border: 1px solid rgba(15, 23, 42, 0.1);
     background: rgba(255, 255, 255, 0.94);
@@ -3083,7 +2225,7 @@ input:focus {
 .menu-dropdown.open>.menu-panel-root {
     opacity: 1;
     transform: translateY(0);
-    filter: blur(0px);
+    filter: none;
     visibility: visible;
     pointer-events: auto;
     display: flex;
@@ -3100,7 +2242,7 @@ input:focus {
 .menu-submenu:focus-within>.menu-panel-sub {
     opacity: 1;
     transform: translateY(0);
-    filter: blur(0px);
+    filter: none;
     visibility: visible;
     pointer-events: auto;
     display: flex;
@@ -3108,12 +2250,13 @@ input:focus {
     gap: 2px;
 }
 
+/* Lucent Menu：面板圆角 12、内缩 4；菜单项 36 高、圆角 8（同心）。 */
 .menu-item-link,
 .menu-item-button {
     width: 100%;
-    min-height: 34px;
+    min-height: var(--row-pc, 36px);
     border: none;
-    border-radius: 9px;
+    border-radius: 8px;
     background: transparent;
     color: var(--text-primary);
     display: flex;
@@ -3163,8 +2306,8 @@ input:focus {
 
 .menu-item-link:hover,
 .menu-item-button:hover {
-    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.08);
-    color: var(--primary-color);
+    background: var(--fill-hover, rgba(0, 0, 0, 0.05));
+    color: var(--ink, var(--text-primary));
 }
 
 .menu-item-has-children::after {
@@ -3172,6 +2315,10 @@ input:focus {
     font-size: 14px;
     line-height: 1;
     color: var(--text-secondary);
+}
+
+.menu-submenu.menu-opens-left > .menu-item-has-children::after {
+    content: "‹";
 }
 
 .menu-item-has-children:hover::after {
@@ -3363,23 +2510,6 @@ input:focus {
     outline-offset: -4px;
 }
 
-.home-hero {
-    width: 100%;
-    padding: 26px 24px 12px;
-}
-
-.home-hero h1 {
-    font-size: clamp(24px, 3vw, 34px);
-    line-height: 1.15;
-    margin-bottom: 8px;
-}
-
-.home-hero p {
-    color: var(--text-secondary);
-    font-size: 15px;
-    max-width: 780px;
-}
-
 .classrooms-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -3461,33 +2591,6 @@ input:focus {
     padding: 38px 18px;
 }
 
-.home-create-group-form {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.home-create-group-actions {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-}
-
-.home-create-group-form input {
-    width: 150px;
-    height: 34px;
-    padding: 0 12px;
-    border: 1px solid rgba(16, 24, 40, .14);
-    border-radius: 999px;
-    outline: none;
-    background: rgba(255, 255, 255, .8);
-}
-
-.home-create-group-form input:focus {
-    border-color: #0a59f7;
-    box-shadow: 0 0 0 3px rgba(10, 89, 247, .1);
-}
-
 .classroom-groups-workspace {
     display: flex;
     width: 100%;
@@ -3544,1304 +2647,6 @@ input:focus {
 
 .classroom-group-section-ungrouped {
     background: rgba(255, 255, 255, .56);
-}
-
-/* 首页：参考 Apple 文件管理式信息架构 */
-.home-dashboard-body {
-    padding-top: 52px;
-    background: #fbfcfe;
-}
-
-.home-dashboard-body .app-header {
-    height: 52px;
-    min-height: 52px;
-    padding: 6px 10px;
-    border-bottom: 1px solid rgba(15, 23, 42, .08);
-    background: rgba(249, 251, 255, .92);
-    box-shadow: 0 6px 20px rgba(15, 23, 42, .06);
-    backdrop-filter: saturate(170%) blur(18px);
-    -webkit-backdrop-filter: saturate(170%) blur(18px);
-}
-
-.home-dashboard-body .header-content {
-    display: block;
-    height: 100%;
-}
-
-.home-dashboard-body .header-titlebar {
-    height: 100%;
-    gap: 14px;
-}
-
-.home-dashboard-body .header-titlebar > div:first-child {
-    gap: 0 !important;
-}
-
-.home-dashboard-body .context-toolbar-shell {
-    display: none;
-}
-
-.home-dashboard-body .logo {
-    gap: 10px;
-    padding: 5px 8px;
-    border: 1px solid rgba(10, 89, 247, .16);
-    border-radius: 12px;
-    background: rgba(255, 255, 255, .92);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .72), 0 4px 16px rgba(10, 89, 247, .08);
-    font-size: 15px;
-    font-weight: 600;
-    letter-spacing: 0;
-}
-
-.home-dashboard-body .logo:hover {
-    border-color: rgba(10, 89, 247, .24);
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, .8), 0 6px 20px rgba(10, 89, 247, .12);
-}
-
-.home-dashboard-body .logo-svg {
-    width: 24px;
-    height: 24px;
-    padding: 0;
-    border-radius: 0;
-    color: #0a59f7;
-    background: transparent;
-    box-shadow: none;
-}
-
-.home-dashboard-body .logo-meta {
-    display: flex;
-}
-
-.home-dashboard-body .cloud-header-area {
-    margin: 0;
-}
-
-.home-dashboard-body .cloud-sync-pill {
-    min-width: 0;
-    height: 31px;
-    padding: 0 11px;
-    font-size: 12px;
-    box-shadow: none;
-}
-
-.home-titlebar-settings {
-    display: grid;
-    width: 31px;
-    height: 31px;
-    margin-left: auto;
-    place-items: center;
-    border-radius: 999px;
-    color: #162033;
-    text-decoration: none;
-    transition: color .18s ease, background .18s ease;
-}
-
-.home-titlebar-settings:hover {
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .07);
-}
-
-.home-titlebar-settings svg {
-    width: 20px;
-    height: 20px;
-}
-
-.home-titlebar-sync {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 6px;
-    min-height: 31px;
-    margin-left: auto;
-    padding: 0 12px;
-    border: 0;
-    border-radius: 999px;
-    background: #0a59f7;
-    color: #fff;
-    font: inherit;
-    font-size: 12px;
-    font-weight: 600;
-    cursor: pointer;
-    box-shadow: 0 2px 7px rgba(10, 89, 247, .18);
-    transition: background .18s ease, transform .18s ease, opacity .18s ease;
-}
-
-.home-titlebar-sync:active {
-    transform: scale(.97);
-}
-
-.home-titlebar-sync:disabled {
-    cursor: wait;
-    opacity: .68;
-}
-
-.home-titlebar-sync svg {
-    width: 16px;
-    height: 16px;
-    flex: 0 0 auto;
-}
-
-.home-titlebar-sync.is-syncing svg {
-    animation: spin .8s linear infinite;
-}
-
-.home-titlebar-sync + .home-titlebar-settings {
-    margin-left: 5px;
-}
-
-.home-dashboard-page {
-    width: 100%;
-    min-height: calc(100vh - 52px);
-    padding: 26px 24px 42px;
-    background: #fbfcfe;
-}
-
-.home-shell {
-    display: flex;
-    width: 100%;
-    min-height: calc(100vh - 52px);
-    background: #fbfcfe;
-}
-
-.home-sidebar {
-    display: flex;
-    width: 214px;
-    flex: 0 0 214px;
-    flex-direction: column;
-    gap: 4px;
-    padding: 22px 14px 16px;
-    border-right: 1px solid rgba(15, 23, 42, .08);
-    background: rgba(247, 249, 253, .9);
-    pointer-events: auto;
-}
-
-/* 首页左栏是应用级导航，不应跟随内容滚动；内容区为它预留固定宽度。 */
-body.home-dashboard-body .home-shell {
-    display: block;
-}
-
-body.home-dashboard-body .home-sidebar {
-    position: fixed;
-    z-index: 30;
-    top: var(--header-height, 52px);
-    left: 0;
-    bottom: 0;
-    overflow-x: hidden;
-    overflow-y: auto;
-    box-sizing: border-box;
-}
-
-body.home-dashboard-body .home-dashboard-page {
-    width: calc(100% - 214px);
-    min-height: calc(100vh - var(--header-height, 52px));
-    margin-left: 214px;
-    box-sizing: border-box;
-}
-
-body.home-dashboard-body .home-sidebar a {
-    pointer-events: auto;
-}
-
-body.home-dashboard-body [id^="home-"] {
-    scroll-margin-top: calc(var(--header-height, 52px) + 16px);
-}
-
-.home-archive-section {
-    margin-top: 28px;
-}
-
-.home-archive-card {
-    display: flex;
-    min-height: 88px;
-    align-items: center;
-    gap: 14px;
-    padding: 18px 20px;
-    border: 1px solid rgba(15, 23, 42, .09);
-    border-radius: var(--radius-card, 12px);
-    background: rgba(255, 255, 255, .9);
-    color: var(--text-secondary, #64748b);
-}
-
-.home-archive-card svg {
-    width: 24px;
-    height: 24px;
-    flex: 0 0 auto;
-    color: #8a96a8;
-}
-
-.home-sidebar-item {
-    display: flex;
-    min-height: 34px;
-    align-items: center;
-    gap: 10px;
-    padding: 0 11px;
-    border-radius: 8px;
-    color: #4b5567;
-    font-size: 13px;
-    font-weight: 600;
-    text-decoration: none;
-    transition: background .18s ease, color .18s ease;
-}
-
-.home-sidebar-item:hover {
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .07);
-}
-
-.home-sidebar-item.is-active {
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .12);
-}
-
-.home-sidebar-icon {
-    display: grid;
-    width: 20px;
-    height: 20px;
-    flex: 0 0 20px;
-    place-items: center;
-    color: currentColor;
-    font-size: 16px;
-    font-weight: 500;
-}
-
-.home-sidebar-icon svg {
-    width: 18px;
-    height: 18px;
-    display: block;
-}
-
-.home-sidebar-subitem {
-    min-height: 31px;
-    padding-left: 18px;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-.home-sidebar-subitem small {
-    margin-left: auto;
-    color: #8a96a8;
-    font-size: 11px;
-}
-
-.home-sidebar-divider {
-    height: 1px;
-    margin: 16px 8px 10px;
-    background: rgba(15, 23, 42, .08);
-}
-
-.home-sidebar-label {
-    padding: 0 11px 5px;
-    color: #8a96a8;
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.home-sidebar-spacer {
-    min-height: 20px;
-    flex: 1 1 auto;
-}
-
-.home-sidebar-sync {
-    display: flex;
-    align-items: center;
-    gap: 9px;
-    margin: 8px 4px;
-    padding: 10px 8px;
-    border-top: 1px solid rgba(15, 23, 42, .08);
-    color: #374151;
-}
-
-.home-sidebar-sync-dot {
-    width: 8px;
-    height: 8px;
-    flex: 0 0 8px;
-    border-radius: 50%;
-    background: #22c55e;
-    box-shadow: 0 0 0 3px rgba(34, 197, 94, .12);
-}
-
-.home-sidebar-sync div {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 2px;
-}
-
-.home-sidebar-sync strong {
-    font-size: 11px;
-}
-
-.home-sidebar-sync small {
-    color: #8a96a8;
-    font-size: 10px;
-}
-
-.home-sidebar-settings {
-    margin-top: 2px;
-}
-
-.home-shell > .home-dashboard-page {
-    min-width: 0;
-    flex: 1 1 auto;
-}
-
-@media (max-width: 820px) {
-    body.home-dashboard-body .home-sidebar {
-        width: 62px;
-        flex-basis: 62px;
-        padding-left: 9px;
-        padding-right: 9px;
-    }
-
-    body.home-dashboard-body .home-dashboard-page {
-        width: calc(100% - 62px);
-        margin-left: 62px;
-    }
-
-    .home-sidebar {
-        width: 62px;
-        flex-basis: 62px;
-        align-items: center;
-        padding-left: 8px;
-        padding-right: 8px;
-    }
-
-    .home-sidebar-item {
-        width: 42px;
-        justify-content: center;
-        padding: 0;
-    }
-
-    .home-sidebar-item > span:not(.home-sidebar-icon),
-    .home-sidebar-item small,
-    .home-sidebar-label,
-    .home-sidebar-sync div {
-        display: none;
-    }
-
-    .home-sidebar-sync {
-        justify-content: center;
-        margin-left: 0;
-        margin-right: 0;
-        padding-left: 0;
-        padding-right: 0;
-    }
-}
-
-body[data-app-platform="windows"] .home-sidebar {
-    background: #f2f4f8;
-}
-
-body[data-app-platform="macos"] .home-sidebar {
-    background: rgba(247, 249, 253, .72);
-    backdrop-filter: saturate(160%) blur(16px);
-    -webkit-backdrop-filter: saturate(160%) blur(16px);
-}
-
-.home-dashboard-hero {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 20px;
-    width: 100%;
-    padding-bottom: 32px;
-}
-
-.home-dashboard-heading {
-    min-width: 0;
-}
-
-.home-dashboard-heading h1 {
-    margin: 0;
-    color: #111827;
-    font-size: clamp(24px, 3vw, 34px);
-    font-weight: 700;
-    line-height: 1.15;
-    letter-spacing: -.035em;
-}
-
-.home-dashboard-heading p {
-    margin: 13px 0 0;
-    color: #64748b;
-    font-size: clamp(14px, 1.25vw, 16px);
-    line-height: 1.65;
-}
-
-.home-dashboard-tools {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 10px;
-    min-width: min(100%, 430px);
-}
-
-.home-create-menu,
-.home-group-create {
-    position: relative;
-}
-
-.home-create-menu > summary,
-.home-group-create > summary {
-    list-style: none;
-}
-
-.home-create-menu > summary::-webkit-details-marker,
-.home-group-create > summary::-webkit-details-marker {
-    display: none;
-}
-
-.home-primary-action {
-    display: inline-flex;
-    height: 34px;
-    min-width: 108px;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    padding: 0 12px;
-    border-radius: 999px;
-    color: #fff;
-    background: #0a59f7;
-    box-shadow: 0 6px 16px rgba(10, 89, 247, .18);
-    font-size: 12px;
-    font-weight: 650;
-    cursor: pointer;
-    transition: background .18s ease, box-shadow .18s ease, transform .18s ease;
-}
-
-.home-primary-action:hover {
-    background: #064cdb;
-    box-shadow: 0 8px 20px rgba(10, 89, 247, .22);
-}
-
-.home-primary-action:active {
-    transform: scale(.98);
-}
-
-.home-primary-action > svg:first-child {
-    width: 18px;
-    height: 18px;
-}
-
-.home-action-chevron {
-    width: 15px;
-    height: 15px;
-    margin-left: 1px;
-    transition: transform .2s ease;
-}
-
-.home-create-menu[open] .home-action-chevron {
-    transform: rotate(180deg);
-}
-
-.home-create-dropdown {
-    position: absolute;
-    top: calc(100% + 8px);
-    left: 0;
-    z-index: 80;
-    display: flex;
-    width: 248px;
-    flex-direction: column;
-    gap: 4px;
-    padding: 6px;
-    border: 1px solid rgba(15, 23, 42, .1);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, .97);
-    box-shadow: 0 22px 58px rgba(15, 23, 42, .16);
-    backdrop-filter: blur(22px);
-    -webkit-backdrop-filter: blur(22px);
-}
-
-.home-create-dropdown a,
-.home-create-dropdown button {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    gap: 9px;
-    padding: 8px 9px;
-    border: 0;
-    border-radius: 10px;
-    color: #172033;
-    text-align: left;
-    text-decoration: none;
-    background: transparent;
-    font: inherit;
-    cursor: pointer;
-}
-
-.home-create-dropdown a:hover,
-.home-create-dropdown button:hover {
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .07);
-}
-
-.home-create-dropdown svg {
-    width: 20px;
-    height: 20px;
-    flex: 0 0 auto;
-}
-
-.home-create-dropdown span {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 3px;
-}
-
-.home-create-dropdown strong {
-    color: inherit;
-    font-size: 12px;
-}
-
-.home-create-dropdown small {
-    color: #7b8798;
-    font-size: 12px;
-}
-
-.home-search-box {
-    display: flex;
-    width: min(310px, 36vw);
-    height: 34px;
-    align-items: center;
-    gap: 8px;
-    padding: 0 13px;
-    border: 1px solid rgba(100, 116, 139, .25);
-    border-radius: 999px;
-    color: #536179;
-    background: rgba(255, 255, 255, .88);
-    transition: border-color .18s ease, box-shadow .18s ease, background .18s ease;
-}
-
-.home-search-box:focus-within {
-    border-color: rgba(10, 89, 247, .55);
-    background: #fff;
-    box-shadow: 0 0 0 4px rgba(10, 89, 247, .09);
-}
-
-.home-search-box svg {
-    width: 18px;
-    height: 18px;
-    flex: 0 0 auto;
-}
-
-.home-search-box input {
-    width: 100%;
-    min-width: 0;
-    border: 0;
-    outline: 0;
-    color: #172033;
-    background: transparent;
-    font: inherit;
-    font-size: 12px;
-}
-
-.home-search-box input::placeholder {
-    color: #8a96a8;
-}
-
-.home-library-section {
-    width: 100%;
-    margin-bottom: 34px;
-}
-
-.home-section-heading {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    margin-bottom: 14px;
-}
-
-.home-section-title {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 9px;
-}
-
-.home-section-icon {
-    display: grid;
-    width: 34px;
-    height: 34px;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .075);
-}
-
-.home-section-icon svg {
-    width: 19px;
-    height: 19px;
-}
-
-.home-section-title h2 {
-    margin: 0;
-    color: #141c2d;
-    font-size: 18px;
-    font-weight: 700;
-    letter-spacing: -.03em;
-}
-
-.home-section-count {
-    color: #64748b;
-    font-size: 12px;
-    white-space: nowrap;
-}
-
-.home-recent-section {
-    width: 100%;
-    margin-bottom: 30px;
-}
-
-.home-section-more {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    color: #0a59f7;
-    font-size: 12px;
-    font-weight: 600;
-    text-decoration: none;
-}
-
-.home-section-more span {
-    font-size: 20px;
-    line-height: 12px;
-}
-
-.home-recent-list {
-    display: grid;
-    gap: 8px;
-}
-
-.home-recent-item {
-    display: flex;
-    min-height: 64px;
-    align-items: center;
-    gap: 12px;
-    padding: 8px 12px;
-    border: 1px solid rgba(100, 116, 139, .16);
-    border-radius: 10px;
-    color: #172033;
-    background: rgba(255, 255, 255, .86);
-    text-decoration: none;
-    transition: background .18s ease, border-color .18s ease, box-shadow .18s ease;
-}
-
-.home-recent-item:hover {
-    border-color: rgba(10, 89, 247, .22);
-    background: #fff;
-    box-shadow: 0 8px 24px rgba(15, 23, 42, .06);
-}
-
-.home-recent-thumb {
-    display: grid;
-    width: 48px;
-    height: 34px;
-    flex: 0 0 48px;
-    place-items: center;
-    border-radius: 5px;
-    color: #7d899b;
-    background: linear-gradient(145deg, #eef1f5, #dfe4ea);
-}
-
-.home-recent-thumb svg {
-    width: 38px;
-    height: 28px;
-}
-
-.home-recent-copy {
-    display: flex;
-    min-width: 0;
-    flex: 1 1 auto;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.home-recent-copy strong {
-    overflow: hidden;
-    color: #1d2738;
-    font-size: 13px;
-    font-weight: 650;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.home-recent-copy small {
-    color: #7a8492;
-    font-size: 11px;
-}
-
-.home-recent-item em {
-    padding: 3px 7px;
-    border-radius: 5px;
-    color: #0a59f7;
-    background: #e9f1ff;
-    font-size: 10px;
-    font-style: normal;
-    white-space: nowrap;
-}
-
-.home-recent-item em.is-muted {
-    color: #6b7482;
-    background: #eef1f4;
-}
-
-.home-recent-more {
-    color: #7d8795;
-    font-size: 16px;
-    letter-spacing: 2px;
-}
-
-.home-outline-action {
-    display: inline-flex;
-    min-height: 34px;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    padding: 0 12px;
-    border: 1px solid rgba(100, 116, 139, .24);
-    border-radius: 999px;
-    color: #0a59f7;
-    background: rgba(255, 255, 255, .84);
-    font-size: 12px;
-    font-weight: 650;
-    cursor: pointer;
-    transition: border-color .18s ease, background .18s ease, box-shadow .18s ease;
-}
-
-.home-outline-action:hover {
-    border-color: rgba(10, 89, 247, .35);
-    background: #fff;
-    box-shadow: 0 8px 22px rgba(10, 89, 247, .09);
-}
-
-.home-outline-action svg {
-    width: 17px;
-    height: 17px;
-}
-
-.home-outline-link {
-    text-decoration: none;
-}
-
-.home-group-create-popover {
-    position: absolute;
-    top: calc(100% + 8px);
-    right: 0;
-    z-index: 70;
-    width: min(360px, calc(100vw - 32px));
-    padding: 14px;
-    border: 1px solid rgba(15, 23, 42, .1);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, .98);
-    box-shadow: 0 24px 64px rgba(15, 23, 42, .17);
-    backdrop-filter: blur(22px);
-    -webkit-backdrop-filter: blur(22px);
-}
-
-.home-popover-heading {
-    display: flex;
-    flex-direction: column;
-    gap: 4px;
-    margin-bottom: 12px;
-}
-
-.home-popover-heading strong {
-    color: #172033;
-    font-size: 14px;
-}
-
-.home-popover-heading span {
-    color: #718096;
-    font-size: 13px;
-}
-
-.home-group-create-popover form,
-.home-group-create-popover label {
-    display: flex;
-    flex-direction: column;
-}
-
-.home-group-create-popover form {
-    gap: 10px;
-}
-
-.home-group-create-popover label {
-    gap: 7px;
-    color: #344054;
-    font-size: 12px;
-    font-weight: 620;
-}
-
-.home-group-create-popover input {
-    width: 100%;
-    height: 34px;
-    padding: 0 11px;
-    border: 1px solid rgba(100, 116, 139, .25);
-    border-radius: 10px;
-    outline: 0;
-    background: #fff;
-    font: inherit;
-}
-
-.home-group-create-popover input:focus {
-    border-color: #0a59f7;
-    box-shadow: 0 0 0 4px rgba(10, 89, 247, .09);
-}
-
-.home-group-create-actions {
-    display: flex;
-    justify-content: flex-end;
-    gap: 9px;
-}
-
-.home-group-grid,
-.home-classroom-grid {
-    display: grid;
-    width: 100%;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 18px;
-}
-
-.home-group-card:only-child {
-    grid-column: 1 / -1;
-}
-
-.home-group-card {
-    display: flex;
-    min-width: 0;
-    min-height: 88px;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    padding: 14px 16px;
-    border: 1px solid rgba(100, 116, 139, .2);
-    border-radius: 14px;
-    background: rgba(255, 255, 255, .9);
-    box-shadow: 0 8px 30px rgba(15, 23, 42, .035);
-    transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
-}
-
-.home-group-card:hover {
-    border-color: rgba(10, 89, 247, .25);
-    background: #fff;
-    box-shadow: 0 16px 40px rgba(15, 23, 42, .07);
-}
-
-.home-card-leading {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 11px;
-}
-
-.home-card-leading > div {
-    min-width: 0;
-}
-
-.home-card-icon {
-    display: grid;
-    width: 38px;
-    height: 38px;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 50%;
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .075);
-}
-
-.home-card-icon svg {
-    width: 21px;
-    height: 21px;
-}
-
-.home-group-card h3,
-.home-classroom-card h3 {
-    overflow: hidden;
-    margin: 0;
-    color: #111827;
-    font-size: 16px;
-    font-weight: 700;
-    letter-spacing: -.025em;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.home-group-card p {
-    margin: 4px 0 0;
-    color: #64748b;
-    font-size: 12px;
-}
-
-.home-group-card p span {
-    margin: 0 5px;
-}
-
-.home-manage-action {
-    display: inline-flex;
-    min-height: 34px;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    padding: 0 12px;
-    border: 1px solid rgba(100, 116, 139, .2);
-    border-radius: 999px;
-    color: #172033;
-    text-decoration: none;
-    background: rgba(255, 255, 255, .9);
-    font-size: 12px;
-    font-weight: 660;
-    transition: color .18s ease, border-color .18s ease, background .18s ease;
-}
-
-.home-manage-action:hover {
-    border-color: rgba(10, 89, 247, .32);
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .05);
-}
-
-.home-manage-action svg {
-    width: 18px;
-    height: 18px;
-}
-
-.home-classroom-card {
-    display: flex;
-    min-width: 0;
-    min-height: 180px;
-    flex-direction: column;
-    padding: 18px;
-    border: 1px solid rgba(100, 116, 139, .2);
-    border-radius: 16px;
-    background: rgba(255, 255, 255, .94);
-    box-shadow: 0 9px 32px rgba(15, 23, 42, .035);
-    transition: border-color .2s ease, box-shadow .2s ease;
-}
-
-.home-classroom-card:hover {
-    border-color: rgba(10, 89, 247, .25);
-    box-shadow: 0 18px 44px rgba(15, 23, 42, .075);
-}
-
-.home-classroom-card-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-}
-
-.home-classroom-card-head .home-card-leading {
-    width: 100%;
-}
-
-.home-sample-badge {
-    flex: 0 0 auto;
-    padding: 4px 9px;
-    border-radius: 999px;
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .09);
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.home-classroom-metrics {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 10px;
-    margin: 20px 0 18px;
-    color: #40506a;
-    font-size: 12px;
-}
-
-.home-classroom-metrics span {
-    display: inline-flex;
-    min-width: 0;
-    align-items: center;
-    gap: 7px;
-    white-space: nowrap;
-}
-
-.home-classroom-metrics svg {
-    width: 16px;
-    height: 16px;
-    flex: 0 0 auto;
-}
-
-.home-classroom-metrics i {
-    width: 1px;
-    height: 15px;
-    flex: 0 0 auto;
-    background: rgba(100, 116, 139, .22);
-}
-
-.home-enter-classroom {
-    display: inline-flex;
-    width: 100%;
-    min-height: 31px;
-    margin-top: auto;
-    align-items: center;
-    justify-content: center;
-    gap: 7px;
-    border-radius: 10px;
-    color: #0a59f7;
-    text-decoration: none;
-    background: rgba(10, 89, 247, .07);
-    font-size: 12px;
-    font-weight: 650;
-    transition: color .18s ease, background .18s ease;
-}
-
-.home-enter-classroom:hover {
-    color: #fff;
-    background: #0a59f7;
-}
-
-.home-enter-classroom svg {
-    width: 17px;
-    height: 17px;
-}
-
-.home-create-classroom-cta,
-.home-section-empty,
-.home-search-empty {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    justify-content: space-between;
-    gap: 14px;
-    margin-top: 18px;
-    padding: 18px 20px;
-    border: 1px dashed rgba(100, 116, 139, .28);
-    border-radius: 14px;
-    color: #64748b;
-    background: rgba(255, 255, 255, .55);
-}
-
-.home-create-classroom-cta > div {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 15px;
-}
-
-.home-cta-icon {
-    width: 29px;
-    height: 29px;
-    flex: 0 0 auto;
-    color: #0a59f7;
-}
-
-.home-cta-icon svg {
-    width: 100%;
-    height: 100%;
-}
-
-.home-create-classroom-cta .btn svg {
-    width: 20px;
-    height: 20px;
-}
-
-.home-section-empty {
-    margin-top: 0;
-}
-
-.home-search-empty {
-    flex-direction: column;
-    justify-content: center;
-    margin: 0;
-    padding: 30px 20px;
-    text-align: center;
-}
-
-.home-search-empty strong {
-    color: #172033;
-    font-size: 14px;
-}
-
-.home-search-empty span {
-    font-size: 14px;
-}
-
-.home-dashboard-page .btn {
-    min-height: 31px;
-    padding: 5px 11px;
-    font-size: 12px;
-}
-
-.home-dashboard-page [hidden] {
-    display: none !important;
-}
-
-@media (max-width: 1040px) {
-    .home-dashboard-hero {
-        align-items: flex-start;
-        flex-direction: column;
-        padding-bottom: 28px;
-    }
-
-    .home-dashboard-tools {
-        width: 100%;
-        justify-content: flex-start;
-    }
-
-    .home-search-box {
-        width: min(100%, 420px);
-    }
-
-    .home-classroom-metrics {
-        flex-wrap: wrap;
-    }
-}
-
-@media (max-width: 820px) {
-    .home-group-grid,
-    .home-classroom-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .home-dashboard-page {
-        padding: 24px 20px 42px;
-    }
-}
-
-@media (max-width: 620px) {
-    .home-dashboard-body {
-        padding-top: 52px;
-    }
-
-    .home-dashboard-body .app-header {
-        height: 52px;
-        min-height: 52px;
-        padding: 6px 8px;
-    }
-
-    .home-dashboard-body .logo {
-        width: auto;
-        height: auto;
-    }
-
-    .home-dashboard-body .logo-meta {
-        display: flex;
-    }
-
-    .home-dashboard-body .logo-meta span {
-        font-size: 15px;
-    }
-
-    .home-dashboard-body .cloud-header-area {
-        display: none;
-    }
-
-    .home-titlebar-settings {
-        margin-left: 5px;
-    }
-
-    .home-titlebar-sync {
-        width: 31px;
-        min-width: 31px;
-        padding: 0;
-        margin-left: auto;
-    }
-
-    .home-titlebar-sync span {
-        display: none;
-    }
-
-    .home-dashboard-page {
-        min-height: calc(100vh - 52px);
-        padding: 22px 14px 36px;
-    }
-
-    .home-dashboard-hero {
-        gap: 18px;
-        padding-bottom: 26px;
-    }
-
-    .home-dashboard-tools {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .home-create-menu,
-    .home-primary-action,
-    .home-search-box {
-        width: 100%;
-    }
-
-    .home-create-dropdown {
-        width: 100%;
-    }
-
-    .home-section-heading {
-        align-items: flex-start;
-        flex-direction: column;
-    }
-
-    .home-section-title {
-        gap: 11px;
-    }
-
-    .home-section-icon {
-        width: 34px;
-        height: 34px;
-    }
-
-    .home-section-icon svg {
-        width: 19px;
-        height: 19px;
-    }
-
-    .home-group-create,
-    .home-outline-action {
-        width: 100%;
-    }
-
-    .home-group-create-popover {
-        right: auto;
-        left: 0;
-    }
-
-    .home-group-create-actions,
-    .home-group-card,
-    .home-create-classroom-cta,
-    .home-section-empty {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .home-group-create-actions .btn,
-    .home-manage-action,
-    .home-create-classroom-cta .btn,
-    .home-section-empty .btn {
-        width: 100%;
-    }
-
-    .home-group-card {
-        min-height: 0;
-        padding: 14px;
-    }
-
-    .home-card-icon {
-        width: 38px;
-        height: 38px;
-    }
-
-    .home-classroom-card {
-        min-height: 0;
-        padding: 16px;
-    }
-
-    .home-classroom-metrics {
-        align-items: flex-start;
-        flex-direction: column;
-        gap: 8px;
-        margin: 18px 0 16px;
-    }
-
-    .home-classroom-metrics i {
-        display: none;
-    }
 }
 
 .classroom-group-detail-page {
@@ -5298,14 +3103,6 @@ body[data-app-platform="macos"] .home-sidebar {
     color: #b42318;
 }
 
-.group-add-page .create-flow-progress {
-    margin-bottom: 24px;
-}
-
-.group-add-page .create-final-form {
-    width: min(100%, 760px);
-}
-
 .group-add-page .group-layout-fields {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -5364,26 +3161,6 @@ body[data-app-platform="macos"] .home-sidebar {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 8px;
     overflow: auto;
-}
-
-.create-classroom-group-page .group-existing-list label {
-    display: flex;
-    min-height: 36px;
-    align-items: center;
-    flex-direction: row;
-    gap: 8px;
-    margin: 0;
-    padding: 8px 10px;
-    border: 1px solid rgba(16, 24, 40, .08);
-    border-radius: 10px;
-    background: #fff;
-}
-
-.create-classroom-group-page .group-existing-list input {
-    width: auto;
-    min-height: 0;
-    padding: 0;
-    box-shadow: none;
 }
 
 .classroom-group-students-page {
@@ -5802,10 +3579,6 @@ body[data-app-platform="macos"] .home-sidebar {
     margin-top: 20px;
 }
 
-.group-sort-wizard .create-choice-grid {
-    width: min(100%, 760px);
-}
-
 .group-sort-wizard .custom-sort-config {
     width: min(100%, 720px);
     padding: 0;
@@ -5883,26 +3656,9 @@ body[data-app-platform="macos"] .home-sidebar {
     .classroom-group-operation-grid {
         grid-template-columns: 1fr;
     }
-
-    .home-create-group-form input {
-        width: 120px;
-    }
 }
 
 @media (max-width: 620px) {
-    .home-create-group-form {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .home-create-group-actions {
-        align-items: stretch;
-        flex-direction: column;
-    }
-
-    .home-create-group-form input {
-        width: 100%;
-    }
 
     .classroom-group-detail-hero,
     .classroom-group-members > header {
@@ -5972,25 +3728,6 @@ body[data-app-platform="macos"] .home-sidebar {
     .group-student-search {
         width: 100%;
     }
-}
-
-.create-classroom-card h2 {
-    margin-bottom: 8px;
-}
-
-.create-subtitle {
-    margin-bottom: 20px;
-    color: var(--text-secondary);
-    font-size: 14px;
-}
-
-.create-wizard {
-    width: 100%;
-    min-height: calc(100vh - var(--header-height));
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    padding: 48px 24px;
 }
 
 .wizard-step {
@@ -6067,8 +3804,7 @@ body[data-app-platform="macos"] .home-sidebar {
 
 .wizard-choice-card:hover {
     border-color: var(--primary-color);
-    box-shadow: 0 2px 8px rgba(10,89,247,0.08), 0 8px 24px rgba(10,89,247,0.06);
-    transform: translateY(-2px);
+    box-shadow: var(--shadow-2, 0 4px 16px rgba(0, 0, 0, 0.08));
 }
 
 .wizard-choice-card:active {
@@ -6113,7 +3849,6 @@ body[data-app-platform="macos"] .home-sidebar {
 
 .wizard-choice-card:hover .wizard-choice-arrow {
     opacity: 0.8;
-    transform: translateX(2px);
 }
 
 .wizard-form-container {
@@ -6200,563 +3935,12 @@ body[data-app-platform="macos"] .home-sidebar {
     animation: wizardFadeIn 0.25s var(--spring-fast);
 }
 
-/* 创建班级：导入与本软件创建方式始终同时展示 */
-.create-classroom-page {
-    width: 100%;
-    min-height: calc(100vh - 76px);
-    padding: 32px clamp(20px, 4vw, 58px) 64px;
-    background: #f5f7fb;
-}
-
-.create-titlebar-back {
-    display: inline-flex;
-    min-height: 34px;
-    margin-left: auto;
-    align-items: center;
-    justify-content: center;
-    gap: 5px;
-    padding: 0 12px;
-    border: 1px solid rgba(100, 116, 139, .2);
-    border-radius: 999px;
-    color: #334155;
-    text-decoration: none;
-    background: rgba(255, 255, 255, .82);
-    font-size: 12px;
-    font-weight: 620;
-    transition: color .18s ease, border-color .18s ease, background .18s ease;
-}
-
-.create-titlebar-back:hover {
-    border-color: rgba(10, 89, 247, .3);
-    color: #0a59f7;
-    background: #fff;
-}
-
-.create-titlebar-back svg {
-    width: 17px;
-    height: 17px;
-}
-
-.create-classroom-hero {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    margin-bottom: 28px;
-}
-
-.create-classroom-eyebrow,
-.create-method-kicker {
-    margin: 0 0 8px;
-    color: #0a59f7;
-    font-size: 12px;
-    font-weight: 750;
-    letter-spacing: .08em;
-    text-transform: uppercase;
-}
-
-.create-classroom-hero h1 {
-    margin: 0;
-    color: #101828;
-    font-size: clamp(25px, 2.7vw, 34px);
-    letter-spacing: -.04em;
-}
-
-.create-classroom-hero p:last-child,
-.create-method-heading p {
-    margin: 10px 0 0;
-    color: #667085;
-    font-size: 13px;
-    line-height: 1.7;
-}
-
-.create-classroom-error {
-    margin-bottom: 20px;
-    padding: 14px 18px;
-    border: 1px solid rgba(180, 35, 24, .18);
-    border-radius: 16px;
-    color: #b42318;
-    background: rgba(254, 243, 242, .92);
-}
-
-.create-method-section {
-    width: 100%;
-    margin-top: 28px;
-    padding: 28px 0 0;
-    border: 0;
-    border-top: 1px solid rgba(16, 24, 40, .1);
-    border-radius: 0;
-    background: transparent;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-}
-
-.create-method-section-recommended {
-    border-top-color: rgba(10, 89, 247, .22);
-    box-shadow: none;
-}
-
-.create-method-heading {
-    display: flex;
-    align-items: flex-end;
-    justify-content: space-between;
-    margin-bottom: 22px;
-}
-
-.create-method-heading h2 {
-    margin: 0;
-    color: #101828;
-    font-size: clamp(20px, 2vw, 25px);
-    letter-spacing: -.025em;
-}
-
-.create-method-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 16px;
-}
-
-.create-method-grid-import {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.create-method-card {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 14px;
-    padding: 18px;
-    border: 1px solid rgba(16, 24, 40, .1);
-    border-radius: 16px;
-    background: #fff;
-    box-shadow: none;
-    transition: border-color .2s ease, background .2s ease;
-}
-
-.create-method-card:hover,
-.create-method-card:focus-within {
-    border-color: rgba(10, 89, 247, .38);
-    background: rgba(255, 255, 255, .98);
-    box-shadow: none;
-}
-
-.create-method-card-featured {
-    border-color: rgba(10, 89, 247, .3);
-    background: #fff;
-}
-
-.create-method-icon {
-    display: grid;
-    width: 42px;
-    height: 42px;
-    place-items: center;
-    border-radius: 12px;
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .1);
-}
-
-.create-method-icon svg {
-    width: 24px;
-    height: 24px;
-    stroke: currentColor;
-    stroke-width: 1.7;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.create-method-card-copy {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    gap: 10px;
-}
-
-.create-method-card h3 {
-    margin: 0;
-    color: #101828;
-    font-size: 17px;
-    letter-spacing: -.018em;
-}
-
-.create-method-card p {
-    min-height: 40px;
-    margin: 0;
-    color: #667085;
-    font-size: 13px;
-    line-height: 1.6;
-}
-
-.create-method-card-title-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.create-method-badge {
-    padding: 4px 9px;
-    border-radius: 999px;
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .1);
-    font-size: 11px;
-    font-weight: 700;
-}
-
-.create-method-card label {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 7px;
-    color: #344054;
-    font-size: 12px;
-    font-weight: 650;
-}
-
-.create-method-card input,
-.create-method-card select {
-    width: 100%;
-    min-width: 0;
-    height: 36px;
-    padding: 0 11px;
-    border: 1px solid rgba(16, 24, 40, .14);
-    border-radius: 10px;
-    outline: none;
-    color: #101828;
-    background: rgba(255, 255, 255, .96);
-    font: inherit;
-    font-weight: 500;
-}
-
-.create-method-card input:focus,
-.create-method-card select:focus {
-    border-color: #0a59f7;
-    box-shadow: 0 0 0 4px rgba(10, 89, 247, .1);
-}
-
-.create-method-fields {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 10px;
-}
-
-.create-method-fields-two {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
-.create-method-card > .btn {
-    align-self: flex-start;
-    min-height: 31px;
-    padding: 5px 11px;
-    font-size: 12px;
-}
-
-/* 创建班级分步流程：每一步只展示当前选择 */
-.create-classroom-page {
-    min-height: calc(100vh - 52px);
-    padding: 26px 24px 48px;
-}
-
-.create-classroom-hero {
-    margin-bottom: 20px;
-}
-
-.create-classroom-hero h1 {
-    font-size: clamp(24px, 3vw, 34px);
-}
-
-.create-flow-progress {
-    display: flex;
-    width: min(100%, 560px);
-    align-items: center;
-    gap: 8px;
-    margin: 0 0 26px;
-}
-
-.create-flow-progress > span {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 6px;
-    color: #8792a5;
-    font-size: 12px;
-    font-weight: 650;
-}
-
-.create-flow-progress > span b {
-    display: grid;
-    width: 22px;
-    height: 22px;
-    place-items: center;
-    border: 1px solid rgba(100, 116, 139, .22);
-    border-radius: 50%;
-    background: #fff;
-    font-size: 11px;
-}
-
-.create-flow-progress > span.is-active {
-    color: #0a59f7;
-}
-
-.create-flow-progress > span.is-active b {
-    border-color: #0a59f7;
-    color: #fff;
-    background: #0a59f7;
-}
-
-.create-flow-progress > span.is-complete b {
-    border-color: rgba(10, 89, 247, .18);
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .08);
-}
-
-.create-flow-progress > i {
-    height: 1px;
-    min-width: 24px;
-    flex: 1 1 52px;
-    background: rgba(100, 116, 139, .18);
-}
-
-.create-flow-stage {
-    width: 100%;
-    padding-top: 22px;
-    border-top: 1px solid rgba(16, 24, 40, .1);
-}
-
-.create-flow-stage[hidden],
-.create-choice[hidden],
-.create-final-form[hidden],
 [data-group-add-step][hidden],
 [data-group-add-form][hidden] {
     display: none !important;
 }
 
-.create-flow-stage-heading {
-    margin-bottom: 16px;
-}
-
-.create-flow-stage-heading > span {
-    display: block;
-    margin-bottom: 5px;
-    color: #0a59f7;
-    font-size: 11px;
-    font-weight: 720;
-    letter-spacing: .06em;
-}
-
-.create-flow-stage-heading h2 {
-    margin: 0;
-    color: #101828;
-    font-size: 20px;
-    line-height: 1.25;
-    letter-spacing: -.025em;
-}
-
-.create-choice-grid {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 12px;
-}
-
-.create-choice {
-    display: flex;
-    min-height: 68px;
-    min-width: 0;
-    align-items: center;
-    gap: 11px;
-    padding: 12px 14px;
-    border: 1px solid rgba(16, 24, 40, .11);
-    border-radius: 13px;
-    color: #101828;
-    text-align: left;
-    background: #fff;
-    box-shadow: none;
-    cursor: pointer;
-    transition: border-color .18s ease, background .18s ease;
-}
-
-.create-choice:hover {
-    border-color: rgba(10, 89, 247, .38);
-    background: rgba(10, 89, 247, .025);
-}
-
-.create-choice-icon {
-    display: grid;
-    width: 36px;
-    height: 36px;
-    flex: 0 0 auto;
-    place-items: center;
-    border-radius: 10px;
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .08);
-}
-
-.create-choice-icon svg {
-    width: 21px;
-    height: 21px;
-    stroke: currentColor;
-    stroke-width: 1.6;
-    stroke-linecap: round;
-    stroke-linejoin: round;
-}
-
-.create-choice-copy {
-    display: flex;
-    min-width: 0;
-    flex: 1;
-    flex-direction: column;
-    gap: 4px;
-}
-
-.create-choice-copy strong {
-    font-size: 14px;
-    line-height: 1.35;
-}
-
-.create-choice-title-row {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 8px;
-}
-
-.create-choice-title-row small {
-    padding: 2px 7px;
-    border-radius: 999px;
-    color: #0a59f7;
-    background: rgba(10, 89, 247, .08);
-    font-size: 10px;
-    font-weight: 700;
-}
-
-.create-choice-arrow {
-    width: 17px;
-    height: 17px;
-    flex: 0 0 auto;
-    color: #7b8798;
-}
-
-.create-flow-back {
-    display: inline-flex;
-    min-height: 28px;
-    align-items: center;
-    gap: 4px;
-    margin-bottom: 10px;
-    padding: 0;
-    border: 0;
-    color: #5f6b7c;
-    background: transparent;
-    font-size: 12px;
-    cursor: pointer;
-}
-
-.create-flow-back:hover {
-    color: #0a59f7;
-}
-
-.create-flow-back svg {
-    width: 16px;
-    height: 16px;
-}
-
-.create-final-form {
-    display: flex;
-    width: min(100%, 720px);
-    flex-direction: column;
-    gap: 13px;
-}
-
-.create-final-form label {
-    display: flex;
-    min-width: 0;
-    flex-direction: column;
-    gap: 6px;
-    color: #344054;
-    font-size: 12px;
-    font-weight: 650;
-}
-
-.create-final-form input,
-.create-final-form select,
-.create-final-form textarea {
-    width: 100%;
-    min-width: 0;
-    min-height: 36px;
-    padding: 8px 11px;
-    border: 1px solid rgba(16, 24, 40, .14);
-    border-radius: 10px;
-    outline: none;
-    color: #101828;
-    background: #fff;
-    font: inherit;
-    font-weight: 500;
-    resize: vertical;
-}
-
-.create-final-form input:focus,
-.create-final-form select:focus,
-.create-final-form textarea:focus {
-    border-color: #0a59f7;
-    box-shadow: 0 0 0 3px rgba(10, 89, 247, .09);
-}
-
-.create-final-fields {
-    display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
-}
-
-.create-final-fields-three {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-}
-
-.create-final-form > .btn {
-    align-self: flex-start;
-    min-height: 31px;
-    padding: 5px 11px;
-    font-size: 12px;
-}
-
-@media (max-width: 900px) {
-    .create-method-grid,
-    .create-method-grid-import {
-        grid-template-columns: 1fr;
-    }
-}
-
-@media (max-width: 560px) {
-    .create-classroom-page {
-        padding: 22px 14px 42px;
-    }
-
-    .create-method-section {
-        padding: 24px 0 0;
-        border-radius: 0;
-    }
-
-    .create-method-fields {
-        grid-template-columns: 1fr;
-    }
-
-    .create-method-card > .btn {
-        width: 100%;
-    }
-
-    .create-choice-grid,
-    .create-final-fields,
-    .create-final-fields-three {
-        grid-template-columns: 1fr;
-    }
-
-    .create-flow-progress > span {
-        font-size: 0;
-    }
-
-    .create-final-form > .btn {
-        width: 100%;
-    }
-}
-
 @media (max-width: 640px) {
-    .create-wizard { padding: 24px 16px; }
     .wizard-title { font-size: 22px; }
     .wizard-choice-card { padding: 16px; gap: 14px; }
     .wizard-choice-icon { width: 48px; height: 48px; }
@@ -6782,45 +3966,11 @@ body[data-app-platform="macos"] .home-sidebar {
 .preset-btn {
     padding: 6px 12px;
     font-size: 12px;
-}
-
-.create-submit-btn {
-    width: 100%;
-    margin-top: 6px;
-}
-
-.quick-arrange-form {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: rgba(243, 247, 255, 0.95);
-    border: 1px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.22);
-    border-radius: 12px;
-    padding: 2px;
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.85);
-}
-
-.quick-arrange-form #btn-auto-arrange,
-.quick-arrange-form .quick-custom-sort-link {
+}.quick-arrange-form .quick-custom-sort-link {
     min-width: 116px;
     flex: 0 0 auto;
     justify-content: center;
     white-space: nowrap;
-}
-
-.quick-arrange-form select {
-    min-width: 170px;
-    border: 1px solid rgba(15, 23, 42, 0.12);
-    border-radius: 9px;
-    background: #fff;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 6px 8px;
-}
-
-.quick-arrange-form select:focus {
-    outline: none;
-    border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.48);
 }
 
 .danger-inline-form {
@@ -6898,35 +4048,6 @@ body[data-app-platform="macos"] .home-sidebar {
         pointer-events: auto;
     }
 
-    .context-toolbar-shell {
-        grid-template-columns: 1fr;
-        gap: 4px;
-    }
-
-    .context-toolbar-row {
-        flex-wrap: nowrap;
-        justify-content: flex-start;
-    }
-
-    .quick-arrange-form {
-        width: auto;
-        flex: 0 0 auto;
-    }
-
-    .quick-arrange-form select {
-        width: auto;
-        min-width: 160px;
-    }
-
-    .toolbar-group {
-        padding-right: 6px;
-        margin-right: 0;
-    }
-
-    .toolbar-group-label {
-        display: none;
-    }
-
     .menu-panel-sub {
         left: 0;
         top: calc(100% + 2px);
@@ -6940,12 +4061,7 @@ body[data-app-platform="macos"] .home-sidebar {
         padding: 12px 14px 24px;
     }
 
-    .home-hero {
-        padding: 22px 14px 8px;
-    }
-
 }
-
 
 .toast-actions {
     display: flex;
@@ -6999,41 +4115,50 @@ body[data-app-platform="macos"] .home-sidebar {
     z-index: 20000;
     inset: 0;
     overflow: auto;
-    background-color: rgba(0, 0, 0, 0);
-    backdrop-filter: blur(0px);
-    -webkit-backdrop-filter: blur(0px);
-    transition: background-color 0.35s var(--spring-gentle),
-                backdrop-filter 0.35s var(--spring-gentle),
-                -webkit-backdrop-filter 0.35s var(--spring-gentle);
+    overscroll-behavior: contain;
     justify-content: center;
     align-items: center;
 }
 
-.modal.modal-visible {
+/* 遮罩的模糊半径固定不变，只过渡伪元素的 opacity；逐帧改变 backdrop-filter 半径代价很高。 */
+.modal::before {
+    content: '';
+    position: fixed;
+    inset: 0;
     background-color: rgba(0, 0, 0, 0.4);
     backdrop-filter: blur(5px);
     -webkit-backdrop-filter: blur(5px);
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
 }
 
+.modal.modal-visible::before {
+    opacity: 1;
+    transition: opacity 0.3s var(--spring-gentle);
+}
+
+/* 关闭态用短促的 ease，打开态用弹簧曲线；closeModal 的 350ms 兜底不会截断关闭动画。 */
 .modal .modal-content {
+    position: relative;
     opacity: 0;
-    transform: scale(0.95) translateY(-10px);
-    filter: blur(8px);
-    transition: opacity 0.4s var(--spring-default),
-                transform 0.5s var(--spring-default),
-                filter 0.4s var(--spring-default);
+    transform: scale(0.96) translateY(-8px);
+    animation: none;
+    transition: opacity 0.18s ease,
+                transform 0.22s ease;
 }
 
 .modal.modal-visible .modal-content {
     opacity: 1;
     transform: scale(1) translateY(0);
-    filter: blur(0px);
+    transition: opacity 0.3s var(--spring-default),
+                transform 0.45s var(--spring-default);
 }
 
 .modal-content {
     background: white;
-    border-radius: 24px;
-    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    border-radius: var(--radius-xl, 28px);
+    box-shadow: var(--shadow-float, 0 16px 48px rgba(0, 0, 0, 0.16));
     max-width: 600px;
     width: 90%;
     padding: 32px;
@@ -7141,12 +4266,10 @@ body.cloud-login-locked {
     from {
         opacity: 0;
         transform: scale(0.95) translateY(-10px);
-        filter: blur(6px);
     }
     to {
         opacity: 1;
         transform: scale(1) translateY(0);
-        filter: blur(0px);
     }
 }
 
@@ -7157,10 +4280,12 @@ body.cloud-login-locked {
     margin-bottom: 24px;
 }
 
+/* 弹窗标题用 ink：品牌色只留给可点的操作。 */
 .modal-header h3 {
-    font-size: 24px;
+    font-size: 20px;
+    line-height: 28px;
     font-weight: 700;
-    color: var(--primary-color);
+    color: var(--ink, var(--text-primary));
     margin: 0 0 8px 0;
 }
 
@@ -7168,15 +4293,14 @@ body.cloud-login-locked {
     background: none;
     border: none;
     cursor: pointer;
-    color: #666;
+    color: var(--ink-secondary, #666);
     padding: 4px;
-    border-radius: 8px;
-    transition: all 0.2s;
+    border-radius: 999px;
 }
 
 .modal-close-btn:hover {
-    background: #f0f0f0;
-    color: #333;
+    background: var(--fill-hover, rgba(0, 0, 0, 0.05));
+    color: var(--ink, #333);
 }
 
 .modal-body p {
@@ -7200,7 +4324,6 @@ body.cloud-login-locked {
     justify-content: center;
     gap: 8px;
 }
-
 
 .plugin-hub-modal-content {
     width: min(1120px, 94vw);
@@ -7481,31 +4604,9 @@ body.cloud-login-locked {
     white-space: pre-wrap;
 }
 
-
 .plugin-quick-group {
     min-width: min(56vw, 740px);
     overflow: hidden;
-}
-
-.plugin-quick-launch-inline {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    padding: 2px;
-    min-height: 34px;
-    width: 100%;
-}
-
-.plugin-quick-launch-inline::-webkit-scrollbar {
-    display: none;
-}
-
-.plugin-quick-launch-empty {
-    font-size: 12px;
-    color: var(--text-secondary);
-    white-space: nowrap;
 }
 
 .plugin-quick-launch-btn {
@@ -9535,19 +6636,12 @@ body.student-import-guide-open {
 html.has-touch-ui body {
     -webkit-tap-highlight-color: transparent;
     overscroll-behavior-y: contain;
-}
-
-html.has-touch-ui .seat-stage,
+}html.has-touch-ui .seat-stage,
 html.has-touch-ui .side-panel,
-html.has-touch-ui .context-toolbar-panel,
-html.has-touch-ui .header-actions,
 html.has-touch-ui .modal,
 html.has-touch-ui .modal-content {
     -webkit-overflow-scrolling: touch;
-}
-
-html.has-touch-ui .btn,
-html.has-touch-ui .context-toolbar-row,
+}html.has-touch-ui .btn,
 html.has-touch-ui .menu-item-link,
 html.has-touch-ui .menu-item-button,
 html.has-touch-ui .tab-btn,
@@ -9589,76 +6683,6 @@ html.has-touch-ui body.touch-dragging .unseated-item {
     textarea,
     select {
         min-height: 44px;
-    }
-
-    .header-content {
-        grid-template-rows: auto auto;
-        gap: 6px;
-    }
-
-    .header-titlebar {
-        align-items: center;
-        gap: 8px;
-    }
-
-    .header-titlebar > div:first-child {
-        flex: 1 1 auto;
-        min-width: 0;
-        gap: 10px !important;
-    }
-
-    .logo {
-        min-height: 40px;
-        padding: 7px 10px;
-        border-radius: 14px;
-    }
-
-    .context-toolbar-panels {
-        display: flex;
-        flex: 1 1 auto;
-        min-width: 0;
-        max-width: 100%;
-        overflow-x: auto;
-        overflow-y: hidden;
-        scroll-snap-type: x proximity;
-        scrollbar-width: none;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .context-toolbar-panels::-webkit-scrollbar {
-        display: none;
-    }
-
-    .context-toolbar-row {
-        flex: 0 0 auto;
-        min-height: 38px;
-        padding: 0 14px;
-        scroll-snap-align: start;
-    }
-
-    .context-toolbar-shell {
-        border-radius: 14px;
-        padding: 6px;
-    }
-
-    .header-actions,
-    .context-toolbar-panel {
-        overflow-x: auto;
-        overflow-y: hidden;
-        scroll-snap-type: x proximity;
-    }
-
-    .context-toolbar-panel[data-toolbar-panel="file"] {
-        overflow: visible;
-    }
-
-    .toolbar-group {
-        flex: 0 0 auto;
-        scroll-snap-align: start;
-    }
-
-    .quick-arrange-form select {
-        min-width: 190px;
     }
 
     .menu-panel {
@@ -9828,35 +6852,6 @@ html.has-touch-ui body.touch-dragging .unseated-item {
 }
 
 @media (max-width: 760px) {
-    .app-header {
-        padding: 6px 8px;
-    }
-
-    .logo-meta {
-        display: none;
-    }
-
-    .logo {
-        width: 42px;
-        height: 42px;
-        justify-content: center;
-        padding: 0;
-    }
-
-    .cloud-header-area {
-        display: none;
-    }
-
-    .context-toolbar-panels {
-        display: flex;
-        overflow-x: auto;
-        scrollbar-width: none;
-        -webkit-overflow-scrolling: touch;
-    }
-
-    .context-toolbar-panels::-webkit-scrollbar {
-        display: none;
-    }
 
     .classroom-layout {
         gap: 10px;
@@ -9951,11 +6946,10 @@ html.has-touch-ui body.touch-dragging .unseated-item {
 body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-layout {
     grid-template-columns: minmax(0, 1fr) minmax(330px, 27vw);
     gap: 0;
-    height: calc(100vh - 130px);
+    height: calc(100vh - var(--header-height));
     margin: 0;
     padding: 0;
     overflow: hidden;
-    background: #fff;
     border: 0;
     border-radius: 0;
 }
@@ -9965,7 +6959,6 @@ body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"
     align-items: flex-start;
     min-width: 0;
     padding: 28px 28px 44px;
-    background: #fff;
     overflow: auto;
 }
 
@@ -9978,8 +6971,6 @@ body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"
     max-height: none;
     padding: 0;
     overflow: hidden;
-    border-left: 1px solid #e0e4ea;
-    background: #fff;
 }
 
 body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-card:first-child {
@@ -10076,21 +7067,6 @@ body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"
     font-weight: 650;
 }
 
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] #unseatedSearch {
-    min-height: 34px;
-    margin: 10px 0;
-    border-radius: 6px;
-    border-color: #d6dce5;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .unseated-item {
-    min-height: 38px;
-    padding: 8px 10px;
-    border-bottom: 1px solid #edf0f3;
-    border-radius: 0;
-    background: transparent;
-}
-
 body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-panel {
     margin-top: 22px;
     padding-top: 18px;
@@ -10128,12 +7104,6 @@ body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"
 }
 
 body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-edit {
-    min-height: 30px;
-    padding: 0 12px;
-    border: 1px solid #d6dce5;
-    border-radius: 6px;
-    background: #f7f9fc;
-    color: #415066;
     cursor: pointer;
 }
 
@@ -10178,18 +7148,7 @@ body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"
 }
 
 body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-action {
-    min-height: 32px;
-    padding: 0 10px;
-    border: 1px solid #d6dce5;
-    border-radius: 6px;
-    background: #fff;
-    color: #354256;
-    font-size: 12px;
     cursor: pointer;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .student-detail-action.is-danger {
-    color: #a13737;
 }
 
 /* 窄窗口仍是 Windows 版，不切回移动端大字号；只把内容上下排列并保留内部滚动。 */
@@ -10201,7 +7160,7 @@ body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"
     body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-layout {
         grid-template-columns: minmax(0, 1fr);
         height: auto;
-        min-height: calc(100vh - 130px);
+        min-height: calc(100vh - var(--header-height));
         overflow: visible;
     }
 
@@ -10216,7 +7175,6 @@ body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"
         max-height: none;
         overflow: visible;
         border-top: 1px solid #e0e4ea;
-        border-left: 0;
     }
 
     body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .side-panel > .panel-tabs {
@@ -10265,14 +7223,6 @@ body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"
 .bsce-cloud-import-btn {
     flex-shrink: 0;
     margin-left: 12px;
-}
-
-.cloud-header-area {
-    display: flex;
-    align-items: center;
-    margin-left: auto;
-    margin-right: 12px;
-    flex-shrink: 0;
 }
 
 .cloud-header-sync-cluster {
@@ -10825,47 +7775,34 @@ body.cloud-connectivity-locked {
     color: var(--text-secondary);
 }
 
-.modal-field {
+/* input.modal-field 与全局 input[type="text"] 同优先级且位置靠后，保证文本框与下拉框尺寸一致。 */
+.modal-field,
+input.modal-field {
     width: 100%;
     box-sizing: border-box;
-    padding: 8px 12px;
-    border: 1px solid var(--border-hairline);
+    min-height: var(--control-pc, 32px);
+    padding: 4px 12px;
+    border: 1px solid transparent;
     border-radius: var(--radius-control);
     font-size: var(--fs-body);
+    line-height: 22px;
     outline: none;
-    background: #fff;
+    background: var(--fill-control, rgba(0, 0, 0, 0.05));
     color: var(--text-primary);
+}
+
+.modal-field:hover {
+    border-color: var(--divider, rgba(0, 0, 0, 0.1));
 }
 
 .modal-field:focus {
     border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(var(--primary-color-rgb, 10, 89, 247), 0.12);
+    box-shadow: none;
 }
 
 .modal-field-row + .modal-field-row,
 .modal-field + .modal-field {
     margin-top: 4px;
-}
-
-/* ===== 首页卡片错位入场 ===== */
-.home-stagger-in {
-    opacity: 0;
-    transform: translateY(20px);
-    animation: homeCardStaggerIn 0.5s var(--spring-fast, cubic-bezier(0.2, 0.9, 0.25, 1.15)) both;
-    animation-delay: calc(var(--stagger-i, 0) * 60ms);
-}
-
-@keyframes homeCardStaggerIn {
-    from { opacity: 0; transform: translateY(20px) scale(0.96); }
-    to { opacity: 1; transform: translateY(0) scale(1); }
-}
-
-@media (prefers-reduced-motion: reduce) {
-    .home-stagger-in {
-        animation: none;
-        opacity: 1;
-        transform: none;
-    }
 }
 
 /* ===== 座位首次落地涟漪入场（左上→右下） ===== */
@@ -10953,7 +7890,7 @@ body.cloud-connectivity-locked {
 @media (min-width: 1101px) {
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
-        top: 76px !important;
+        top: calc(var(--app-titlebar-h) + var(--app-hdr-menu)) !important;
         right: 0 !important;
         bottom: 0 !important;
         height: auto !important;
@@ -10971,12 +7908,6 @@ body.cloud-connectivity-locked {
         --desktop-side-width: min(430px, 32vw);
     }
 
-    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
-    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
-        width: calc(100% - var(--desktop-side-width));
-        margin-right: var(--desktop-side-width);
-    }
-
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .classroom-layout {
         grid-template-columns: minmax(0, 1fr);
@@ -10988,7 +7919,7 @@ body.cloud-connectivity-locked {
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
         position: fixed;
-        top: 76px;
+        top: calc(var(--app-titlebar-h) + var(--app-hdr-menu));
         right: 0;
         bottom: 46px;
         width: var(--desktop-side-width);
@@ -11073,64 +8004,10 @@ body.cloud-connectivity-locked {
         padding-bottom: 52px !important;
     }
 
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"],
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"],
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"],
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] {
-        --mac-window-left: 0px;
-        --mac-window-right: 0px;
-        --mac-window-top: 0px;
-        --mac-window-bottom: 0px;
-        min-height: 100vh;
-        padding-top: 0;
-        overflow: hidden;
-        background: #f5f6f8;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
-        top: 0;
-        left: 0;
-        right: 0;
-        border-radius: 0;
-        box-shadow: 0 1px 6px rgba(31, 41, 55, .08);
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
-        display: none;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-shell,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-app,
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout,
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root {
-        left: 0;
-        right: 0;
-        border-radius: 0;
-        box-shadow: none;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-statusbar {
-        left: 0;
-        right: 0;
-        border-radius: 0;
-    }
-
     /* 末尾覆盖旧的 fixed 侧栏规则，确保其不会回到工具栏上方。 */
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"],
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] {
         --desktop-side-width: min(430px, 32vw);
-    }
-
-    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
-    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
-        width: calc(100% - var(--desktop-side-width));
-        margin-right: var(--desktop-side-width);
     }
 
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
@@ -11144,7 +8021,7 @@ body.cloud-connectivity-locked {
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
         position: fixed;
-        top: 76px;
+        top: calc(var(--app-titlebar-h) + var(--app-hdr-menu));
         right: 0;
         bottom: 46px;
         width: var(--desktop-side-width);
@@ -11213,210 +8090,19 @@ body.cloud-connectivity-locked {
     }
 }
 
-/* macOS 班级窗口：按参考图还原为带交通灯、左侧教室导航和右侧详情栏的独立窗口。 */
+/* macOS 班级页座位区细节。 */
 @media (min-width: 1101px) {
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] {
-        --mac-window-left: 82px;
-        --mac-window-right: 82px;
-        --mac-window-top: 47px;
-        --mac-window-bottom: 75px;
-        overflow: hidden;
-        padding-top: 0;
-        min-height: 100vh;
-        background:
-            radial-gradient(ellipse at 12% 46%, rgba(40, 100, 164, .72), transparent 34%),
-            radial-gradient(ellipse at 84% 42%, rgba(53, 115, 66, .66), transparent 38%),
-            linear-gradient(135deg, #6d9dcc 0%, #c6d7e8 44%, #6e9f77 100%);
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
-        top: var(--mac-window-top);
-        left: var(--mac-window-left);
-        right: var(--mac-window-right);
-        height: 66px;
-        min-height: 66px;
-        padding: 0;
-        overflow: hidden;
-        border-radius: 14px 14px 0 0;
-        background: rgba(255, 255, 255, .91);
-        box-shadow: 0 8px 24px rgba(31, 41, 55, .16);
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-content {
-        display: block;
-        height: 66px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
-        position: relative;
-        height: 66px;
-        padding: 0 24px;
-        border: 0;
-        background: transparent;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
-        content: "";
-        position: absolute;
-        top: 26px;
-        left: 18px;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #ff5f57;
-        box-shadow: 24px 0 #febc2e, 48px 0 #28c840;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar,
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] #btn-open-tour-titlebar,
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
-        display: none !important;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-titlebar-meta {
-        display: flex;
-        flex-direction: column;
-        align-items: flex-start;
-        min-width: 210px;
-        margin-left: 118px;
-        margin-right: auto;
-        line-height: 1.2;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-titlebar-meta strong {
-        color: #263143;
-        font-size: 16px;
-        font-weight: 650;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-titlebar-meta small {
-        display: block;
-        margin-top: 4px;
-        color: #7a8492;
-        font-size: 12px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell {
-        position: absolute;
-        top: 0;
-        left: 500px;
-        right: 0;
-        width: auto;
-        height: 66px;
-        min-height: 66px;
-        margin: 0;
-        padding: 0 24px 0 0;
-        border: 0;
-        border-radius: 0;
-        background: transparent;
-        box-shadow: none;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-actions {
-        height: 66px;
-        justify-content: flex-start;
-        gap: 8px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-toolbar-row {
-        height: 66px;
-        justify-content: flex-start;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-toolbar-divider {
-        height: 30px;
-        background: #e3e7ec;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout {
-        position: fixed;
-        top: calc(var(--mac-window-top) + 66px);
-        right: var(--mac-window-right);
-        bottom: var(--mac-window-bottom);
-        left: var(--mac-window-left);
-        width: auto;
-        height: auto;
-        min-height: 0;
-        grid-template-columns: minmax(0, 1fr) 320px;
-        gap: 0;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        border: 0;
-        border-radius: 0 0 14px 0;
-        background: #fff;
-        box-shadow: 0 12px 32px rgba(31, 41, 55, .16);
-    }
 
     body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-stage {
         justify-content: center;
         align-items: flex-start;
         padding: 20px 24px 38px;
-        background: #fff;
         overflow: auto;
     }
 
     body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat {
         height: clamp(58px, 6vw, 72px);
-        border-radius: 6px;
     }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .side-panel {
-        position: static;
-        width: auto;
-        height: 100%;
-        border-left: 1px solid #e0e4ea;
-        border-top: 0;
-        border-radius: 0 0 14px 0;
-    }
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .side-panel > .panel-card:first-child {
-        border-radius: 0;
-    }
-}
-
-/* 参考图级别的桌面窗口细节：浏览器预览也绘制 Windows 标题栏控制区，
- * 这样同一套业务页面在浏览器和桌面壳中保持几何一致。 */
-.browser-window-controls {
-    display: flex;
-    align-items: stretch;
-    align-self: stretch;
-    margin-left: auto;
-    flex: 0 0 auto;
-}
-
-.browser-window-control {
-    position: relative;
-    width: 46px;
-    height: 38px;
-    display: block;
-}
-
-.browser-window-control::before,
-.browser-window-control::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    top: 50%;
-    transform: translate(-50%, -50%);
-    background: #263143;
-}
-
-.browser-window-minimize::before { width: 10px; height: 1px; }
-.browser-window-maximize::before { width: 10px; height: 10px; border: 1px solid #263143; background: transparent; }
-.browser-window-close::before,
-.browser-window-close::after { width: 12px; height: 1px; }
-.browser-window-close::before { transform: translate(-50%, -50%) rotate(45deg); }
-.browser-window-close::after { transform: translate(-50%, -50%) rotate(-45deg); }
-.browser-window-control:hover { background: #edf3ff; }
-.browser-window-close:hover { background: #d13438; }
-.browser-window-close:hover::before,
-.browser-window-close:hover::after { background: #fff; }
-
-body[data-app-shell="webview"] .browser-window-controls,
-body[data-app-platform="macos"] .browser-window-controls {
-    display: none;
 }
 
 /* Windows 参考图：座位格是紧凑的直角桌面单元，不使用网页卡片的大圆角。 */
@@ -11447,20 +8133,14 @@ body.classroom-detail-body[data-app-platform="windows"] .seat {
     width: 100px;
     height: 80px;
     flex: 0 0 100px;
-    border: 1px solid #d6dce5;
-    border-radius: 4px;
-    background: #fff;
-    box-shadow: none;
 }
 
 body.classroom-detail-body[data-app-platform="windows"] .seat.occupied {
     border-color: #0a59f7;
-    background: #f7fbff;
 }
 
 body.classroom-detail-body[data-app-platform="windows"] .seat.selected {
     border-width: 2px;
-    box-shadow: 0 0 0 1px rgba(10, 89, 247, .12);
 }
 
 body.classroom-detail-body[data-app-platform="windows"] .seat-column-labels {
@@ -11470,14 +8150,12 @@ body.classroom-detail-body[data-app-platform="windows"] .seat-column-labels {
 body.classroom-detail-body[data-app-platform="windows"] .seat-row-label {
     width: 50px;
     flex: 0 0 50px;
-    color: #586273;
     font-size: 13px;
     text-align: left;
 }
 
 body.classroom-detail-body[data-app-platform="windows"] .seat-number {
     display: block;
-    color: #6e7785;
     font-size: 12px;
     line-height: 1.1;
 }
@@ -11496,43 +8174,7 @@ body.classroom-detail-body[data-app-platform="windows"] .seat-group-tag {
     right: 4px;
     bottom: 3px;
     padding: 1px 4px;
-    border-radius: 3px;
     font-size: 10px;
-}
-
-/* 所有非首页页面提供稳定的返回入口；它是普通路由链接，不依赖浏览器历史。 */
-.global-back-button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-height: 30px;
-    padding: 0 12px;
-    border: 1px solid #d6dce5;
-    border-radius: 7px;
-    background: #fff;
-    color: #354256;
-    font-size: 12px;
-    font-weight: 550;
-    text-decoration: none;
-    white-space: nowrap;
-}
-
-.global-back-button::before {
-    content: "‹";
-    margin-right: 5px;
-    color: #0a59f7;
-    font-size: 17px;
-    line-height: 1;
-}
-
-.global-back-button:hover {
-    border-color: rgba(10, 89, 247, .35);
-    background: #eef5ff;
-    color: #0a59f7;
-}
-
-body.home-dashboard-body .global-back-button {
-    display: none;
 }
 
 body.classroom-detail-body[data-app-platform="windows"] .seat.cell-podium {
@@ -11542,7 +8184,6 @@ body.classroom-detail-body[data-app-platform="windows"] .seat.cell-podium {
 body.classroom-detail-body[data-app-platform="windows"] .seat.cell-aisle {
     width: 52px;
     flex-basis: 52px;
-    background: #e9edf2;
     border: 0;
     border-radius: 2px;
 }
@@ -11579,72 +8220,38 @@ body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs 
     display: none;
 }
 
-body.classroom-detail-body[data-app-platform="windows"] .classroom-toolbar-arrange .classroom-arrange-select {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
+.arrange-preferences-content {
+    max-width: 460px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
 }
-
-body.classroom-detail-body[data-app-platform="windows"] #btn-auto-arrange {
-    min-width: 126px;
-    height: 40px;
-    border-radius: 6px;
-    font-size: 14px;
+.arrange-preferences-content h3 {
+    margin: 0 0 16px;
+    font-size: 16px;
+    font-weight: 600;
 }
-
-body.classroom-detail-body[data-app-platform="windows"] .classroom-toolbar-arrange .quick-arrange-form {
-    position: relative;
+.arrange-preferences-fields {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
-
-.arrange-method-trigger {
-    width: 28px;
-    height: 40px;
-    display: inline-flex;
+.arrange-preferences-fields .modal-field { margin-top: 4px; }
+.arrange-preferences-checkbox {
+    display: flex;
     align-items: center;
-    justify-content: center;
-    margin-left: -1px;
-    border: 0;
-    border-left: 1px solid rgba(255,255,255,.38);
-    border-radius: 0 6px 6px 0;
-    background: #0a59f7;
-    color: #fff;
-    cursor: pointer;
+    gap: 8px;
+    font-size: var(--fs-body);
 }
-.arrange-method-trigger:hover { background: #084fdc; }
-.arrange-method-menu {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    z-index: 2400;
-    width: 210px;
-    padding: 6px;
-    border: 1px solid #dfe4ea;
-    border-radius: 8px;
-    background: #fff;
-    box-shadow: 0 12px 28px rgba(15,23,42,.16);
+.arrange-preferences-checkbox input { accent-color: #0a59f7; }
+.arrange-preferences-hint {
+    margin: 16px 0 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 1.5;
 }
-.arrange-method-menu[hidden] { display: none; }
-.arrange-method-menu button {
-    display: block;
-    width: 100%;
-    min-height: 30px;
-    padding: 5px 10px;
-    border: 0;
-    border-radius: 5px;
-    background: transparent;
-    color: #263143;
-    font-size: 12px;
-    text-align: left;
-    cursor: pointer;
-}
-.arrange-method-menu button:hover { background: #edf3ff; color: #0a59f7; }
-
-body.classroom-detail-body[data-app-platform="macos"] .arrange-method-trigger {
-    height: 36px;
-    border-radius: 0 8px 8px 0;
-}
+.arrange-preferences-error { color: var(--danger-color, #d92d20); }
+.arrange-preferences-content .modal-actions { margin-top: 20px; }
+.arrange-preferences-content .btn { border-radius: 999px; }
 
 .classroom-statusbar {
     position: fixed;
@@ -11753,14 +8360,6 @@ body.classroom-detail-body[data-app-platform="macos"] .seat.cell-aisle {
     flex-basis: calc(68px * var(--seat-density-scale, 1));
 }
 
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-arrange-select {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
-}
-
 body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-board {
     width: 325px;
 }
@@ -11793,14 +8392,11 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] 
     width: 104px;
     height: 66px;
     flex-basis: 104px;
-    border-radius: 5px;
-    border-color: #d6dce5;
 }
 
 body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat.cell-aisle {
     width: 68px;
     flex-basis: 68px;
-    background: #e9edf2;
     border: 0;
     border-radius: 3px;
 }
@@ -11815,50 +8411,8 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] 
 }
 
 /* 扩展入口由原生“扩展”菜单承接，班级主工具栏只保留参考图中的排座、历史与导入导出。 */
-@media (min-width: 1101px) {
-    body.classroom-detail-body[data-app-platform="windows"] .classroom-toolbar-overflow,
-    body.classroom-detail-body[data-app-platform="macos"] .classroom-toolbar-overflow {
-        display: none !important;
-    }
-}
 
 body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-name { font-size: 14px; }
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-statusbar {
-    left: var(--mac-window-left);
-    right: var(--mac-window-right);
-    bottom: var(--mac-window-bottom);
-    min-height: 38px;
-    padding: 0 18px;
-    border-radius: 0 0 14px 14px;
-    border-top-color: #e1e5eb;
-}
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout {
-    bottom: calc(var(--mac-window-bottom) + 38px);
-}
-
-/* Windows 参考图的三行标题区：38px 标题栏 + 38px 菜单栏 + 54px 工具栏。 */
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .header-content,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
-    grid-template-rows: 38px 38px 54px;
-}
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-bar,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-bar {
-    height: 38px;
-}
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-trigger,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
-    min-height: 38px;
-}
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .context-toolbar-shell,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
-    min-height: 54px;
-    height: 54px;
-}
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-toolbar-row,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-toolbar-row {
-    height: 53px;
-}
 
 body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .seat-stage,
 body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .seat-stage {
@@ -11878,151 +8432,7 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"
     }
 }
 
-/* macOS 首页与设置页也使用独立窗口层级，避免 WebView 预览退化成整页网页。 */
-@media (min-width: 1101px) {
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"],
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] {
-        --mac-window-left: 82px;
-        --mac-window-right: 82px;
-        --mac-window-top: 47px;
-        --mac-window-bottom: 75px;
-        min-height: 100vh;
-        padding-top: 0;
-        overflow: hidden;
-        background:
-            radial-gradient(ellipse at 12% 44%, rgba(40, 100, 164, .72), transparent 34%),
-            radial-gradient(ellipse at 84% 42%, rgba(53, 115, 66, .66), transparent 38%),
-            linear-gradient(135deg, #6d9dcc 0%, #c6d7e8 44%, #6e9f77 100%);
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
-        top: var(--mac-window-top);
-        left: var(--mac-window-left);
-        right: var(--mac-window-right);
-        height: 66px;
-        min-height: 66px;
-        padding: 0;
-        overflow: hidden;
-        border-radius: 14px 14px 0 0;
-        border: 0;
-        background: rgba(255, 255, 255, .91);
-        box-shadow: 0 8px 24px rgba(31, 41, 55, .16);
-        backdrop-filter: saturate(160%) blur(18px);
-        -webkit-backdrop-filter: saturate(160%) blur(18px);
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-content,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-content {
-        display: block;
-        height: 66px;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
-        position: relative;
-        height: 66px;
-        padding: 0 24px;
-        border: 0;
-        background: transparent;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
-        content: "";
-        position: absolute;
-        top: 26px;
-        left: 18px;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #ff5f57;
-        box-shadow: 24px 0 #febc2e, 48px 0 #28c840;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after {
-        position: absolute;
-        top: 23px;
-        left: 50%;
-        transform: translateX(-50%);
-        color: #263143;
-        font-size: 15px;
-        font-weight: 650;
-        white-space: nowrap;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after {
-        content: "不想排座位";
-    }
-
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after {
-        content: "设置 — 不想排座位";
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-titlebar-sync,
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-titlebar-settings,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area,
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
-        display: none !important;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-shell,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-app {
-        position: fixed;
-        top: calc(var(--mac-window-top) + 66px);
-        right: var(--mac-window-right);
-        bottom: var(--mac-window-bottom);
-        left: var(--mac-window-left);
-        width: auto;
-        height: auto;
-        min-height: 0;
-        overflow: hidden;
-        background: #fff;
-        box-shadow: 0 12px 32px rgba(31, 41, 55, .16);
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-shell {
-        border-radius: 0 0 14px 14px;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-sidebar {
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        left: 0;
-        width: 214px;
-        min-height: 0;
-        border-radius: 0 0 0 14px;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-dashboard-page {
-        height: 100%;
-        min-height: 0;
-        margin-left: 214px;
-        overflow-y: auto;
-        background: #fff;
-    }
-
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-app {
-        grid-template-columns: 214px minmax(0, 1fr);
-        border-radius: 0 0 14px 14px;
-    }
-
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-rail {
-        border-radius: 0 0 0 14px;
-        background: rgba(247, 249, 253, .84);
-    }
-
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-canvas {
-        background: #fff;
-    }
-}
-
-/* 动态密度变量必须放在所有平台覆盖规则之后，才能覆盖 macOS 独立窗口的固定尺寸。 */
+/* 动态密度变量必须放在所有平台覆盖规则之后，才能覆盖 macOS 的固定尺寸。 */
 body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] #classroom-root {
     --seat-density-scale: 1;
 }
@@ -12056,114 +8466,14 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] 
 body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"],
 body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] {
     overflow: hidden;
-    --header-height: 130px;
-    padding-top: 130px;
     background: #f5f6f8;
 }
 
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .app-header,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .app-header {
-    height: 130px;
-    min-height: 130px;
-    padding: 0;
-    background: #fff;
-    border-bottom: 1px solid #dfe3e8;
-    box-shadow: none;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .header-content,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
-    display: grid;
-    grid-template-rows: 38px 28px 64px;
-    gap: 0;
-    height: 100%;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .header-titlebar,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar {
-    grid-row: 1;
-    height: 38px;
-    padding: 0 16px;
-    border-bottom: 1px solid #edf0f4;
-    background: #fbfcfd;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .logo,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .logo {
-    gap: 8px;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    box-shadow: none;
-    color: #172033;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .logo-svg,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .logo-svg {
-    width: 20px;
-    height: 20px;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .logo-meta small,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .logo-meta small,
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .cloud-header-area,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .cloud-header-area {
-    display: none !important;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-bar,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-bar {
-    top: 38px;
-    left: 16px;
-    right: 0;
-    height: 28px;
-    padding-left: 0;
-    gap: 0;
-    align-items: stretch;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-brand {
-    display: inline-flex;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .native-menu-trigger,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
-    min-height: 28px;
-    padding: 3px 12px;
-    border-radius: 0;
-    font-size: 12px;
-    font-weight: 500;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .context-toolbar-shell,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
-    grid-row: 3;
-    min-height: 64px;
-    height: 64px;
-    padding: 0 20px;
-    border: 0;
-    border-top: 1px solid #e8ebf0;
-    border-radius: 0;
-    background: #fff;
-    box-shadow: none;
-}
-
-body.layout-editor-body[data-app-shell="browser"][data-app-platform="windows"] .context-toolbar-row,
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-row {
-    height: 63px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    overflow: visible;
-}
-
-body.layout-editor-body[data-app-platform="windows"] #layout-root {
+body.layout-editor-body:is([data-app-platform="windows"], [data-app-platform="macos"]) #layout-root {
     grid-template-columns: minmax(0, 1fr) minmax(320px, 27vw);
     gap: 0;
     width: 100%;
-    height: calc(100vh - 130px);
+    height: calc(100vh - var(--header-height));
     margin: 0;
     padding: 0;
     overflow: hidden;
@@ -12172,25 +8482,25 @@ body.layout-editor-body[data-app-platform="windows"] #layout-root {
     border-radius: 0;
 }
 
-body.layout-editor-body[data-app-platform="windows"] #layout-root .seat-stage {
+body.layout-editor-body:is([data-app-platform="windows"], [data-app-platform="macos"]) #layout-root .seat-stage {
     min-width: 0;
     padding: 18px 28px 34px;
     background: #fff;
     overflow: auto;
 }
 
-body.layout-editor-body[data-app-platform="windows"] #layout-root .seat-grid {
+body.layout-editor-body:is([data-app-platform="windows"], [data-app-platform="macos"]) #layout-root .seat-grid {
     gap: 12px;
     width: max-content;
     min-width: 100%;
     padding: 10px 0 26px;
 }
 
-body.layout-editor-body[data-app-platform="windows"] #layout-root .seat-row {
+body.layout-editor-body:is([data-app-platform="windows"], [data-app-platform="macos"]) #layout-root .seat-row {
     gap: 12px;
 }
 
-body.layout-editor-body[data-app-platform="windows"] #layout-root .seat {
+body.layout-editor-body:is([data-app-platform="windows"], [data-app-platform="macos"]) #layout-root .seat {
     width: 100px;
     height: 80px;
     flex: 0 0 100px;
@@ -12200,7 +8510,7 @@ body.layout-editor-body[data-app-platform="windows"] #layout-root .seat {
     box-shadow: none;
 }
 
-body.layout-editor-body[data-app-platform="windows"] #layout-root .seat.cell-aisle {
+body.layout-editor-body:is([data-app-platform="windows"], [data-app-platform="macos"]) #layout-root .seat.cell-aisle {
     width: 52px;
     flex-basis: 52px;
     border: 0;
@@ -12208,7 +8518,7 @@ body.layout-editor-body[data-app-platform="windows"] #layout-root .seat.cell-ais
     background: #e9edf2;
 }
 
-body.layout-editor-body[data-app-platform="windows"] #layout-root .side-panel {
+body.layout-editor-body:is([data-app-platform="windows"], [data-app-platform="macos"]) #layout-root .side-panel {
     display: flex;
     flex-direction: column;
     gap: 0;
@@ -12222,7 +8532,7 @@ body.layout-editor-body[data-app-platform="windows"] #layout-root .side-panel {
     background: #fff;
 }
 
-body.layout-editor-body[data-app-platform="windows"] #layout-root .panel-card {
+body.layout-editor-body:is([data-app-platform="windows"], [data-app-platform="macos"]) #layout-root .panel-card {
     flex: 0 0 auto;
     margin-bottom: 12px;
     padding: 14px;
@@ -12232,285 +8542,11 @@ body.layout-editor-body[data-app-platform="windows"] #layout-root .panel-card {
     background: #fff;
 }
 
-/* macOS 布局编辑器使用与班级页一致的独立窗口层级。 */
-@media (min-width: 1101px) {
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] {
-        --mac-window-left: 82px;
-        --mac-window-right: 82px;
-        --mac-window-top: 47px;
-        --mac-window-bottom: 75px;
-        min-height: 100vh;
-        padding-top: 0;
-        overflow: hidden;
-        background:
-            radial-gradient(ellipse at 12% 44%, rgba(40, 100, 164, .72), transparent 34%),
-            radial-gradient(ellipse at 84% 42%, rgba(53, 115, 66, .66), transparent 38%),
-            linear-gradient(135deg, #6d9dcc 0%, #c6d7e8 44%, #6e9f77 100%);
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
-        position: fixed;
-        top: var(--mac-window-top);
-        left: var(--mac-window-left);
-        right: var(--mac-window-right);
-        height: 66px;
-        min-height: 66px;
-        padding: 0;
-        overflow: hidden;
-        border: 0;
-        border-radius: 14px 14px 0 0;
-        background: rgba(255, 255, 255, .91);
-        box-shadow: 0 8px 24px rgba(31, 41, 55, .16);
-        backdrop-filter: saturate(160%) blur(18px);
-        -webkit-backdrop-filter: saturate(160%) blur(18px);
-        z-index: 1000;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-content {
-        display: block;
-        height: 66px;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
-        position: relative;
-        height: 66px;
-        padding: 0 24px;
-        border: 0;
-        background: transparent;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
-        content: "";
-        position: absolute;
-        top: 26px;
-        left: 18px;
-        width: 12px;
-        height: 12px;
-        border-radius: 50%;
-        background: #ff5f57;
-        box-shadow: 24px 0 #febc2e, 48px 0 #28c840;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after {
-        content: "布局编辑";
-        position: absolute;
-        top: 23px;
-        left: 50%;
-        transform: translateX(-50%);
-        color: #263143;
-        font-size: 15px;
-        font-weight: 650;
-        white-space: nowrap;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar,
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
-        display: none !important;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell {
-        position: absolute;
-        top: 0;
-        left: 500px;
-        right: 0;
-        width: auto;
-        height: 66px;
-        min-height: 66px;
-        padding: 0 24px 0 0;
-        border: 0;
-        border-radius: 0;
-        background: transparent;
-        box-shadow: none;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-row {
-        height: 66px;
-        justify-content: flex-start;
-        gap: 8px;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root {
-        position: fixed;
-        top: calc(var(--mac-window-top) + 66px);
-        right: var(--mac-window-right);
-        bottom: var(--mac-window-bottom);
-        left: var(--mac-window-left);
-        width: auto;
-        height: auto;
-        min-height: 0;
-        grid-template-columns: minmax(0, 1fr) 320px;
-        gap: 0;
-        margin: 0;
-        padding: 0;
-        overflow: hidden;
-        border: 0;
-        border-radius: 0 0 14px 14px;
-        background: #fff;
-        box-shadow: 0 12px 32px rgba(31, 41, 55, .16);
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat-stage {
-        min-width: 0;
-        padding: 20px 24px 30px;
-        background: #fff;
-        overflow: auto;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat-grid {
-        gap: 12px;
-        width: max-content;
-        min-width: 100%;
-        padding: 0 0 20px;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat-row {
-        gap: 12px;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat {
-        width: 104px;
-        height: 66px;
-        flex: 0 0 104px;
-        border: 1px solid #d6dce5;
-        border-radius: 5px;
-        background: #fff;
-        box-shadow: none;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .seat.cell-aisle {
-        width: 68px;
-        flex-basis: 68px;
-        border: 0;
-        border-radius: 3px;
-        background: #e9edf2;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .side-panel {
-        min-width: 0;
-        height: 100%;
-        max-height: none;
-        padding: 14px 16px 18px;
-        overflow-x: hidden;
-        overflow-y: auto;
-        border-left: 1px solid #e0e4ea;
-        border-radius: 0 0 14px 0;
-        background: #fff;
-    }
-
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .panel-card {
-        margin-bottom: 12px;
-        padding: 14px;
-        border: 1px solid #e3e7ed;
-        border-radius: 12px;
-        box-shadow: 0 2px 8px rgba(31, 41, 55, .06);
-        background: rgba(255, 255, 255, .96);
-    }
-}
-
-/* 最终覆盖：原生 macOS 窗口内容铺满，不保留外层桌面背景或内嵌窗口边界。 */
-@media (min-width: 1101px) {
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"],
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"],
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"],
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] {
-        --mac-window-left: 0px;
-        --mac-window-right: 0px;
-        --mac-window-top: 0px;
-        --mac-window-bottom: 0px;
-        min-height: 100vh;
-        padding-top: 0;
-        overflow: hidden;
-        background: #f5f6f8;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header,
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
-        top: 0;
-        left: 0;
-        right: 0;
-        border-radius: 0;
-        box-shadow: 0 1px 6px rgba(31, 41, 55, .08);
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before,
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::before {
-        display: none;
-    }
-
-    body.home-dashboard-body[data-app-shell="webview"][data-app-platform="macos"] .home-shell,
-    body.settings-page-body[data-app-shell="webview"][data-app-platform="macos"] .settings-app,
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-layout,
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root {
-        left: 0;
-        right: 0;
-        border-radius: 0;
-        box-shadow: none;
-    }
-
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-statusbar {
-        left: 0;
-        right: 0;
-        border-radius: 0;
-    }
-
-    /* 布局编辑页只保留工具栏里的返回排座，避免两个返回入口重叠。 */
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .global-back-button {
-        display: none;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar {
-        justify-content: flex-end;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .wd-global-link {
-        position: absolute;
-        right: 110px;
-    }
-
-    /* 左侧工具栏从窗口控制点之后开始，居中的页面标题不参与工具排列。 */
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell {
-        left: 96px !important;
-        right: 18px !important;
-        width: auto !important;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .constraint-grid {
-        grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 10px;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .constraint-grid input {
-        min-width: 0;
-        width: 100%;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .constraint-grid .btn {
-        min-width: 0;
-        white-space: nowrap;
-    }
-
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .panel-card:first-child .constraint-grid .btn,
-    body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #layout-root .panel-card:nth-child(2) .constraint-grid input {
-        grid-column: 1 / -1;
-    }
-}
-
 /* Windows 班级页最终层级修正：右侧栏和座位区绝不互相覆盖。 */
 @media (min-width: 1101px) {
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"],
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] {
         --desktop-side-width: min(430px, 32vw);
-    }
-
-    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .context-toolbar-shell,
-    body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .context-toolbar-shell {
-        width: calc(100% - var(--desktop-side-width));
-        margin-right: var(--desktop-side-width);
     }
 
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .classroom-layout,
@@ -12524,7 +8560,7 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] 
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="browser"] .side-panel,
     body.classroom-detail-body[data-app-platform="windows"][data-app-shell="webview"] .side-panel {
         position: fixed;
-        top: 76px;
+        top: calc(var(--app-titlebar-h) + var(--app-hdr-menu));
         right: 0;
         bottom: 46px;
         width: var(--desktop-side-width);
@@ -12609,90 +8645,21 @@ body.classroom-detail-body .seat-grid .seat.cell-podium {
 
 body.classroom-detail-body .seat-grid .seat.cell-podium .seat-placeholder {
     color: #4b5563;
-    font-size: 12px;
+    font-size: calc(12px * var(--seat-density-scale, 1));
     letter-spacing: .08em;
 }
 
-/* 班级工具栏的下拉菜单必须能够越过工具栏底边展开。
-   旧规则同时使用 overflow-x:auto 和 overflow-y:hidden，菜单打开后只剩
-   一个空白圆角边，造成“箭头打开但菜单被遮住”的错觉。桌面宽度下核心
-   操作已经能完整放入预留区域，窄窗口则改为换行，因此这里不再裁切纵向内容。 */
-body.classroom-detail-body .context-toolbar-panel.active,
-body.classroom-detail-body .classroom-toolbar-row {
-    overflow: visible !important;
-}
-
-/* macOS 班级页的原生风格标题栏曾用 overflow:hidden 裁切交通灯区域，
-   同时也把网页内的导入/导出三级菜单裁掉；标题栏本身不再承担裁切职责。 */
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .app-header {
-    overflow: visible !important;
-}
-
-/* 响应式班级页：窄窗口不再把固定 130px 顶栏压在座位区上方，
-   顶栏根据两行工具按钮自然增高，页面主体从顶栏之后开始布局。 */
+/* 响应式班级页：窄窗口改为整页滚动，主体从固定顶栏之后开始布局。 */
 @media (max-width: 1100px) {
     body.classroom-detail-body[data-app-shell="browser"],
     body.classroom-detail-body[data-app-shell="webview"] {
-        --header-height: 0px;
-        padding-top: 0 !important;
         overflow: auto;
-    }
-
-    body.classroom-detail-body[data-app-shell="browser"] .app-header,
-    body.classroom-detail-body[data-app-shell="webview"] .app-header {
-        position: relative !important;
-        height: auto !important;
-        min-height: 0 !important;
-        z-index: 1000;
-    }
-
-    body.classroom-detail-body[data-app-shell="browser"] .header-content,
-    body.classroom-detail-body[data-app-shell="webview"] .header-content {
-        height: auto !important;
-        grid-template-rows: 38px 38px auto !important;
-    }
-
-    body.classroom-detail-body[data-app-shell="browser"] .context-toolbar-shell,
-    body.classroom-detail-body[data-app-shell="webview"] .context-toolbar-shell {
-        height: auto !important;
-        min-height: 54px;
-        padding: 0 12px 8px;
-    }
-
-    body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-row,
-    body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-row {
-        height: auto !important;
-        min-height: 53px;
-        flex-wrap: wrap;
-        align-content: center;
-        row-gap: 8px;
-        padding: 8px 0 0;
-    }
-
-    body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-overflow,
-    body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-overflow {
-        display: flex !important;
-        flex: 1 1 100%;
-        min-width: 0;
-        flex-wrap: wrap;
-        align-items: center;
-        gap: 8px;
-        padding-bottom: 2px;
-    }
-
-    body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-overflow .plugin-quick-launch-inline,
-    body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-overflow .plugin-quick-launch-inline {
-        display: flex;
-        min-width: 0;
-        max-width: 100%;
-        flex-wrap: wrap;
-        gap: 8px;
     }
 
     body.classroom-detail-body[data-app-shell="browser"] .classroom-layout,
     body.classroom-detail-body[data-app-shell="webview"] .classroom-layout {
         height: auto !important;
-        min-height: calc(100vh - 1px);
+        min-height: calc(100vh - var(--header-height));
         overflow: visible !important;
     }
 
@@ -12705,21 +8672,8 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] 
         position: sticky;
         top: 0;
         z-index: 20;
-        background: #fff;
         opacity: 1;
         visibility: visible;
-    }
-}
-
-@media (max-width: 760px) {
-    body.classroom-detail-body[data-app-shell="browser"] .header-content,
-    body.classroom-detail-body[data-app-shell="webview"] .header-content {
-        grid-template-rows: 38px 0 auto !important;
-    }
-
-    body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-row,
-    body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-row {
-        padding-top: 8px;
     }
 }
 
@@ -12741,65 +8695,6 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"
 
 @media (min-width: 1101px) {
     body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] {
-        --header-height: 120px;
-        padding-top: 120px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .app-header {
-        height: 120px;
-        min-height: 120px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
-        position: relative;
-        grid-template-rows: 56px 64px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar {
-        height: 56px;
-        padding: 0 16px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta {
-        max-width: 210px;
-        overflow: hidden;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta strong {
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar > .native-menu-bar {
-        position: static;
-        inset: auto;
-        flex: 0 1 auto;
-        height: 56px;
-        min-width: 0;
-        margin-left: 14px;
-        margin-right: auto;
-        padding: 0;
-        align-items: center;
-        overflow-x: auto;
-        scrollbar-width: thin;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
-        flex: 0 0 auto;
-        min-height: 38px;
-        padding: 6px 12px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
-        grid-row: 2;
-        height: 64px;
-        min-height: 64px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-toolbar-row {
-        height: 63px;
     }
 
     body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-layout {
@@ -12810,79 +8705,12 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"
         top: 56px !important;
         bottom: 46px !important;
     }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .desktop-window-button {
-        height: 56px;
-    }
-}
-
-@media (max-width: 1100px) {
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
-        position: relative;
-        grid-template-rows: 56px auto !important;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar {
-        height: 56px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta {
-        max-width: 100px;
-        overflow: hidden;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta strong {
-        max-width: 100%;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar > .native-menu-bar {
-        position: static;
-        inset: auto;
-        flex: 0 1 auto;
-        height: 56px;
-        min-width: 0;
-        margin-left: 4px;
-        margin-right: auto;
-        align-items: center;
-        overflow-x: auto;
-        scrollbar-width: thin;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta {
-        min-width: 0;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
-        flex: 0 0 auto;
-        min-height: 34px;
-        padding: 4px 6px;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
-        grid-row: 2;
-    }
-
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .desktop-window-button {
-        height: 56px;
-    }
-}
-
-@media (min-width: 1101px) and (max-width: 1250px) {
-    body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .native-menu-trigger {
-        padding-left: 6px;
-        padding-right: 6px;
-    }
 }
 
 body.classroom-detail-body .side-panel > .panel-tabs .tab-header {
     display: flex;
     align-items: center;
     flex-wrap: nowrap;
-    overflow-x: auto;
-    overflow-y: hidden;
     scrollbar-width: none;
 }
 
@@ -12907,69 +8735,9 @@ body.classroom-detail-body .side-panel > .panel-tabs .tab-btn {
     body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-header,
     body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-header {
         justify-content: stretch;
-        gap: 8px;
-        padding-left: 12px;
-        padding-right: 12px;
     }
 
-    body.classroom-detail-body[data-app-platform="windows"] .side-panel > .panel-tabs .tab-btn,
-    body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs .tab-btn {
-        flex: 1 1 0;
-        min-width: 0;
-        padding-left: 6px;
-        padding-right: 6px;
     }
-}
-
-/* 自动排座采用真正的分段按钮：外层不再显示浅色套壳，主操作与算法菜单
-   共用一块蓝色背景，只在中间保留细分隔线，避免出现双重圆角和错位边框。 */
-body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange .quick-arrange-form,
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange .quick-arrange-form {
-    height: 40px;
-    min-height: 40px;
-    position: relative;
-    gap: 0;
-    padding: 2px;
-    border: 0;
-    border-radius: 12px;
-    background: #0a59f7;
-    box-shadow: 0 2px 8px rgba(10, 89, 247, .18);
-    overflow: visible;
-}
-
-body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange #btn-auto-arrange,
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange #btn-auto-arrange {
-    height: 36px;
-    min-height: 36px;
-    min-width: 126px;
-    flex: 1 1 auto;
-    padding: 0 20px;
-    border: 0;
-    border-radius: 10px 0 0 10px;
-    background: #0a59f7;
-    box-shadow: none;
-    line-height: 36px;
-}
-
-body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange .arrange-method-trigger,
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange .arrange-method-trigger {
-    width: 40px;
-    height: 36px;
-    min-height: 36px;
-    flex: 0 0 40px;
-    margin-left: 0;
-    border: 0;
-    border-left: 1px solid rgba(255, 255, 255, .42);
-    border-radius: 0 10px 10px 0;
-    background: #0a59f7;
-}
-
-body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange .arrange-method-trigger:hover,
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange .arrange-method-trigger:hover,
-body.classroom-detail-body[data-app-shell="browser"] .classroom-toolbar-arrange #btn-auto-arrange:hover,
-body.classroom-detail-body[data-app-shell="webview"] .classroom-toolbar-arrange #btn-auto-arrange:hover {
-    background: #084fdc;
-}
 
 /* 班级网格不再显示“第几排/第几列”外围文字，让格子本身成为唯一视觉单位。 */
 body.classroom-detail-body .seat-column-labels,
@@ -12979,9 +8747,6 @@ body.classroom-detail-body .seat-row-label {
 
 /* 格子内容分成：左上座位号、中央姓名/分数、底部小组标签，
    每层占用独立区域，避免分数与小组标签相互覆盖。 */
-body.classroom-detail-body .seat {
-    border-radius: 8px;
-}
 
 body.classroom-detail-body .seat-content {
     position: relative;
@@ -13007,13 +8772,12 @@ body.classroom-detail-body .seat-info {
 }
 
 body.classroom-detail-body .seat-name {
-    font-size: 13px;
+    font-size: calc(13px * var(--seat-density-scale, 1));
     line-height: 1.25;
 }
 
 body.classroom-detail-body .seat-info {
-    color: #7c8796;
-    font-size: 11px;
+    font-size: calc(11px * var(--seat-density-scale, 1));
     line-height: 1.15;
 }
 
@@ -13032,7 +8796,7 @@ body.classroom-detail-body .seat-badge-row > * {
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: 8px;
+    font-size: calc(8px * var(--seat-density-scale, 1));
     line-height: 12px;
     padding: 0 3px;
 }
@@ -13046,8 +8810,7 @@ body.classroom-detail-body .seat-group-tag {
     box-sizing: border-box;
     overflow: hidden;
     padding: 0 5px;
-    border-radius: 5px;
-    font-size: 9px;
+    font-size: calc(9px * var(--seat-density-scale, 1));
     line-height: 16px;
     text-align: center;
     text-overflow: ellipsis;
@@ -13062,12 +8825,12 @@ body.classroom-detail-body[data-app-platform="macos"] .seat-content {
 }
 
 body.classroom-detail-body[data-app-platform="macos"] .seat-name {
-    font-size: 13px;
+    font-size: calc(13px * var(--seat-density-scale, 1));
     line-height: 1.2;
 }
 
 body.classroom-detail-body[data-app-platform="macos"] .seat-info {
-    font-size: 10px;
+    font-size: calc(10px * var(--seat-density-scale, 1));
     line-height: 1.1;
 }
 
@@ -13075,43 +8838,12 @@ body.classroom-detail-body[data-app-platform="macos"] .seat-group-tag {
     bottom: 4px;
     height: 14px;
     padding: 0 4px;
-    border-radius: 4px;
-    font-size: 8px;
+    font-size: calc(8px * var(--seat-density-scale, 1));
     line-height: 14px;
-}
-
-/* Windows 二级页的应用菜单参与标题栏排版，避免绝对定位盖住返回和帮助控件。 */
-body[data-app-shell="webview"][data-app-platform="windows"] .header-titlebar > .native-menu-bar {
-    position: static;
-    inset: auto;
-    display: inline-flex;
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 100%;
-    margin: 0 8px;
-    padding: 0;
-    align-items: center;
-    overflow-x: auto;
-    scrollbar-width: thin;
 }
 
 /* 布局编辑页原先的菜单独占一行；菜单进入标题栏后收掉空行。 */
 body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] {
-    --header-height: 102px;
-    padding-top: 102px;
-}
-
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .app-header {
-    height: 102px;
-    min-height: 102px;
-}
-
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .header-content {
-    grid-template-rows: 38px 64px;
-}
-
-body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] .context-toolbar-shell {
-    grid-row: 2;
 }
 
 body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] #layout-root {
@@ -13128,49 +8860,26 @@ body.layout-editor-body[data-app-shell="webview"][data-app-platform="windows"] #
     }
 }
 
-/* Windows/网页端密度较高时，文字跟随座位密度收缩；不再出现“大字体塞进小格子”。
-   使用最小字号保证普通 Windows 屏幕仍然清晰，满宽窗口则恢复参考图字号。 */
+/* 字号与座位使用同一密度比例；不要单独限制最小字号，否则格子继续缩小，
+   文字却停在固定大小。手动缩放再由整个网格的 zoom 统一叠加。 */
 @media (min-width: 1101px) {
     body.classroom-detail-body[data-app-platform="windows"] .seat-name {
-        font-size: max(10px, calc(14px * var(--seat-density-scale, 1)));
+        font-size: calc(14px * var(--seat-density-scale, 1));
         line-height: 1.15;
     }
 
     body.classroom-detail-body[data-app-platform="windows"] .seat-info {
-        font-size: max(8px, calc(11px * var(--seat-density-scale, 1)));
+        font-size: calc(11px * var(--seat-density-scale, 1));
         line-height: 1.1;
     }
 
     body.classroom-detail-body[data-app-platform="windows"] .seat-group-tag {
-        height: max(14px, calc(16px * var(--seat-density-scale, 1)));
-        font-size: max(8px, calc(10px * var(--seat-density-scale, 1)));
-        line-height: max(14px, calc(16px * var(--seat-density-scale, 1)));
+        height: calc(16px * var(--seat-density-scale, 1));
+        font-size: calc(10px * var(--seat-density-scale, 1));
+        line-height: calc(16px * var(--seat-density-scale, 1));
         padding-left: 4px;
         padding-right: 4px;
     }
-}
-
-/* 班级详情页始终保留云同步入口。
-   之前 Windows/网页与桌面壳的标题栏规则把动态生成的云按钮一起隐藏，
-   逻辑仍在运行但用户看不到入口；将它放回标题栏右侧，和班级标题保持同一层级。 */
-body.classroom-detail-body .cloud-header-area {
-    display: flex !important;
-    align-items: center;
-    margin-left: auto;
-    margin-right: 12px;
-    min-width: 0;
-    flex: 0 0 auto;
-    position: relative;
-    z-index: 30;
-    pointer-events: auto !important;
-    visibility: visible !important;
-}
-
-/* 覆盖平台级隐藏规则（它们带有更高的选择器权重）。 */
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .cloud-header-area,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .cloud-header-area,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area {
-    display: flex !important;
 }
 
 /* macOS 标题栏由桌面壳接管布局，但云同步按钮仍是页面内真实可点击控件。
@@ -13186,59 +8895,11 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] 
 
 body.classroom-detail-body .cloud-header-sync-cluster {
     max-width: min(300px, 32vw);
-}
-
-body.classroom-detail-body .classroom-titlebar-meta {
-    margin-right: 0;
-}
-
-body.classroom-detail-body[data-app-shell="browser"][data-app-platform="windows"] .classroom-titlebar-meta,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"] .classroom-titlebar-meta,
-body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .classroom-titlebar-meta {
-    margin-right: 0;
-}
-
-body.classroom-detail-body .browser-window-controls {
-    margin-left: 12px;
-}
-
-/* 首页与设置页不承载班级级菜单；Windows/网页预览只保留一行标题栏，
-   避免菜单、返回按钮和标题挤在同一行后产生错位。 */
-body.home-dashboard-body[data-app-platform="windows"] .native-menu-bar,
-body.settings-page-body[data-app-platform="windows"] .native-menu-bar,
-body.home-dashboard-body[data-app-platform="windows"] .context-toolbar-shell,
-body.settings-page-body[data-app-platform="windows"] .context-toolbar-shell {
-    display: none !important;
-}
-
-body.home-dashboard-body[data-app-platform="windows"],
-body.settings-page-body[data-app-platform="windows"] {
-    padding-top: 52px;
-}
-
-body.home-dashboard-body[data-app-platform="windows"] .app-header,
-body.settings-page-body[data-app-platform="windows"] .app-header {
-    height: 52px;
-    min-height: 52px;
-    padding: 6px 10px;
-}
-
-body.home-dashboard-body[data-app-platform="windows"] .header-content,
-body.settings-page-body[data-app-platform="windows"] .header-content {
-    display: block;
-    height: 100%;
-}
-
-body.home-dashboard-body[data-app-platform="windows"] .header-titlebar,
-body.settings-page-body[data-app-platform="windows"] .header-titlebar {
-    height: 100%;
+}body.settings-page-body[data-app-platform="windows"] {
 }
 
 /* 小屏网页保留一个紧凑的同步入口，不让状态文案挤占标题栏。 */
 @media (max-width: 760px) {
-    body.classroom-detail-body .cloud-header-area {
-        margin-right: 4px;
-    }
 
     body.classroom-detail-body .cloud-sync-pill {
         width: 32px;
@@ -13274,8 +8935,8 @@ body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #la
 @media (min-width: 761px) {
     body.classroom-detail-body[data-app-platform="macos"] .seat-content {
         min-width: 0;
-        gap: max(1px, calc(2px * var(--seat-density-scale, 1)));
-        padding: max(4px, calc(5px * var(--seat-density-scale, 1))) 4px max(10px, calc(14px * var(--seat-density-scale, 1)));
+        gap: calc(2px * var(--seat-density-scale, 1));
+        padding: calc(5px * var(--seat-density-scale, 1)) 4px calc(14px * var(--seat-density-scale, 1));
     }
 
     body.classroom-detail-body[data-app-platform="macos"] .seat-name,
@@ -13288,16 +8949,16 @@ body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #la
     }
 
     body.classroom-detail-body[data-app-platform="macos"] .seat-name {
-        font-size: max(10px, calc(13px * var(--seat-density-scale, 1)));
+        font-size: calc(13px * var(--seat-density-scale, 1));
         line-height: 1.15;
     }
 
     body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] .seat-name {
-        font-size: max(10px, calc(13px * var(--seat-density-scale, 1)));
+        font-size: calc(13px * var(--seat-density-scale, 1));
     }
 
     body.classroom-detail-body[data-app-platform="macos"] .seat-info {
-        font-size: max(8px, calc(10px * var(--seat-density-scale, 1)));
+        font-size: calc(10px * var(--seat-density-scale, 1));
         line-height: 1.1;
     }
 
@@ -13310,19 +8971,18 @@ body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #la
         left: 4px;
         right: 4px;
         bottom: 2px;
-        height: max(12px, calc(14px * var(--seat-density-scale, 1)));
+        height: calc(14px * var(--seat-density-scale, 1));
         max-width: calc(100% - 8px);
         overflow: hidden;
         padding-left: 4px;
         padding-right: 4px;
-        font-size: max(8px, calc(8px * var(--seat-density-scale, 1)));
-        line-height: max(12px, calc(14px * var(--seat-density-scale, 1)));
+        font-size: calc(8px * var(--seat-density-scale, 1));
+        line-height: calc(14px * var(--seat-density-scale, 1));
         text-align: center;
         text-overflow: ellipsis;
         white-space: nowrap;
     }
 }
-
 
 /* Bencho Create menu (MIT, Copyright (c) 2026 Lorenzo Cabra).
    Original demo commentary is retained below. Homepage adaptation:
@@ -13648,14 +9308,6 @@ body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #la
 .crt-item a { font-size: 12px; font-weight: 650; }
 .crt-item svg { flex: 0 0 auto; }
 .crt-item a:focus-visible { outline-offset: -2px; }
-.home-create-host { flex: 0 0 auto; }
-
-/* The hero's entrance animation creates a stacking context. Raising a
-   descendant dropdown alone cannot place it above later animated rows. */
-.home-dashboard-hero { position: relative; z-index: 90; }
-@media (max-width: 620px) {
-    .home-create-host, .home-create-host .crt-stage { width: 100%; }
-}
 @media (prefers-reduced-motion: reduce) {
     .crt-body, .crt-pill, .crt-item, .crt-say { transition: none !important; }
     .crt-item { transition-delay: 0ms !important; }
@@ -13664,15 +9316,103 @@ body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #la
 /* Creation pages share the homepage body class, but have no fixed
    .home-shell to reserve the macOS header. Give their own content that
    space, and keep every wizard step scrollable inside the window. */
-@media (min-width: 1101px) {
-    body.home-dashboard-body.create-classroom-body[data-app-shell="webview"][data-app-platform="macos"] {
-        padding-top: var(--header-height, 66px);
-        height: 100dvh;
-        box-sizing: border-box;
-    }
-    body.home-dashboard-body.create-classroom-body[data-app-shell="webview"][data-app-platform="macos"] .create-classroom-page {
-        height: calc(100dvh - var(--header-height, 66px));
-        min-height: 0;
-        overflow-y: auto;
-    }
+
+/* ===== 弹窗通用排版：取代各弹窗内联样式，统一标题、说明、字段与按钮间距 ===== */
+.modal-content.modal-compact { max-width: 420px; }
+.modal-content.modal-medium { max-width: 480px; }
+
+.modal-content .modal-title {
+    margin: 0 0 16px;
+    font-size: 17px;
+    font-weight: 600;
+    line-height: 1.35;
+    color: var(--text-primary);
 }
+
+.modal-content .modal-title:has(+ .modal-desc) { margin-bottom: 6px; }
+
+.modal-content .modal-desc {
+    margin: 0 0 16px;
+    font-size: 13px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+}
+
+.modal-content .modal-message { font-size: 14px; }
+
+.modal-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.modal-fieldset {
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    border: 0;
+}
+
+.modal-fieldset > legend.modal-field-label {
+    padding: 0;
+    margin-bottom: 8px;
+}
+
+.modal-content .modal-dialog-input { margin-bottom: 16px; }
+.modal-actions.modal-actions-spaced { margin-top: 20px; }
+
+.modal-choice-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px 20px;
+}
+
+.modal-content label.modal-choice {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-primary);
+    cursor: pointer;
+}
+
+.modal-hint {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.55;
+    color: var(--text-secondary);
+}
+
+.modal-content .modal-field-color { height: 36px; padding: 2px; cursor: pointer; }
+.modal-content .tag-picker { margin-top: 8px; }
+
+.modal-choice-row { display: flex; justify-content: center; gap: 12px; }
+.modal-inline-actions { display: flex; gap: 8px; margin-top: 4px; }
+.modal-empty-state { padding: 24px 0; text-align: center; font-size: 14px; color: var(--text-secondary); }
+.modal-scroll-list { max-height: 320px; overflow-y: auto; }
+
+/* ===== 班级详情侧栏：取代内联样式 ===== */
+.panel-header-actions { display: flex; align-items: center; gap: 8px; }
+
+.icon-btn.icon-btn-add {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.icon-btn.icon-btn-add svg { width: 12px; height: 12px; }
+
+.group-item-actions { display: flex; gap: 4px; }
+.btn.btn-xs { padding: 2px 8px; font-size: 12px; }
+
+.tag-rule-area-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+
+.panel-header.panel-subheader { margin-top: 8px; }
+.tool-row.tool-row-spaced { margin-bottom: 8px; }
+.btn.btn-block { width: 100%; }
+.btn.btn-block + .btn.btn-block { margin-top: 8px; }

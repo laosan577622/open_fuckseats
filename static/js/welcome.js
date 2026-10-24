@@ -108,6 +108,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.body.classList.toggle('layout-editor-body', editing);
         document.getElementById('welcome-classroom-toolbar').hidden = editing;
         document.getElementById('welcome-layout-toolbar').hidden = !editing;
+        document.getElementById('welcome-layout-done').hidden = !editing;
         document.getElementById('undoBtn').disabled = state.page === 'history' && state.phase !== 0;
         document.getElementById('redoBtn').disabled = state.page === 'history' && state.phase !== 1;
         window.dispatchEvent(new Event('fuckseats:menus-changed'));
@@ -133,9 +134,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         case 'initials': screen.innerHTML = split('换个位置，<br>也可以打几个字母', '双击张明的座位，输入李华的首字母 <strong>lh</strong>，然后按回车。', textButton('看一次演示','demonstrate')); break;
         case 'history': screen.innerHTML = split('刚才的操作，<br>可以退回一步', state.phase ? '现在点击顶栏的“重做”，恢复刚才的换位。' : '点击顶栏的“撤销”，让两位学生回到原位。'); break;
         case 'layout': {
-            const native = document.body.dataset.appShell === 'webview' && document.body.dataset.appPlatform === 'macos';
-            const prompts = [native ? '点击屏幕顶部 macOS 系统菜单“视图 → 布局编辑”。' : '点击窗口顶部的“视图”，再选择“布局编辑”。', '在右侧“编辑工具”选择“走廊”，再点击蓝框格子。', '在右侧“编辑工具”选择“讲台”，再点击蓝框格子。', '布局已准备好，点击窗口左上方“返回排座”。'];
-            screen.innerHTML = split('让座位，<br>适合你的教室', prompts[state.phase] || prompts[0]); break;
+            const prompts = ['点击“布局编辑”，调整示例座位表。', '在右侧“编辑工具”选择“走廊”，再点击蓝框格子。', '在右侧“编辑工具”选择“讲台”，再点击蓝框格子。', '布局已准备好，点击窗口左上方“返回排座”。'];
+            screen.innerHTML = split('让座位，<br>适合你的教室', prompts[state.phase] || prompts[0], state.phase === 0 ? button('布局编辑', 'edit-layout') : ''); break;
         }
         case 'arrange': screen.innerHTML = split('剩下的座位，<br>交给自动排座', '点击顶栏蓝色按钮右侧的箭头，选择“随机排座”，再点击“自动排座”。'); break;
         case 'news-toolbar':
@@ -305,6 +305,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         const action = trigger?.dataset.action; if (!action) return;
         if (action.startsWith('practice-')) { state.practiceMode = true; go(action.slice(9)); return; }
         switch(action) {
+        case 'edit-layout': state.phase = 1; save(); render(); break;
         case 'start': state.practiceMode = false; go(state.returning ? 'news-toolbar' : 'drag'); break;
         case 'returning': state.returning = true; go('welcome'); break;
         case 'used': state.returning = true; state.skipped.push('basics','news'); go('login'); break;
@@ -362,7 +363,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (state.page === 'layout') { state.phase = 1; save(); render(); }
         else if (state.page === 'news-toolbar') tell('“视图 → 布局编辑”用于调整座位、走廊和讲台。');
     };
-    document.querySelector('#welcome-layout-toolbar a').onclick = event => {
+    document.getElementById('welcome-layout-done').onclick = event => {
         event.preventDefault();
         if (state.page === 'layout' && state.phase === 3) success('你的教室，已经有了自己的样子');
         else tell('先完成走廊和讲台的设置。');

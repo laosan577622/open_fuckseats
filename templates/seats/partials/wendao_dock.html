@@ -1,27 +1,42 @@
 <div id="future-mode-root" hidden data-inline-dock="1" data-chat-url="{% url 'wendao_chat' classroom.pk %}" data-chat-stream-url="{% url 'wendao_chat_stream' classroom.pk %}" data-classroom-id="{{ classroom.pk }}" data-classroom-name="{{ classroom.name }}" data-csrf="{{ csrf_token }}"></div>
-<section id="wd-composer-panel" class="wd-panel wd-spectrum wd-composer-panel" hidden role="region" aria-label="闻道智能快捷提问">
-    <span class="wd-morph-label" aria-hidden="true">闻道智能</span>
-    <div class="wd-panel-content"><form id="future-chat-form" class="wd-quick-form" aria-label="闻道智能快捷提问">
-        <input id="userInput" type="text" placeholder="向闻道智能提问" aria-label="向闻道智能提问" autocomplete="off" maxlength="16000">
-        <button type="button" id="wd-model-trigger" class="wd-quick-gear" aria-label="选择模型" aria-expanded="false" aria-controls="wd-model-panel"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="M10.4 2.8h3.2l.6 2.1c.5.2 1 .5 1.5.9l2.1-.6 1.6 2.8-1.5 1.6a7.5 7.5 0 0 1 0 1.8l1.5 1.6-1.6 2.8-2.1-.6c-.5.4-1 .7-1.5.9l-.6 2.1h-3.2l-.6-2.1c-.5-.2-1-.5-1.5-.9l-2.1.6-1.6-2.8 1.5-1.6a7.5 7.5 0 0 1 0-1.8L4.6 8l1.6-2.8 2.1.6c.5-.4 1-.7 1.5-.9z"/><circle cx="12" cy="10.5" r="2.4"/></svg></button>
-        <button type="submit" id="sendBtn" class="wd-quick-send" disabled aria-label="发送">发送</button>
-    </form></div>
-</section>
-<section id="wd-chat" class="wd-panel wd-spectrum" hidden role="region" aria-label="闻道智能回复">
-    <span class="wd-morph-label" aria-hidden="true">闻道智能</span>
-    <div class="wd-panel-content">
-        <div id="chatContainer" class="wd-messages" role="log" aria-label="对话记录"></div>
+{# 闻道智能左侧栏：标题 → 模型选择 → 排座建议 → 对话 → 底部输入框（澄光 AIComposer） #}
+<aside id="wd-side" class="wd-side" aria-label="闻道智能" aria-hidden="true" inert>
+    <header class="wd-side-head">
+        <span class="lc-ai-orb lc-ai-orb--sm wd-side-orb" id="wd-side-orb" aria-hidden="true"></span>
+        <div class="wd-side-title">
+            <strong>闻道智能</strong>
+            <button type="button" id="wd-model-trigger" class="wd-model-chip" aria-expanded="false" aria-controls="wd-model-panel">
+                <span id="wd-model-name">选择模型</span>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"/></svg>
+            </button>
+        </div>
+        <a id="wd-full-workspace" class="wd-side-icon" href="{% url 'ai_workspace' classroom.pk %}" aria-label="展开全屏工作区" title="展开全屏工作区">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7"/></svg>
+        </a>
+        <button type="button" class="wd-side-icon" data-wd-close aria-label="收起闻道智能" title="收起">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="3"/><path d="M9.5 4.5v15M16 10l-2 2 2 2"/></svg>
+        </button>
+    </header>
+    <section id="wd-model-panel" class="wd-model-panel" hidden aria-label="选择闻道模型">
+        <select id="wendao-model" size="5" aria-label="可用模型" disabled></select>
+        <div class="wd-model-foot">
+            <p id="wd-model-status" role="status"></p>
+            <a href="{% url 'settings' %}?classroom={{ classroom.pk }}#wendao">连接设置</a>
+        </div>
+    </section>
+    <div class="wd-side-scroll" id="wd-side-scroll">
+        <section id="wd-suggestions" class="wd-suggest-block" hidden aria-label="排座建议">
+            <div class="wd-side-label">排座建议</div>
+            <p id="wd-suggestion-status" role="status"></p>
+            <div id="wd-suggestion-list" class="wd-suggestion-list"></div>
+        </section>
+        <div id="chatContainer" class="wd-messages" role="log" aria-live="polite" aria-label="对话记录"></div>
         <p id="wendao-status" role="status"></p>
-        <div class="wd-reply-actions"><button type="button" id="wd-continue" class="btn wd-continue">继续提问</button><a id="wd-full-workspace" class="wd-expand" href="{% url 'ai_workspace' classroom.pk %}" aria-label="展开全屏工作区" title="展开全屏工作区"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H3v5M16 3h5v5M3 16v5h5M21 16v5h-5"/></svg></a></div>
     </div>
-</section>
-<section id="wd-model-panel" class="wd-panel wd-spectrum wd-model-panel" hidden role="region" aria-label="选择闻道模型">
-    <span class="wd-morph-label" aria-hidden="true"></span>
-    <div class="wd-panel-content"><div class="wd-model-title">选择模型</div><select id="wendao-model" size="6" aria-label="可用模型" disabled></select><p id="wd-model-status" role="status"></p><a href="{% url 'settings' %}?classroom={{ classroom.pk }}#wendao">连接设置</a></div>
-</section>
-<section id="wd-suggestions" class="wd-panel wd-suggestion-stack" hidden role="region" aria-label="排座建议">
-    <div class="wd-panel-content">
-        <p id="wd-suggestion-status" role="status"></p>
-        <div id="wd-suggestion-list" class="wd-messages"></div>
-    </div>
-</section>
+    <form id="future-chat-form" class="lc-ai-glow lc-ai-composer wd-composer" data-state="idle" aria-label="向闻道智能提问">
+        <textarea id="userInput" rows="1" placeholder="问问闻道，或输入 / 调用班级命令" aria-label="向闻道智能提问" autocomplete="off" maxlength="16000"></textarea>
+        <button type="submit" id="sendBtn" class="lc-ai-send" disabled aria-label="发送">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg>
+        </button>
+    </form>
+</aside>

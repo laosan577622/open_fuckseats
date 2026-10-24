@@ -1,111 +1,231 @@
-@property --wd-angle { syntax: '<angle>'; initial-value: 0deg; inherits: false; }
+/* 闻道智能入口：按澄光 AI 规范，AI 是一圈纯色品牌蓝的光边，底色 ai-tint，文字 brand-text；不用渐变与彩虹色。
+   静置时光边细而安静；工作中（.wd-running）光边呼吸。 */
 .wd-spectrum {
-    --wd-colors: #5bd6c2, #9ed398, #e5bd28, #5bd6c2;
-    position: relative; isolation: isolate; color: #171719; background: #fff;
-    border: 1.5px solid transparent; border-radius: 999px;
-    background: linear-gradient(#fff, #fff) padding-box, linear-gradient(100deg, #5bd6c2, #e5bd28) border-box;
-    box-shadow: inset 0 3px 3px -3px #5bd6c226, inset 0 -3px 3px -3px #e5bd2826;
+    position: relative; isolation: isolate;
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    height: var(--app-control, 32px); padding: 0 var(--space-3, 12px);
+    border: 0; border-radius: var(--radius-full, 9999px);
+    background: var(--ai-tint); color: var(--brand-text);
+    box-shadow: inset 0 0 0 1.5px rgba(var(--primary-color-rgb, 10, 89, 247), .5);
+    font-size: 14px; line-height: 20px; font-weight: 500; text-decoration: none;
+    transition: background-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard);
 }
-.wd-spectrum:hover { color: #171719; background: linear-gradient(#fff, #fff) padding-box, linear-gradient(100deg, #5bd6c2, #e5bd28) border-box; }
-.wd-brand-text { background: linear-gradient(100deg, #5bd6c2 0%, #9ed398 52%, #e5bd28 100%); -webkit-background-clip: text; background-clip: text; color: transparent; -webkit-text-fill-color: transparent; }
-.wd-global-link, .wd-launch { white-space: nowrap; flex-shrink: 0; }
+.wd-spectrum:hover { color: var(--brand-text); background: var(--brand-tint); }
+.wd-spectrum:active { background: rgba(var(--primary-color-rgb, 10, 89, 247), .16); }
+.wd-glyph { width: var(--icon-sm, 16px); height: var(--icon-sm, 16px); flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linejoin: round; }
+.wd-brand-text { color: inherit; }
+.wd-launch { white-space: nowrap; flex-shrink: 0; }
+/* 侧栏展开时入口按钮呈按下态，表明它是开关 */
+.wd-launch[aria-expanded="true"] { background: var(--brand); color: var(--on-brand); box-shadow: none; }
 .wd-dock { display: flex; align-items: center; gap: 8px; flex-shrink: 0; position: relative; -webkit-app-region: no-drag; }
-.wd-dock .wd-launch.wd-parked { width:0; min-width:0; padding:0; margin:0; border-width:0; overflow:hidden; }
-.wd-orb { width: 36px; height: 36px; padding: 0; display: grid; place-items: center; flex-shrink: 0; overflow: visible; }
-.wd-dock [hidden], .wd-panel[hidden] { display: none !important; }
-.wd-count { position: absolute; top: -4px; right: -5px; background: #ff3b30; color: #fff; border: 2px solid white; border-radius: 999px; min-width: 16px; height: 16px; font-size: 10px; line-height: 12px; text-align: center; }
-.wd-notice { width: 6px; height: 6px; border-radius: 50%; background: #0a59f7; position: absolute; top: 4px; right: 6px; }
-.wd-running { animation: wd-breathe 2.2s ease-in-out infinite; }
-.wd-spectrum.wd-running {
-    background: linear-gradient(#fff, #fff) padding-box, conic-gradient(from var(--wd-angle), var(--wd-colors)) border-box;
-    animation: wd-circulate 2.2s linear infinite;
+.wd-orb { width: var(--app-control, 32px); height: var(--app-control, 32px); padding: 0; display: grid; place-items: center; flex-shrink: 0; overflow: visible; color: var(--brand-text); }
+.wd-orb svg { stroke: currentColor; }
+.wd-dock [hidden] { display: none !important; }
+.wd-count { position: absolute; top: -4px; right: -5px; background: var(--danger); color: var(--on-danger); box-shadow: 0 0 0 2px var(--surface); border-radius: 999px; min-width: 16px; height: 16px; padding: 0 4px; font-size: 10px; line-height: 16px; font-weight: 500; text-align: center; }
+.wd-notice { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); box-shadow: 0 0 0 2px var(--surface); position: absolute; top: 2px; right: 2px; }
+.wd-launch[aria-expanded="true"] .wd-notice { display: none; }
+.wd-running { animation: wd-breathe 1.6s var(--ease-standard) infinite; }
+@keyframes wd-breathe {
+    0%, 100% { box-shadow: inset 0 0 0 1.5px rgba(var(--primary-color-rgb, 10, 89, 247), .35), 0 0 0 0 rgba(var(--primary-color-rgb, 10, 89, 247), 0); }
+    50% { box-shadow: inset 0 0 0 1.5px rgba(var(--primary-color-rgb, 10, 89, 247), .9), 0 0 0 4px rgba(var(--primary-color-rgb, 10, 89, 247), .12); }
 }
-@keyframes wd-circulate { to { --wd-angle: 360deg; } }
-@keyframes wd-breathe { 50% { filter: brightness(1.06); } }
-.wd-orb.wd-born { animation: wd-bud 680ms cubic-bezier(.2,.7,.2,1) both; }
-.wd-orb.wd-born::after { content: ''; position: absolute; inset: -7px; border-radius: 50%; background: conic-gradient(#5bd6c270,#9ed39860,#e5bd2860,#5bd6c270); filter: blur(7px); z-index: -1; animation: wd-fluff 680ms ease-out both; }
-@keyframes wd-bud { 0% { transform: translateX(-24px) scale(.12); opacity: 0; } 28% { transform: translateX(-16px) scaleX(1.18) scaleY(.65); opacity: 1; } 65% { transform: translateX(0) scale(1.08); } 100% { transform: none; } }
-@keyframes wd-fluff { 0% { opacity: 0; transform: scale(.4); } 40% { opacity: .8; } 100% { opacity: 0; transform: scale(1.45); } }
-.wd-panel { position: fixed; z-index: 1700; overflow: hidden; border-radius: 24px; box-sizing: border-box; margin: 0; box-shadow: 0 10px 28px -16px #3a846d40, 0 10px 28px -16px #ab8d2440; color-scheme: light; }
-.wd-panel-content { padding: 18px; display: flex; flex-direction: column; height: 100%; box-sizing: border-box; min-height: 0; color: #171719; }
-.wd-panel-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-shrink: 0; }
-.wd-panel-header strong { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.wd-close { border: 0; border-radius: 999px; background: #f2f3f5; color: #555; padding: 5px 10px; font: inherit; font-size: 12px; cursor: pointer; }
-.wd-panel :focus-visible, .wd-dock :focus-visible { outline: 2px solid #0a59f7; outline-offset: 3px; }
-.wd-options { font-size: 12px; color: #60646c; margin-top: 10px; }
-.wd-options summary { cursor: pointer; width: fit-content; }
-.wd-options > div { display: flex; flex-wrap: wrap; gap: 8px; padding: 10px 0; }
-.wd-options select { max-width: 100%; border: 1px solid #e6e7eb; background: white; color: #171719; border-radius: 9px; padding: 5px; }
-.wd-options a { color: #0a59f7; align-self: center; }
-.wd-options .btn { padding: 5px 9px; font-size: 12px; }
-.wd-panel [role=status] { font-size: 12px; line-height: 1.5; margin: 10px 0; color: #676b73; flex-shrink: 0; }
-.wd-panel [role=status]:empty { display: none; }
-.wd-messages { overflow-y: auto; min-height: 0; flex: 1; overscroll-behavior: contain; scrollbar-gutter: stable; }
-.wd-messages:empty { flex: 0; }
-.wd-panel .message { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 14px; line-height: 1.65; padding: 10px 0; color: #202126; }
-.wd-panel .message.user { padding: 10px 12px; border-radius: 15px; background: #f2f5fa; margin: 8px 0 8px 28px; }
-.wd-panel .message.status { color: #666; font-size: 12px; }
-.wd-composer { display: flex; align-items: flex-end; gap: 12px; margin-top: 12px; flex-shrink: 0; }
-.wd-composer textarea { resize: none; border: 0; outline: none; box-shadow: none; background: transparent; color: #171719; font: inherit; font-size: 14px; line-height: 1.6; flex: 1; min-width: 0; max-height: 100px; padding: 7px 0; }
-.wd-panel .wd-composer textarea:focus-visible { outline: none; }
-.wd-composer:focus-within { box-shadow: 0 1px #5bd6c255; }
-.wd-send, .wd-panel .btn-capsule { border-radius: 999px; border: none; background: #0a59f7; color: #fff; padding: 8px 16px; cursor: pointer; }
-.wd-panel button:disabled { opacity: .45; cursor: default; }
-.wd-morph-label { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; white-space: nowrap; pointer-events: none; opacity: 0; font-size: 14px; }
-.wd-suggestion-stack { overflow: visible; border: 0; background: transparent; box-shadow: none; pointer-events: none; }
-.wd-suggestion-stack .wd-panel-content { padding: 0; }
-.wd-suggestion-stack #wd-suggestion-list { display: flex; flex-direction: column; gap: 10px; padding: 3px 8px 8px 3px; scrollbar-width: thin; }
-.wd-suggestion-stack #wd-suggestion-status:not(:empty) { width: fit-content; padding: 7px 11px; border-radius: 999px; background: #f6faf8; }
-.wd-suggestion { flex: 0 0 auto; padding: 0; border: 1px solid rgba(0, 0, 0, .08); border-radius: 18px; background: #fff; box-shadow: 0 10px 30px rgba(0, 0, 0, .08), 0 1px 3px rgba(0, 0, 0, .05); font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; pointer-events: auto; }
-.wd-suggestion-content { padding: 14px 15px; box-sizing: border-box; }
-.wd-suggestion-flight { overflow: visible; pointer-events: none; will-change: transform; --wd-orb: 1; --wd-sweep: 0; box-shadow: 0 10px 30px rgba(0, 0, 0, calc(.08 * (1 - var(--wd-orb)))), 0 0 18px 1px rgba(91, 214, 194, calc(.32 * var(--wd-sweep))), 0 0 26px 4px rgba(229, 189, 40, calc(.22 * var(--wd-sweep))); }
-.wd-flight-clip { position: absolute; inset: 0; overflow: hidden; border-radius: inherit; }
-.wd-flight-icon { position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; transform: translate(-50%, -50%); pointer-events: none; }
-/* 按钮的渐变圆环与扫光圆环只画在边框一圈，不给卡片内部上色；外沿光晕用阴影，避免逐帧模糊造成卡顿。 */
-.wd-flight-ring, .wd-suggestion-flight::before { content: ''; position: absolute; border-radius: inherit; pointer-events: none; -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0); -webkit-mask-composite: xor; mask-composite: exclude; }
-.wd-flight-ring { inset: -1px; padding: 1.5px; background: linear-gradient(100deg, #5bd6c2, #e5bd28); opacity: var(--wd-orb); z-index: 2; }
-.wd-suggestion-flight::before { inset: -1.5px; padding: 2px; background: conic-gradient(from var(--wd-angle), transparent 0deg 190deg, #5bd6c2 250deg, #9ed398 295deg, #e5bd28 335deg, transparent 360deg); opacity: var(--wd-sweep); z-index: 3; animation: wd-circulate 1.1s linear infinite; }
+.wd-orb.wd-born { animation: wd-bud var(--duration-spring) var(--ease-spring-soft) both; }
+@keyframes wd-bud { 0% { transform: scale(.4); opacity: 0; } 60% { transform: scale(1.08); opacity: 1; } 100% { transform: none; } }
 
-.wd-suggestion-stack.wd-suggestions-moving .wd-panel-content { visibility: hidden; }
-.wd-suggestion-heading { margin-bottom: 5px; color: #86868b; font-size: 11px; font-weight: 600; }
-.wd-suggestion p { margin: 0 0 12px; }
-.wd-suggestion-actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.wd-panel .wd-secondary { background: #f1f2f5; color: #4b5059; }
-.wd-panel .message.approval-wrapper { white-space: normal; padding: 0; }
-.wd-panel .approval-card { white-space: normal; background: #f7f8fb; padding: 14px; border-radius: 16px; margin: 8px 0; }
-.wd-panel .approval-card-text { white-space: pre-line; font-size: 14px; line-height: 1.5; }
-.wd-panel .approval-card-actions { display: flex; gap: 8px; margin-top: 12px; }
-.wd-panel .app-deny-btn { background: #e9ebf0; color: #30343b; }
-.wd-panel .app-allow-btn { background: #0a59f7; color: #fff; }
-.wd-panel .ai-card { white-space: normal; padding: 12px; background: #f7f8fb; border-radius: 14px; }
-.wd-panel .ai-card-title { font-weight: 600; }
-.wd-panel .ai-card-sub, .wd-panel .meta { font-size: 12px; color: #676b73; }
-.wd-panel .ai-card-kv { display: flex; flex-wrap: wrap; gap: 12px; }
-.wd-panel .ai-card-seat-grid { display: grid; gap: 4px; overflow: auto; }
-.wd-panel .ai-card-seat-cell { background: white; padding: 5px; border: 1px solid #e5e8f0; border-radius: 6px; min-width: 45px; }
-.wd-composer-panel .wd-panel-content { padding:0 4px 0 14px; }
-.wd-quick-form { display:flex; align-items:center; gap:3px; width:100%; height:100%; min-height:0; padding:0; box-sizing:border-box; }
-.wd-quick-form input { min-width:0; width:100%; flex:1; border:0; outline:0; background:transparent; color:#171719; font:inherit; font-size:13px; }
-.wd-quick-form input::placeholder { color:#858b96; }
-.wd-quick-form input:focus-visible { outline:0; }
-.wd-quick-form button { display:grid; place-items:center; height:28px; flex-shrink:0; border:0; cursor:pointer; font:inherit; }
-.wd-quick-gear { width:28px; padding:0; border-radius:50%; color:#5c6472; background:transparent; }
-.wd-quick-gear:hover { color:#0a59f7; background:#eff4ff; }
-.wd-quick-send { min-width:48px; padding:0 10px; border-radius:999px; background:#0a59f7; color:white; font-size:12px !important; }
-.wd-quick-send:disabled { background:#e8edf6; color:#8b95a5; cursor:default; }
-.wd-quick-form .wd-notice { top:2px; right:3px; }
-.wd-panel #wendao-status { display:none; }
-.wd-panel .wd-messages[data-current-only="1"] > :not([data-wd-current]) { display:none; }
-.wd-panel .wd-messages[data-current-only="1"] > [data-wd-current]:first-child { border-top:0; }
-.wd-reply-actions { display:flex; align-items:center; justify-content:space-between; gap:12px; padding-top:14px; border-top:1px solid #eef0f4; flex-shrink:0; }
-.wd-continue { background:#0a59f7; border:0; border-radius:999px; padding:8px 16px; color:white; font-size:13px; cursor:pointer; }
-.wd-expand { display:grid; place-items:center; width:34px; height:34px; border-radius:50%; color:#465265; background:#f3f5f8; }
-.wd-expand:hover { color:#0a59f7; background:#ecf2ff; }
-.wd-model-panel .wd-panel-content { padding:15px; gap:9px; }
-.wd-model-title { font-size:13px; font-weight:600; }
-.wd-model-panel select { flex:1; width:100%; min-height:0; overflow-y:auto; border:0; outline:0; background:#fff; font:inherit; font-size:12px; color:#202126; }
-.wd-model-panel select option { padding:8px 10px; border-radius:9px; overflow:hidden; text-overflow:ellipsis; }
-.wd-model-panel select option:checked { background:#eaf1ff linear-gradient(#eaf1ff,#eaf1ff); color:#0a59f7; }
-.wd-model-panel #wd-model-status { margin:0; font-size:11px; }
-.wd-model-panel a { color:#0a59f7; font-size:12px; width:fit-content; }
-@media (prefers-reduced-motion: reduce) { .wd-running, .wd-spectrum.wd-running, .wd-orb.wd-born, .wd-orb.wd-born::after, .wd-suggestion-flight::before { animation: none !important; } }
+/* ===================================================================== */
+/* 左侧栏                                                                 */
+/* 宽窗口（≥1101）停靠在顶栏与状态栏之间，推开座位区；                      */
+/* 窄窗口浮在内容之上（玻璃浮层）；手机占满整屏。                            */
+/* ===================================================================== */
+:root { --wd-side-w: 360px; }
+.wd-side {
+    position: fixed;
+    z-index: 1002;
+    top: var(--header-height, 88px);
+    bottom: var(--cw-status-h, 0px);
+    left: 0;
+    width: var(--wd-side-w);
+    display: flex;
+    flex-direction: column;
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+    transform: translateX(calc(-100% - 24px));
+    visibility: hidden;
+    transition: transform var(--duration-spring, 560ms) var(--ease-spring-soft, cubic-bezier(.2, 0, 0, 1)), visibility 0s linear var(--duration-spring, 560ms);
+}
+.wd-side.is-open {
+    transform: none;
+    visibility: visible;
+    transition: transform var(--duration-spring, 560ms) var(--ease-spring-soft, cubic-bezier(.2, 0, 0, 1)), visibility 0s;
+}
+.wd-side.wd-no-motion { transition: none !important; }
+
+.wd-side-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2, 8px);
+    flex: none;
+    min-height: 56px;
+    padding: var(--space-2, 8px) var(--space-2, 8px) var(--space-2, 8px) var(--space-4, 16px);
+}
+.wd-side-orb { --s: 24px; }
+.wd-side-title { display: flex; flex: 1; min-width: 0; flex-direction: column; align-items: flex-start; }
+.wd-side-title strong { color: var(--ink); font-size: 15px; line-height: 20px; font-weight: 600; }
+.wd-model-chip {
+    display: inline-flex; align-items: center; gap: 2px; max-width: 100%;
+    height: 20px; margin: 0 0 0 -6px; padding: 0 6px;
+    border: 0; border-radius: var(--radius-full, 9999px);
+    background: transparent; color: var(--ink-secondary);
+    font: inherit; font-size: 12px; line-height: 16px; cursor: pointer;
+}
+.wd-model-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wd-model-chip svg { flex: none; width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; transition: transform var(--duration-fast) var(--ease-standard); }
+.wd-model-chip[aria-expanded="true"] svg { transform: rotate(180deg); }
+.wd-model-chip:hover { background: var(--fill-hover); color: var(--ink); }
+.wd-side-icon {
+    display: inline-grid; place-items: center; flex: none;
+    width: var(--app-control, 32px); height: var(--app-control, 32px);
+    border: 0; border-radius: var(--radius-full, 9999px);
+    background: transparent; color: var(--ink-secondary); cursor: pointer;
+}
+.wd-side-icon svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.wd-side-icon:hover { background: var(--fill-hover); color: var(--ink); }
+.wd-side-icon:active { background: var(--fill-pressed); }
+
+.wd-model-panel {
+    display: flex; flex-direction: column; gap: var(--space-2, 8px); flex: none;
+    margin: 0 var(--space-3, 12px) var(--space-2, 8px);
+    padding: var(--space-2, 8px);
+    border-radius: var(--radius-md, 12px);
+    background: var(--surface-sunken, var(--fill-control));
+    animation: wd-drop var(--duration-base, 250ms) var(--ease-standard) backwards;
+}
+.wd-model-panel[hidden] { display: none; }
+@keyframes wd-drop { from { opacity: 0; transform: translateY(-4px); } }
+.wd-model-panel select { width: 100%; border: 0; outline: 0; background: transparent; color: var(--ink); font: inherit; font-size: 13px; }
+.wd-model-panel select option { padding: 6px 8px; border-radius: var(--radius-sm, 8px); }
+.wd-model-panel select option:checked { background: var(--brand-tint) linear-gradient(var(--brand-tint), var(--brand-tint)); color: var(--brand-text); }
+.wd-model-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-2, 8px); padding: 0 var(--space-1, 4px); }
+.wd-model-foot p { margin: 0; color: var(--ink-secondary); font-size: 12px; line-height: 16px; }
+.wd-model-foot a { flex: none; color: var(--brand-text); font-size: 12px; text-decoration: none; }
+
+.wd-side-scroll {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 0 var(--space-4, 16px) var(--space-4, 16px);
+    scrollbar-width: thin;
+}
+.wd-side-label { margin: var(--space-2, 8px) 0; color: var(--ink-secondary); font-size: 12px; line-height: 16px; font-weight: 500; }
+.wd-suggest-block[hidden] { display: none; }
+.wd-suggest-block { padding-bottom: var(--space-3, 12px); }
+.wd-suggest-block [role="status"] { margin: 0 0 var(--space-2, 8px); color: var(--ink-secondary); font-size: 12px; }
+.wd-suggest-block [role="status"]:empty { display: none; }
+.wd-suggestion-list { display: flex; flex-direction: column; gap: var(--space-2, 8px); }
+.wd-suggestion {
+    padding: var(--space-3, 12px) var(--space-3, 12px) var(--space-3, 12px) var(--space-4, 16px);
+    border-radius: var(--radius-md, 12px);
+    background: var(--ai-tint);
+    font-size: 14px; line-height: 20px; overflow-wrap: anywhere;
+    animation: wd-drop var(--duration-base, 250ms) var(--ease-standard) backwards;
+}
+.wd-suggestion-heading { margin-bottom: 2px; color: var(--brand-text); font-size: 12px; line-height: 16px; font-weight: 500; }
+.wd-suggestion p { margin: 0 0 var(--space-3, 12px); color: var(--ink); }
+.wd-suggestion-actions { display: flex; flex-wrap: wrap; gap: var(--space-2, 8px); }
+.wd-chip {
+    height: 28px; padding: 0 var(--space-3, 12px);
+    border: 0; border-radius: var(--radius-full, 9999px);
+    background: var(--surface); color: var(--ink);
+    font: inherit; font-size: 13px; font-weight: 500; cursor: pointer;
+}
+.wd-chip--primary { background: var(--brand); color: var(--on-brand); }
+.wd-chip:disabled { opacity: .45; cursor: default; }
+
+/* 对话：用户是品牌蓝气泡靠右，闻道是正文直排（AIMessage 规范） */
+.wd-messages { display: flex; flex-direction: column; gap: var(--space-3, 12px); padding-top: var(--space-2, 8px); }
+:is(.wd-side, .ws-thread) .message { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); font-size: 14px; line-height: 22px; }
+:is(.wd-side, .ws-thread) .message.user {
+    align-self: flex-end; max-width: 85%;
+    padding: 8px 12px;
+    border-radius: 18px 18px 6px 18px;
+    background: var(--brand); color: var(--on-brand);
+}
+:is(.wd-side, .ws-thread) .message.ai { align-self: stretch; }
+:is(.wd-side, .ws-thread) .message.status { color: var(--ink-secondary); font-size: 12px; line-height: 16px; }
+:is(.wd-side, .ws-thread) .message.approval-wrapper,
+:is(.wd-side, .ws-thread) .message.card-message { white-space: normal; }
+:is(.wd-side, .ws-thread) #wendao-status { margin: var(--space-2, 8px) 0 0; color: var(--ink-secondary); font-size: 12px; line-height: 16px; }
+:is(.wd-side, .ws-thread) #wendao-status:empty { display: none; }
+
+:is(.wd-side, .ws-thread) .approval-card { padding: var(--space-3, 12px); border-radius: var(--radius-md, 12px); background: var(--surface-sunken, var(--fill-control)); }
+:is(.wd-side, .ws-thread) .approval-card + .approval-card { margin-top: var(--space-2, 8px); }
+:is(.wd-side, .ws-thread) .approval-card-text { white-space: pre-line; font-size: 14px; line-height: 20px; }
+:is(.wd-side, .ws-thread) .approval-card-actions { display: flex; gap: var(--space-2, 8px); margin-top: var(--space-3, 12px); }
+:is(.wd-side, .ws-thread) .btn-capsule { height: 32px; padding: 0 var(--space-4, 16px); border: 0; border-radius: var(--radius-full, 9999px); background: var(--brand); color: var(--on-brand); font: inherit; font-size: 13px; font-weight: 500; cursor: pointer; }
+:is(.wd-side, .ws-thread) .app-deny-btn { background: var(--fill-control); color: var(--ink); }
+:is(.wd-side, .ws-thread) .app-submit-btn { margin-top: var(--space-2, 8px); }
+:is(.wd-side, .ws-thread) .ai-card { padding: var(--space-3, 12px); border-radius: var(--radius-md, 12px); background: var(--ai-tint); }
+:is(.wd-side, .ws-thread) .ai-card-title { font-size: 14px; line-height: 20px; font-weight: 600; }
+:is(.wd-side, .ws-thread) .ai-card-sub, :is(.wd-side, .ws-thread) .meta { color: var(--ink-secondary); font-size: 12px; line-height: 16px; }
+:is(.wd-side, .ws-thread) .ai-card-kv { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-2, 8px); margin-top: var(--space-2, 8px); }
+:is(.wd-side, .ws-thread) .ai-card-kv-label { color: var(--ink-secondary); font-size: 12px; }
+:is(.wd-side, .ws-thread) .ai-card-kv-value { font-size: 14px; font-weight: 500; }
+:is(.wd-side, .ws-thread) .ai-card-list { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+:is(.wd-side, .ws-thread) .ai-card-seat-grid { display: grid; gap: 4px; overflow-x: auto; }
+:is(.wd-side, .ws-thread) .ai-card-seat-cell { min-width: 56px; padding: 4px; border-radius: var(--radius-xs, 6px); background: var(--surface); font-size: 12px; }
+:is(.wd-side, .ws-thread) .collapsible-body { display: grid; grid-template-rows: 0fr; transition: grid-template-rows var(--duration-base) var(--ease-standard); }
+:is(.wd-side, .ws-thread) .collapsible-card.expanded .collapsible-body { grid-template-rows: 1fr; }
+:is(.wd-side, .ws-thread) .collapsible-body-inner { overflow: hidden; min-height: 0; }
+:is(.wd-side, .ws-thread) .collapsible-card.expanded .collapsible-body-inner { padding-top: var(--space-3, 12px); }
+
+/* 输入框：直接使用 lc-ai-composer，只调整在侧栏里的外边距与字号 */
+.wd-composer { flex: none; margin: 0 var(--space-3, 12px) var(--space-3, 12px); min-height: 48px; }
+.wd-composer textarea { font-size: 14px; line-height: 20px; min-height: 36px; padding: 8px 6px 8px 10px; }
+.wd-composer .lc-ai-send { width: 36px; height: 36px; }
+.wd-composer .lc-ai-send svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
+
+.wd-side :focus-visible { outline: 2px solid var(--brand); outline-offset: 2px; }
+.wd-side textarea:focus-visible { outline: 0; }
+
+/* 宽窗口：侧栏停靠，座位区与工具栏让出宽度 */
+@media (min-width: 1101px) {
+    :root body.classroom-detail-body.wd-side-open[data-app-shell][data-app-platform] .classroom-layout { left: var(--wd-side-w) !important; }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform]:not(.wd-no-motion) .classroom-layout { transition: left var(--duration-spring, 560ms) var(--ease-spring-soft, cubic-bezier(.2, 0, 0, 1)); }
+}
+/* 窄窗口：侧栏浮在内容上，用浮层玻璃 */
+@media (max-width: 1100px) {
+    .wd-side {
+        top: calc(var(--header-height, 88px) + var(--space-2, 8px));
+        bottom: calc(var(--cw-status-h, 0px) + var(--space-2, 8px));
+        left: var(--space-2, 8px);
+        width: min(var(--wd-side-w), calc(100vw - 16px));
+        border-radius: var(--radius-lg, 20px);
+        background: var(--glass-fill-float);
+        -webkit-backdrop-filter: blur(var(--blur-lg, 40px)) saturate(var(--glass-saturate, 200%));
+        backdrop-filter: blur(var(--blur-lg, 40px)) saturate(var(--glass-saturate, 200%));
+        box-shadow: var(--shadow-float);
+    }
+}
+/* 手机：整屏对话，输入框贴底并避开安全区 */
+@media (max-width: 599px) {
+    .wd-side {
+        top: var(--header-height, 56px);
+        bottom: 0;
+        left: 0;
+        width: 100vw;
+        border-radius: 0;
+        background: var(--bg, var(--surface));
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        box-shadow: none;
+        z-index: 1300;
+    }
+    .wd-composer { margin-bottom: calc(var(--space-4, 16px) + env(safe-area-inset-bottom, 0px)); }
+    .wd-composer textarea { font-size: 16px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .wd-running, .wd-spectrum.wd-running, .wd-orb.wd-born { animation: none !important; }
+    .wd-side, .wd-side.is-open { transition: visibility 0s; }
+}

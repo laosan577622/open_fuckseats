@@ -415,6 +415,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
                 if (!result) return false;
                 if (result.status === 'cancelled') return true;
+                if (result.response?.next_url) {
+                    window.location.href = result.response.next_url;
+                    return true;
+                }
                 showInlineToast(`${result.filename || '文件'} 已导入`);
                 setTimeout(() => window.location.reload(), 500);
                 return true;
@@ -466,9 +470,10 @@ document.addEventListener('DOMContentLoaded', () => {
         let bsceCredentials = { username: '', password: '' };
 
         const showStage = (stage) => {
-            stageChoose.style.display = stage === 'choose' ? 'flex' : 'none';
-            stageLogin.style.display = stage === 'login' ? 'block' : 'none';
-            stageCloud.style.display = stage === 'cloud' ? 'block' : 'none';
+            // 显示时清空内联值，交还给模板中的布局类（flex 栈）。
+            stageChoose.style.display = stage === 'choose' ? '' : 'none';
+            stageLogin.style.display = stage === 'login' ? '' : 'none';
+            stageCloud.style.display = stage === 'cloud' ? '' : 'none';
         };
 
         const resetModal = () => {
@@ -2123,9 +2128,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     };
 
+    // 统一走 openModal/closeModal：只设 display 不会加 modal-visible，面板会保持透明却拦截点击。
     const openPluginCommandModal = () => {
         if (!pluginCommandModal) return;
-        pluginCommandModal.style.display = 'block';
+        window.openModal('plugin-command-modal');
         renderPluginCommandList(pluginCommandInput ? pluginCommandInput.value : '');
         if (pluginCommandInput) {
             setTimeout(() => {
@@ -2137,7 +2143,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const closePluginCommandModal = () => {
         if (!pluginCommandModal) return;
-        pluginCommandModal.style.display = 'none';
+        window.closeModal('plugin-command-modal');
     };
 
     const initChromeLikePluginApi = () => {
@@ -2526,7 +2532,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
 
         document.addEventListener('keydown', (event) => {
-            if (event.key === 'Escape' && pluginCommandModal && pluginCommandModal.style.display === 'block') {
+            if (event.key === 'Escape' && pluginCommandModal && pluginCommandModal.classList.contains('modal-visible')) {
                 closePluginCommandModal();
             }
         });

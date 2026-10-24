@@ -7,7 +7,19 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 from django.urls import reverse
 from django.conf import settings
+from django.core.cache import cache
 from .ai_privacy import get_ai_privacy, restore_student_names, with_ai_name_rendering
+from .arrangement_preferences import (
+    BUILTIN_METHODS,
+    DEFAULT_PREFERENCES,
+    arrangement_message,
+    current_deskmates,
+    load_preferences,
+    normalize_preferences,
+    optimize_deskmates,
+    preferences_enabled,
+    save_preferences,
+)
 from django.test import RequestFactory
 from pypinyin import lazy_pinyin
 import base64
@@ -26,6 +38,7 @@ from .models import (
     SeatCellType,
     SeatGroup,
     LayoutSnapshot,
+    LocalSyncSnapshot,
     SeatConstraint,
     StudentTag,
     StudentTagMembership,
@@ -51,9 +64,13 @@ from .sorting import (
     sort_students,
     sort_students_with_python,
 )
+from .sync_snapshots import local_sync_snapshot_data, save_local_sync_snapshot, sync_content_hash
+from .sdes import FORMAT as SDES_FORMAT, MAX_FILE_BYTES as SDES_MAX_FILE_BYTES, convert_sdes, parse_sdes, sdes_catalog
 from io import BytesIO
 from http.cookies import CookieError, SimpleCookie
 from urllib.parse import quote as _url_quote
+from urllib.parse import urlsplit
+from functools import wraps
 import json
 import random
 import os
@@ -143,11 +160,11 @@ def _redirect_preserving_query(request, target_url):
 
 
 def app_manifest_redirect(request):
-    return _redirect_preserving_query(request, APP_MANIFEST_REDIRECT_URL)
+    return _redirect_preserving_query(request, desktop_runtime.get_update_manifest_url())
 
 
 def update_details_redirect(request):
-    return _redirect_preserving_query(request, UPDATE_DETAILS_REDIRECT_URL)
+    return _redirect_preserving_query(request, desktop_runtime.get_update_details_url())
 
 
 @require_http_methods(['GET'])
@@ -7662,8 +7679,10 @@ def _import_seats_file_payload(classroom, data, request=None):
             state = _remap_history_state(data.get('current_state'), mappings, classroom.pk)
             _restore_history_state(classroom, state)
             _restore_exported_history(classroom, data, mappings)
-            _restore_future_mode_config(classroom, data.get('future_mode_config'))
-            _restore_ai_conversations(classroom, data.get('ai_conversations'), request=request)
+            if 'future_mode_config' in data:
+                _restore_future_mode_config(classroom, data.get('future_mode_config'))
+            if 'ai_conversations' in data:
+                _restore_ai_conversations(classroom, data.get('ai_conversations'), request=request)
         return 'full'
 
     _apply_layout_data(classroom, data, replace_students=True)
@@ -8375,6 +8394,7 @@ def classroom_detail(request, pk):
     
     return render(request, 'seats/classroom_detail.html', {
         'classroom': classroom,
+        'arrange_preferences': load_preferences(classroom),
         'seat_grid': seat_grid,
         'podium_anchor': podium_anchor,
         'students': students,
@@ -8382,6 +8402,7 @@ def classroom_detail(request, pk):
         'seated_count': seated_count,
         'groups': groups,
         'snapshots': snapshots,
+        'local_sync_snapshots': classroom.local_sync_snapshots.defer('data').all(),
         'custom_info_keys': custom_info_keys,
         'sort_strategies': sort_strategies,
         'constraint_items': constraint_items,
@@ -11028,7 +11049,7 @@ def _assign_pairs(students, seats, seat_map, assignments, maps, required_group_m
     return available
 
 
-def _arrange_standard(classroom, students, seats, method):
+def _arrange_standard(classroom, students, seats, method, *, preferences=None, previous_pairs=None):
     seats = [s for s in seats if s.cell_type == SeatCellType.SEAT]
     seat_map = _build_seat_map(seats)
 
@@ -11057,6 +11078,14 @@ def _arrange_standard(classroom, students, seats, method):
                 available.remove(seat)
                 break
 
+    if preferences and preferences_enabled(preferences):
+        optimize_deskmates(
+            students, seats, assignments, preferences,
+            previous_pairs if previous_pairs is not None else current_deskmates(seats),
+            lambda student, seat, simulated: _seat_is_valid(student, seat, simulated, maps),
+            preserve_rows=method in {'score_desc', 'score_asc', 'good_front', 'good_back', 'score_spread'},
+        )
+
     Seat.objects.filter(classroom=classroom).update(student=None)
 
     for student in students:
@@ -11066,7 +11095,7 @@ def _arrange_standard(classroom, students, seats, method):
             seat.save(update_fields=['student'])
 
 
-def _arrange_grouped(classroom, students, method):
+def _arrange_grouped(classroom, students, method, *, preferences=None, previous_pairs=None):
     groups = list(classroom.groups.all())
     if not groups:
         return False
@@ -11161,6 +11190,14 @@ def _arrange_grouped(classroom, students, method):
                 remaining_seats.remove(seat)
                 break
 
+    if preferences and preferences_enabled(preferences):
+        optimize_deskmates(
+            students, all_seat_cells, assignments, preferences,
+            previous_pairs if previous_pairs is not None else current_deskmates(all_seat_cells),
+            lambda student, seat, simulated: _seat_is_valid(student, seat, simulated, maps, required_group_map),
+            preserve_groups=True,
+        )
+
     Seat.objects.filter(classroom=classroom).update(student=None)
     for student in students:
         seat = assignments.get(student.pk)
@@ -11172,7 +11209,11 @@ def _arrange_grouped(classroom, students, method):
     return True
 
 
-def _run_arrangement(classroom, method, *, sort_definition=None):
+def _run_arrangement(classroom, method, *, sort_definition=None, preferences=None, previous_pairs=None):
+    if preferences is None:
+        preferences = load_preferences(classroom) if method in BUILTIN_METHODS else DEFAULT_PREFERENCES.copy()
+    else:
+        preferences = normalize_preferences(preferences)
     students = list(classroom.students.select_related('classroom', 'assigned_seat__group').all())
     if method in ['score_desc', 'score_asc', 'good_front', 'good_back']:
         seats = list(classroom.seats.select_related('student').order_by('col', 'row'))
@@ -11216,18 +11257,18 @@ def _run_arrangement(classroom, method, *, sort_definition=None):
             current = sorted(row_seats[row], key=lambda item: item.col)
             seats.extend(current if row % 2 == 1 else list(reversed(current)))
     elif method in ['group_balanced', 'group_mentor']:
-        return _arrange_grouped(classroom, students, method)
+        return _arrange_grouped(classroom, students, method, preferences=preferences, previous_pairs=previous_pairs)
     elif method == 'field_sort':
         students = sort_students(
             students,
             sort_definition or definition_for_field('name', 'asc', 'pinyin_initial'),
         )
 
-    _arrange_standard(classroom, students, seats, method)
+    _arrange_standard(classroom, students, seats, method, preferences=preferences, previous_pairs=previous_pairs)
     return True
 
 
-def _attempt_auto_constraint_fix(classroom, preferred_method=None):
+def _attempt_auto_constraint_fix(classroom, preferred_method=None, *, preferences=None, previous_pairs=None):
     methods = []
     if preferred_method:
         methods.append(preferred_method)
@@ -11254,7 +11295,7 @@ def _attempt_auto_constraint_fix(classroom, preferred_method=None):
         for _ in range(tries):
             try:
                 with transaction.atomic():
-                    ok = _run_arrangement(classroom, method)
+                    ok = _run_arrangement(classroom, method, preferences=preferences, previous_pairs=previous_pairs)
                     if not ok:
                         raise ValueError('arrange_failed')
                     _stabilize_layout_with_rules(classroom)
@@ -11265,6 +11306,18 @@ def _attempt_auto_constraint_fix(classroom, preferred_method=None):
             except Exception:
                 continue
     return False
+
+
+@require_http_methods(['GET', 'POST'])
+def arrange_preferences(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    if request.method == 'GET':
+        return JsonResponse({'status': 'success', 'preferences': load_preferences(classroom)})
+    try:
+        preferences = save_preferences(classroom, json.loads(request.body))
+    except (ValueError, TypeError):
+        return JsonResponse({'status': 'error', 'message': '偏好选项无效，请重新选择'}, status=400)
+    return JsonResponse({'status': 'success', 'preferences': preferences})
 
 
 def auto_arrange_seats(request, pk):
@@ -11305,10 +11358,21 @@ def auto_arrange_seats(request, pk):
             message = f'可用座位不足(座位:{seat_cells_count} < 学生:{students_count})，无法保证100%入座，请在布局编辑中增加座位。'
             return _arrange_error(message, status=400)
 
+        preferences = load_preferences(classroom)
+        previous_pairs = current_deskmates(list(classroom.seats.all())) if preferences['avoid_previous'] else set()
+
+        def _arrange_success(auto_fixed=False):
+            payload = {'status': 'success', 'preferences': preferences}
+            if preferences_enabled(preferences) or auto_fixed:
+                payload['message'] = arrangement_message(
+                    list(classroom.seats.select_related('student')), preferences, auto_fixed=auto_fixed,
+                )
+            return JsonResponse(payload)
+
         before_state = _capture_history_state(classroom)
         try:
             with transaction.atomic():
-                if not _run_arrangement(classroom, method):
+                if not _run_arrangement(classroom, method, preferences=preferences, previous_pairs=previous_pairs):
                     raise ValueError('未设置小组或小组没有座位')
 
                 _stabilize_layout_with_rules(classroom, request)
@@ -11316,7 +11380,8 @@ def auto_arrange_seats(request, pk):
                 if violations:
                     raise ValueError(f'约束未满足，排座已回滚：{_format_issues_preview(violations)}')
         except ValueError as e:
-            if _attempt_auto_constraint_fix(classroom, preferred_method=method):
+            if _attempt_auto_constraint_fix(classroom, preferred_method=method,
+                                            preferences=preferences, previous_pairs=previous_pairs):
                 _push_snapshot_action(
                     request,
                     classroom,
@@ -11334,7 +11399,7 @@ def auto_arrange_seats(request, pk):
                     payload={'method': method, 'auto_fixed': True},
                 )
                 if is_ajax:
-                    return JsonResponse({'status': 'success', 'message': '已自动调整并满足约束'})
+                    return _arrange_success(auto_fixed=True)
                 return redirect('classroom_detail', pk=pk)
             return _arrange_error(str(e), status=400)
 
@@ -11355,7 +11420,7 @@ def auto_arrange_seats(request, pk):
             payload={'method': method, 'auto_fixed': False},
         )
         if is_ajax:
-            return JsonResponse({'status': 'success'})
+            return _arrange_success()
         return redirect('classroom_detail', pk=pk)
     if request.headers.get('x-requested-with') == 'XMLHttpRequest':
         return JsonResponse({'status': 'error'}, status=400)
@@ -15142,6 +15207,43 @@ def delete_layout_snapshot(request, pk, snapshot_id):
     return redirect('classroom_detail', pk=pk)
 
 
+@require_POST
+@transaction.atomic
+def load_local_sync_snapshot(request, pk, snapshot_id):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    snapshot = get_object_or_404(LocalSyncSnapshot, pk=snapshot_id, classroom=classroom)
+    data = local_sync_snapshot_data(snapshot)
+    meta = SyncMeta.objects.get(classroom=classroom)
+    before_state = _capture_history_state(classroom)
+    save_local_sync_snapshot(
+        classroom, _serialize_seats_file_bundle(classroom),
+        source=LocalSyncSnapshot.Source.LOCAL, version=meta.local_version,
+        operation_at=_sync_meta_operation_time(meta, classroom),
+    )
+    _import_seats_file_payload(classroom, data, request=request)
+    _push_snapshot_action(request, classroom, before_state, 'load_local_sync_snapshot')
+    return redirect('classroom_detail', pk=pk)
+
+
+@require_POST
+def delete_local_sync_snapshot(request, pk, snapshot_id):
+    snapshot = get_object_or_404(LocalSyncSnapshot, pk=snapshot_id, classroom_id=pk)
+    snapshot.delete()
+    if _is_ajax_request(request):
+        return JsonResponse({'status': 'success'})
+    return redirect('classroom_detail', pk=pk)
+
+
+def export_local_sync_snapshot(request, pk, snapshot_id):
+    snapshot = get_object_or_404(LocalSyncSnapshot, pk=snapshot_id, classroom_id=pk)
+    data = local_sync_snapshot_data(snapshot)
+    response = HttpResponse(json.dumps(data, ensure_ascii=False, indent=2), content_type='application/octet-stream')
+    response['Content-Disposition'] = _download_content_disposition(
+        f'{snapshot.classroom.name}_{snapshot.get_source_display()}_v{snapshot.source_version}.seats'
+    )
+    return response
+
+
 def export_seats_file(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     data = _serialize_seats_file_bundle(classroom)
@@ -15158,8 +15260,15 @@ def import_seats_file(request, pk):
     if request.method == 'POST' and request.FILES.get('seats_file'):
         seats_file = request.FILES['seats_file']
         try:
-            raw = seats_file.read().decode('utf-8')
+            raw_bytes = seats_file.read()
+            raw = raw_bytes.decode('utf-8-sig')
             data = json.loads(raw)
+            if isinstance(data, dict) and data.get('format') == SDES_FORMAT:
+                staged = _stage_sdes_import(classroom, parse_sdes(raw_bytes), seats_file.name)
+                next_url = reverse('import_sdes', args=[pk]) + '?token=' + staged['token']
+                if _is_ajax_request(request):
+                    return JsonResponse({'status': 'success', 'next_url': next_url, 'message': '请选择班级和座位表'})
+                return redirect(next_url)
             import_mode = 'full'
             before_state = None
             if not isinstance(data.get('current_state'), dict):
@@ -15171,6 +15280,82 @@ def import_seats_file(request, pk):
         except Exception:
             pass
     return redirect('classroom_detail', pk=pk)
+
+
+def _stage_sdes_import(classroom, data, filename):
+    catalog = sdes_catalog(data)
+    token = secrets.token_urlsafe(32)
+    class_index = next(item['index'] for item in catalog if item['charts'])
+    preview = _sdes_import_preview(classroom, data, token, catalog, class_index, 0, filename)
+    cache.set('sdes-import:' + token, {
+        'classroom_id': classroom.pk, 'data': data, 'filename': os.path.basename(filename),
+        'original_state_hash': sync_content_hash(_capture_history_state(classroom)),
+    }, timeout=1800)
+    return preview
+
+
+def _sdes_import_preview(classroom, data, token, catalog, class_index, chart_index, filename):
+    bundle, summary = convert_sdes(data, class_index, chart_index, classroom_name=classroom.name)
+    return {
+        'status': 'success', 'token': token, 'classes': catalog, 'filename': os.path.basename(filename),
+        'class_index': class_index, 'chart_index': chart_index,
+        'preview_hash': sync_content_hash(bundle), **summary,
+    }
+
+
+@require_http_methods(['GET', 'POST'])
+def import_sdes(request, pk):
+    classroom = get_object_or_404(Classroom, pk=pk)
+    if request.method == 'GET':
+        initial = None
+        token = str(request.GET.get('token') or '')
+        staged = cache.get('sdes-import:' + token) if token else None
+        if staged and staged['classroom_id'] == pk:
+            catalog = sdes_catalog(staged['data'])
+            class_index = next(item['index'] for item in catalog if item['charts'])
+            initial = _sdes_import_preview(classroom, staged['data'], token, catalog, class_index, 0, staged['filename'])
+        return render(request, 'seats/import_sdes.html', {'classroom': classroom, 'sdes_initial': initial})
+    try:
+        uploaded = request.FILES.get('sdes_file')
+        if uploaded:
+            data = parse_sdes(uploaded.read(SDES_MAX_FILE_BYTES + 1))
+            return JsonResponse(_stage_sdes_import(classroom, data, uploaded.name))
+        token = str(request.POST.get('token') or '')
+        staged = cache.get('sdes-import:' + token)
+        if not staged or staged['classroom_id'] != pk:
+            raise ValueError('文件已失效，请重新选择并识别 SDES 文件')
+        class_index = int(request.POST.get('class_index', 0))
+        chart_index = int(request.POST.get('chart_index', 0))
+        action = request.POST.get('action')
+        if action == 'preview':
+            return JsonResponse(_sdes_import_preview(
+                classroom, staged['data'], token, sdes_catalog(staged['data']), class_index, chart_index, staged['filename'],
+            ))
+        if action != 'apply':
+            raise ValueError('请选择预览或导入操作')
+        bundle, summary = convert_sdes(staged['data'], class_index, chart_index, classroom_name=classroom.name)
+        if request.POST.get('preview_hash') != sync_content_hash(bundle):
+            raise ValueError('选择已变化，请更新预览后再导入')
+        with transaction.atomic():
+            meta = SyncMeta.objects.select_for_update().get(classroom=classroom)
+            before_state = _capture_history_state(classroom)
+            if sync_content_hash(before_state) != staged['original_state_hash']:
+                raise ValueError('班级在预览后发生了修改，请重新识别文件后再导入')
+            save_local_sync_snapshot(
+                classroom, _serialize_seats_file_bundle(classroom), source=LocalSyncSnapshot.Source.LOCAL,
+                version=meta.local_version, operation_at=_sync_meta_operation_time(meta, classroom),
+            )
+            _import_seats_file_payload(classroom, bundle, request=request)
+            _push_snapshot_action(request, classroom, before_state, 'import_sdes')
+        cache.delete('sdes-import:' + token)
+        return JsonResponse({
+            'status': 'success', 'message': f'SDES 导入完成，已安排 {summary["assigned"]} 名学生',
+            'next_url': reverse('classroom_detail', args=[pk]) + '?cloud_sync=import-return',
+        })
+    except (ValueError, TypeError, KeyError, OverflowError) as exc:
+        return JsonResponse({'status': 'error', 'message': str(exc) or 'SDES 数据无效'}, status=400)
+    except (OSError, IntegrityError, OperationalError) as exc:
+        return JsonResponse({'status': 'error', 'message': f'SDES 导入未完成：{exc}'}, status=500)
 
 
 BSCE_CLOUD_AUTH_URL = 'https://sce.jbyc.cc/api/auth.php'
@@ -16327,19 +16512,22 @@ def _cloud_push_item(
     device_id='local-desktop',
     operation_at=None,
     allow_delta=True,
+    base_version=None,
+    snapshot=None,
 ):
-    snapshot = _cloud_export_payload(classroom, session)
+    snapshot = snapshot if snapshot is not None else _cloud_export_payload(classroom, session)
+    base_version = int(meta.cloud_version or 0) if base_version is None else int(base_version)
     item = {
         'uuid': str(meta.uuid),
-        'base_version': int(meta.cloud_version or 0),
-        'cloud_version': int(meta.cloud_version or 0),
+        'base_version': base_version,
+        'cloud_version': base_version,
         'local_version': int(meta.local_version or 0),
         'force': bool(force),
         'device_id': str(device_id or 'local-desktop')[:64],
         'last_operation_at': operation_at.isoformat() if operation_at else None,
     }
     base = _cloud_base_snapshot(meta)
-    if allow_delta and not force and int(meta.cloud_version or 0) > 0 and base:
+    if allow_delta and not force and base_version == int(meta.cloud_version or 0) and base_version > 0 and base:
         item.update({
             'protocol': DELTA_PROTOCOL,
             'changes': build_delta(base, snapshot),
@@ -16495,11 +16683,15 @@ def _cloud_restore_classroom_group_data(group_payload):
 
 
 @transaction.atomic
-def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None, operation_time=None):
-    if not isinstance(data, dict):
+def _cloud_restore_classroom_data(
+    request, classroom_uuid, data, version=None, operation_time=None, *, expected_local_version=None,
+):
+    if not isinstance(data, dict) or not data:
         raise ValueError('云端班级数据格式错误')
 
-    meta = SyncMeta.objects.select_related('classroom').filter(uuid=classroom_uuid).first()
+    meta = SyncMeta.objects.select_for_update().select_related('classroom').filter(uuid=classroom_uuid).first()
+    if meta and expected_local_version is not None and int(meta.local_version) != int(expected_local_version):
+        raise ValueError('同步期间本地数据已变化，请重试')
     classroom = meta.classroom if meta else None
     classroom_data = data.get('classroom') if isinstance(data.get('classroom'), dict) else {}
     name = str(classroom_data.get('name') or data.get('name') or '云端班级').strip() or '云端班级'
@@ -16515,6 +16707,12 @@ def _cloud_restore_classroom_data(request, classroom_uuid, data, version=None, o
     with suspend_sync_version_bump():
         if classroom is None:
             classroom = Classroom.objects.create(name=name, rows=rows, cols=cols)
+        else:
+            save_local_sync_snapshot(
+                classroom, _serialize_seats_file_bundle(classroom),
+                source=LocalSyncSnapshot.Source.LOCAL, version=meta.local_version,
+                operation_at=_sync_meta_operation_time(meta, classroom),
+            )
 
         _import_seats_file_payload(classroom, data, request=request)
         meta, _ = SyncMeta.objects.get_or_create(classroom=classroom)
@@ -16545,12 +16743,13 @@ def _cloud_pull_and_restore_classroom(
     fallback_operation_time=None,
     *,
     refresh_subscription=True,
+    full=False,
 ):
     local_meta = SyncMeta.objects.select_related('classroom').filter(uuid=classroom_uuid).first()
     base_snapshot = _cloud_base_snapshot(local_meta) if local_meta else {}
     full_path = f'/api/sync/pull/{classroom_uuid}'
     path = full_path
-    if local_meta and int(local_meta.cloud_version or 0) > 0 and base_snapshot:
+    if not full and local_meta and int(local_meta.cloud_version or 0) > 0 and base_snapshot:
         path += f'?protocol={DELTA_PROTOCOL}&base_version={int(local_meta.cloud_version or 0)}'
     payload = cloud_api_request(
         session,
@@ -16582,7 +16781,10 @@ def _cloud_pull_and_restore_classroom(
                 return local_meta.classroom, local_meta
     version = payload.get('version') if payload.get('version') is not None else fallback_version
     operation_time = payload.get('last_operation_at') or payload.get('last_modified_at') or fallback_operation_time
-    return _cloud_restore_classroom_data(request, classroom_uuid, data, version=version, operation_time=operation_time)
+    return _cloud_restore_classroom_data(
+        request, classroom_uuid, data, version=version, operation_time=operation_time,
+        expected_local_version=local_meta.local_version if local_meta else None,
+    )
 
 
 def _cloud_pull_and_restore_classroom_group(
@@ -16853,6 +17055,109 @@ def cloud_sync_status(request):
         return _cloud_error_response(exc)
 
 
+@transaction.atomic
+def _cloud_accept_snapshot(meta, snapshot, version, operation_at, expected_local_version):
+    current = SyncMeta.objects.select_for_update().get(pk=meta.pk)
+    current.cloud_version = int(version)
+    if int(current.local_version) == int(expected_local_version):
+        current.local_version = int(version)
+        if operation_at:
+            current.last_operation_at = operation_at
+    else:
+        # Keep edits made while the HTTP request was in flight marked as unsynced.
+        current.local_version = max(int(current.local_version), int(version) + 1)
+    current.last_sync_at = timezone.now()
+    current.last_error = ''
+    current.save(update_fields=[
+        'cloud_version', 'local_version', 'last_operation_at', 'last_sync_at', 'last_error', 'updated_at',
+    ])
+    _save_cloud_base_snapshot(current, snapshot, version=version)
+    return current
+
+
+def _cloud_reconcile_classroom(
+    request, session, classroom, meta, *, remote_version=None, remote_operation_at=None,
+    device_id='local-desktop', force=False,
+):
+    expected_local_version = int(meta.local_version or 0)
+    local_operation_at = _sync_meta_operation_time(meta, classroom)
+    local_data = _cloud_export_payload(classroom, session)
+    payload = cloud_api_request(
+        session, 'GET', f'/api/sync/pull/{meta.uuid}', refresh_subscription=False,
+    )
+    remote_data = payload.get('data') or payload.get('data_snapshot')
+    if not isinstance(remote_data, dict) or not remote_data:
+        raise ValueError('云端未返回完整数据，已保留本地数据')
+    remote_version = int(payload.get('version') if payload.get('version') is not None else remote_version or 0)
+    if remote_version <= 0:
+        raise ValueError('云端版本号无效，已保留双方数据')
+    remote_data_meta = remote_data.get('meta') if isinstance(remote_data.get('meta'), dict) else {}
+    remote_operation_at = (
+        _parse_cloud_operation_time(payload.get('last_operation_at') or payload.get('last_modified_at'))
+        or _parse_cloud_operation_time(remote_data_meta.get('last_operation_at') or remote_data_meta.get('operation_time'))
+        or remote_operation_at
+    )
+    local_hash = sync_content_hash(local_data)
+    remote_hash = sync_content_hash(remote_data)
+
+    if local_hash == remote_hash:
+        meta = _cloud_accept_snapshot(meta, remote_data, remote_version, remote_operation_at, expected_local_version)
+        status, message = 'up_to_date', '两端内容一致，已校正同步版本'
+    else:
+        local_changed = expected_local_version > int(meta.cloud_version or 0)
+        base_data = _cloud_base_snapshot(meta)
+        remote_unchanged = bool(base_data and sync_content_hash(base_data) == remote_hash)
+        if force or remote_unchanged:
+            use_local = True
+        elif local_operation_at and remote_operation_at and local_operation_at != remote_operation_at:
+            use_local = local_operation_at > remote_operation_at
+        elif not local_changed and remote_version > int(meta.cloud_version or 0):
+            use_local = False
+        elif local_changed and remote_version == int(meta.cloud_version or 0):
+            use_local = True
+        else:
+            raise CloudAPIError(
+                '两端内容不同，但修改时间相同或缺失，无法自动选择；已保留双方数据',
+                status_code=409,
+                payload={'conflict': True, 'version': remote_version,
+                         'message': '两端内容不同，但修改时间相同或缺失，无法自动选择；已保留双方数据'},
+            )
+
+        if use_local:
+            if not SyncMeta.objects.filter(pk=meta.pk, local_version=expected_local_version).exists():
+                raise ValueError('同步期间本地数据已变化，请重试')
+            save_local_sync_snapshot(
+                classroom, remote_data, source=LocalSyncSnapshot.Source.CLOUD,
+                version=remote_version, operation_at=remote_operation_at,
+            )
+            body, pushed_snapshot = _cloud_push_item(
+                classroom, meta, session, device_id=device_id, operation_at=local_operation_at,
+                allow_delta=False, base_version=remote_version, snapshot=local_data,
+            )
+            # Full replacement checks the exact cloud version saved in the backup.
+            pushed = cloud_api_request(session, 'POST', '/api/sync/push', body, refresh_subscription=False)
+            if not (pushed.get('ok') or pushed.get('status') == 'success'):
+                raise CloudAPIError(pushed.get('message') or '云端未接受同步', payload=pushed)
+            version = int(pushed.get('version') or remote_version + 1)
+            operation_at = _parse_cloud_operation_time(
+                pushed.get('last_operation_at') or pushed.get('last_modified_at')
+            ) or local_operation_at
+            meta = _cloud_accept_snapshot(meta, pushed_snapshot, version, operation_at, expected_local_version)
+            status, message = 'ok', '已完整上传；云端旧版已保存为本地快照'
+        else:
+            classroom, meta = _cloud_restore_classroom_data(
+                request, str(meta.uuid), remote_data, version=remote_version, operation_time=remote_operation_at,
+                expected_local_version=expected_local_version,
+            )
+            status, message = 'pulled', '已完整拉取；本地旧版已保存为本地快照'
+
+    return {
+        'classroom_id': classroom.pk, 'name': classroom.name,
+        **_serialize_classroom_sync_meta(classroom, meta),
+        'status': status, 'version': int(meta.cloud_version), 'message': message,
+    }
+
+
 def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None):
     data = data if isinstance(data, dict) else {}
     _refresh_cloud_subscription_if_logged_in(session)
@@ -16893,7 +17198,8 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
         remote_version = _cloud_remote_version_for(remote_versions, meta.uuid)
         remote_operation_at = _cloud_remote_operation_time_for(remote_operation_times, meta.uuid)
         local_operation_at = _sync_meta_operation_time(meta, classroom)
-        local_has_changes = int(sync_payload['local_version'] or 0) > int(sync_payload['cloud_version'] or 0)
+        local_has_changes = int(meta.local_version or 0) > int(meta.cloud_version or 0)
+        base_snapshot = _cloud_base_snapshot(meta) if remote_version is not None else {}
         if (
             max_classrooms != -1
             and remote_version is None
@@ -16908,53 +17214,28 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
             })
             continue
 
-        # Version divergence takes precedence over device clocks, including auto sync.
+        # Read complete copies before reconciling divergent versions. An upload
+        # whose acknowledgement was lost may already match the local contents.
         if (
             remote_version is not None
-            and remote_version > int(meta.cloud_version or 0)
-            and not force
+            and (remote_version != int(meta.cloud_version or 0) or force or data.get('full')
+                 or local_has_changes and not base_snapshot)
         ):
-            if not local_has_changes:
-                try:
-                    classroom, meta = _cloud_pull_and_restore_classroom(
-                        request,
-                        session,
-                        str(meta.uuid),
-                        fallback_version=remote_version,
-                        fallback_operation_time=remote_operation_at,
-                        refresh_subscription=False,
-                    )
-                except Exception as exc:
-                    meta.last_error = str(exc)
-                    meta.save(update_fields=['last_error', 'updated_at'])
-                    results.append({
-                        'classroom_id': classroom.pk,
-                        'name': classroom.name,
-                        **_serialize_classroom_sync_meta(classroom, meta),
-                        'status': 'error',
-                        'message': str(exc),
-                    })
-                else:
-                    results.append({
-                        'classroom_id': classroom.pk,
-                        'name': classroom.name,
-                        **_serialize_classroom_sync_meta(classroom, meta),
-                        'status': 'pulled',
-                        'version': int(meta.cloud_version or remote_version or 0),
-                        'message': '已从云端更新',
-                    })
-                continue
-
-            meta.last_error = 'conflict'
-            meta.save(update_fields=['last_error', 'updated_at'])
-            results.append({
-                'classroom_id': classroom.pk,
-                'name': classroom.name,
-                **_serialize_classroom_sync_meta(classroom, meta),
-                'status': 'conflict',
-                'cloud_version': remote_version,
-                'message': '本地与云端均有修改，已保留双方数据；请先导出本地副本，再选择要保留的版本',
-            })
+            try:
+                results.append(_cloud_reconcile_classroom(
+                    request, session, classroom, meta, remote_version=remote_version,
+                    remote_operation_at=remote_operation_at,
+                    device_id=data.get('device_id') or 'local-desktop', force=force,
+                ))
+            except Exception as exc:
+                conflict = isinstance(exc, CloudAPIError) and bool(exc.payload.get('conflict'))
+                meta.last_error = 'conflict' if conflict else str(exc)
+                meta.save(update_fields=['last_error', 'updated_at'])
+                results.append({
+                    'classroom_id': classroom.pk, 'name': classroom.name,
+                    **_serialize_classroom_sync_meta(classroom, meta),
+                    'status': 'conflict' if conflict else 'error', 'message': str(exc),
+                })
             continue
 
         if (
@@ -16964,10 +17245,13 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
             and sync_payload['local_version'] <= sync_payload['cloud_version']
             and remote_version <= sync_payload['cloud_version']
         ):
+            meta.last_error = ''
+            meta.last_sync_at = timezone.now()
+            meta.save(update_fields=['last_error', 'last_sync_at', 'updated_at'])
             results.append({
                 'classroom_id': classroom.pk,
                 'name': classroom.name,
-                **sync_payload,
+                **_serialize_classroom_sync_meta(classroom, meta),
                 'status': 'up_to_date',
                 'message': '云端已是最新',
             })
@@ -16983,6 +17267,29 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
             allow_delta=allow_delta,
         )
 
+        if remote_version is not None and base_snapshot:
+            if sync_content_hash(base_snapshot) == sync_content_hash(pushed_snapshot):
+                meta = _cloud_accept_snapshot(meta, base_snapshot, remote_version, remote_operation_at, meta.local_version)
+                results.append({
+                    'classroom_id': classroom.pk, 'name': classroom.name,
+                    **_serialize_classroom_sync_meta(classroom, meta),
+                    'status': 'up_to_date', 'message': '两端内容一致，已校正同步版本',
+                })
+                continue
+            try:
+                save_local_sync_snapshot(
+                    classroom, base_snapshot, source=LocalSyncSnapshot.Source.CLOUD, version=remote_version,
+                    operation_at=remote_operation_at or _parse_cloud_operation_time((base_snapshot.get('meta') or {}).get('last_operation_at')),
+                )
+            except Exception as exc:
+                meta.last_error = str(exc)
+                meta.save(update_fields=['last_error', 'updated_at'])
+                results.append({
+                    'classroom_id': classroom.pk, 'name': classroom.name,
+                    **_serialize_classroom_sync_meta(classroom, meta), 'status': 'error', 'message': str(exc),
+                })
+                continue
+
         try:
             payload = cloud_api_request(
                 session,
@@ -16993,6 +17300,17 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
             )
         except CloudAPIError as exc:
             payload = exc.payload or {}
+            if payload.get('conflict') or body.get('protocol') == DELTA_PROTOCOL and exc.status_code == 400:
+                try:
+                    results.append(_cloud_reconcile_classroom(
+                        request, session, classroom, meta, remote_version=payload.get('version') or remote_version,
+                        remote_operation_at=remote_operation_at, device_id=data.get('device_id') or 'local-desktop',
+                        force=force,
+                    ))
+                    continue
+                except Exception as recovery_exc:
+                    exc = recovery_exc
+                    payload = exc.payload if isinstance(exc, CloudAPIError) else {}
             if payload.get('conflict'):
                 meta.last_error = 'conflict'
                 meta.save(update_fields=['last_error', 'updated_at'])
@@ -17002,7 +17320,7 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
                     **_serialize_classroom_sync_meta(classroom, meta),
                     'status': 'conflict',
                     'cloud_version': payload.get('version'),
-                    'message': payload.get('message') or '云端版本更新，请先拉取或让用户选择保留版本',
+                    'message': payload.get('message') or '同步期间云端又有修改，请重试以重新比较修改时间',
                 })
                 continue
             meta.last_error = payload.get('message') or str(exc)
@@ -17024,17 +17342,7 @@ def _cloud_sync_classrooms(request, session, data=None, remote_status_sink=None)
                 _parse_cloud_operation_time(payload.get('last_operation_at') or payload.get('last_modified_at'))
                 or local_operation_at
             )
-            meta.cloud_version = version
-            meta.local_version = version
-            if operation_at:
-                meta.last_operation_at = operation_at
-            meta.last_sync_at = timezone.now()
-            meta.last_error = ''
-            meta.save(update_fields=[
-                'cloud_version', 'local_version', 'last_operation_at', 'last_sync_at',
-                'last_error', 'updated_at',
-            ])
-            _save_cloud_base_snapshot(meta, pushed_snapshot, version=version)
+            meta = _cloud_accept_snapshot(meta, pushed_snapshot, version, operation_at, meta.local_version)
             results.append({
                 'classroom_id': classroom.pk,
                 'name': classroom.name,
@@ -17457,6 +17765,7 @@ def cloud_sync_pull(request, classroom_uuid):
             request,
             session,
             classroom_uuid,
+            full=True,
         )
         return JsonResponse({
             'status': 'success',
@@ -17662,7 +17971,7 @@ def frontend_store_js(request):
         if (navigator.userAgent.includes('Mac OS X') || navigator.platform.toUpperCase().indexOf('MAC') >= 0) {{
             if (!localStorage.getItem('mac_os_warning_seen')) {{
                 localStorage.setItem('mac_os_warning_seen', 'true');
-                const message = "当前系统可能部分动效、功能不稳定，若您有相关需要，可以前往 Windows/使用 Chrome 打开http://127.0.0.1:23948";
+                const message = "如遇桌面窗口显示异常，请更新系统 WebView，或使用 -dev 模式通过 Microsoft Edge 调试。";
                 if (typeof window.showToast === 'function') {{
                     window.showToast(message);
                 }} else {{
@@ -17703,6 +18012,17 @@ def frontend_store_delete(request):
         return JsonResponse({'status': 'error', 'message': str(e)}, status=400)
 
 
+def _local_update_request(view):
+    @wraps(view)
+    def wrapped(request, *args, **kwargs):
+        hostname = urlsplit('//' + request.get_host()).hostname
+        if hostname not in {'127.0.0.1', 'localhost', '::1'}:
+            return JsonResponse({'status': 'error', 'message': '更新接口仅允许本机访问'}, status=403)
+        return view(request, *args, **kwargs)
+    return wrapped
+
+
+@_local_update_request
 @require_http_methods(['GET'])
 def desktop_update_check(request):
     try:
@@ -17718,11 +18038,13 @@ def desktop_update_check(request):
         }, status=502)
 
 
-@csrf_exempt
+@_local_update_request
 @require_POST
 def desktop_update_start(request):
     try:
         payload = json.loads(request.body or b'{}')
+        if not isinstance(payload, dict):
+            raise ValueError('请求数据必须是对象')
     except Exception:
         return JsonResponse({
             'status': 'error',
@@ -17760,7 +18082,7 @@ def desktop_update_start(request):
         }, status=500)
 
 
-@csrf_exempt
+@_local_update_request
 @require_POST
 def desktop_update_install(request):
     try:
@@ -17784,6 +18106,7 @@ def desktop_update_install(request):
         }, status=500)
 
 
+@_local_update_request
 @require_http_methods(['GET'])
 def desktop_update_status(request):
     return JsonResponse({'status': 'success', **desktop_runtime.get_update_status()})

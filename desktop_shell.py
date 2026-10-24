@@ -10,6 +10,8 @@ import urllib.request
 import webbrowser
 from pathlib import Path
 
+from desktop_security import desktop_session, open_local_request
+
 
 LOCAL_DESKTOP_HOSTS = {"127.0.0.1", "localhost"}
 FILENAME_SANITIZE_RE = re.compile(r'[<>:"/\\|?*\x00-\x1F]')
@@ -512,7 +514,7 @@ class DesktopBridge:
             about_bridge = DesktopBridge(self._server_origin, self._native_menu_builder)
             about_window = webview.create_window(
                 "关于不想排座位",
-                f"{self._server_origin}/about/",
+                desktop_session.window_url(f"{self._server_origin}/about/"),
                 js_api=about_bridge,
                 **options,
             )
@@ -544,7 +546,7 @@ class DesktopBridge:
             child_bridge = DesktopBridge(self._server_origin)
             child_bridge._tutorial_parent = self._window
             child_bridge._tutorial_result = {'requestId': request_id, 'kind': kind}
-            child = webview.create_window('班管理 · 模拟文件选择', f'{self._server_origin}/welcome/files/{kind}/?request={request_id}', js_api=child_bridge, width=780, height=540, min_size=(560, 400), background_color='#FFFFFF', frameless=False, resizable=True)
+            child = webview.create_window('班管理 · 模拟文件选择', desktop_session.window_url(f'{self._server_origin}/welcome/files/{kind}/?request={request_id}'), js_api=child_bridge, width=780, height=540, min_size=(560, 400), background_color='#FFFFFF', frameless=False, resizable=True)
             child_bridge._attach_window(child)
             return {'status': 'opened'}
         except Exception as exc:
@@ -740,24 +742,29 @@ class DesktopBridge:
 
         self._close_active_context_menu()
 
+        import webview
+
+        # About and tutorial windows have their own bridges. The event loop
+        # stays alive until every window closes, regardless of the caller.
+        windows = list(webview.windows)
+        if self._window not in windows:
+            windows.append(self._window)
+
         def _close():
-            native_window = getattr(self._window, "native", None) if self._window is not None else None
-            if native_window is not None:
+            closed = True
+            for window in windows:
+                native_window = getattr(window, "native", None)
                 try:
-                    native_window.Close()
-                    return True
+                    if native_window is not None and callable(getattr(native_window, "Close", None)):
+                        native_window.Close()
+                    else:
+                        window.destroy()
                 except Exception:
-                    pass
-
-            destroy = getattr(self._window, "destroy", None) if self._window is not None else None
-            if callable(destroy):
-                try:
-                    destroy()
-                    return True
-                except Exception:
-                    pass
-
-            return False
+                    try:
+                        window.destroy()
+                    except Exception:
+                        closed = False
+            return closed
 
         def _close_later():
             try:
@@ -1432,7 +1439,7 @@ class DesktopBridge:
         )
 
         try:
-            with urllib.request.urlopen(request, timeout=120) as response:
+            with open_local_request(request, timeout=120) as response:
                 status = getattr(response, "status", 200)
                 if status >= 400:
                     raise ValueError(f"导出失败（{status}）")
@@ -1666,7 +1673,7 @@ class DesktopBridge:
             )
 
             try:
-                with urllib.request.urlopen(request, timeout=120) as response:
+                with open_local_request(request, timeout=120) as response:
                     status = getattr(response, "status", 200)
                     if status >= 400:
                         raise ValueError(f"导入失败（{status}）")

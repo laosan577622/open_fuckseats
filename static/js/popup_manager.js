@@ -12,11 +12,10 @@
 
     function tryShowNext() {
         if (current !== null) return;
-        // 新手引导进行中不弹任何队列弹窗，引导销毁后由 wake() 重新触发。
-        if (window.FUCKSEATS_ONBOARDING_ACTIVE === true) return;
         for (var i = 0; i < queue.length; i++) {
             var item = queue[i];
             if (forceHiddenIds[item.id]) continue;
+            if (window.FUCKSEATS_ONBOARDING_ACTIVE === true && !item.allowDuringOnboarding) continue;
             queue.splice(i, 1);
             current = item.id;
             try {
@@ -39,7 +38,7 @@
 
         var priority = Number(options && options.priority);
         if (!Number.isFinite(priority)) priority = 0;
-        queue.push({ id: id, showFn: showFn, hideFn: hideFn, priority: priority, sequence: requestSequence++ });
+        queue.push({ id: id, showFn: showFn, hideFn: hideFn, priority: priority, sequence: requestSequence++, allowDuringOnboarding: Boolean(options && options.allowDuringOnboarding) });
         queue.sort(function (a, b) {
             if (a.priority !== b.priority) return b.priority - a.priority;
             return a.sequence - b.sequence;

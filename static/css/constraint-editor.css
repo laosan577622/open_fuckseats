@@ -1,17 +1,6 @@
 .constraint-editor-body { background: #fff; }
-.constraint-editor-body .global-back-button { display: none; }
 @media (min-width: 1101px) {
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] { --header-height: 66px; padding-top: 66px; }
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .app-header { height: 66px; min-height: 66px; padding: 0; background: #ffffffeb; }
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-content { display: block; height: 66px; }
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar { position: relative; height: 66px; padding: 0 24px; justify-content: flex-end; }
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar::after { content: "约束"; position: absolute; left: 50%; top: 22px; transform: translateX(-50%); color: #263143; font-size: 15px; font-weight: 650; }
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .header-titlebar > div:first-child,
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .global-back-button,
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .native-menu-bar,
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .cloud-header-area { display: none !important; }
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .wd-global-link { position: absolute; right: 110px; }
-    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] .context-toolbar-shell { position: absolute; top: 0; left: 96px; right: auto; width: auto; height: 66px; min-height: 66px; padding: 0; border: 0; background: transparent; box-shadow: none; }
+    .constraint-editor-body[data-app-shell="webview"][data-app-platform="macos"] { }
 }
 .constraint-editor-body .constraint-editor-layout { display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(300px, .8fr); min-height: calc(100vh - var(--header-height)); }
 .constraint-editor-main { min-width: 0; padding: 32px clamp(24px, 4vw, 64px); }

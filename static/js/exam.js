@@ -195,7 +195,7 @@
     let labelPhase = null;
     plan.obstacles.forEach(([x, y]) => svg.append(makeSVG('rect', {x: x - .46, y: y - .46, width: .92, height: .92, rx: .14, class: 'exam-podium'})));
     plan.doors.forEach(door => {
-        let y = 2 + 2 * door.offset;
+        let y = plan.geometry === 'desk-cell-grid' && !door.offset ? 1 : 2 + 2 * door.offset;
         if (door.corner.startsWith('back')) y = plan.height - y;
         const x = door.corner.endsWith('left') ? 0 : plan.width;
         svg.append(makeSVG('rect', {x: x - .11, y: y - .55, width: .22, height: 1.1, rx: .11, class: 'exam-door'}));

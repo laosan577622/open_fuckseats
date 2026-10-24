@@ -3,22 +3,8 @@
 
 {% block title %}{% if classroom_group %}{{ classroom_group.name }} - 批量导入学生{% else %}{{ classroom.name }} - 导入 Excel 成绩表{% endif %}{% endblock %}
 {% block body_class %}workflow-page-body import-options-body{% endblock %}
-{% block global_back_button %}{% endblock %}
+{% block back_href %}{% if classroom_group %}{% url 'classroom_group_students' classroom_group.pk %}{% else %}{% url 'classroom_detail' classroom.pk %}?cloud_sync=import-return{% endif %}{% endblock %}{% block back_label %}{% if classroom_group %}返回学生管理{% else %}返回班级{% endif %}{% endblock %}
 
-{% block actions %}
-<div class="context-toolbar-panels">
-    <div class="context-toolbar-row context-toolbar-panel active" data-toolbar-panel="import">
-        <div class="toolbar-group">
-            {% if classroom_group %}
-            <a href="{% url 'classroom_group_students' classroom_group.pk %}" class="btn btn-secondary">返回学生管理</a>
-            {% else %}
-            <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=import-return" class="btn btn-secondary">返回班级</a>
-            {% endif %}
-            <span class="toolbar-group-label">导航</span>
-        </div>
-    </div>
-</div>
-{% endblock %}
 
 {% block content %}
 {% include "seats/partials/import_students_workspace.html" %}

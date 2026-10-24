@@ -5,14 +5,12 @@ __pycache__/
 *.pyo
 *.pyd
 .Python
-env/
-venv/
-.env
-.DS_Store
+*.egg-info/
+.eggs/
 db.sqlite3
-db.sqlite3-journal
+db.sqlite3-*
 backend/cloud.sqlite3
-backend/cloud.sqlite3-journal
+backend/cloud.sqlite3-*
 backend/improve_data.sqlite3
 backend/improve_data.sqlite3-*
 backend/cloud_config.yaml
@@ -24,7 +22,13 @@ staticfiles/
 *.spec
 build/
 dist/
-artifacts/*
+/artifacts/
+
+# 本地日志
+/logs/
+*.log
+*.log.*
+
 # Flask stuff:
 instance/
 .webassets-cache
@@ -61,6 +65,11 @@ celerybeat-schedule
 
 # Environments
 .env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+*.env.local
 .venv
 env/
 venv/
@@ -80,6 +89,7 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+.ruff_cache/
 .dmypy.json
 dmypy.json
 
@@ -92,9 +102,26 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
+# 测试缓存与报告；正式测试源码继续纳入版本管理
+.pytest_cache/
+.hypothesis/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+coverage/
+.nyc_output/
+test-results/
+playwright-report/
+blob-report/
+
 # Editors
 .vscode/
 .idea/
+/.claude/
+/.codex/
 *.swp
 *.swo
 
@@ -118,8 +145,16 @@ _mac_dmg_stage/
 /locks/
 /state/
 /temp/
+/tmp/
 
 # Frontend
 node_modules/
-dist/
-npm-debug.log
+.cache/
+.vite/
+.vite-temp/
+.eslintcache
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*

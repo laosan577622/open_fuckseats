@@ -2,22 +2,8 @@
 
 {% block title %}{% if classroom_group %}自动排序模式{% else %}自定义策略设置{% endif %} - {% if classroom_group %}{{ classroom_group.name }}{% else %}{{ classroom.name }}{% endif %}{% endblock %}
 {% block body_class %}workflow-page-body custom-sort-body{% endblock %}
-{% block global_back_button %}{% endblock %}
+{% block back_href %}{% if classroom_group %}{% url 'classroom_group_detail' classroom_group.pk %}{% else %}{% url 'classroom_detail' classroom.pk %}?cloud_sync=return{% endif %}{% endblock %}{% block back_label %}{% if classroom_group %}返回班级组{% else %}返回班级{% endif %}{% endblock %}
 
-{% block actions %}
-<div class="context-toolbar-panels">
-    <div class="context-toolbar-row context-toolbar-panel active" data-toolbar-panel="custom-sort">
-        <div class="toolbar-group">
-            {% if classroom_group %}
-            <a href="{% url 'classroom_group_detail' classroom_group.pk %}" class="btn btn-secondary">返回班级组</a>
-            {% else %}
-            <a href="{% url 'classroom_detail' classroom.pk %}?cloud_sync=return" class="btn btn-secondary">返回班级</a>
-            {% endif %}
-            <span class="toolbar-group-label">导航</span>
-        </div>
-    </div>
-</div>
-{% endblock %}
 
 {% block content %}
 <section class="custom-sort-page">

@@ -1,0 +1,792 @@
+/* ===== 设置页：SideBar 导航 + 分组列表（澄光 PC） ===== */
+.settings-app {
+    display: grid;
+    grid-template-columns: var(--sidebar, 240px) minmax(0, 1fr);
+    height: calc(100vh - var(--header-height));
+    background: var(--bg);
+}
+
+/* 侧栏固定在窗口左侧：surface 底，与内容之间不画分隔线 */
+.settings-rail {
+    background: var(--surface);
+    overflow-y: auto;
+    scrollbar-width: none;
+}
+.settings-rail::-webkit-scrollbar { display: none; }
+.settings-rail-inner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4, 16px);
+    min-height: 100%;
+    padding: var(--space-2, 8px);
+}
+
+.settings-account-chip {
+    display: flex;
+    align-items: center;
+    gap: var(--space-3, 12px);
+    width: 100%;
+    min-height: var(--row-2, 64px);
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    border: 0;
+    border-radius: var(--radius-md, 12px);
+    background: var(--surface-sunken);
+    color: var(--ink);
+    text-align: left;
+    cursor: pointer;
+}
+.settings-account-chip:hover { background: var(--fill-hover); }
+.settings-account-chip:active { background: var(--fill-pressed); }
+.settings-account-avatar {
+    position: relative;
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    overflow: hidden;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--brand-tint);
+    color: var(--brand-text);
+}
+.settings-account-avatar svg { width: var(--icon-md, 20px); height: var(--icon-md, 20px); transition: opacity var(--duration-fast) var(--ease-standard); }
+.settings-account-avatar.has-image { background: transparent; }
+.settings-account-avatar-image { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; visibility: hidden; }
+.settings-account-avatar.has-image svg { opacity: 0; }
+.settings-account-avatar.has-image .settings-account-avatar-image { opacity: 1; visibility: visible; }
+.settings-account-copy { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-account-copy strong,
+.settings-account-copy small { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.settings-account-copy strong { color: var(--ink); font-size: 14px; line-height: 20px; font-weight: 500; }
+.settings-account-copy small { color: var(--ink-secondary); font-size: 12px; line-height: 16px; }
+
+/* 导航项：对应 lc-side__item，行高随平台密度 */
+.settings-nav { display: flex; flex-direction: column; gap: 2px; }
+.settings-nav-item {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: var(--space-3, 12px);
+    height: var(--app-row, 36px);
+    padding: 0 var(--space-3, 12px);
+    border: 0;
+    border-radius: var(--radius-md, 12px);
+    background: transparent;
+    color: var(--ink);
+    font-size: 14px;
+    line-height: 20px;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.settings-nav-item svg { flex: none; width: var(--icon-md, 20px); height: var(--icon-md, 20px); color: var(--ink-secondary); }
+.settings-nav-item:hover { background: var(--fill-hover); }
+.settings-nav-item:active { background: var(--fill-pressed); }
+.settings-nav-item.active { background: var(--brand-tint); color: var(--brand-text); font-weight: 500; }
+.settings-nav-item.active svg { color: var(--brand-text); }
+.settings-nav.is-app-liquid > .app-liquid { background: var(--brand-tint) !important; box-shadow: none !important; }
+
+.settings-rail-footer {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    margin-top: auto;
+    padding: var(--space-2, 8px) 0;
+    color: var(--ink-tertiary);
+    font-size: 12px;
+    line-height: 16px;
+}
+
+/* ===== 内容画布 ===== */
+.settings-canvas {
+    overflow-y: auto;
+    padding: var(--space-8, 32px) var(--space-8, 32px) var(--space-16, 64px);
+    scroll-behavior: smooth;
+}
+.settings-panel { display: none; max-width: 680px; margin: 0 auto; }
+.settings-panel.active { display: block; animation: settings-panel-in var(--duration-base, 250ms) var(--ease-standard) backwards; }
+@keyframes settings-panel-in { from { opacity: 0; transform: translateY(8px); } }
+
+.settings-panel-head { display: flex; align-items: center; gap: var(--space-4, 16px); margin-bottom: var(--space-6, 24px); }
+.settings-panel-glyph {
+    flex: none;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+    overflow: hidden;
+    border-radius: var(--radius-md, 12px);
+    background: var(--brand-tint);
+    color: var(--brand-text);
+}
+.settings-panel-glyph svg { width: var(--icon-lg, 24px); height: var(--icon-lg, 24px); }
+.settings-panel-head h1 { margin: 0; color: var(--ink); font-size: 22px; line-height: 28px; font-weight: 700; }
+.settings-panel-head p { margin: 2px 0 0; color: var(--ink-secondary); font-size: 14px; line-height: 20px; }
+
+/* ===== 分组列表：对应 lc-list，行间分隔线从文字处开始 ===== */
+.settings-list { display: flex; flex-direction: column; gap: var(--space-4, 16px); }
+.settings-list-group {
+    overflow: hidden;
+    padding: var(--space-1, 4px);
+    border: 0;
+    border-radius: var(--radius-lg, 20px);
+    background: var(--surface);
+    box-shadow: var(--shadow-1);
+}
+.settings-row {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-4, 16px);
+    min-height: var(--row-1, 48px);
+    padding: var(--space-3, 12px);
+    border-radius: 16px;
+}
+.settings-row + .settings-row::before,
+.settings-row + .settings-row-stack::before,
+.settings-row-stack + .settings-row::before,
+.settings-row-stack + .settings-row-stack::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: var(--space-3, 12px);
+    right: var(--space-3, 12px);
+    height: 1px;
+    background: var(--divider);
+}
+.settings-row-stack { flex-direction: column; align-items: stretch; gap: var(--space-3, 12px); }
+.settings-row-main { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.settings-row-main label { color: var(--ink); font-size: 15px; line-height: 22px; font-weight: 500; }
+.settings-row-desc { color: var(--ink-secondary); font-size: 13px; line-height: 18px; }
+.settings-row-status { margin-top: 2px; color: var(--ink-secondary); font-size: 12px; line-height: 16px; }
+.settings-row-status-error,
+.settings-list-group-danger .settings-row-main label { color: var(--danger); }
+.settings-row-trail { display: flex; flex: none; align-items: center; gap: var(--space-3, 12px); }
+
+/* ===== 开关：对应 lc-switch ===== */
+.settings-switch { position: relative; display: inline-flex; flex: none; align-items: center; cursor: pointer; user-select: none; }
+.settings-switch input[type="checkbox"] { position: absolute; width: 1px; height: 1px; margin: 0; opacity: 0; pointer-events: none; }
+.settings-switch-track {
+    display: flex;
+    align-items: center;
+    width: 48px;
+    height: 28px;
+    padding: 2px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--stroke-control, rgba(0, 0, 0, .2));
+    transition: background-color var(--duration-base) var(--ease-standard);
+}
+.settings-switch-thumb {
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-full, 9999px);
+    background: var(--surface-raised, #fff);
+    box-shadow: var(--shadow-2);
+    transition: transform var(--duration-spring) var(--ease-spring), width var(--duration-fast) var(--ease-standard);
+}
+.settings-switch input[type="checkbox"]:checked + .settings-switch-track { background: var(--brand); }
+.settings-switch input[type="checkbox"]:checked + .settings-switch-track .settings-switch-thumb { transform: translateX(20px); }
+.settings-switch input[type="checkbox"]:focus-visible + .settings-switch-track { box-shadow: var(--focus-ring); }
+
+/* ===== 选项卡片：选中态描边画在 box-shadow 上，不占布局 ===== */
+.settings-segment,
+.theme-picker { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--space-3, 12px); width: 100%; }
+.settings-segment-option { position: relative; display: block; cursor: pointer; }
+.settings-segment-option input[type="radio"] { position: absolute; opacity: 0; pointer-events: none; }
+.settings-segment-card,
+.theme-card {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2, 8px);
+    min-height: 88px;
+    padding: var(--space-3, 12px) var(--space-4, 16px);
+    border: 0;
+    border-radius: var(--radius-md, 12px);
+    background: var(--surface-sunken);
+    box-shadow: inset 0 0 0 1px transparent;
+    transition: background-color var(--duration-fast) var(--ease-standard), box-shadow var(--duration-base) var(--ease-standard);
+}
+.settings-segment-card strong { color: var(--ink); font-size: 14px; line-height: 20px; font-weight: 500; }
+.settings-segment-card small { color: var(--ink-secondary); font-size: 12px; line-height: 18px; }
+.settings-segment-option:hover .settings-segment-card,
+.theme-card:hover { background: var(--fill-hover); }
+.settings-segment-option input[type="radio"]:checked + .settings-segment-card { background: var(--brand-tint); box-shadow: inset 0 0 0 1.5px var(--brand); }
+.settings-segment-option input[type="radio"]:checked + .settings-segment-card strong { color: var(--brand-text); }
+.settings-segment-option input[type="radio"]:focus-visible + .settings-segment-card { box-shadow: var(--focus-ring); }
+
+.theme-card { position: relative; cursor: pointer; }
+.theme-card.active { background: var(--surface-sunken); box-shadow: inset 0 0 0 1.5px var(--tc-color); }
+.theme-card-header { display: flex; align-items: center; gap: var(--space-3, 12px); }
+.theme-card-swatch { position: relative; flex: none; width: 32px; height: 32px; border-radius: var(--radius-full, 9999px); background: var(--tc-color); }
+.theme-card.active .theme-card-swatch::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 14px;
+    height: 14px;
+    transform: translate(-50%, -50%);
+    background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6L9 17l-5-5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.theme-card-title { color: var(--ink); font-size: 14px; line-height: 20px; font-weight: 500; }
+.theme-card.active .theme-card-title { color: var(--tc-color); }
+.theme-card-desc { color: var(--ink-secondary); font-size: 12px; line-height: 18px; }
+
+/* 登录/未登录容器内的分组与 .settings-list 保持同款 18px 间距 */
+#cloud-logged-in .settings-list-group + .settings-list-group,
+#cloud-not-logged-in .settings-list-group + .settings-list-group {
+    margin-top: 18px;
+}
+
+/* ===== 云服务 ===== */
+.cloud-settings-login-icon,
+.cloud-settings-login-icon svg { display: block; width: 18px; height: 18px; }
+
+.cloud-account-info {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+}
+
+.cloud-avatar-wrap { flex-shrink: 0; }
+.cloud-settings-avatar {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: block;
+}
+
+.cloud-settings-avatar-placeholder {
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--brand-tint);
+    color: var(--brand);
+}
+
+.cloud-settings-avatar-placeholder svg { width: 22px; height: 22px; }
+
+.cloud-account-detail { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.cloud-nickname { font-size: 15px; font-weight: 650; color: var(--ink); }
+.cloud-email { font-size: 12.5px; color: var(--ink-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.cloud-tier-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11.5px;
+    font-weight: 650;
+    background: var(--brand-tint);
+    color: var(--brand);
+    white-space: nowrap;
+}
+
+.cloud-tier-badge.cloud-tier-pro { background: var(--accent-amber-soft); color: var(--accent-amber-text); }
+.cloud-tier-badge.cloud-tier-max { background: var(--brand-tint); color: var(--brand-text); }
+
+.cloud-small-btn { padding: 6px 14px; font-size: 12.5px; }
+
+.cloud-manager-heading,
+.local-open-api-heading {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 16px;
+    width: 100%;
+}
+
+.cloud-manager-toolbar { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+
+.cloud-classroom-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    width: 100%;
+}
+
+.cloud-classroom-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 13px 14px;
+    border: 1px solid var(--divider);
+    border-radius: 13px;
+    background: var(--surface-sunken);
+}
+
+.cloud-classroom-main { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.cloud-classroom-title-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cloud-classroom-title-line strong {
+    overflow: hidden;
+    color: var(--ink);
+    font-size: 14px;
+    font-weight: 650;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cloud-classroom-state {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border-radius: 999px;
+    background: var(--fill-hover);
+    color: var(--ink-secondary);
+    font-size: 11px;
+    font-weight: 600;
+}
+
+.cloud-classroom-state.is-local { background: var(--success-tint); color: var(--success); }
+.cloud-classroom-state.is-remote { background: var(--brand-tint); color: var(--brand); }
+
+.cloud-classroom-meta {
+    overflow: hidden;
+    color: var(--ink-secondary);
+    font-size: 12px;
+    line-height: 1.45;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.cloud-classroom-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; flex-wrap: wrap; }
+.cloud-classroom-delete-btn { color: var(--danger); }
+
+.cloud-classroom-loading,
+.cloud-classroom-empty {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 9px;
+    min-height: 76px;
+    padding: 16px;
+    border: 1px dashed rgba(0, 0, 0, 0.11);
+    border-radius: 13px;
+    color: var(--ink-secondary);
+    font-size: 13px;
+    text-align: center;
+}
+
+.cloud-classroom-empty { flex-direction: column; }
+.cloud-classroom-empty strong { color: var(--ink); font-size: 14px; }
+.cloud-classroom-error { border-color: var(--danger-tint); background: var(--danger-tint); }
+
+.cloud-login-spinner {
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: settingsSpin 0.8s linear infinite;
+    display: inline-block;
+}
+
+@keyframes settingsSpin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.cloud-manager-modal-overlay {
+    z-index: 12000;
+    padding: 20px;
+    background: var(--scrim);
+}
+
+.cloud-manager-modal {
+    width: min(520px, 100%);
+    max-height: min(680px, calc(100vh - 40px));
+    padding: 22px;
+    border: 0;
+    border-radius: var(--radius-xl, 28px);
+    background: var(--glass-fill-float);
+    -webkit-backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    backdrop-filter: blur(var(--blur-lg)) saturate(var(--glass-saturate));
+    box-shadow: var(--shadow-float);
+    overflow: auto;
+}
+
+.cloud-manager-modal .modal-header { align-items: flex-start; margin-bottom: 16px; }
+.cloud-manager-modal .modal-header h3,
+.cloud-manager-delete-modal h3 { margin: 0; color: var(--ink); font-size: 20px; letter-spacing: -0.02em; }
+.cloud-manager-modal .modal-header p,
+.cloud-manager-delete-modal p { margin: 5px 0 0; color: var(--ink-secondary); font-size: 13px; line-height: 1.55; }
+
+.cloud-manager-local-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    max-height: 390px;
+    overflow: auto;
+}
+
+.cloud-manager-local-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 13px;
+    border: 1px solid var(--divider);
+    border-radius: 13px;
+    background: var(--surface-sunken);
+    cursor: pointer;
+}
+
+.cloud-manager-local-option:has(input:checked) {
+    border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.46);
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.055);
+}
+
+.cloud-manager-local-option input { width: 18px; height: 18px; accent-color: var(--brand); }
+
+.cloud-manager-local-copy { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.cloud-manager-local-copy strong { overflow: hidden; color: var(--ink); font-size: 14px; text-overflow: ellipsis; white-space: nowrap; }
+.cloud-manager-local-copy span { color: var(--ink-secondary); font-size: 12px; }
+
+.cloud-manager-upload-result {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px;
+    padding: 12px 13px;
+    border: 1px solid var(--divider);
+    border-radius: 13px;
+    background: var(--surface-sunken);
+}
+
+.cloud-manager-upload-result > span:first-child { display: flex; flex-direction: column; gap: 3px; }
+.cloud-manager-upload-result strong { color: var(--ink); font-size: 14px; }
+.cloud-manager-upload-result small { color: var(--ink-secondary); font-size: 12px; }
+
+.cloud-manager-result-badge { flex-shrink: 0; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 650; }
+.cloud-manager-upload-result.is-success .cloud-manager-result-badge { background: var(--success-tint); color: var(--success); }
+.cloud-manager-upload-result.is-error .cloud-manager-result-badge { background: var(--danger-tint); color: var(--danger); }
+
+.cloud-manager-modal-actions { margin-top: 18px; }
+.cloud-manager-delete-modal { width: min(420px, 100%); text-align: left; }
+.cloud-manager-delete-modal p { margin-top: 10px; }
+
+.cloud-server-url-row { display: flex; gap: 8px; width: 100%; flex-wrap: wrap; }
+
+.cloud-server-url-input {
+    flex: 1;
+    min-width: 200px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    outline: none;
+    background: var(--surface);
+    color: var(--ink);
+    font-size: 13px;
+}
+
+.cloud-server-url-input:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-tint);
+}
+
+/* ===== 本机 API ===== */
+.local-open-api-setting-inner { gap: 12px; }
+.local-open-api-actions { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+.local-open-api-endpoint {
+    width: 100%;
+    color: var(--ink-secondary);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+    line-height: 1.45;
+    overflow-wrap: anywhere;
+}
+
+.local-open-api-key-panel {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.18);
+    border-radius: 13px;
+    background: rgba(var(--primary-color-rgb, 10, 89, 247), 0.055);
+}
+
+.local-open-api-key-panel > span { display: block; margin-bottom: 8px; color: var(--ink-secondary); font-size: 12px; line-height: 1.45; }
+.local-open-api-key-row { display: flex; align-items: center; gap: 8px; }
+
+.local-open-api-key-row input {
+    flex: 1;
+    min-width: 0;
+    height: 34px;
+    padding: 0 11px;
+    border: 1px solid rgba(0, 0, 0, 0.1);
+    border-radius: 10px;
+    outline: none;
+    background: var(--surface);
+    color: var(--ink);
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    font-size: 12px;
+}
+
+.local-open-api-key-row input:focus {
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-tint);
+}
+
+/* ===== 订阅计划 ===== */
+.subscription-plans-wrap { padding: 0; }
+
+.subscription-plans-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--ink-secondary);
+    font-size: 14px;
+    padding: 40px 0;
+}
+
+.plans-loading-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(var(--primary-color-rgb, 10, 89, 247), 0.15);
+    border-top-color: var(--brand);
+    border-radius: 50%;
+    animation: settingsSpin 0.8s linear infinite;
+}
+
+.subscription-plans-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; }
+
+.plan-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    border: 1px solid var(--divider);
+    background: var(--surface);
+    overflow: hidden;
+    box-shadow: 0 1px 3px var(--fill-hover);
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.plan-card:hover {
+    border-color: rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 14px var(--divider);
+}
+.plan-card.plan-card-current { border-color: var(--brand); box-shadow: 0 0 0 3px var(--brand-tint); }
+.plan-card.plan-card-recommended { border-color: var(--brand); }
+
+.plan-card-badge {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 999px;
+    line-height: 1.6;
+}
+
+.plan-card-badge-current { background: var(--brand-tint); color: var(--brand); }
+
+.plan-card-header { padding: 18px 16px 12px; display: flex; flex-direction: column; gap: 4px; }
+.plan-card-name { font-size: 17px; font-weight: 700; color: var(--ink); }
+.plan-card-current .plan-card-name { color: var(--brand); }
+.plan-card-desc { font-size: 12px; color: var(--ink-secondary); line-height: 1.5; }
+.plan-card-price { font-size: 14px; font-weight: 600; color: var(--ink); margin-top: 4px; }
+
+.plan-card-limits { padding: 0 16px 14px; display: flex; flex-direction: column; gap: 8px; flex: 1; }
+
+.plan-limit-row { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink); line-height: 1.4; }
+.plan-limit-icon { flex-shrink: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+.plan-limit-icon-check { color: var(--success); }
+.plan-limit-icon-cross { color: var(--ink-tertiary); }
+
+.plan-card-footer { padding: 0 16px 16px; margin-top: auto; }
+.plan-card-footer .btn { width: 100%; justify-content: center; font-size: 14px; }
+
+.plan-card-footer .btn-plan-current {
+    background: var(--brand-tint);
+    color: var(--brand);
+    cursor: default;
+    pointer-events: none;
+    border: none;
+}
+
+/* ===== 更新 ===== */
+.setting-version-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 999px;
+    background: var(--brand-tint);
+    color: var(--brand);
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+#manual-check-update-btn { display: flex; align-items: center; gap: 8px; white-space: nowrap; flex-shrink: 0; }
+
+/* ===== 数据与隐私 ===== */
+.data-sharing-retention-select {
+    appearance: none;
+    -webkit-appearance: none;
+    padding: 7px 32px 7px 12px;
+    border-radius: 9px;
+    border: 1.5px solid rgba(0, 0, 0, 0.1);
+    background: var(--surface) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E") no-repeat right 10px center;
+    font-size: 13px;
+    color: var(--ink);
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+}
+
+.data-sharing-retention-select:hover { border-color: rgba(var(--primary-color-rgb, 10, 89, 247), 0.3); }
+.data-sharing-retention-select:focus {
+    outline: none;
+    border-color: var(--brand);
+    box-shadow: 0 0 0 3px var(--brand-tint);
+}
+
+.privacy-card {
+    padding: 16px 18px;
+    border: 1px solid var(--divider);
+    border-radius: 14px;
+    background: var(--surface);
+    box-shadow: 0 1px 3px var(--fill-hover);
+}
+
+.privacy-card-title {
+    font-size: 13px;
+    font-weight: 650;
+    color: var(--ink);
+    margin-bottom: 12px;
+}
+
+.data-sharing-privacy-list { display: flex; flex-direction: column; gap: 8px; }
+
+.data-sharing-privacy-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    line-height: 1.4;
+    color: var(--ink);
+}
+
+.data-sharing-privacy-icon { flex-shrink: 0; width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; }
+.data-sharing-privacy-collect .data-sharing-privacy-icon { color: var(--success); }
+.data-sharing-privacy-no .data-sharing-privacy-icon { color: var(--ink-tertiary); }
+.data-sharing-privacy-no span:last-child { color: var(--ink-secondary); }
+
+/* ===== 关于 ===== */
+.settings-about-icon-lg svg { width: 26px; height: 26px; max-width: 26px; max-height: 26px; }
+
+.settings-about-hero {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 44px 24px 36px;
+    border-radius: 16px;
+    background: var(--surface);
+    border: 1px solid var(--divider);
+    box-shadow: 0 1px 3px var(--fill-hover);
+}
+
+.settings-about-logo {
+    width: 76px;
+    height: 76px;
+    max-width: 76px;
+    max-height: 76px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    border-radius: 20px;
+    background: var(--surface);
+    border: 1px solid var(--divider);
+    box-shadow: 0 2px 8px var(--divider);
+    color: var(--brand);
+    margin-bottom: 4px;
+}
+
+.settings-about-logo svg { width: 44px; height: 44px; max-width: 44px; max-height: 44px; }
+
+.settings-about-name {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--ink);
+    letter-spacing: -0.01em;
+}
+
+.settings-about-meta {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--ink-secondary);
+}
+
+.settings-about-dot { width: 3px; height: 3px; border-radius: 50%; background: var(--ink-secondary); opacity: 0.5; }
+
+.settings-about-link {
+    color: var(--brand);
+    text-decoration: none;
+    font-weight: 550;
+}
+
+.settings-about-link:hover { text-decoration: underline; }
+.settings-about-action { margin-top: 10px; min-width: 160px; justify-content: center; }
+
+/* ===== 响应式：md 及以下导航改为顶部横向胶囊，内容占满宽度 ===== */
+@media (max-width: 839px) {
+    .settings-app { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr); height: auto; min-height: calc(100vh - var(--header-height)); }
+    .settings-rail {
+        position: sticky;
+        top: var(--header-height);
+        z-index: var(--z-sticky, 20);
+        overflow: visible;
+        background: var(--glass-fill-strong);
+        -webkit-backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+        backdrop-filter: blur(var(--blur-md, 30px)) saturate(var(--glass-saturate, 200%));
+    }
+    .settings-rail-inner { gap: var(--space-2, 8px); min-height: 0; padding: var(--space-2, 8px) var(--app-margin, 16px); }
+    .settings-account-chip { display: none; }
+    .settings-nav { flex-direction: row; gap: var(--space-1, 4px); overflow-x: auto; scrollbar-width: none; }
+    .settings-nav::-webkit-scrollbar { display: none; }
+    .settings-nav-item { height: var(--app-control, 32px); padding: 0 var(--space-3, 12px); border-radius: var(--radius-full, 9999px); }
+    .settings-nav-item svg,
+    .settings-rail-footer { display: none; }
+    .settings-canvas { overflow: visible; padding: var(--space-6, 24px) var(--app-margin, 16px) var(--space-12, 48px); }
+
+    .cloud-manager-heading,
+    .local-open-api-heading { flex-direction: column; align-items: stretch; }
+    .cloud-manager-toolbar,
+    .cloud-classroom-actions { justify-content: flex-start; }
+    .cloud-classroom-actions .btn { flex: 1 1 auto; justify-content: center; }
+    .cloud-classroom-meta { white-space: normal; }
+    .local-open-api-actions,
+    .local-open-api-key-row { flex-direction: column; align-items: stretch; }
+    .local-open-api-actions .btn,
+    .local-open-api-key-row .btn { justify-content: center; width: 100%; }
+}
+@media (max-width: 599px) {
+    .settings-segment,
+    .theme-picker { grid-template-columns: 1fr; }
+    .settings-panel-head { gap: var(--space-3, 12px); }
+    .settings-panel-glyph { width: 40px; height: 40px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .settings-panel.active { animation: none; }
+    .settings-switch-track,
+    .settings-switch-thumb,
+    .settings-segment-card,
+    .theme-card { transition: none; }
+}
