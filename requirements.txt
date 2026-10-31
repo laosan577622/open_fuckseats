@@ -5,7 +5,7 @@
 # Linux：通过系统包管理器安装与 Python 匹配的 python3-tk。
 # 验证当前环境：python -m tkinter。鸿蒙黑体由应用资源提供，无需 pip 安装。
 
-Django
+Django==5.2.18
 PyYAML
 certifi
 cryptography

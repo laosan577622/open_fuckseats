@@ -142,7 +142,7 @@
 
         try {
             const detailUrl = `${updateDetailsUrl}?t=${Date.now()}`;
-            const response = await fetch(detailUrl, { cache: 'no-store' });
+            const response = await fetch(detailUrl, { cache: 'no-store', credentials: 'same-origin' });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
             }

@@ -10,7 +10,7 @@ import logging
 import argparse
 import errno
 import socket
-from io import StringIO
+from io import BytesIO, StringIO
 from runtime_bootstrap import ensure_runtime_dependencies
 from desktop_access import ReadAccessRequest, forward_read_access_request, read_access_broker
 from desktop_instance import DesktopInstanceGuard, ExistingInstanceError
@@ -120,6 +120,38 @@ def _start_waitress(application):
     from waitress import serve
 
     serve(application, host=HOST, port=PORT, threads=32)
+
+
+def _check_startup_pages(application):
+    # Exercise the actual template engine before opening the desktop window.
+    # A health response alone cannot detect incompatible template tag libraries.
+    for path in ('/', '/welcome/'):
+        environ = {
+            'REQUEST_METHOD': 'GET', 'PATH_INFO': path, 'SCRIPT_NAME': '',
+            'QUERY_STRING': '', 'SERVER_NAME': HOST, 'SERVER_PORT': str(PORT),
+            'SERVER_PROTOCOL': 'HTTP/1.1', 'REMOTE_ADDR': HOST,
+            'HTTP_HOST': f'{HOST}:{PORT}',
+            'wsgi.version': (1, 0), 'wsgi.url_scheme': 'http',
+            'wsgi.input': BytesIO(), 'wsgi.errors': sys.stderr,
+            'wsgi.multithread': True, 'wsgi.multiprocess': False,
+            'wsgi.run_once': False,
+            'HTTP_X_FUCKSEATS_DESKTOP': desktop_session.request_headers(
+                f'http://{HOST}:{PORT}'
+            ).get('X-FuckSeats-Desktop', ''),
+        }
+        # Use the supplied WSGI app, including its middleware and authentication.
+        status = []
+        response = application(environ, lambda value, headers: status.append(value))
+        try:
+            for _ in response:
+                pass
+        finally:
+            if hasattr(response, 'close'):
+                response.close()
+        if not status or not status[0].startswith('200 '):
+            raise RuntimeError(
+                f'启动页面 {path} 加载失败，请重新安装应用以修复运行依赖。'
+            )
 
 
 def _open_browser(url):
@@ -396,6 +428,7 @@ def _prepare_application(dev_mode):
     except Exception as exc:
         raise RuntimeError(f'数据库迁移失败，应用已停止启动：{exc}') from exc
 
+    _check_startup_pages(application)
     app_url = f'http://{HOST}:{PORT}'
     server_thread = threading.Thread(
         target=_start_waitress, args=(application,), daemon=True,

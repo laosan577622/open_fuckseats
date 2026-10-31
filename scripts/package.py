@@ -20,6 +20,9 @@ OPENAI_ENV_NAMES = (
 
 COMMON_HIDDEN_IMPORTS = (
     'seats.desktop_auth',
+    'seats.drop_views',
+    'buxiang_drop_sdk',
+    'buxiang_drop_sdk.drop_client',
     'tkinter',
     'tkinter.ttk',
     'tkinter.messagebox',

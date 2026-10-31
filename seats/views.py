@@ -163,8 +163,16 @@ def app_manifest_redirect(request):
     return _redirect_preserving_query(request, desktop_runtime.get_update_manifest_url())
 
 
-def update_details_redirect(request):
-    return _redirect_preserving_query(request, desktop_runtime.get_update_details_url())
+@require_http_methods(['GET'])
+def update_details(request):
+    try:
+        content = desktop_runtime.fetch_update_details()
+        response = HttpResponse(content, content_type='text/plain; charset=utf-8')
+    except RuntimeError as exc:
+        response = HttpResponse(str(exc), status=502, content_type='text/plain; charset=utf-8')
+    response['Cache-Control'] = 'no-store'
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 
 @require_http_methods(['GET'])
@@ -16910,6 +16918,7 @@ def _cloud_callback_done_page(success, error_detail=None):
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
+<script src="/static/js/branding.js?v=1.0"></script>
 <title>{title} - FuckSeats</title>
 <style>
 *{{margin:0;padding:0;box-sizing:border-box}}

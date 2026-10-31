@@ -3,9 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
+    {% load static %}
+    <script src="{% static 'js/branding.js' %}?v=1.1"></script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}不想排座位{% endblock %}</title>
-    {% load static %}
     <link rel="icon" type="image/svg+xml" href="{% static 'favicon.svg' %}">
     <link rel="stylesheet" href="{% static 'vendor/lucent/tokens.css' %}?v=1">
     <link rel="stylesheet" href="{% static 'vendor/lucent/bundle.css' %}?v=1">
@@ -38,7 +39,8 @@
     {{ onboarding_bootstrap|json_script:"onboarding-bootstrap" }}
     <script src="{% static 'js/onboarding.js' %}?v=4.7"></script>
     {% if not is_onboarding %}<script src="{% static 'js/theme.js' %}?v=1.2"></script>
-    <script src="{% url 'frontend_store_js' %}?v=1.0"></script>{% endif %}
+    <script src="{% url 'frontend_store_js' %}?v=1.0"></script>
+    <script>if (window.AppBranding) window.AppBranding.syncStore();</script>{% endif %}
 </head>
 
 <body class="lc-page lc-page--desktop {% block body_class %}{% endblock %}" data-app-shell="{{ app_runtime.shell }}" data-app-platform="{{ app_runtime.platform }}" data-app-version="{{ app_runtime.version }}">
@@ -216,10 +218,10 @@
     <script src="{% static 'js/popup_manager.js' %}?v=1.2"></script>
     <script src="{% static 'js/dialog.js' %}?v=1.2"></script>
     <script src="{% static 'js/cloud.js' %}?v=2.1"></script>
-    <script src="{% static 'js/data_sharing.js' %}?v=1.0"></script>
+    <script src="{% static 'js/data_sharing.js' %}?v=1.1"></script>
     <script src="{% static 'js/toast.js' %}?v=2.0"></script>
-    <script src="{% static 'js/update.js' %}?v=3.5"></script>
-    <script src="{% static 'js/client_control.js' %}?v=1.1"></script>
+    <script src="{% static 'js/update.js' %}?v=3.6"></script>
+    <script src="{% static 'js/client_control.js' %}?v=1.2"></script>
     <script src="{% static 'js/effects.js' %}?v=2.2"></script>
     <script src="{% static 'js/desktop_bridge.js' %}?v=20260810"></script>
     <script src="{% static 'js/main.js' %}?v=1.15"></script>
@@ -258,7 +260,7 @@
             <p class="ds-prompt-footnote">你随时可以在「设置」中更改此选项</p>
         </div>
     </div>
-    <script src="{% static 'js/data_sharing_prompt.js' %}?v=4.6"></script>
+    <script src="{% static 'js/data_sharing_prompt.js' %}?v=4.7"></script>
     <script src="{% static 'js/cloud_header.js' %}?v=1.0"></script>
     <div id="qq-group-overlay" style="display:none">
         <div class="qq-group-backdrop"></div>

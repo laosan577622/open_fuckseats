@@ -137,6 +137,11 @@ def normalize_client_control(payload: Any) -> dict[str, Any]:
             'mode': _safe_text(raw.get('mode'), default_item['mode'], 20) if raw.get('mode') in {'hide', 'disable'} else default_item['mode'],
             'message': _safe_text(raw.get('message'), default_item['message'], 180),
         }
+        if name == 'drop':
+            explicit = (payload.get('features') or {}).get('drop') if isinstance(payload.get('features'), dict) else None
+            enabled = explicit if isinstance(explicit, bool) else explicit.get('enabled') if isinstance(explicit, dict) else None
+            features[name]['enabled'] = enabled is True and payload.get('enabled', True) is True
+            features[name]['mode'] = 'hide'
     merged['features'] = features
 
     experiments = {}
@@ -193,6 +198,17 @@ def normalize_client_control(payload: Any) -> dict[str, Any]:
         for key in ('product_website', 'developer_website', 'feedback_url')
     }
     merged['about'] = normalized_about
+    default_brand = defaults['branding']['no_fuck_mode']
+    branding = payload.get('branding') if isinstance(payload.get('branding'), dict) else {}
+    brand = branding.get('no_fuck_mode') if isinstance(branding.get('no_fuck_mode'), dict) else {}
+    brand_about = brand.get('about') if isinstance(brand.get('about'), dict) else {}
+    merged['branding'] = {'no_fuck_mode': {
+        'english_name': _safe_text(brand.get('english_name'), default_brand['english_name'], 80) or default_brand['english_name'],
+        'product_name': _safe_text(brand.get('product_name'), default_brand['product_name'], 80) or default_brand['product_name'],
+        'product_website': _safe_url(brand.get('product_website'), default_brand['product_website']),
+        'about': {key: _safe_text(brand_about.get(key), value, 600 if key == 'product_description' else 240)
+                  for key, value in default_brand['about'].items()},
+    }}
     return merged
 
 
@@ -299,6 +315,7 @@ def resolve_client_control(config: dict[str, Any], client_id: str) -> dict[str, 
         'feature_flags': feature_flags,
         'experiments': resolved_experiments,
         'about': copy.deepcopy(config.get('about') or DEFAULT_CLIENT_CONTROL['about']),
+        'branding': copy.deepcopy(config.get('branding') or DEFAULT_CLIENT_CONTROL['branding']),
     }
 
 
@@ -306,6 +323,9 @@ def get_resolved_client_control(*, force: bool = False) -> dict[str, Any]:
     config, source = load_client_control_config(force=force)
     resolved = resolve_client_control(config, get_or_create_client_control_id())
     resolved['source'] = source
+    if source != 'remote':
+        resolved['feature_flags']['drop'] = False
+        resolved['features']['drop'] = {**resolved['features'].get('drop', {}), 'available': False, 'enabled': False, 'mode': 'hide'}
     return resolved
 
 

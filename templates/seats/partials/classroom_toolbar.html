@@ -105,6 +105,13 @@
                     </div>
                 </div>
             </div>
+            {% if classroom.pk %}
+            <button type="button" class="classroom-toolbar-button classroom-drop-button" id="btn-drop-classroom"
+                data-client-feature="drop" data-client-feature-mode="hide" hidden
+                data-drop-url="{% url 'drop_classroom' classroom.pk %}" title="用不想班管投送当前座次图" aria-label="Drop，投送当前座次图">
+                <span class="cw-ico classroom-drop-icon" aria-hidden="true"></span>Drop
+            </button>
+            {% endif %}
             {# 扩展入口收起时的替身：转调右侧原按钮，保留它们各自的打开逻辑 #}
             <div class="menu-dropdown classroom-toolbar-menu classroom-toolbar-more" data-menu-root>
                 <button type="button" class="classroom-toolbar-button classroom-toolbar-menu-trigger menu-trigger"

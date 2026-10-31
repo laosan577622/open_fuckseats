@@ -27,6 +27,7 @@ DEFAULT_UPDATE_DETAILS_URL = "https://apps.577622.xyz/api/user_a6d12cebda652894/
 MACOS_UPDATE_DETAILS_URL = "https://apps.577622.xyz/api/user_a6d12cebda652894/pgth9eyr8uf6/update.txt"
 OFFICIAL_RELEASE_API_URL = "https://api.github.com/repos/laosan577622/open_fuckseats/releases/tags/v{}"
 MAX_UPDATE_JSON_BYTES = 1024 * 1024
+MAX_UPDATE_DETAILS_BYTES = 256 * 1024
 LOCAL_RELEASE_MANIFEST_RELATIVE_PATHS = (
     ("runtime", "release.json"),
     ("website", "public", "api.json"),
@@ -309,6 +310,34 @@ def fetch_json(url, timeout=8):
         if content.lstrip().startswith(b"<"):
             raise RuntimeError(f"更新服务（{hostname}）返回了 HTML 页面，可能被访问规则拦截或服务异常。") from exc
         raise RuntimeError(f"更新服务（{hostname}）返回的 JSON 格式无效：{exc}") from exc
+
+
+def fetch_update_details(timeout=8):
+    url = get_update_details_url()
+    request = urllib.request.Request(add_cache_busting_query(url), headers={
+        'User-Agent': f'FuckSeatsDesktop/{get_current_version()}',
+        'Accept': '*/*', 'Cache-Control': 'no-cache',
+    })
+    try:
+        with _open_update_url(request, timeout=timeout) as response:
+            content = response.read(MAX_UPDATE_DETAILS_BYTES + 1)
+            content_type = response.headers.get('Content-Type', '').lower()
+    except (urllib.error.URLError, OSError) as exc:
+        raise _update_request_error(exc, url, timeout) from exc
+    if len(content) > MAX_UPDATE_DETAILS_BYTES:
+        raise RuntimeError('更新说明超过 256 KB，请稍后重试。')
+    if 'text/html' in content_type or content.lstrip().lower().startswith((b'<!doctype', b'<html')):
+        raise RuntimeError('更新服务返回了网页，暂时无法读取更新说明。')
+    try:
+        if content.startswith((b'\xff\xfe', b'\xfe\xff')):
+            return content.decode('utf-16').strip()
+        try:
+            return content.decode('utf-8-sig').strip()
+        except UnicodeDecodeError:
+            # Some published Windows TXT files are GBK despite an UTF-8 header.
+            return content.decode('gb18030').strip()
+    except UnicodeDecodeError as exc:
+        raise RuntimeError('更新说明的文字编码无效。') from exc
 
 
 def _build_progress_payload(received_bytes=0, total_bytes=0):

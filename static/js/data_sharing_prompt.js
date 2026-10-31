@@ -2,6 +2,8 @@
     var PROMPT_SEEN_KEY = 'fuckseats_data_sharing_prompt_seen_version';
     var AFTER_ONBOARDING_KEY = 'fuckseats_show_data_sharing_after_onboarding';
     var promptVisible = false;
+    var promptVersion = '';
+    var savingDecision = false;
 
     function getCurrentVersion() {
         var version = '0.0.0';
@@ -38,19 +40,19 @@
     }
 
     function persistPromptDecision(body) {
-        var payload = JSON.stringify(body);
-        if (navigator.sendBeacon) {
-            try {
-                var blob = new Blob([payload], { type: 'application/json' });
-                if (navigator.sendBeacon('/cloud/config', blob)) return;
-            } catch(e) {}
-        }
-        fetch('/cloud/config', {
+        var token = document.querySelector('meta[name="csrf-token"]');
+        return fetch('/cloud/config', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: payload,
+            credentials: 'same-origin',
+            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': token ? token.content : '' },
+            body: JSON.stringify(body),
             keepalive: true
-        }).catch(function(){});
+        }).then(function(response) {
+            return response.json().then(function(data) {
+                if (!response.ok || data.status !== 'success') throw new Error(data.message || '无法保存数据共享选项');
+                return data.data_sharing || {};
+            });
+        });
     }
 
     function showDataSharingPrompt() {
@@ -63,17 +65,25 @@
             overlay.style.display = '';
         }
 
-        function dismiss(enable) {
-            var version = getCurrentVersion();
+        async function dismiss(enable) {
+            if (savingDecision) return;
+            savingDecision = true;
+            var version = promptVersion || getCurrentVersion();
             var body = { data_sharing_prompt_seen_version: version };
             if (enable) body.data_sharing_enabled = true;
-
-            markPromptSeen(version);
-            persistPromptDecision(body);
-
-            if (enable && window.DataSharing && DataSharing.setEnabled) {
-                DataSharing.setEnabled(true).catch(function(){});
+            var controls = overlay.querySelectorAll('button');
+            controls.forEach(function(button) { button.disabled = true; });
+            try {
+                await persistPromptDecision(body);
+            } catch(error) {
+                if (typeof window.showToast === 'function') window.showToast('未能保存选择，请重试');
+                return;
+            } finally {
+                savingDecision = false;
+                controls.forEach(function(button) { button.disabled = false; });
             }
+            markPromptSeen(version);
+            if (enable && window.DataSharing && window.DataSharing.refreshConfig) window.DataSharing.refreshConfig().catch(function(){});
 
             promptVisible = false;
             overlay.style.display = 'none';
@@ -95,11 +105,12 @@
     }
 
     function requestDataSharingPrompt(delayMs) {
-        fetch('/cloud/config')
-            .then(function(r) { return r.json(); })
+        fetch('/cloud/config', { credentials: 'same-origin', cache: 'no-store' })
+            .then(function(r) { if (!r.ok) throw new Error('config unavailable'); return r.json(); })
             .then(function(data) {
                 var ds = data.data_sharing || {};
-                if (ds.show_prompt && getLocalSeenVersion() !== getCurrentVersion()) {
+                promptVersion = ds.prompt_version || getCurrentVersion();
+                if (ds.show_prompt && getLocalSeenVersion() !== promptVersion) {
                     setTimeout(showDataSharingPrompt, delayMs == null ? 800 : delayMs);
                 }
             })
@@ -117,6 +128,7 @@
             return;
         }
         if (shouldDeferForOnboarding()) return;
+        if (!['/', '/welcome/'].includes(window.location.pathname)) return;
         requestDataSharingPrompt(800);
     }
 

@@ -1,6 +1,6 @@
 from django.urls import include, path, re_path
 from . import views, wendao
-from . import exam_views
+from . import exam_views, drop_views
 from .client_control import feature_gate
 
 urlpatterns = [
@@ -26,7 +26,7 @@ urlpatterns = [
     path('api/wendao/chat/<int:pk>/', wendao.chat, name='wendao_chat'),
     re_path(r'^open_api(?:/|$)', include('seats.open_api.urls')),
     path('api.json', views.app_manifest_redirect, name='app_manifest_redirect'),
-    path('update.txt', views.update_details_redirect, name='update_details_redirect'),
+    path('update.txt', views.update_details, name='update_details_redirect'),
     path('', views.index, name='index'),
     path('welcome/', views.welcome, name='welcome'),
     path('settings/', views.settings_page, name='settings'),
@@ -130,6 +130,7 @@ urlpatterns = [
     path('classroom/<int:pk>/sync-snapshots/<int:snapshot_id>/delete/', views.delete_local_sync_snapshot, name='delete_local_sync_snapshot'),
     path('classroom/<int:pk>/sync-snapshots/<int:snapshot_id>/export/', views.export_local_sync_snapshot, name='export_local_sync_snapshot'),
     path('classroom/<int:pk>/layout/export/', views.export_seats_file, name='export_seats_file'),
+    path('classroom/<int:pk>/drop/', drop_views.drop_classroom, name='drop_classroom'),
     path('classroom/<int:pk>/layout/import/', views.import_seats_file, name='import_seats_file'),
     path('classroom/<int:pk>/layout/import/sdes/', views.import_sdes, name='import_sdes'),
     path('classroom/<int:pk>/layout/import/bsce/', views.import_bsce_file, name='import_bsce_file'),

@@ -131,6 +131,7 @@ def get_data_sharing_config() -> dict[str, Any]:
         'local_log_retention_days': local_log_retention_days,
         'log_retention_days': local_log_retention_days,
         'show_prompt': should_show_data_sharing_prompt(),
+        'prompt_version': _get_app_version(),
     }
 
 

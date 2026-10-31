@@ -311,6 +311,12 @@ window.DataSharing = (function () {
         setLogRetentionDays: setLogRetentionDays,
         setLocalLogRetentionDays: setLocalLogRetentionDays,
         getConfig: getConfig,
+        refreshConfig: function() {
+            return fetchConfig().then(function(config) {
+                if (isEnabled() && !_flushTimer) startFlushTimer();
+                return config;
+            });
+        },
         isEnabled: isEnabled,
         featureFromPath: featureFromPath
     };

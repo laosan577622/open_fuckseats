@@ -187,6 +187,22 @@
     opacity: var(--opacity-disabled);
     background: transparent;
 }
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-history > a.classroom-toolbar-button {
+    text-decoration: none;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-drop-button,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-drop-button:hover,
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-drop-button:active {
+    color: #fff;
+    background: #0a59f7;
+}
+:root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-drop-button .classroom-drop-icon {
+    color: inherit;
+    background: currentColor;
+    -webkit-mask: url('../img/drop.svg') center / contain no-repeat;
+    mask: url('../img/drop.svg') center / contain no-repeat;
+}
+[data-client-feature="drop"][hidden] { display: none !important; }
 :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-button.is-exam-active,
 :root body.classroom-detail-body[data-app-shell][data-app-platform] .classroom-toolbar-menu.open .classroom-toolbar-menu-trigger {
     background: var(--brand-tint);

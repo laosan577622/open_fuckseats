@@ -28,6 +28,10 @@
 
     function feature(name) {
         const features = state && state.features;
+        if (name === 'drop') {
+            const item = features && features.drop || {};
+            return { ...item, mode: 'hide', available: !!state && state.source === 'remote' && item.available === true };
+        }
         return features && features[name] ? features[name] : { available: true, mode: 'disable', message: '' };
     }
 
@@ -163,6 +167,7 @@
             getExperiment: function (name) { return state && state.experiments ? state.experiments[name] : 'control'; },
             refresh: initialize
         };
+        if (window.AppBranding && typeof window.AppBranding.configure === 'function') window.AppBranding.configure(state.branding);
         applyFeatureAvailability();
         window.dispatchEvent(new CustomEvent('fuckseats:client-control-ready', { detail: state }));
         await checkAnnouncement();

@@ -4,6 +4,12 @@
   "enabled": true,
   "salt": "fuckseats-client-control-v1",
   "features": {
+    "drop": {
+      "enabled": false,
+      "rollout_percentage": 100,
+      "mode": "hide",
+      "message": "Drop 尚未由云控开启"
+    },
     "about_page": {
       "enabled": true,
       "rollout_percentage": 100,
@@ -110,5 +116,20 @@
       "feedback_url": "https://guestbook.577622.xyz/"
     },
     "footer_line": "致力于让班级管理与座位安排更高效、更可靠。"
+  },
+  "branding": {
+    "no_fuck_mode": {
+      "english_name": "BuxiangSeats",
+      "product_name": "不想排座位",
+      "product_website": "https://paizuowei.577622.xyz",
+      "about": {
+        "page_title": "关于应用",
+        "page_subtitle": "了解不想排座位如何帮助学校与教师更高效地管理班级与座位。",
+        "product_tagline": "让班级管理与座位安排更简单高效",
+        "product_description": "不想排座位是一款面向班主任和教务人员的班级管理工具，覆盖班级组、名单导入、布局编辑、自动排座、约束规则、小组管理、自定义排序、多格式导出与云同步。",
+        "hero_label": "不想排座位",
+        "footer_line": "致力于让班级管理与座位安排更高效、更可靠。"
+      }
+    }
   }
 }

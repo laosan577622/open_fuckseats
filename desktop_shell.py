@@ -428,6 +428,18 @@ class DesktopBridge:
     def get_window_state(self):
         return {"maximized": self._window_maximized}
 
+    def _close_window(self):
+        window = self._window
+        if sys.platform == 'darwin':
+            # Cocoa's JS bridge waits for the Python result on a non-daemon
+            # thread. Closing WKWebView before that result is delivered leaves
+            # the thread waiting forever and prevents the process from exiting.
+            timer = threading.Timer(0.15, window.destroy)
+            timer.daemon = True
+            timer.start()
+        else:
+            window.destroy()
+
     def window_action(self, action):
         if self._window is None:
             return {"status": "unavailable"}
@@ -443,7 +455,7 @@ class DesktopBridge:
             else:
                 self._window.maximize()
         elif action == "close":
-            self._window.destroy()
+            self._close_window()
         else:
             return {"status": "error", "message": "未知窗口操作"}
         return {"status": "ok"}
@@ -559,12 +571,12 @@ class DesktopBridge:
             return {'status': 'error'}
         parent.evaluate_js('window.dispatchEvent(new CustomEvent("welcome-file-picked", {detail: ' + json.dumps(result) + '}));')
         self._tutorial_result = None
-        self._window.destroy()
+        self._close_window()
         return {'status': 'selected'}
 
     def cancel_tutorial_file_picker(self):
         if getattr(self, '_tutorial_parent', None) is not None:
-            self._window.destroy()
+            self._close_window()
         return {'status': 'cancelled'}
 
     def sync_native_menu(self, payload=None):

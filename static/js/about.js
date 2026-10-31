@@ -53,7 +53,65 @@
         }
     }
 
+    function initializeBrandingToggle() {
+        const button = document.getElementById('about-branding-toggle');
+        const state = document.getElementById('about-branding-state');
+        if (!button || !state || !window.AppBranding) return;
+        function renderState() {
+            state.textContent = '无 fuck 模式' + (AppBranding.isEnabled() ? '已开启' : '已关闭');
+        }
+        renderState();
+        document.addEventListener('app-branding-changed', renderState);
+        button.addEventListener('click', async function () {
+            if (button.disabled) return;
+            button.disabled = true;
+            try {
+                await AppBranding.refresh();
+                const wasEnabled = AppBranding.isEnabled();
+                const confirmed = await window.showConfirmModal(
+                    wasEnabled
+                        ? '确认后将关闭无 fuck 模式，并在所有界面恢复显示原英文名称。'
+                        : '开启后，所有界面中的原英文名称将显示为 BuxiangSeats。',
+                    { title: wasEnabled ? '开启原名显示？' : '开启无 fuck 模式？', okText: '确认开启', cancelText: '取消' },
+                );
+                if (!confirmed) return;
+                await AppBranding.save(!wasEnabled);
+                if (typeof window.showToast === 'function') window.showToast(!wasEnabled ? '无 fuck 模式已开启' : '已开启原名显示');
+            } catch (error) {
+                if (typeof window.showToast === 'function') window.showToast(error.message || '模式保存失败，请重试');
+            } finally {
+                button.disabled = false;
+            }
+        });
+    }
+
+    function initializeProductDisplay() {
+        const copies = Array.from(document.querySelectorAll('[data-brand-about]')).map(element => ({ element, original: element.textContent }));
+        const website = document.getElementById('about-product-website');
+        const normalUrl = website && website.dataset.externalUrl;
+        function render() {
+            const branding = window.AppBranding;
+            const enabled = !branding || branding.isEnabled();
+            const config = branding && branding.getDisplayConfig ? branding.getDisplayConfig() : { product_name: '不想排座位', product_website: 'https://paizuowei.577622.xyz', about: {} };
+            copies.forEach(({ element, original }) => {
+                const key = element.dataset.brandAbout;
+                const value = key === 'product_name' ? config.product_name : config.about && config.about[key];
+                element.textContent = enabled && typeof value === 'string' ? value : original;
+            });
+            if (website) {
+                const url = enabled ? config.product_website : normalUrl;
+                website.dataset.externalUrl = url;
+                try { website.querySelector('small').textContent = new URL(url).hostname; } catch (_) {}
+            }
+        }
+        render();
+        document.addEventListener('app-branding-changed', render);
+        document.addEventListener('app-branding-config-changed', render);
+    }
+
     function initialize() {
+        initializeBrandingToggle();
+        initializeProductDisplay();
         document.querySelectorAll('[data-external-url]').forEach(function (element) {
             element.addEventListener('click', function () { openExternal(element.dataset.externalUrl); });
         });
