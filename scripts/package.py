@@ -1,5 +1,6 @@
 import json
 import os
+import py_compile
 import shutil
 import subprocess
 import sys
@@ -247,6 +248,137 @@ def _write_staged_release_manifest(stage_dir):
         output.write('\n')
 
 
+def _compile_staged_app_code(stage_dir):
+    """为动态发现的 Django 模块保留相邻 .pyc，绝不修改工作区源码。"""
+    compiled = 0
+    for package in ('seats', 'config'):
+        package_dir = os.path.join(stage_dir, package)
+        if not os.path.isdir(package_dir):
+            continue
+        for directory, _, files in os.walk(package_dir):
+            for filename in files:
+                if not filename.endswith('.py'):
+                    continue
+                source = os.path.join(directory, filename)
+                py_compile.compile(
+                    source, cfile=source + 'c', dfile=os.path.relpath(source, stage_dir),
+                    doraise=True, optimize=0,
+                    invalidation_mode=py_compile.PycInvalidationMode.UNCHECKED_HASH,
+                )
+                os.remove(source)
+                compiled += 1
+    return compiled
+
+
+def _verify_compiled_app_payload(dist_dir):
+    plaintext = []
+    views_bytecode = False
+    for directory, _, files in os.walk(dist_dir):
+        parts = os.path.relpath(directory, dist_dir).split(os.sep)
+        if 'seats' not in parts:
+            continue
+        for filename in files:
+            if filename.endswith('.py'):
+                plaintext.append(os.path.join(directory, filename))
+            if filename == 'views.pyc' and parts[-1] == 'seats':
+                views_bytecode = True
+    if plaintext:
+        raise RuntimeError('安装包仍包含核心 Python 源码：' + ', '.join(plaintext[:5]))
+    if not views_bytecode:
+        raise RuntimeError('安装包缺少 seats/views.pyc，动态模块收集不完整')
+
+
+def _verify_frozen_startup(app_path):
+    """脱离源码目录验证成品，验证结束后关闭进程并清理隔离数据。"""
+    import secrets
+    import socket
+    import tempfile
+    import time
+    import urllib.error
+    import urllib.request
+    from concurrent.futures import ThreadPoolExecutor
+
+    with socket.socket() as connection:
+        if connection.connect_ex(('127.0.0.1', 23948)) == 0:
+            raise RuntimeError('23948 端口已占用，无法执行隔离成品验证')
+    executable = os.path.abspath(app_path)
+    if executable.endswith('.app'):
+        executable = os.path.join(executable, 'Contents', 'MacOS', 'FuckSeats')
+    with tempfile.TemporaryDirectory(prefix='fuckseats-package-check-') as directory:
+        api_key = secrets.token_hex(24)
+        env = {
+            **os.environ, 'FUCKSEATS_DATA_DIR': directory,
+            'FUCKSEATS_DATABASE_KEY': secrets.token_hex(32),
+            'FUCKSEATS_OPEN_API_KEY': api_key,
+            'BROWSER': 'msedge' if _is_windows() else '/usr/bin/true',
+        }
+        env.pop('FUCKSEATS_DATABASE_PATH', None)
+        env.pop('FUCKSEATS_DISABLE_DATABASE_ENCRYPTION', None)
+
+        def request(path, payload=None):
+            headers = {'Authorization': 'Bearer ' + api_key}
+            data = None
+            if payload is not None:
+                data = json.dumps(payload).encode('utf-8')
+                headers['Content-Type'] = 'application/json'
+            req = urllib.request.Request('http://127.0.0.1:23948' + path, data=data, headers=headers)
+            with urllib.request.urlopen(req, timeout=20) as response:
+                if path == '/health/':
+                    return response.read().strip() == b'ok'
+                return json.load(response)
+
+        log_path = os.path.join(directory, 'startup.log')
+        with open(log_path, 'w+b') as log:
+            process = subprocess.Popen([executable, '-dev'], cwd=directory, env=env, stdout=log, stderr=log)
+            try:
+                deadline = time.monotonic() + 120
+                while True:
+                    if process.poll() is not None:
+                        raise RuntimeError('打包程序在启动验证中提前退出')
+                    try:
+                        if request('/health/'):
+                            break
+                    except (OSError, ValueError, urllib.error.URLError):
+                        pass
+                    if time.monotonic() >= deadline:
+                        raise RuntimeError('打包程序启动验证超时')
+                    time.sleep(0.25)
+                with ThreadPoolExecutor(max_workers=4) as pool:
+                    cloud_checks = [pool.submit(request, '/cloud/userinfo') for _ in range(4)]
+                    created = request('/open_api/tools/execute', {
+                        'tool': 'create_classroom', 'arguments': {'name': '成品隔离验证', 'rows': 2, 'cols': 3},
+                    })
+                    classroom_id = created['result']['classroom']['id']
+                    operations = [
+                        ('add_students_batch', {'students': [{'name': '验证甲'}, {'name': '验证乙'}]}),
+                        ('arrange_seats', {'mode': 'random'}),
+                        ('create_snapshot', {'name': '成品验证快照'}),
+                        ('validate_seating', {}),
+                    ]
+                    for tool, arguments in operations:
+                        result = request('/open_api/tools/execute', {
+                            'tool': tool, 'classroom_id': classroom_id, 'arguments': arguments,
+                        })
+                        if result.get('status') != 'ok' or (tool == 'validate_seating' and not result['result']['ok']):
+                            raise RuntimeError('成品核心操作验证失败：' + tool)
+                    for check in cloud_checks:
+                        check.result()
+                print('成品独立启动、数据库迁移、并发云状态、排座与快照验证通过。', flush=True)
+            except Exception as error:
+                log.flush()
+                with open(log_path, 'r', encoding='utf-8', errors='replace') as source:
+                    details = source.read()[-4000:]
+                raise RuntimeError(f'{error}\n{details}') from error
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=10)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=10)
+
+
 def _remove_embedded_databases(dist_root):
     if not os.path.exists(dist_root):
         return []
@@ -306,7 +438,11 @@ def main():
     SPEC_FILE = os.path.join(BASE_DIR, 'FuckSeats.spec')
     STAGE_DIR = os.path.join(BASE_DIR, '_data_stage')
     DATA_DIRS = ['templates', 'static', 'seats', 'runtime', 'config', 'plugins', 'skill']
-    DB_EXCLUDE_PATTERNS = ['*.sqlite3', '*.sqlite', '*.db']
+    DATA_EXCLUDE_PATTERNS = [
+        '*.sqlite3', '*.sqlite', '*.db', '__pycache__', '*.pyc', '*.pyo',
+        'tests', 'test', '__tests__', 'tests.py', 'test_*.py', 'tests_*.py',
+        '.pytest_cache', '.DS_Store',
+    ]
 
     print("正在清理旧构建文件...", flush=True)
     if os.path.exists(DIST_DIR):
@@ -346,11 +482,13 @@ def main():
         shutil.copytree(
             src_dir,
             dst_dir,
-            ignore=shutil.ignore_patterns(*DB_EXCLUDE_PATTERNS),
+            ignore=shutil.ignore_patterns(*DATA_EXCLUDE_PATTERNS),
         )
         staged_data_dirs[data_dir] = dst_dir
 
     _write_staged_release_manifest(STAGE_DIR)
+    compiled = _compile_staged_app_code(STAGE_DIR)
+    print(f'已将 {compiled} 个核心 Python 文件编译为无源码 .pyc。', flush=True)
     staged_font_dir = _stage_startup_font(BASE_DIR, STAGE_DIR)
 
     data_args = ['--add-data', f'{staged_font_dir}{os.pathsep}fonts']
@@ -367,6 +505,9 @@ def main():
         subprocess.check_call(cmd, cwd=BASE_DIR)
         removed_unwanted_dirs = _remove_project_backend_payload(DIST_DIR)
         removed_db_files = _remove_embedded_databases(DIST_DIR)
+        _verify_compiled_app_payload(DIST_DIR)
+        if os.getenv('FUCKSEATS_VERIFY_PACKAGE') == '1':
+            _verify_frozen_startup(_build_output_path(DIST_DIR))
         print("-" * 30, flush=True)
         print("打包成功！", flush=True)
         if removed_unwanted_dirs:

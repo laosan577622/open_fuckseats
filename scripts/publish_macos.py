@@ -8,16 +8,15 @@ import subprocess
 import tempfile
 import time
 import sys
-from urllib.parse import urlsplit, urlunsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from release_versions import version_key
+from scripts.pan_upload import upload_pan
 
 
 APP_ID = 'pgth9eyr8uf6'
 MANIFEST_URL = f'https://apps.577622.xyz/api/user_a6d12cebda652894/{APP_ID}/api.json'
 RELEASE_URL = f'https://apps.577622.xyz/api/v1/external/apps/{APP_ID}/release/'
-PAN_BASE_URL = 'https://pan.577622.xyz'
 
 
 def _version(value):
@@ -25,13 +24,6 @@ def _version(value):
         return version_key(value)
     except ValueError as exc:
         raise RuntimeError('发布版本必须是三段数字或 SP 修订版本号') from exc
-
-
-def _https(url):
-    parsed = urlsplit(url)
-    if parsed.scheme != 'https' or not parsed.hostname or parsed.username or parsed.password:
-        raise RuntimeError('发布地址必须使用 HTTPS，且不能包含登录凭据')
-    return parsed
 
 
 def _safe_error(message):
@@ -88,35 +80,7 @@ def _official_asset(version, digest, size):
 
 
 def _upload_pan(asset, version, md5, ca_path=None):
-    upload_url = os.environ.get('PAN_UPLOAD_API_URL') or f'{PAN_BASE_URL}/api.php'
-    parsed = _https(upload_url)
-    tls_args = []
-    if parsed.hostname == 'pan.577622.xyz':
-        # 保留公开域名的 Host/SNI 与证书校验，直连上传源站以避开 CDN 大文件限制。
-        tls_args = ['--connect-to', 'pan.577622.xyz:443:no-cf-pan.577622.xyz:443']
-    if ca_path:
-        tls_args.extend(['--cacert', str(ca_path)])
-    expected_url = f'{PAN_BASE_URL}/down.php/{md5}.pkg'
-    status, body = _curl([
-        *tls_args, '--form-string', f'key={os.environ["PAN_UPLOAD_KEY"]}',
-        '--form-string', 'show=0', '--form-string', 'format=json',
-        '--form', f'file=@{asset};filename=FuckSeats-macOS-{version}.pkg;type=application/octet-stream',
-        upload_url,
-    ])
-    if status == 524:
-        for _ in range(12):
-            time.sleep(10)
-            check_status, _ = _curl(['--head', '--location', expected_url], timeout=30)
-            if 200 <= check_status < 300:
-                return expected_url
-        raise RuntimeError('网盘上传超时，且未找到上传后的 PKG')
-    result = _json_response(status, body)
-    if str(result.get('code')) != '0':
-        raise RuntimeError(_safe_error(f'网盘上传失败：{result.get("msg", "未知错误")}'))
-    returned = _https(str(result.get('downurl') or ''))
-    if returned.path != urlsplit(expected_url).path:
-        raise RuntimeError('网盘返回地址与上传包的文件指纹不一致')
-    return urlunsplit(('https', 'pan.577622.xyz', returned.path, returned.query, ''))
+    return upload_pan(asset, f'FuckSeats-macOS-{version}.pkg', expected_md5=md5, ca_path=ca_path)
 
 
 def publish(version, asset, notes_path):

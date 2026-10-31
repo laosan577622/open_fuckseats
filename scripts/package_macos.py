@@ -267,6 +267,7 @@ def main(argv=None):
     shutil.copytree(app_bundle_path, staged_app_path, symlinks=True)
     _configure_app_info(staged_app_path, version)
     _sign_app(staged_app_path)
+    subprocess.check_call(['/usr/bin/codesign', '--verify', '--deep', '--strict', staged_app_path])
     _build_pkg(base_dir, staged_app_path, pkg_path, version)
 
     skill_source_dir = os.path.join(base_dir, 'skill')

@@ -32,6 +32,7 @@ AUTO_REFRESH_SUBSCRIPTION_EXCLUDED_PATHS = {
 }
 
 _sync_state = threading.local()
+_local_cloud_keypair_lock = threading.RLock()
 
 
 class CloudAPIError(RuntimeError):
@@ -147,6 +148,12 @@ def _unwrap_encrypted_response(payload, session=None):
 
 
 def get_or_create_local_cloud_keypair():
+    # 首页的多个请求可同时初始化密钥，统一使用已持久化的同一对密钥。
+    with _local_cloud_keypair_lock:
+        return _get_or_create_local_cloud_keypair()
+
+
+def _get_or_create_local_cloud_keypair():
     local_key = LocalCloudKeyMaterial.objects.filter(scope='default').first()
     if local_key and local_key.public_key_pem and local_key.private_key_pem:
         key_id = str(local_key.key_id or '').strip() or compute_key_id(local_key.public_key_pem)
@@ -162,38 +169,33 @@ def get_or_create_local_cloud_keypair():
     session = CloudSession.objects.order_by('-updated_at').first()
     if session and session.client_private_key_pem and session.client_public_key_pem:
         key_id = str(session.client_key_id or '').strip() or compute_key_id(session.client_public_key_pem)
-        if session.client_key_id != key_id:
-            session.client_key_id = key_id
-            session.save(update_fields=['client_key_id', 'updated_at'])
-        LocalCloudKeyMaterial.objects.update_or_create(
-            scope='default',
-            defaults={
-                'key_id': key_id,
-                'public_key_pem': session.client_public_key_pem,
-                'private_key_pem': session.client_private_key_pem,
-            },
-        )
-        return {
+        proposed = {
             'key_id': key_id,
             'public_key_pem': session.client_public_key_pem,
             'private_key_pem': session.client_private_key_pem,
         }
-
-    generated = generate_rsa_keypair()
-    LocalCloudKeyMaterial.objects.update_or_create(
-        scope='default',
-        defaults={
-            'key_id': generated['key_id'],
-            'public_key_pem': generated['public_key_pem'],
-            'private_key_pem': generated['private_key_pem'],
-        },
-    )
-    if session:
-        session.client_key_id = generated['key_id']
-        session.client_public_key_pem = generated['public_key_pem']
-        session.client_private_key_pem = generated['private_key_pem']
+    else:
+        proposed = generate_rsa_keypair()
+    if local_key is None:
+        # 不使用 update_or_create 的读后写事务，避免 SQLite 升级读锁时失败。
+        local_key, _ = LocalCloudKeyMaterial.objects.get_or_create(scope='default', defaults=proposed)
+    if not local_key.public_key_pem or not local_key.private_key_pem:
+        for field, value in proposed.items():
+            setattr(local_key, field, value)
+        local_key.save(update_fields=['key_id', 'public_key_pem', 'private_key_pem', 'updated_at'])
+    persisted = {
+        'key_id': str(local_key.key_id or '').strip() or compute_key_id(local_key.public_key_pem),
+        'public_key_pem': local_key.public_key_pem,
+        'private_key_pem': local_key.private_key_pem,
+    }
+    if session and (session.client_key_id != persisted['key_id'] or
+                    session.client_public_key_pem != persisted['public_key_pem'] or
+                    session.client_private_key_pem != persisted['private_key_pem']):
+        session.client_key_id = persisted['key_id']
+        session.client_public_key_pem = persisted['public_key_pem']
+        session.client_private_key_pem = persisted['private_key_pem']
         session.save(update_fields=['client_key_id', 'client_public_key_pem', 'client_private_key_pem', 'updated_at'])
-    return generated
+    return persisted
 
 
 def _encrypt_request_body(body, session=None):
