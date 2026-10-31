@@ -40,7 +40,7 @@ VERSION_RE = re.compile(
     r"v?(\d+(?:\.\d+)*)(?:-([0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
     r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
 )
-STABLE_VERSION_RE = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)")
+STABLE_VERSION_RE = re.compile(r"(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-sp[1-9]\d*)?")
 BLOCKED_INSTALLER_FLAG_RE = re.compile(
     r"(?i)(?:^|\s)/(?:verysilent|silent|suppressmsgboxes|closeapplications|forcecloseapplications)(?=\s|$)"
 )
@@ -165,7 +165,12 @@ def _parse_version_parts(value):
     matched = VERSION_RE.fullmatch(str(value or "").strip())
     if not matched:
         raise ValueError("版本号格式无效")
-    return [int(item) for item in matched[1].split(".")], matched[2]
+    parts, prerelease = [int(item) for item in matched[1].split(".")], matched[2]
+    service_pack = re.fullmatch(r'sp([1-9]\d*)', prerelease or '')
+    if service_pack:
+        parts.append(int(service_pack[1]))
+        prerelease = None
+    return parts, prerelease
 
 
 def compare_versions(left, right):
@@ -330,12 +335,14 @@ def fetch_update_details(timeout=8):
         raise RuntimeError('更新服务返回了网页，暂时无法读取更新说明。')
     try:
         if content.startswith((b'\xff\xfe', b'\xfe\xff')):
-            return content.decode('utf-16').strip()
-        try:
-            return content.decode('utf-8-sig').strip()
-        except UnicodeDecodeError:
-            # Some published Windows TXT files are GBK despite an UTF-8 header.
-            return content.decode('gb18030').strip()
+            text = content.decode('utf-16').strip()
+        else:
+            try:
+                text = content.decode('utf-8-sig').strip()
+            except UnicodeDecodeError:
+                # Some published Windows TXT files are GBK despite an UTF-8 header.
+                text = content.decode('gb18030').strip()
+        return re.sub(r'\Aversion=[^\r\n]+\r?\nurl=https://[^\r\n]+\r?\n(?:\r?\n)?', '', text).strip()
     except UnicodeDecodeError as exc:
         raise RuntimeError('更新说明的文字编码无效。') from exc
 
@@ -634,7 +641,8 @@ def _inspect_macos_package_metadata(package_path):
             raise RuntimeError("升级包缺少 PackageInfo")
         root = ET.parse(package_info_files[0]).getroot()
         identifier = str(root.attrib.get("identifier") or "").strip()
-        version = str(root.attrib.get("version") or "").strip()
+        from release_versions import public_package_version
+        version = public_package_version(str(root.attrib.get("version") or "").strip())
         if identifier != MACOS_PACKAGE_IDENTIFIER:
             raise RuntimeError("升级包不是不想排座位的官方 macOS 安装包")
         if not version:
@@ -776,7 +784,7 @@ def _normalize_remote_manifest(manifest):
     if not latest_version:
         raise RuntimeError("远程更新清单缺少 version。")
     if not STABLE_VERSION_RE.fullmatch(latest_version):
-        raise RuntimeError("远程更新清单必须使用三段数字正式版本号。")
+        raise RuntimeError("远程更新清单必须使用正式版本号，例如 3.3.0 或 3.3.0-sp1。")
     if not download_url:
         raise RuntimeError("远程更新清单缺少 download_url。")
     _require_https_url(download_url)
@@ -853,6 +861,11 @@ def check_for_updates():
         manifest["latest_version"],
         payload["current_version"],
     )
+    if payload["update_available"] and not payload.get("notes"):
+        try:
+            payload["notes"] = fetch_update_details(timeout=4)
+        except RuntimeError as exc:
+            payload["notes_error"] = str(exc)
     return payload
 
 

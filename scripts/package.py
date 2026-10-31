@@ -181,6 +181,11 @@ def _build_pyinstaller_command(data_args):
 
     if _is_windows() or _is_macos():
         cmd.append('--windowed')
+        icon = 'app-icon.ico' if _is_windows() else 'app-icon.icns'
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'static', icon)
+        if not os.path.isfile(icon_path):
+            raise FileNotFoundError(f'缺少应用图标：{icon_path}')
+        cmd.extend(['--icon', icon_path])
     if _is_macos():
         cmd.extend(['--osx-bundle-identifier', 'xyz.577622.fuckseats'])
         # Sign bundled native libraries with the same identity as the outer App.

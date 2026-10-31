@@ -10,6 +10,9 @@ import subprocess
 import sys
 import tempfile
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from release_versions import RELEASE_VERSION_RE, native_version
+
 
 APP_DISPLAY_NAME = '不想排座位'
 APP_BUNDLE_NAME = 'FuckSeats.app'
@@ -74,8 +77,8 @@ def _preflight(base_dir, version):
     """Read-only checks: never stages files, builds, signs or submits to Apple."""
     errors = []
     print(f'检查环境：Python {platform.python_version()} / {platform.machine()}', flush=True)
-    if not re.fullmatch(r'\d+\.\d+\.\d+', version):
-        errors.append('请明确指定三段数字版本号（例如 2.3.0），本地占位版本不能用于 PKG。')
+    if not RELEASE_VERSION_RE.fullmatch(version):
+        errors.append('请明确指定正式版本号（例如 3.3.0 或 3.3.0-sp1），本地占位版本不能用于 PKG。')
     for tool in ('codesign', 'pkgbuild', 'pkgutil', 'hdiutil', 'security', 'xcrun'):
         if not shutil.which(tool):
             errors.append(f'缺少 macOS 工具：{tool}')
@@ -129,8 +132,8 @@ def _configure_app_info(app_path, version):
     info['CFBundleIdentifier'] = APP_BUNDLE_ID
     info['CFBundleDisplayName'] = APP_DISPLAY_NAME
     info['CFBundleName'] = APP_DISPLAY_NAME
-    info['CFBundleShortVersionString'] = str(version)
-    info['CFBundleVersion'] = str(version)
+    info['CFBundleShortVersionString'] = str(version).split('-sp')[0]
+    info['CFBundleVersion'] = str(version).split('-sp')[0]
     info['NSHumanReadableCopyright'] = 'Copyright © 老三 · www.577622.xyz'
     with open(info_path, 'wb') as output:
         plistlib.dump(info, output, sort_keys=True)
@@ -173,7 +176,7 @@ def _build_pkg(base_dir, app_path, pkg_path, version):
             '--component', app_path,
             '--install-location', '/Applications',
             '--identifier', PKG_IDENTIFIER,
-            '--version', str(version),
+            '--version', native_version(version),
             '--scripts', scripts_dir,
         ]
         installer_identity = str(os.getenv('MACOS_INSTALLER_SIGNING_IDENTITY') or '').strip()

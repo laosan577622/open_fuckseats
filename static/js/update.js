@@ -140,6 +140,11 @@
             return;
         }
 
+        if (fallbackText) {
+            renderUpdateDetails(fallbackText, 'loaded');
+            return;
+        }
+
         try {
             const detailUrl = `${updateDetailsUrl}?t=${Date.now()}`;
             const response = await fetch(detailUrl, { cache: 'no-store', credentials: 'same-origin' });
@@ -170,7 +175,8 @@
                 return;
             }
 
-            renderUpdateDetails('暂时无法加载更新详情，请稍后重试。', 'error');
+            const reason = (window.updateInfo && window.updateInfo.notes_error) || error.message || String(error);
+            renderUpdateDetails(`暂时无法加载更新详情：${reason}`, 'error');
         }
     }
 

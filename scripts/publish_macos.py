@@ -4,25 +4,27 @@ import hashlib
 import json
 import os
 from pathlib import Path
-import re
 import subprocess
 import tempfile
 import time
+import sys
 from urllib.parse import urlsplit, urlunsplit
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from release_versions import version_key
 
 
 APP_ID = 'pgth9eyr8uf6'
 MANIFEST_URL = f'https://apps.577622.xyz/api/user_a6d12cebda652894/{APP_ID}/api.json'
 RELEASE_URL = f'https://apps.577622.xyz/api/v1/external/apps/{APP_ID}/release/'
 PAN_BASE_URL = 'https://pan.577622.xyz'
-VERSION_RE = re.compile(r'(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)')
 
 
 def _version(value):
-    value = str(value or '')
-    if not VERSION_RE.fullmatch(value):
-        raise RuntimeError('发布版本必须是三段数字正式版本号')
-    return tuple(map(int, value.split('.')))
+    try:
+        return version_key(value)
+    except ValueError as exc:
+        raise RuntimeError('发布版本必须是三段数字或 SP 修订版本号') from exc
 
 
 def _https(url):
