@@ -624,8 +624,13 @@
                     <input type="checkbox" id="arrangePreferenceAvoidPrevious" name="avoid_previous">
                     <span>尽量更换同桌</span>
                 </label>
+                <label class="arrange-preferences-checkbox" for="arrangePreferenceAvoidPreviousPosition">
+                    <input type="checkbox" id="arrangePreferenceAvoidPreviousPosition" name="avoid_previous_position">
+                    <span>尽量不重复位置</span>
+                </label>
             </div>
-            <p id="arrangePreferencesHint" class="arrange-preferences-hint">仅对当前教室的自动排座生效。固定座位和约束优先；成绩模式保留前后排，小组模式保留分组。多项偏好依次考虑性别、更换同桌、成绩搭配。</p>
+            <p id="arrangePreferencesHint" class="arrange-preferences-hint">偏好按当前教室保存。固定座位和约束优先；成绩模式保留前后排，小组模式保留分组。多项偏好依次考虑位置轮换、性别、更换同桌、成绩搭配。</p>
+            <p class="arrange-preferences-hint">位置轮换参考最近 8 个已保存的布局快照，临时拖拽和撤销记录不计入。没有快照时先按原策略排座；正式结果可手动保存，或在首页设置中开启导出时自动保存快照。</p>
             <p class="arrange-preferences-hint">同桌按每排连续座位从左到右两两配对，不跨走廊和小组边界。未填写性别或成绩的学生仍正常参与排座；人数不均衡时尽量满足偏好。</p>
             <p id="arrangePreferencesError" class="arrange-preferences-error" role="alert" hidden></p>
             <div class="modal-actions">

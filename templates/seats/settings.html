@@ -93,7 +93,7 @@
                 </span>
                 <div>
                     <h1>排座偏好</h1>
-                    <p>控制移动学生与布局轮换时的默认行为。</p>
+                    <p>设置移动、轮换与导出时的默认行为。</p>
                 </div>
             </header>
             <div class="settings-list">
@@ -155,6 +155,19 @@
                         <div class="settings-row-trail">
                             <label class="settings-switch">
                                 <input type="checkbox" id="settings-show-group-completion-suggestion-toggle" checked>
+                                <span class="settings-switch-track"><span class="settings-switch-thumb"></span></span>
+                            </label>
+                        </div>
+                    </div>
+                    <div class="settings-row">
+                        <div class="settings-row-main">
+                            <label for="settings-snapshot-on-export-toggle">导出文件时自动保存快照</label>
+                            <span class="settings-row-desc">对所有班级生效。导出正式文件时保存布局，供后续排座的位置偏好参考；预览不保存。</span>
+                            <span class="settings-row-status" id="snapshot-on-export-status">已关闭</span>
+                        </div>
+                        <div class="settings-row-trail">
+                            <label class="settings-switch">
+                                <input type="checkbox" id="settings-snapshot-on-export-toggle" aria-label="导出文件时自动保存快照">
                                 <span class="settings-switch-track"><span class="settings-switch-thumb"></span></span>
                             </label>
                         </div>

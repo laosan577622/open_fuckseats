@@ -20,6 +20,9 @@ from .arrangement_preferences import (
     preferences_enabled,
     save_preferences,
 )
+from .seat_rotation import ROTATION_HISTORY_LIMIT, RotationContext, optimize_positions
+from .layout_snapshots import create_timed_snapshot, export_snapshot_enabled
+from functools import wraps
 from django.test import RequestFactory
 from pypinyin import lazy_pinyin
 import base64
@@ -11057,7 +11060,13 @@ def _assign_pairs(students, seats, seat_map, assignments, maps, required_group_m
     return available
 
 
-def _arrange_standard(classroom, students, seats, method, *, preferences=None, previous_pairs=None):
+def _load_rotation_context(classroom, seats):
+    snapshots = classroom.layout_snapshots.exclude(data__has_key='exam').order_by('-created_at', '-pk')
+    return RotationContext(seats, classroom.students.all(), snapshots.values_list('data', flat=True)[:ROTATION_HISTORY_LIMIT])
+
+
+def _arrange_standard(classroom, students, seats, method, *, preferences=None, previous_pairs=None,
+                      rotation_context=None):
     seats = [s for s in seats if s.cell_type == SeatCellType.SEAT]
     seat_map = _build_seat_map(seats)
 
@@ -11086,12 +11095,20 @@ def _arrange_standard(classroom, students, seats, method, *, preferences=None, p
                 available.remove(seat)
                 break
 
-    if preferences and preferences_enabled(preferences):
+    preserve_rows = method in {'score_desc', 'score_asc', 'good_front', 'good_back', 'score_spread'}
+    optimize_positions(
+        students, seats, assignments, rotation_context,
+        lambda student, seat, simulated: _seat_is_valid(student, seat, simulated, maps),
+        preserve_rows=preserve_rows,
+    )
+
+    if rotation_context is not None or (preferences and preferences_enabled(preferences)):
         optimize_deskmates(
-            students, seats, assignments, preferences,
+            students, seats, assignments, preferences or DEFAULT_PREFERENCES.copy(),
             previous_pairs if previous_pairs is not None else current_deskmates(seats),
             lambda student, seat, simulated: _seat_is_valid(student, seat, simulated, maps),
-            preserve_rows=method in {'score_desc', 'score_asc', 'good_front', 'good_back', 'score_spread'},
+            preserve_rows=preserve_rows,
+            position_cost=rotation_context.cost if rotation_context is not None and rotation_context.previous else None,
         )
 
     Seat.objects.filter(classroom=classroom).update(student=None)
@@ -11103,7 +11120,7 @@ def _arrange_standard(classroom, students, seats, method, *, preferences=None, p
             seat.save(update_fields=['student'])
 
 
-def _arrange_grouped(classroom, students, method, *, preferences=None, previous_pairs=None):
+def _arrange_grouped(classroom, students, method, *, preferences=None, previous_pairs=None, rotation_context=None):
     groups = list(classroom.groups.all())
     if not groups:
         return False
@@ -11198,12 +11215,18 @@ def _arrange_grouped(classroom, students, method, *, preferences=None, previous_
                 remaining_seats.remove(seat)
                 break
 
+    optimize_positions(
+        students, all_seat_cells, assignments, rotation_context,
+        lambda student, seat, simulated: _seat_is_valid(student, seat, simulated, maps, required_group_map),
+        preserve_groups=True,
+    )
     if preferences and preferences_enabled(preferences):
         optimize_deskmates(
             students, all_seat_cells, assignments, preferences,
             previous_pairs if previous_pairs is not None else current_deskmates(all_seat_cells),
             lambda student, seat, simulated: _seat_is_valid(student, seat, simulated, maps, required_group_map),
             preserve_groups=True,
+            position_cost=rotation_context.cost if rotation_context is not None and rotation_context.previous else None,
         )
 
     Seat.objects.filter(classroom=classroom).update(student=None)
@@ -11217,7 +11240,8 @@ def _arrange_grouped(classroom, students, method, *, preferences=None, previous_
     return True
 
 
-def _run_arrangement(classroom, method, *, sort_definition=None, preferences=None, previous_pairs=None):
+def _run_arrangement(classroom, method, *, sort_definition=None, preferences=None, previous_pairs=None,
+                     rotation_context=None):
     if preferences is None:
         preferences = load_preferences(classroom) if method in BUILTIN_METHODS else DEFAULT_PREFERENCES.copy()
     else:
@@ -11232,6 +11256,8 @@ def _run_arrangement(classroom, method, *, sort_definition=None, preferences=Non
     if len(seat_cells) < len(students):
         return False
 
+    if preferences['avoid_previous_position'] and rotation_context is None:
+        rotation_context = _load_rotation_context(classroom, seats)
     if method == 'random':
         random.shuffle(students)
     elif method == 'score_desc':
@@ -11265,18 +11291,21 @@ def _run_arrangement(classroom, method, *, sort_definition=None, preferences=Non
             current = sorted(row_seats[row], key=lambda item: item.col)
             seats.extend(current if row % 2 == 1 else list(reversed(current)))
     elif method in ['group_balanced', 'group_mentor']:
-        return _arrange_grouped(classroom, students, method, preferences=preferences, previous_pairs=previous_pairs)
+        return _arrange_grouped(classroom, students, method, preferences=preferences,
+                                previous_pairs=previous_pairs, rotation_context=rotation_context)
     elif method == 'field_sort':
         students = sort_students(
             students,
             sort_definition or definition_for_field('name', 'asc', 'pinyin_initial'),
         )
 
-    _arrange_standard(classroom, students, seats, method, preferences=preferences, previous_pairs=previous_pairs)
+    _arrange_standard(classroom, students, seats, method, preferences=preferences,
+                      previous_pairs=previous_pairs, rotation_context=rotation_context)
     return True
 
 
-def _attempt_auto_constraint_fix(classroom, preferred_method=None, *, preferences=None, previous_pairs=None):
+def _attempt_auto_constraint_fix(classroom, preferred_method=None, *, preferences=None, previous_pairs=None,
+                                 rotation_context=None):
     methods = []
     if preferred_method:
         methods.append(preferred_method)
@@ -11303,7 +11332,8 @@ def _attempt_auto_constraint_fix(classroom, preferred_method=None, *, preference
         for _ in range(tries):
             try:
                 with transaction.atomic():
-                    ok = _run_arrangement(classroom, method, preferences=preferences, previous_pairs=previous_pairs)
+                    ok = _run_arrangement(classroom, method, preferences=preferences,
+                                          previous_pairs=previous_pairs, rotation_context=rotation_context)
                     if not ok:
                         raise ValueError('arrange_failed')
                     _stabilize_layout_with_rules(classroom)
@@ -11368,19 +11398,26 @@ def auto_arrange_seats(request, pk):
 
         preferences = load_preferences(classroom)
         previous_pairs = current_deskmates(list(classroom.seats.all())) if preferences['avoid_previous'] else set()
+        rotation_context = (_load_rotation_context(classroom, list(classroom.seats.all()))
+                            if preferences['avoid_previous_position'] else None)
 
         def _arrange_success(auto_fixed=False):
             payload = {'status': 'success', 'preferences': preferences}
-            if preferences_enabled(preferences) or auto_fixed:
+            if preferences_enabled(preferences) or auto_fixed or rotation_context is not None:
+                seats = list(classroom.seats.select_related('student'))
                 payload['message'] = arrangement_message(
-                    list(classroom.seats.select_related('student')), preferences, auto_fixed=auto_fixed,
+                    seats, preferences, auto_fixed=auto_fixed,
                 )
+                if rotation_context is not None:
+                    payload['position_preference'] = rotation_context.report(seats)
+                    payload['message'] += '；' + rotation_context.message(payload['position_preference'])
             return JsonResponse(payload)
 
         before_state = _capture_history_state(classroom)
         try:
             with transaction.atomic():
-                if not _run_arrangement(classroom, method, preferences=preferences, previous_pairs=previous_pairs):
+                if not _run_arrangement(classroom, method, preferences=preferences,
+                                        previous_pairs=previous_pairs, rotation_context=rotation_context):
                     raise ValueError('未设置小组或小组没有座位')
 
                 _stabilize_layout_with_rules(classroom, request)
@@ -11389,7 +11426,8 @@ def auto_arrange_seats(request, pk):
                     raise ValueError(f'约束未满足，排座已回滚：{_format_issues_preview(violations)}')
         except ValueError as e:
             if _attempt_auto_constraint_fix(classroom, preferred_method=method,
-                                            preferences=preferences, previous_pairs=previous_pairs):
+                                            preferences=preferences, previous_pairs=previous_pairs,
+                                            rotation_context=rotation_context):
                 _push_snapshot_action(
                     request,
                     classroom,
@@ -14179,6 +14217,29 @@ def _download_content_disposition(filename):
     return f'attachment; filename="{fallback}"; filename*=UTF-8\'\'{encoded}'
 
 
+def _snapshot_on_file_export(view):
+    @wraps(view)
+    def export(request, pk, *args, **kwargs):
+        classroom = get_object_or_404(Classroom, pk=pk)
+        enabled = export_snapshot_enabled()
+        if not enabled or request.method == 'HEAD' or request.GET.get('preview'):
+            return view(request, pk, *args, **kwargs)
+        with transaction.atomic():
+            before_state = _capture_history_state(classroom)
+            data = _snapshot_payload(classroom, include_students=False)
+            snapshot = create_timed_snapshot(classroom, '导出布局', data)
+            _push_snapshot_action(request, classroom, before_state, 'auto_export_snapshot',
+                                  extra={'snapshot_id': snapshot.pk, 'snapshot_name': snapshot.name})
+            response = view(request, pk, *args, **kwargs)
+            if response.status_code == 200 and response.get('Content-Disposition', '').lower().startswith('attachment'):
+                response['X-FuckSeats-Snapshot-Id'] = str(snapshot.pk)
+            else:
+                transaction.set_rollback(True)
+            return response
+    return export
+
+
+@_snapshot_on_file_export
 def export_students(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
 
@@ -14275,6 +14336,7 @@ def export_students(request, pk):
     return response
 
 
+@_snapshot_on_file_export
 def export_students_csis(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     payload = _build_csis_csls_payload(classroom)
@@ -14355,6 +14417,7 @@ def export_students_options_page(request, pk):
     })
 
 
+@_snapshot_on_file_export
 def export_students_svg(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     seats = list(classroom.seats.select_related('student', 'group').all())
@@ -14565,6 +14628,7 @@ def export_students_svg_options_page(request, pk):
     })
 
 
+@_snapshot_on_file_export
 def export_students_pptx(request, pk):
     try:
         from pptx import Presentation
@@ -14922,6 +14986,7 @@ def export_students_pptx_options_page(request, pk):
     })
 
 
+@_snapshot_on_file_export
 def export_group_report(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     groups = list(classroom.groups.prefetch_related(
@@ -15168,7 +15233,7 @@ def save_layout_snapshot(request, pk):
         snapshot, _ = LayoutSnapshot.objects.update_or_create(
             classroom=classroom,
             name=name,
-            defaults={'data': data}
+            defaults={'data': data, 'created_at': timezone.now()}
         )
         _push_snapshot_action(
             request,
@@ -15252,6 +15317,7 @@ def export_local_sync_snapshot(request, pk, snapshot_id):
     return response
 
 
+@_snapshot_on_file_export
 def export_seats_file(request, pk):
     classroom = get_object_or_404(Classroom, pk=pk)
     data = _serialize_seats_file_bundle(classroom)

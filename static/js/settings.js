@@ -68,6 +68,37 @@ document.addEventListener('DOMContentLoaded', () => {
     const GROUP_MOVE_MODE_KEY = 'seats_group_move_mode';
     const SHOW_LAYOUT_SUGGESTIONS_KEY = 'seats_show_layout_suggestions';
     const SHOW_GROUP_COMPLETION_SUGGESTION_KEY = 'seats_show_group_completion_suggestion';
+    const SNAPSHOT_ON_EXPORT_KEY = 'seats_snapshot_on_export';
+    const snapshotOnExportToggle = document.getElementById('settings-snapshot-on-export-toggle');
+    const snapshotOnExportStatus = document.getElementById('snapshot-on-export-status');
+
+    const syncSnapshotOnExportUi = (value = localStorage.getItem(SNAPSHOT_ON_EXPORT_KEY)) => {
+        if (!snapshotOnExportToggle || !snapshotOnExportStatus) return;
+        snapshotOnExportToggle.checked = value === '1';
+        snapshotOnExportStatus.textContent = value === '1' ? '已开启' : '已关闭';
+    };
+    syncSnapshotOnExportUi();
+    snapshotOnExportToggle?.addEventListener('change', async () => {
+        const value = snapshotOnExportToggle.checked ? '1' : '0';
+        snapshotOnExportToggle.disabled = true;
+        try {
+            const response = await fetch('/api/store/set/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ key: SNAPSHOT_ON_EXPORT_KEY, value }),
+            });
+            const data = await response.json();
+            if (!response.ok || data.status !== 'success' || !data.persisted) throw new Error('保存失败');
+            localStorage.setItem(SNAPSHOT_ON_EXPORT_KEY, value);
+            syncSnapshotOnExportUi(value);
+            window.showToast?.(value === '1' ? '已开启导出自动快照' : '已关闭导出自动快照');
+        } catch (error) {
+            syncSnapshotOnExportUi();
+            window.showToast?.('设置保存失败，请重试');
+        } finally {
+            snapshotOnExportToggle.disabled = false;
+        }
+    });
     const checkBtn = document.getElementById('manual-check-update-btn');
     const checkBtnOriginalHtml = checkBtn ? checkBtn.innerHTML : '';
     const checkBtnSpinnerHtml = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" style="animation: spin 1s linear infinite;"><path d="M12.79 8.64Q12.41 8.3 11.9 8.3Q11.4 8.3 11.06 8.66L6.05 13.68Q5.74 13.97 5.86 14.35Q5.98 14.74 6.35 14.88Q6.72 15.02 7.06 14.69L11.93 9.82L16.78 14.66Q17.09 14.98 17.46 14.84Q17.83 14.71 17.96 14.34Q18.1 13.97 17.78 13.66L12.79 8.64Z" fill="currentColor"/><path d="M12 2.5Q14.57 2.5 16.75 3.78Q18.94 5.06 20.22 7.25Q21.5 9.43 21.5 12Q21.5 14.57 20.22 16.75Q18.94 18.94 16.75 20.22Q14.57 21.5 12 21.5Q9.43 21.5 7.25 20.22Q5.06 18.94 3.78 16.75Q2.5 14.57 2.5 12Q2.5 9.43 3.78 7.25Q5.06 5.06 7.25 3.78Q9.43 2.5 12 2.5ZM12 1.01Q9 1.01 6.48 2.48Q3.96 3.96 2.48 6.48Q1.01 9 1.01 12Q1.01 14.98 2.48 17.51Q3.96 20.04 6.49 21.52Q9.02 22.99 12 22.99Q14.98 22.99 17.51 21.52Q20.04 20.04 21.52 17.51Q22.99 14.98 22.99 12Q22.99 9 21.52 6.48Q20.04 3.96 17.52 2.48Q15 1.01 12 1.01Z" fill="currentColor" fill-opacity="0.85"/></svg>检查中...';
@@ -168,6 +199,7 @@ document.addEventListener('DOMContentLoaded', () => {
     );
 
     window.addEventListener('storage', (event) => {
+        if (event.key === SNAPSHOT_ON_EXPORT_KEY) syncSnapshotOnExportUi(event.newValue);
         if (event.key === SHOW_LAYOUT_SUGGESTIONS_KEY) {
             syncSuggestionPreferenceUi(showLayoutSuggestionsToggle, showLayoutSuggestionsStatus, SHOW_LAYOUT_SUGGESTIONS_KEY);
         }

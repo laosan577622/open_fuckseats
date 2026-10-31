@@ -4,10 +4,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const trigger = document.getElementById('btn-arrange-preferences');
     if (!form || !modal || !trigger) return;
 
-    const defaults = { gender: 'none', score: 'none', avoid_previous: false };
+    const defaults = {
+        gender: 'none', score: 'none', avoid_previous: false,
+        avoid_previous_position: false,
+    };
     const gender = document.getElementById('arrangePreferenceGender');
     const score = document.getElementById('arrangePreferenceScore');
     const avoidPrevious = document.getElementById('arrangePreferenceAvoidPrevious');
+    const avoidPreviousPosition = document.getElementById('arrangePreferenceAvoidPreviousPosition');
     const indicator = document.getElementById('arrange-preferences-indicator');
     const error = document.getElementById('arrangePreferencesError');
     const save = document.getElementById('arrangePreferencesSave');
@@ -24,11 +28,13 @@ document.addEventListener('DOMContentLoaded', () => {
         gender.value = value.gender;
         score.value = value.score;
         avoidPrevious.checked = value.avoid_previous;
+        avoidPreviousPosition.checked = value.avoid_previous_position;
         error.hidden = true;
     }
 
     function updateIndicator() {
-        const active = saved.gender !== 'none' || saved.score !== 'none' || saved.avoid_previous;
+        const active = saved.gender !== 'none' || saved.score !== 'none' || saved.avoid_previous
+            || saved.avoid_previous_position;
         indicator.hidden = !active;
         trigger.setAttribute('aria-label', active ? '偏好选项，已设置' : '偏好选项');
     }
@@ -79,7 +85,10 @@ document.addEventListener('DOMContentLoaded', () => {
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (saving) return;
-        const preferences = { gender: gender.value, score: score.value, avoid_previous: avoidPrevious.checked };
+        const preferences = {
+            gender: gender.value, score: score.value, avoid_previous: avoidPrevious.checked,
+            avoid_previous_position: avoidPreviousPosition.checked,
+        };
         saving = true;
         error.hidden = true;
         form.querySelectorAll('button, select, input[type="checkbox"]').forEach((control) => { control.disabled = true; });

@@ -1,17 +1,18 @@
 """Separate exam workflow pages; mutations use CSRF and snapshot history."""
 import json
 from copy import deepcopy
-from uuid import uuid4
 
 from django.db import transaction
 from django.http import Http404, JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
+from django.utils import timezone
 from django.views.decorators.http import require_GET, require_POST
 
 from .exam_planner import (PlanningError, Router, fingerprint, number_desks,
                            plan_exam, plan_restore, target_snapshot, validate_doors)
 from .models import Classroom, LayoutSnapshot
+from .layout_snapshots import create_timed_snapshot
 
 
 def _body(request):
@@ -161,9 +162,9 @@ def generate(request, pk):
             classroom = Classroom.objects.select_for_update().get(pk=pk)
             if fingerprint(_snapshot(classroom)) != fingerprint(active):
                 return JsonResponse({'error': '生成期间教室发生变化，请重新生成'}, status=409)
-            suffix = uuid4().hex[:8]
-            LayoutSnapshot.objects.create(classroom=classroom, name=f'考场前原布局 {suffix}', data=active)
-            saved = LayoutSnapshot.objects.create(classroom=classroom, name=f"考场 {plan['cols']}组×{plan['rows']}排 {suffix}", data=data)
+            saved_at = timezone.now()
+            create_timed_snapshot(classroom, '考场前原布局', active, at=saved_at)
+            saved = create_timed_snapshot(classroom, f"考场 {plan['cols']}组×{plan['rows']}排", data, at=saved_at)
         return JsonResponse({'id': saved.pk, 'url': _url(classroom, saved), 'metrics': plan['metrics']})
     except SourceMismatch as error:
         return JsonResponse({'error': str(error)}, status=409)
@@ -233,8 +234,7 @@ def restore(request, pk, plan_id):
             classroom = Classroom.objects.select_for_update().get(pk=pk)
             if fingerprint(_snapshot(classroom)) != fingerprint(current):
                 return JsonResponse({'error': '规划期间教室发生变化，请重新生成恢复方案'}, status=409)
-            result = LayoutSnapshot.objects.create(classroom=classroom,
-                name=f'考后恢复 {uuid4().hex[:8]}', data=target)
+            result = create_timed_snapshot(classroom, '考后恢复', target)
         return JsonResponse({'url': _url(classroom, result)})
     except PlanningError as error:
         return JsonResponse({'error': str(error)}, status=400)

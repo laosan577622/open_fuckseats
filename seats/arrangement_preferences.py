@@ -10,6 +10,7 @@ DEFAULT_PREFERENCES = {
     'gender': 'none',
     'score': 'none',
     'avoid_previous': False,
+    'avoid_previous_position': False,
 }
 BUILTIN_METHODS = {
     'random', 'score_desc', 'score_asc', 'good_front', 'good_back',
@@ -33,6 +34,8 @@ def normalize_preferences(value):
         raise ValueError('不支持的成绩搭配偏好')
     if not isinstance(result['avoid_previous'], bool):
         raise ValueError('更换同桌选项必须为布尔值')
+    if not isinstance(result['avoid_previous_position'], bool):
+        raise ValueError('不重复位置选项必须为布尔值')
     return result
 
 
@@ -91,12 +94,14 @@ def _score(student):
 
 
 def optimize_deskmates(students, seats, assignments, preferences, previous_pairs, is_valid,
-                       *, preserve_rows=False, preserve_groups=False):
-    """只接受改善偏好且不违反约束的交换；性别、更换同桌、成绩依次优先。"""
-    if not preferences_enabled(preferences) or len(assignments) != len(students):
+                       *, preserve_rows=False, preserve_groups=False, position_cost=None):
+    """只接受不违反约束的改善；方位轮换优先于同桌搭配偏好。"""
+    deskmate_preferences = any(preferences[key] != DEFAULT_PREFERENCES[key]
+                              for key in ('gender', 'score', 'avoid_previous'))
+    if (not deskmate_preferences and position_cost is None) or len(assignments) != len(students):
         return
     pairs = desk_pairs(seats)
-    if not pairs:
+    if not pairs and position_cost is None:
         return
     student_map = {student.pk: student for student in students}
     occupants = {seat.pk: None for seat in seats}
@@ -133,9 +138,13 @@ def optimize_deskmates(students, seats, assignments, preferences, previous_pairs
         # 优先保留完整同桌，避免用拆成单人座的方式规避偏好。
         return (-1, gender_cost, repeat_cost, round(score_cost, 8))
 
-    def cost(indices):
+    def cost(indices, positions):
         costs = [pair_cost(index) for index in indices]
-        return tuple(sum(item[part] for item in costs) for part in range(4))
+        desk_cost = tuple(sum(item[part] for item in costs) for part in range(4))
+        if position_cost is None:
+            return desk_cost
+        position_costs = [position_cost(occupants[seat.pk], seat) for seat in positions if occupants[seat.pk]]
+        return tuple(map(sum, zip(*position_costs))) + desk_cost
 
     # 使用局部增量评分，不在交换循环中访问数据库；限制大布局的计算量。
     comparisons = 0
@@ -154,11 +163,11 @@ def optimize_deskmates(students, seats, assignments, preferences, previous_pairs
                 if preserve_groups and left.group_id != right.group_id:
                     continue
                 affected = {pair_by_seat[seat.pk] for seat in (left, right) if seat.pk in pair_by_seat}
-                if not affected:
+                if not affected and position_cost is None:
                     continue
-                before = cost(affected)
+                before = cost(affected, (left, right))
                 occupants[left.pk], occupants[right.pk] = right_id, left_id
-                after = cost(affected)
+                after = cost(affected, (left, right))
                 if after >= before:
                     occupants[left.pk], occupants[right.pk] = left_id, right_id
                     continue
