@@ -72,6 +72,7 @@ data_sharing:  # 帮助改进数据接收
 |------|------|------|
 | `client_id` | string | OAuth 应用 Client ID |
 | `client_secret` | string | OAuth 应用 Client Secret |
+| `allowed_client_callbacks` | list | 网页客户端的精确 HTTPS 回调地址，默认空列表；桌面端 HTTP 本机 `/cloud/callback` 自动允许，端口可变。登录用的 `state` 查询参数不参与地址匹配。 |
 | `authorize_url` | string | 授权页面地址 |
 | `token_url` | string | Token 交换地址 |
 | `userinfo_url` | string | 用户信息接口地址 |

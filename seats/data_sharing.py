@@ -169,10 +169,7 @@ def _ssl_context():
 
         return ssl.create_default_context(cafile=certifi.where())
     except Exception:
-        try:
-            return ssl.create_default_context()
-        except Exception:
-            return ssl._create_unverified_context()
+        return ssl.create_default_context()
 
 
 def _post_json(url: str, payload: dict[str, Any], timeout: int = 4) -> None:

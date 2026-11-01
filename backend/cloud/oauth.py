@@ -22,17 +22,9 @@ def _get_ssl_context():
     try:
         import certifi
         return ssl.create_default_context(cafile=certifi.where())
-    except ImportError:
+    except (ImportError, OSError, ssl.SSLError):
         pass
-    ctx = ssl.create_default_context()
-    try:
-        ctx.load_default_certs()
-    except Exception:
-        pass
-    if not ctx.get_ca_certs():
-        ctx.check_hostname = False
-        ctx.verify_mode = ssl.CERT_NONE
-    return ctx
+    return ssl.create_default_context()
 
 
 def _request_json(url, method='GET', data=None, headers=None):
@@ -51,6 +43,10 @@ def _request_json(url, method='GET', data=None, headers=None):
         request_headers['Content-Type'] = 'application/x-www-form-urlencoded'
 
     req = urllib.request.Request(url, data=body, headers=request_headers, method=method)
+    authorization = req.get_header('Authorization')
+    if authorization:
+        req.remove_header('Authorization')
+        req.add_unredirected_header('Authorization', authorization)
     try:
         with urllib.request.urlopen(req, timeout=20, context=_get_ssl_context()) as response:
             raw = response.read()

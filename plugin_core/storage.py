@@ -48,15 +48,16 @@ class MemoryStorageBackend:
 class DjangoModelStorageBackend(MemoryStorageBackend):
     """以延迟 Model getter 复用本地/云端 ORM；迁移前自动退回进程内存。"""
 
-    def __init__(self, model_getter: Callable[[], Any], secret_key_getter: Callable[[], str]):
+    def __init__(self, model_getter: Callable[[], Any], secret_key_getter: Callable[[], str], *, fallback_secret_keys=()):
         super().__init__()
         self._model_getter = model_getter
         self._secret_key_getter = secret_key_getter
+        self._fallback_secret_keys = tuple(str(key) for key in fallback_secret_keys if key)
 
-    def _fernet(self):
+    def _fernet(self, secret_key=None):
         from cryptography.fernet import Fernet
 
-        raw_key = str(self._secret_key_getter() or 'fuckseats-plugin-storage').encode('utf-8')
+        raw_key = str((self._secret_key_getter() if secret_key is None else secret_key) or 'fuckseats-plugin-storage').encode('utf-8')
         key = base64.urlsafe_b64encode(hashlib.sha256(raw_key).digest())
         return Fernet(key)
 
@@ -80,8 +81,24 @@ class DjangoModelStorageBackend(MemoryStorageBackend):
             row = model.objects.filter(plugin_id=plugin_id, namespace=namespace, key=key).only('value').first()
             if row is None:
                 return super().get(plugin_id, namespace, key, default, secret=secret)
-            value = self._decode(row.value, secret=secret)
+            from cryptography.fernet import InvalidToken
+
+            rotate = False
+            try:
+                value = self._decode(row.value, secret=secret)
+            except InvalidToken:
+                for fallback_key in self._fallback_secret_keys:
+                    try:
+                        value = json.loads(self._fernet(fallback_key).decrypt(str(row.value)[7:].encode('ascii')))
+                    except InvalidToken:
+                        continue
+                    rotate = True
+                    break
+                else:
+                    raise
             super().set(plugin_id, namespace, key, value, secret=secret)
+            if rotate:
+                model.objects.filter(pk=row.pk, value=row.value).update(value=self._encode(value, secret=True))
             return value
         except Exception:
             return super().get(plugin_id, namespace, key, default, secret=secret)

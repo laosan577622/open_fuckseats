@@ -1,7 +1,8 @@
-Django
+Django==5.2.18
 waitress
 PyYAML
-certifi
-cryptography
+certifi>=2026.10.19
+cryptography>=50.0.0,<51
+sqlparse>=0.6.0,<1
 tzdata
 sqlcipher3==0.6.2

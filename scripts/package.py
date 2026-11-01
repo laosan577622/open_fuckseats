@@ -57,8 +57,6 @@ COMMON_HIDDEN_IMPORTS = (
     'cryptography',
     'cryptography.hazmat.primitives.ciphers.aead',
     'cryptography.hazmat.bindings._rust',
-    'cryptography.hazmat.bindings._rust.openssl',
-    'cryptography.hazmat.bindings._rust.openssl.aead',
     'keyring',
     'sqlcipher3',
     'sqlcipher3.dbapi2',
@@ -272,20 +270,25 @@ def _compile_staged_app_code(stage_dir):
 
 def _verify_compiled_app_payload(dist_dir):
     plaintext = []
-    views_bytecode = False
+    required_bytecode = {'seats/views.pyc', 'config/settings.pyc'}
+    root_modules = {
+        name for name in os.listdir(os.path.dirname(os.path.dirname(__file__)))
+        if name.endswith('.py')
+    }
     for directory, _, files in os.walk(dist_dir):
         parts = os.path.relpath(directory, dist_dir).split(os.sep)
-        if 'seats' not in parts:
-            continue
+        core_package = any(part in {'seats', 'config', 'plugin_core'} for part in parts)
         for filename in files:
-            if filename.endswith('.py'):
+            if filename.lower().endswith(('.py', '.pyw')) and (core_package or filename in root_modules):
                 plaintext.append(os.path.join(directory, filename))
-            if filename == 'views.pyc' and parts[-1] == 'seats':
-                views_bytecode = True
+            for required in tuple(required_bytecode):
+                package, name = required.split('/')
+                if filename == name and parts[-1] == package:
+                    required_bytecode.remove(required)
     if plaintext:
         raise RuntimeError('安装包仍包含核心 Python 源码：' + ', '.join(plaintext[:5]))
-    if not views_bytecode:
-        raise RuntimeError('安装包缺少 seats/views.pyc，动态模块收集不完整')
+    if required_bytecode:
+        raise RuntimeError('安装包缺少核心字节码：' + ', '.join(sorted(required_bytecode)))
 
 
 def _verify_frozen_startup(app_path):
@@ -343,12 +346,20 @@ def _verify_frozen_startup(app_path):
                     if time.monotonic() >= deadline:
                         raise RuntimeError('打包程序启动验证超时')
                     time.sleep(0.25)
+                for path in ('/api/store/js/', '/cloud/userinfo'):
+                    try:
+                        request(path)
+                    except urllib.error.HTTPError as error:
+                        if error.code != 401 or json.load(error).get('code') != 'DESKTOP_AUTH_REQUIRED':
+                            raise RuntimeError('成品桌面鉴权验证失败：' + path) from error
+                    else:
+                        raise RuntimeError('成品内部接口接受了 Open API 凭证：' + path)
                 with ThreadPoolExecutor(max_workers=4) as pool:
-                    cloud_checks = [pool.submit(request, '/cloud/userinfo') for _ in range(4)]
                     created = request('/open_api/tools/execute', {
                         'tool': 'create_classroom', 'arguments': {'name': '成品隔离验证', 'rows': 2, 'cols': 3},
                     })
                     classroom_id = created['result']['classroom']['id']
+                    read_checks = [pool.submit(request, '/open_api/classrooms') for _ in range(4)]
                     operations = [
                         ('add_students_batch', {'students': [{'name': '验证甲'}, {'name': '验证乙'}]}),
                         ('arrange_seats', {'mode': 'random'}),
@@ -361,9 +372,9 @@ def _verify_frozen_startup(app_path):
                         })
                         if result.get('status') != 'ok' or (tool == 'validate_seating' and not result['result']['ok']):
                             raise RuntimeError('成品核心操作验证失败：' + tool)
-                    for check in cloud_checks:
+                    for check in read_checks:
                         check.result()
-                print('成品独立启动、数据库迁移、并发云状态、排座与快照验证通过。', flush=True)
+                print('成品独立启动、桌面鉴权、数据库迁移、并发读取、排座与快照验证通过。', flush=True)
             except Exception as error:
                 log.flush()
                 with open(log_path, 'r', encoding='utf-8', errors='replace') as source:
@@ -442,6 +453,7 @@ def main():
         '*.sqlite3', '*.sqlite', '*.db', '__pycache__', '*.pyc', '*.pyo',
         'tests', 'test', '__tests__', 'tests.py', 'test_*.py', 'tests_*.py',
         '.pytest_cache', '.DS_Store',
+        '.env', '.env.*', '*.env', 'instance-secret', 'database-bootstrap.json',
     ]
 
     print("正在清理旧构建文件...", flush=True)

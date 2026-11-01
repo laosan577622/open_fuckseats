@@ -17,6 +17,9 @@ import urllib.request
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
+from app_paths import is_frozen
+from secure_env import env
+
 
 APP_NAME = "不想排座位"
 MACOS_PACKAGE_IDENTIFIER = "xyz.577622.fuckseats.pkg"
@@ -80,7 +83,7 @@ def is_macos():
 
 
 def get_platform_name():
-    override = (os.getenv("FUCKSEATS_APP_PLATFORM") or "").strip().lower()
+    override = env("FUCKSEATS_APP_PLATFORM").strip().lower()
     if override in {"windows", "macos", "linux"}:
         return override
     if sys.platform.startswith("win"):
@@ -93,7 +96,7 @@ def get_platform_name():
 def is_update_api_supported():
     if not (is_windows() or is_macos()):
         return False
-    return (os.getenv("FUCKSEATS_APP_SHELL") or "").strip().lower() == "webview"
+    return is_frozen() or (os.getenv("FUCKSEATS_APP_SHELL") or "").strip().lower() == "webview"
 
 
 def _unique_paths(paths):
@@ -114,7 +117,7 @@ def _unique_paths(paths):
 def iter_runtime_roots():
     candidates = []
 
-    env_root = (os.getenv("FUCKSEATS_RUNTIME_ROOT") or "").strip()
+    env_root = env("FUCKSEATS_RUNTIME_ROOT").strip()
     if env_root:
         candidates.append(env_root)
 
@@ -126,7 +129,8 @@ def iter_runtime_roots():
         candidates.append(Path(sys.executable).resolve().parent)
 
     candidates.append(Path(__file__).resolve().parent)
-    candidates.append(Path.cwd())
+    if not is_frozen():
+        candidates.append(Path.cwd())
 
     return _unique_paths(candidates)
 
@@ -153,7 +157,7 @@ def load_release_manifest(path=None):
 
 
 def get_current_version():
-    env_version = (os.getenv("FUCKSEATS_APP_VERSION") or "").strip()
+    env_version = env("FUCKSEATS_APP_VERSION").strip()
     if env_version:
         return env_version
 
@@ -207,7 +211,7 @@ def is_newer_version(candidate, current):
 
 
 def get_update_manifest_url():
-    configured = (os.getenv("FUCKSEATS_UPDATE_MANIFEST_URL") or "").strip()
+    configured = env("FUCKSEATS_UPDATE_MANIFEST_URL").strip()
     return configured or (MACOS_UPDATE_MANIFEST_URL if is_macos() else DEFAULT_UPDATE_MANIFEST_URL)
 
 
@@ -573,7 +577,7 @@ def relaunch_self_as_admin(entry_script, argv=None):
 def launch_installer_as_admin(installer_path, installer_args=None):
     installer_args = (
         (installer_args or "").strip()
-        or (os.getenv("FUCKSEATS_INSTALLER_ARGS") or "").strip()
+        or env("FUCKSEATS_INSTALLER_ARGS").strip()
         or DEFAULT_WINDOWS_INSTALLER_ARGS
     )
     installer_args = BLOCKED_INSTALLER_FLAG_RE.sub(" ", installer_args)
@@ -622,7 +626,7 @@ def _allow_unsigned_macos_package():
 
 
 def _expected_macos_team_id():
-    configured = str(os.getenv("FUCKSEATS_MACOS_TEAM_ID") or "").strip()
+    configured = env("FUCKSEATS_MACOS_TEAM_ID").strip()
     if configured:
         return configured
     return str(load_release_manifest().get("team_id") or "").strip()

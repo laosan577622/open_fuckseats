@@ -11,6 +11,7 @@ import webbrowser
 from pathlib import Path
 
 from desktop_security import desktop_session, open_local_request
+from app_paths import is_frozen, resource_root, user_data_root
 
 
 LOCAL_DESKTOP_HOSTS = {"127.0.0.1", "localhost"}
@@ -1464,6 +1465,18 @@ class DesktopBridge:
         except urllib.error.URLError as exc:
             raise ValueError(f"无法连接本地导出服务：{exc.reason}") from exc
 
+    @staticmethod
+    def _validate_export_target(path):
+        target = Path(path).expanduser().resolve()
+        protected = [user_data_root().resolve(), resource_root().resolve()]
+        if is_frozen():
+            executable = Path(sys.executable).resolve()
+            bundle = next((parent for parent in executable.parents if parent.suffix == '.app'), executable.parent)
+            protected.append(bundle)
+        if any(target == root or root in target.parents for root in protected):
+            raise ValueError('导出位置不能位于应用程序或应用数据目录内，请选择其他文件夹')
+        return target
+
     def _show_save_dialog(self, suggested_filename, accept_mime, accept_extensions):
         if self._window is None:
             raise RuntimeError("桌面窗口尚未准备完成")
@@ -1555,7 +1568,7 @@ class DesktopBridge:
                 }
 
             final_path = ensure_allowed_extension(selected_path, normalized_exts)
-            target_path = Path(final_path).expanduser()
+            target_path = self._validate_export_target(final_path)
             target_path.parent.mkdir(parents=True, exist_ok=True)
             target_path.write_bytes(exported["content"])
             self._last_export_dir = str(target_path.parent)
@@ -1593,6 +1606,10 @@ class DesktopBridge:
             target_directory = Path(selected_directory).expanduser()
             if target_directory.is_symlink() or not target_directory.is_dir():
                 return {"status": "error", "message": "选择的文件夹不存在或不可用"}
+            try:
+                target_directory = self._validate_export_target(target_directory)
+            except ValueError as exc:
+                return {"status": "error", "message": str(exc)}
 
             saved_files = []
             used_names = set()
@@ -1612,7 +1629,7 @@ class DesktopBridge:
                         header_filename or fallback_filename,
                         used_names,
                     )
-                    target_path = target_directory / filename
+                    target_path = self._validate_export_target(target_directory / filename)
                     target_path.write_bytes(exported["content"])
                     saved_files.append({
                         "filename": target_path.name,

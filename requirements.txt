@@ -7,13 +7,15 @@
 
 Django==5.2.18
 PyYAML
-certifi
-cryptography
+certifi>=2026.10.19
+cryptography>=50.0.0,<51
 pandas
 openai
 httpx>=0.27,<1
+anyio>=4.14.2,<5
 openpyxl
 python-pptx
+Pillow>=13.0.0,<14
 xlrd
 waitress
 whitenoise
@@ -23,3 +25,4 @@ pypinyin
 pywebview
 keyring>=25,<26
 sqlcipher3==0.6.2
+sqlparse>=0.6.0,<1

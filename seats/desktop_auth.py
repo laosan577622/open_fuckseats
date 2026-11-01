@@ -1,25 +1,31 @@
 """Authenticate every desktop page and internal endpoint before dispatch."""
 
 from django.conf import settings
+from django.core.exceptions import DisallowedHost
 from django.http import HttpResponseRedirect, JsonResponse
 from django.utils.cache import patch_cache_control, patch_vary_headers
 
 from desktop_security import DESKTOP_COOKIE, DESKTOP_HEADER, DESKTOP_SESSION_PATH, desktop_session
+from app_paths import is_frozen
 
 
 CALLBACK_PATHS = frozenset({'/cloud/callback', '/cloud/callback/', '/ai/connect/callback/'})
 
 
 def desktop_mode_enabled():
-    return settings.APP_SHELL == 'webview'
+    return is_frozen() or settings.APP_SHELL == 'webview'
 
 
 def _private_response(response, *, referrer_policy='same-origin'):
     patch_cache_control(response, private=True, no_store=True)
     # Native form POSTs need their real Origin; no-referrer turns it into null.
     # same-origin still prevents desktop page URLs from reaching external sites.
-    response['Referrer-Policy'] = referrer_policy
+    if response.get('Referrer-Policy') != 'no-referrer':
+        response['Referrer-Policy'] = referrer_policy
     response['X-Content-Type-Options'] = 'nosniff'
+    response.setdefault('Content-Security-Policy', "object-src 'none'; base-uri 'none'; frame-ancestors 'none'")
+    response.setdefault('Cross-Origin-Resource-Policy', 'same-origin')
+    response.setdefault('Permissions-Policy', 'camera=(), microphone=(), geolocation=(), payment=(), usb=()')
     return response
 
 
@@ -36,9 +42,13 @@ class DesktopAuthMiddleware:
     def __call__(self, request):
         if not desktop_mode_enabled():
             return self.get_response(request)
+        try:
+            host = request.get_host()
+        except DisallowedHost:
+            return _denied('桌面服务仅接受本机地址', status=403, code='LOCAL_CLIENT_REQUIRED')
         if (
             request.META.get('REMOTE_ADDR') not in {'127.0.0.1', '::1'}
-            or not desktop_session.accepts_host(request.get_host())
+            or not desktop_session.accepts_host(host)
         ):
             return _denied('桌面服务仅接受本机地址', status=403, code='LOCAL_CLIENT_REQUIRED')
 

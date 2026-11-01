@@ -79,7 +79,8 @@ def is_authorized(request):
     token = extract_bearer_token(request)
     if not token:
         return False
-    return any(secrets.compare_digest(token, key) for key in valid_open_api_keys())
+    token_bytes = token.encode('utf-8')
+    return any(secrets.compare_digest(token_bytes, key.encode('utf-8')) for key in valid_open_api_keys())
 
 
 def is_trusted_browser_request(request):

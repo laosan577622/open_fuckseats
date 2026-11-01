@@ -8,6 +8,7 @@ from django.http import HttpResponse, HttpResponseRedirect, JsonResponse
 from django.db import transaction
 from django.views.decorators.http import require_http_methods
 from django.utils import timezone
+from django.utils.html import escape
 
 from .auth import issue_session, require_session, user_payload
 from .config import (
@@ -108,9 +109,10 @@ def _append_query(url, params):
 
 def _oauth_status_page(message, redirect_url, *, success=True):
     """Show a short, branded hand-off page while the desktop client resumes OAuth."""
-    target = json.dumps(str(redirect_url), ensure_ascii=False)
+    target = json.dumps(str(redirect_url), ensure_ascii=False).replace('<', '\\u003c').replace('>', '\\u003e').replace('&', '\\u0026')
+    message = escape(message)
     state_class = 'success' if success else 'error'
-    return HttpResponse(f'''<!doctype html>
+    response = HttpResponse(f'''<!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>云服务登录</title><style>
 :root{{--blue:#0a59f7;--ink:#17181c;--muted:#747984;--bg:#f5f7fb}}
@@ -119,6 +121,9 @@ def _oauth_status_page(message, redirect_url, *, success=True):
 .icon{{width:58px;height:58px;margin:0 auto 18px;border-radius:18px;display:grid;place-items:center;background:rgba(10,89,247,.1);color:var(--blue);font-size:28px}}h1{{margin:0 0 10px;font-size:22px;text-align:center}}p{{width:100%;margin:0;color:var(--muted);line-height:1.6;font-size:14px;text-align:center}}.spinner{{width:18px;height:18px;margin:22px auto 0;border:2px solid #dce5ff;border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite}}.error .icon{{background:#fff0f0;color:#c9342f}}.error .spinner{{display:none}}@keyframes spin{{to{{transform:rotate(360deg)}}}}
 </style></head><body><main class="card {state_class}"><div class="icon">{'✓' if success else '!'}</div><h1>云服务登录</h1><p>{message}</p><div class="spinner" aria-label="正在加载"></div></main>
 <script>setTimeout(function(){{location.replace({target});}}, {'900' if success else '1800'});</script></body></html>''')
+    response['Cache-Control'] = 'no-store'
+    response['Referrer-Policy'] = 'no-referrer'
+    return response
 
 
 def _oauth_redirect_uri():
@@ -129,6 +134,36 @@ def _session_code_expired(pending):
     ttl = get_data_limit('session_code_ttl_seconds', 60)
     created_at = pending.session_code_created_at or pending.created_at
     return created_at + timedelta(seconds=ttl) < timezone.now()
+
+
+def _callback_identity(url):
+    if not isinstance(url, str) or len(url) > 1000 or '\\' in url or any(ord(c) < 32 for c in url):
+        raise ValueError('invalid callback')
+    parsed = urllib.parse.urlsplit(url)
+    if parsed.scheme not in {'http', 'https'} or not parsed.hostname or parsed.username or parsed.password or parsed.fragment:
+        raise ValueError('invalid callback')
+    port = parsed.port if parsed.port is not None else (443 if parsed.scheme == 'https' else 80)
+    if not 1 <= port <= 65535:
+        raise ValueError('invalid callback port')
+    query = tuple(sorted((key, value) for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+                         if key != 'state'))
+    return parsed.scheme, parsed.hostname.lower(), port, parsed.path, query
+
+
+def _allowed_login_callback(url):
+    try:
+        identity = _callback_identity(url)
+        scheme, host, _, path, query = identity
+        if scheme == 'http' and host in {'127.0.0.1', 'localhost', '::1'}:
+            return path in {'/cloud/callback', '/cloud/callback/'} and not query
+        if scheme != 'https':
+            return False
+        registered = get_config().get('laosan_oauth', {}).get('allowed_client_callbacks', [])
+        if not isinstance(registered, (list, tuple)):
+            return False
+        return any(identity == _callback_identity(value) for value in registered)
+    except (ValueError, TypeError):
+        return False
 
 
 def health(request):
@@ -148,6 +183,8 @@ def auth_login(request):
     callback_url = str(request.GET.get('callback') or '').strip()
     if not callback_url:
         return _json_error('缺少 callback')
+    if not _allowed_login_callback(callback_url):
+        return _json_error('登录回调地址未登记', error='invalid_callback')
     client_public_key = str(request.GET.get('client_public_key') or '').strip()
     client_key_id = str(request.GET.get('client_key_id') or '').strip()
     if not client_public_key:
@@ -186,12 +223,13 @@ def auth_oauth_callback(request):
     oauth_error = str(request.GET.get('error') or '').strip()
 
     pending = PendingLogin.objects.filter(state=state, used=False).first()
-    if not pending:
+    if not pending or pending.session_code or pending.created_at + timedelta(minutes=10) <= timezone.now():
         return _json_error('登录状态不存在或已过期', status=400)
 
     if oauth_error:
         pending.oauth_error = oauth_error[:200]
-        pending.save(update_fields=['oauth_error'])
+        pending.used = True
+        pending.save(update_fields=['oauth_error', 'used'])
         return _oauth_status_page('登录已取消，正在返回应用。', _append_query(pending.callback_url, {'error': oauth_error}), success=False)
 
     if not code:
@@ -225,46 +263,54 @@ def auth_exchange(request):
         return _json_error(exc)
 
     code = str(data.get('code') or '').strip()
+    if not code:
+        return _json_error('session_code 无效', status=400, error='invalid_code')
     pending = PendingLogin.objects.select_related('user').filter(session_code=code, used=False).first()
     if not pending or not pending.user_id:
         return _json_error('session_code 无效', status=400, error='invalid_code')
     if _session_code_expired(pending):
         return _json_error('session_code 已过期', status=400, error='expired_code')
 
-    client_key_id = str(data.get('client_key_id') or pending.client_key_id or '')[:96]
-    client_public_key = str(data.get('client_public_key') or pending.client_public_key_pem or '')
+    client_key_id = str(pending.client_key_id or '')
+    client_public_key = str(pending.client_public_key_pem or '').strip()
+    if (str(data.get('client_key_id') or client_key_id) != client_key_id
+            or str(data.get('client_public_key') or client_public_key).strip() != client_public_key):
+        return _json_error('客户端密钥与登录请求不匹配', status=400, error='client_key_mismatch')
     if not client_public_key:
         return _json_error('缺少客户端加密公钥，拒绝明文签发 session_token', status=400, error='missing_client_public_key')
     if not client_key_id:
         return _json_error('缺少客户端密钥标识，拒绝签发 session_token', status=400, error='missing_client_key_id')
-    session = issue_session(
-        pending.user,
-        device_id=data.get('device_id') or '',
-        client_key_id=client_key_id,
-        client_public_key_pem=client_public_key,
-    )
-    pending.used = True
-    pending.save(update_fields=['used'])
-
-    user = pending.user
-    response_payload = {
-        'ok': True,
-        'status': 'success',
-        'session_token': session.token,
-        'token_expires_at': session.expires_at.isoformat(),
-        'uid': user.uid,
-        'nickname': user.nickname,
-        'email': user.email,
-        'avatar_url': user.avatar_url,
-        'subscription': subscription_payload(user.subscription_tier, user.subscription_expires_at),
-        'server_key': _service_key_payload(),
-        'client_key_id': client_key_id,
-    }
-    return _encrypted_json_response(
-        response_payload,
-        client_public_key_pem=client_public_key,
-        client_key_id=client_key_id,
-    )
+    with transaction.atomic():
+        claimed = PendingLogin.objects.filter(pk=pending.pk, used=False, session_code=code).update(used=True)
+        if not claimed:
+            return _json_error('session_code 无效', status=400, error='invalid_code')
+        session = issue_session(
+            pending.user,
+            device_id=data.get('device_id') or '',
+            client_key_id=client_key_id,
+            client_public_key_pem=client_public_key,
+        )
+        user = pending.user
+        response_payload = {
+            'ok': True,
+            'status': 'success',
+            'session_token': session.token,
+            'token_expires_at': session.expires_at.isoformat(),
+            'uid': user.uid,
+            'nickname': user.nickname,
+            'email': user.email,
+            'avatar_url': user.avatar_url,
+            'subscription': subscription_payload(user.subscription_tier, user.subscription_expires_at),
+            'server_key': _service_key_payload(),
+            'client_key_id': client_key_id,
+        }
+        response = _encrypted_json_response(
+            response_payload,
+            client_public_key_pem=client_public_key,
+            client_key_id=client_key_id,
+        )
+    response['Cache-Control'] = 'no-store'
+    return response
 
 
 @require_http_methods(['POST'])

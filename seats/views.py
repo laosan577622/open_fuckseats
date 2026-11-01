@@ -5,6 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.db import transaction, models, IntegrityError, OperationalError, ProgrammingError
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from django.utils.html import escape
 from django.urls import reverse
 from django.conf import settings
 from django.core.cache import cache
@@ -123,6 +124,7 @@ from .plugin_system import (
     PluginWorkspaceScriptNotFoundError,
 )
 from .cloud import (
+    _get_ssl_context as cloud_ssl_context,
     apply_cloud_subscription_payload,
     CloudAPIError,
     build_cloud_login_url,
@@ -130,6 +132,7 @@ from .cloud import (
     cloud_api_request,
     cloud_exchange_session_code,
     cloud_public_request,
+    consume_cloud_login_state,
     get_active_cloud_session,
     get_cloud_server_url,
     refresh_cloud_subscription,
@@ -14251,7 +14254,7 @@ def export_students(request, pk):
 
     wb = openpyxl.Workbook()
     ws = wb.active
-    ws.title = classroom.name
+    ws.title = re.sub(r'[\\/*?:\[\]]', '_', classroom.name).strip("'")[:31] or '座位表'
 
     thin_border = Border(left=Side(style='thin'),
                          right=Side(style='thin'),
@@ -14266,6 +14269,7 @@ def export_students(request, pk):
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=classroom.cols)
     title_suffix = "（180°翻转）" if rotate_180 else ""
     cell = ws.cell(row=1, column=1, value=f"{classroom.name} 座位表{title_suffix}")
+    cell.data_type = 's'
     cell.font = header_font
     cell.alignment = center_align
     ws.row_dimensions[1].height = 40
@@ -14309,6 +14313,7 @@ def export_students(request, pk):
                     value = seat.get_cell_type_display()
 
             cell.value = value
+            cell.data_type = 's'
             cell.alignment = center_align
             cell.font = seat_font
 
@@ -15169,6 +15174,7 @@ def export_group_report(request, pk):
                 end_row=row, end_column=start_col + boxes_count
             )
             cell = ws.cell(row=row, column=start_col, value=entry['text'])
+            cell.data_type = 's'
             cell.font = group_font
             cell.alignment = center
             cell.fill = PatternFill(start_color="FFFFFF", end_color="FFFFFF", fill_type="solid")
@@ -15177,6 +15183,7 @@ def export_group_report(request, pk):
             
         elif kind == 'member':
             cell_name = ws.cell(row=row, column=start_col, value=entry['text'])
+            cell_name.data_type = 's'
             cell_name.font = leader_name_font if entry.get('is_leader') else name_font
             cell_name.alignment = center
             cell_name.border = thin_border
@@ -15667,29 +15674,17 @@ def _bsce_json_post(url, payload, timeout=BSCE_CLOUD_TIMEOUT, browser_session=No
         except json.JSONDecodeError as exc:
             raise ValueError('云端返回的数据不是有效 JSON') from exc
 
-    contexts = [ssl.create_default_context()]
-    used_cert_fallback = False
-    while contexts:
-        context = contexts.pop(0)
+    try:
+        return execute(cloud_ssl_context())
+    except urllib.error.HTTPError as exc:
         try:
-            return execute(context)
-        except urllib.error.HTTPError as exc:
-            detail = ''
-            try:
-                detail = exc.read().decode('utf-8', errors='replace')
-            except Exception:
-                detail = str(exc)
-            raise ValueError(f'云端请求失败：HTTP {exc.code} {detail[:180]}') from exc
-        except urllib.error.URLError as exc:
-            reason = getattr(exc, 'reason', exc)
-            cert_failed = isinstance(reason, ssl.SSLCertVerificationError) or 'CERTIFICATE_VERIFY_FAILED' in str(reason)
-            if cert_failed and not used_cert_fallback:
-                used_cert_fallback = True
-                contexts.append(ssl._create_unverified_context())
-                continue
-            raise ValueError(f'无法连接 BSCE 云端：{reason}') from exc
-
-    raise ValueError('无法连接 BSCE 云端')
+            detail = exc.read().decode('utf-8', errors='replace')
+        except Exception:
+            detail = str(exc)
+        raise ValueError(f'云端请求失败：HTTP {exc.code} {detail[:180]}') from exc
+    except urllib.error.URLError as exc:
+        reason = getattr(exc, 'reason', exc)
+        raise ValueError(f'无法连接 BSCE 云端：{reason}') from exc
 
 
 def _bsce_require_success(response, fallback_message):
@@ -16952,7 +16947,9 @@ def cloud_open_external(request):
 
 @require_http_methods(['GET'])
 def cloud_login(request):
-    callback_url = request.GET.get('callback') or _cloud_callback_url(request)
+    callback_url = _cloud_callback_url(request)
+    if request.GET.get('callback') and request.GET['callback'] != callback_url:
+        return JsonResponse({'status': 'error', 'message': '登录回调地址必须指向当前应用。'}, status=400)
     login_url = build_cloud_login_url(callback_url)
     if request.GET.get('format') == 'json':
         return JsonResponse({
@@ -16978,7 +16975,7 @@ def _cloud_callback_done_page(success, error_detail=None):
         title = '登录失败'
         icon_svg = '<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="28" fill="#ff3b30" opacity="0.1"/><circle cx="28" cy="28" r="20" fill="#ff3b30" opacity="0.15"/><path d="M22 22L34 34M34 22L22 34" stroke="#ff3b30" stroke-width="3" stroke-linecap="round"/></svg>'
         message = '登录失败，请关闭此窗口后重试'
-        sub_message = str(error_detail or '')[:120] if error_detail else ''
+        sub_message = escape(str(error_detail or '')[:120]) if error_detail else ''
     html = f'''<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -17007,19 +17004,29 @@ color:#1d1d1f}}
 </div>
 </body>
 </html>'''
-    return HttpResponse(html, content_type='text/html; charset=utf-8')
+    response = HttpResponse(html, content_type='text/html; charset=utf-8')
+    response['Cache-Control'] = 'no-store'
+    response['Referrer-Policy'] = 'no-referrer'
+    return response
 
 
 @require_http_methods(['GET'])
 def cloud_callback(request):
+    from .desktop_auth import desktop_mode_enabled
+
     code = str(request.GET.get('code') or '').strip()
     error = str(request.GET.get('error') or '').strip()
-    is_desktop = getattr(settings, 'APP_SHELL', 'browser') != 'browser'
+    is_desktop = desktop_mode_enabled()
+
+    if not consume_cloud_login_state(request.GET.get('state'), _cloud_callback_url(request)):
+        response = _cloud_callback_done_page(False, '登录请求不存在或已过期，请返回应用重新登录。')
+        response.status_code = 400
+        return response
 
     if error:
         if is_desktop:
             return _cloud_callback_done_page(False, error)
-        return redirect(f'/?cloud_login=failed&error={error}')
+        return redirect('/?cloud_login=failed')
     if not code:
         if is_desktop:
             return _cloud_callback_done_page(False, 'missing_code')

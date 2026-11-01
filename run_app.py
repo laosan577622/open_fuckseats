@@ -16,6 +16,8 @@ from desktop_access import ReadAccessRequest, forward_read_access_request, read_
 from desktop_instance import DesktopInstanceGuard, ExistingInstanceError
 from desktop_security import desktop_session
 from startup_dialogs import StartupSplash, prompt_read_access, show_message
+from app_paths import is_frozen
+from secure_env import sanitize_environment
 
 HOST = '127.0.0.1'
 PORT = 23948
@@ -401,7 +403,7 @@ def _prepare_application(dev_mode):
     from database_security import prepare_desktop_database
 
     os.environ['FUCKSEATS_APP_SHELL'] = 'browser' if dev_mode else 'webview'
-    if dev_mode:
+    if dev_mode and not is_frozen():
         desktop_session.close()
     else:
         desktop_session.start(f'http://{HOST}:{PORT}')
@@ -440,6 +442,9 @@ def _prepare_application(dev_mode):
 
 
 def main(argv=None):
+    removed = sanitize_environment()
+    if removed:
+        print('已忽略发布版不支持的环境变量：' + ', '.join(removed), file=sys.stderr, flush=True)
     try:
         options = _parse_startup_options(sys.argv if argv is None else argv)
     except ValueError as exc:
@@ -490,7 +495,7 @@ def main(argv=None):
         app_url = f'http://{HOST}:{PORT}'
         print(f'客户端已启动：{app_url}', flush=True)
         if options.dev:
-            _open_browser(app_url)
+            _open_browser(desktop_session.window_url(app_url))
             splash.close()
             try:
                 while server_thread.is_alive():

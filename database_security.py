@@ -21,8 +21,10 @@ from app_paths import (
     database_path,
     legacy_database_candidates,
     locks_directory,
+    is_frozen,
     state_directory,
 )
+from secure_env import env
 
 
 SQLITE_HEADER = b"SQLite format 3\x00"
@@ -42,6 +44,8 @@ def _is_truthy(value: object) -> bool:
 
 
 def _is_test_process() -> bool:
+    if is_frozen():
+        return False
     executable = Path(str(sys.argv[0] or "")).stem.lower()
     return (
         executable in {"pytest", "py.test"}
@@ -51,9 +55,7 @@ def _is_test_process() -> bool:
 
 
 def database_encryption_enabled() -> bool:
-    if _is_truthy(os.getenv("FUCKSEATS_DISABLE_DATABASE_ENCRYPTION")):
-        if getattr(sys, "frozen", False):
-            raise DatabaseSecurityError("正式桌面版本不允许关闭数据库加密")
+    if _is_truthy(env("FUCKSEATS_DISABLE_DATABASE_ENCRYPTION")):
         return False
     return not _is_test_process()
 
@@ -218,8 +220,14 @@ def _write_state(state: str, **details):
     }
     target = _state_path()
     temporary = target.with_suffix(".tmp")
-    temporary.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    os.replace(temporary, target)
+    descriptor = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC | getattr(os, 'O_NOFOLLOW', 0), 0o600)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as output:
+            output.write(json.dumps(payload, ensure_ascii=False, indent=2))
+        temporary.chmod(0o600)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def _is_plaintext_sqlite(path: Path) -> bool:

@@ -31,6 +31,7 @@ DEFAULT_CONFIG = {
         'userinfo_url': 'https://www.577622.xyz/oauth/userinfo',
         'developer_subscriptions_url': 'https://www.577622.xyz/api/developer/subscriptions',
         'scope': 'email nickname subscriptions',
+        'allowed_client_callbacks': [],
     },
     'subscription': {
         'fallback_tier': 'free',

@@ -5,6 +5,7 @@ import re
 import sys
 from urllib.parse import urlsplit
 
+from django.db.models import F
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_POST
@@ -12,6 +13,7 @@ from django.views.decorators.http import require_POST
 from buxiang_drop_sdk import DropClient
 from .models import Classroom
 from .client_control import feature_gate
+from .sorting import normalize_custom_data
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +32,30 @@ def _filename(name):
     return value.encode('utf-16-le')[:288].decode('utf-16-le', errors='ignore').rstrip('. ') + '.seats'
 
 
+def _serialize_drop_document(classroom):
+    """只读取当前布局和人员资料，不复用包含排座配置的完整备份。"""
+    return {
+        'classroom': {
+            'name': classroom.name,
+            'rows': classroom.rows,
+            'cols': classroom.cols,
+            'doors': classroom.doors,
+        },
+        'students': [
+            {**student, 'custom_data': normalize_custom_data(student['custom_data'])}
+            for student in classroom.students.order_by('pk').values(
+                'pk', 'name', 'student_id', 'gender', 'score', 'custom_data',
+            )
+        ],
+        'groups': list(classroom.groups.order_by('order', 'pk').values(
+            'pk', 'name', 'order', leader_student_pk=F('leader_id'),
+        )),
+        'seats': list(classroom.seats.order_by('row', 'col').values(
+            'row', 'col', 'cell_type', student_pk=F('student_id'), group_pk=F('group_id'),
+        )),
+    }
+
+
 @require_POST
 @feature_gate('drop')
 def drop_classroom(request, pk):
@@ -39,9 +65,7 @@ def drop_classroom(request, pk):
     if not sys.platform.startswith('win'):
         return JsonResponse({'status': 'not_installed', 'message': '请先安装 Windows 版不想班管教师端，再使用 Drop。'})
     try:
-        from .views import _serialize_seats_file_bundle
-        document = _serialize_seats_file_bundle(classroom, history_limit=0,
-                                                include_future_mode_config=False, include_ai_conversations=False)
+        document = _serialize_drop_document(classroom)
         ticket = DropClient(source='不想排座位').send_seats(document, filename=_filename(classroom.name))
     except FileNotFoundError:
         return JsonResponse({'status': 'not_installed', 'message': '请先安装不想班管教师端（支持 Drop 的新版），安装后再点击 Drop。便携版请先运行一次教师端。'})

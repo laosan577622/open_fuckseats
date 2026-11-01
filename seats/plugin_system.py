@@ -103,7 +103,14 @@ def _plugin_storage_model():
 
 
 def _plugin_storage_secret():
-    return str(getattr(settings, 'SECRET_KEY', 'fuckseats-local-plugin-storage'))
+    import hashlib
+    from database_security import get_database_key
+
+    return hashlib.sha256(get_database_key() + b'fuckseats-plugin-storage-v2').hexdigest()
+
+
+# 旧密钥仅用于迁移插件密文，绝不能用于 Django 签名或新数据加密。
+LEGACY_PLUGIN_STORAGE_KEY = 'django-insecure-1bux7tnh9ubww-d(pohhj#nw=n5ndw-&8tvns(!yx-pb*sn3xz'
 
 
 class PluginRegistry(BasePluginRegistry):
@@ -112,7 +119,10 @@ class PluginRegistry(BasePluginRegistry):
     def __init__(self):
         super().__init__(
             app_version=desktop_runtime.get_current_version(),
-            storage_backend=DjangoModelStorageBackend(_plugin_storage_model, _plugin_storage_secret),
+            storage_backend=DjangoModelStorageBackend(
+                _plugin_storage_model, _plugin_storage_secret,
+                fallback_secret_keys=(LEGACY_PLUGIN_STORAGE_KEY,),
+            ),
             services=local_plugin_service_factories(),
         )
 

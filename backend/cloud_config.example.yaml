@@ -30,6 +30,8 @@ laosan_oauth:
   userinfo_url: "https://www.577622.xyz/oauth/userinfo"
   developer_subscriptions_url: "https://www.577622.xyz/api/developer/subscriptions"
   scope: "email nickname subscriptions"
+  # 桌面端 HTTP 本机 /cloud/callback 自动允许；网页部署须登记精确 HTTPS 回调地址。
+  allowed_client_callbacks: []
 
 subscription:
   # 未登录或订阅过期时回退到此等级

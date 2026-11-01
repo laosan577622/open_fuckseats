@@ -1,6 +1,7 @@
 import json
 import http.client
 import os
+import secrets
 import ssl
 import socket
 import threading
@@ -14,6 +15,7 @@ from datetime import timedelta
 from django.db import models, transaction
 from django.utils import timezone
 from django.utils.dateparse import parse_datetime
+from secure_env import env
 
 from .crypto import compute_key_id, decrypt_payload, encrypt_payload, generate_rsa_keypair
 from .models import CloudSession, FrontendKVStore, LocalCloudKeyMaterial, SyncMeta
@@ -21,7 +23,7 @@ from .models import CloudSession, FrontendKVStore, LocalCloudKeyMaterial, SyncMe
 
 OFFICIAL_CLOUD_SERVER_URL = 'https://fuckseatsapi.577622.xyz'
 DEFAULT_CLOUD_SERVER_URL = OFFICIAL_CLOUD_SERVER_URL
-DEFAULT_CLOUD_CALLBACK_URL = os.getenv('FUCKSEATS_CLOUD_CALLBACK_URL', 'http://localhost:23948/cloud/callback').strip() or 'http://localhost:23948/cloud/callback'
+DEFAULT_CLOUD_CALLBACK_URL = env('FUCKSEATS_CLOUD_CALLBACK_URL', 'http://localhost:23948/cloud/callback').strip() or 'http://localhost:23948/cloud/callback'
 CLOUD_USER_AGENT = os.getenv('FUCKSEATS_CLOUD_USER_AGENT', 'fuckseats_cilent').strip() or 'fuckseats_cilent'
 CLOUD_SERVER_URL_KEY = 'cloud_server_url'
 TRANSIENT_REQUEST_RETRIES = 3
@@ -33,6 +35,9 @@ AUTO_REFRESH_SUBSCRIPTION_EXCLUDED_PATHS = {
 
 _sync_state = threading.local()
 _local_cloud_keypair_lock = threading.RLock()
+CLOUD_LOGIN_STATE_TTL = 600
+_cloud_login_states = {}
+_cloud_login_state_lock = threading.Lock()
 
 
 class CloudAPIError(RuntimeError):
@@ -49,18 +54,7 @@ def _get_ssl_context():
     except Exception:
         pass
 
-    try:
-        context = ssl.create_default_context()
-        try:
-            context.load_default_certs()
-        except Exception:
-            pass
-        if context.get_ca_certs():
-            return context
-    except Exception:
-        pass
-
-    return ssl._create_unverified_context()
+    return ssl.create_default_context()
 
 
 def get_cloud_server_url():
@@ -85,17 +79,69 @@ def set_cloud_server_url(url):
         SyncMeta.objects.update(cloud_version=0, last_sync_at=None, last_error='')
         ClassroomGroup.objects.update(cloud_version=0, last_sync_at=None, last_synced_fingerprint='')
         FrontendKVStore.objects.update_or_create(key=CLOUD_SERVER_URL_KEY, defaults={'value': target})
+    clear_cloud_login_states()
     return target
+
+
+def clear_cloud_login_states():
+    with _cloud_login_state_lock:
+        _cloud_login_states.clear()
+
+
+def _login_callback_base(callback_url):
+    parsed = urllib.parse.urlsplit(callback_url)
+    query = [(key, value) for key, value in urllib.parse.parse_qsl(parsed.query, keep_blank_values=True)
+             if key not in {'state', 'code', 'error'}]
+    return urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode(query), fragment=''))
+
+
+def _cloud_login_callback(callback_url, server_url):
+    callback_url = _login_callback_base(callback_url)
+    now = time.monotonic()
+    with _cloud_login_state_lock:
+        for state, (_, _, expires) in list(_cloud_login_states.items()):
+            if expires <= now:
+                del _cloud_login_states[state]
+        state = next((key for key, (callback, server, _) in _cloud_login_states.items()
+                      if callback == callback_url and server == server_url), None)
+        if state is None:
+            if len(_cloud_login_states) >= 128:
+                del _cloud_login_states[next(iter(_cloud_login_states))]
+            state = secrets.token_urlsafe(32)
+            _cloud_login_states[state] = (callback_url, server_url, now + CLOUD_LOGIN_STATE_TTL)
+    parsed = urllib.parse.urlsplit(callback_url)
+    query = urllib.parse.parse_qsl(parsed.query, keep_blank_values=True) + [('state', state)]
+    return urllib.parse.urlunsplit(parsed._replace(query=urllib.parse.urlencode(query)))
+
+
+def consume_cloud_login_state(state, callback_url):
+    if not isinstance(state, str) or not 40 <= len(state) <= 64:
+        return False
+    callback_url = _login_callback_base(callback_url)
+    server_url = get_cloud_server_url()
+    with _cloud_login_state_lock:
+        pending = _cloud_login_states.get(state)
+        if not pending:
+            return False
+        callback, server, expires = pending
+        if expires <= time.monotonic():
+            del _cloud_login_states[state]
+            return False
+        if callback != callback_url or server != server_url:
+            return False
+        del _cloud_login_states[state]
+        return True
 
 
 def build_cloud_login_url(callback_url=None):
     local_keys = get_or_create_local_cloud_keypair()
+    server_url = get_cloud_server_url()
     query = urllib.parse.urlencode({
-        'callback': callback_url or DEFAULT_CLOUD_CALLBACK_URL,
+        'callback': _cloud_login_callback(callback_url or DEFAULT_CLOUD_CALLBACK_URL, server_url),
         'client_key_id': local_keys['key_id'],
         'client_public_key': local_keys['public_key_pem'],
     })
-    return f'{get_cloud_server_url()}/auth/login?{query}'
+    return f'{server_url}/auth/login?{query}'
 
 
 def _read_json_response(response):
@@ -232,6 +278,10 @@ def _request_json(method, url, body=None, headers=None, timeout=20):
     request_attempts = TRANSIENT_REQUEST_RETRIES if request_method in {'GET', 'HEAD', 'OPTIONS'} else 1
     for attempt in range(request_attempts):
         req = urllib.request.Request(url, data=data, headers=request_headers, method=request_method)
+        for name, value in request_headers.items():
+            if name.lower() == 'authorization':
+                req.remove_header('Authorization')
+                req.add_unredirected_header('Authorization', value)
         try:
             with urllib.request.urlopen(req, timeout=timeout, context=_get_ssl_context()) as response:
                 payload = _read_json_response(response)
@@ -400,6 +450,7 @@ def get_active_cloud_session():
 
 def clear_cloud_session():
     CloudSession.objects.all().delete()
+    clear_cloud_login_states()
 
 
 def refresh_cloud_subscription(session, timeout=20, strict=False):
