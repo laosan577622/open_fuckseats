@@ -15,6 +15,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
+from concurrent.futures import Future
 from pathlib import Path
 
 from app_paths import is_frozen
@@ -50,6 +51,8 @@ BLOCKED_INSTALLER_FLAG_RE = re.compile(
 UPDATE_STATE_LOCK = threading.Lock()
 UPDATE_THREAD_LOCK = threading.RLock()
 UPDATE_THREAD = None
+STARTUP_UPDATE_CHECK_LOCK = threading.Lock()
+STARTUP_UPDATE_CHECK = None
 PREPARED_INSTALLER_PATH = ""
 UPDATE_STATE = {
     "state": "idle",
@@ -855,10 +858,6 @@ def check_for_updates():
         "mode": "remote_download",
     }
 
-    if not payload["supported"]:
-        payload["message"] = "当前平台暂不支持自动更新"
-        return payload
-
     manifest = _normalize_remote_manifest(fetch_remote_release_manifest())
     payload.update(manifest)
     payload["update_available"] = is_newer_version(
@@ -871,6 +870,33 @@ def check_for_updates():
         except RuntimeError as exc:
             payload["notes_error"] = str(exc)
     return payload
+
+
+def start_startup_update_check():
+    global STARTUP_UPDATE_CHECK
+    with STARTUP_UPDATE_CHECK_LOCK:
+        if STARTUP_UPDATE_CHECK is None:
+            result = Future()
+
+            def run():
+                try:
+                    result.set_result(check_for_updates())
+                except Exception as exc:
+                    result.set_exception(exc)
+
+            threading.Thread(target=run, name="fuckseats-update-check", daemon=True).start()
+            STARTUP_UPDATE_CHECK = result
+        return STARTUP_UPDATE_CHECK
+
+
+def get_startup_update_result():
+    with STARTUP_UPDATE_CHECK_LOCK:
+        result = STARTUP_UPDATE_CHECK
+    if result is None:
+        return {"state": "idle"}
+    if not result.done():
+        return {"state": "checking"}
+    return {"state": "checked", **result.result()}
 
 
 def _run_manual_update_task(manifest):

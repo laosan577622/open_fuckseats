@@ -20,6 +20,7 @@ Get-Process -Name FuckSeats -ErrorAction SilentlyContinue | ForEach-Object {
 
 $count = 0
 $backupRoot = Join-Path $root ('repair-backups\' + [guid]::NewGuid().ToString('N'))
+$files = @()
 foreach ($layout in @('_internal\django', 'django')) {
     $tags = Join-Path $root "$layout\contrib\admin\templatetags"
     $source = Join-Path $tags 'admin_filters.py'
@@ -29,24 +30,39 @@ foreach ($layout in @('_internal\django', 'django')) {
     if ((Get-Content -LiteralPath $source -Raw) -notmatch 'from\s+django\.contrib\.admin\.options\s+import\s+EMPTY_VALUE_STRING') {
         continue
     }
-    $files = @($source)
+    $files += $source
     $legacyBytecode = Join-Path $tags 'admin_filters.pyc'
     if (Test-Path -LiteralPath $legacyBytecode -PathType Leaf) { $files += $legacyBytecode }
     $cache = Join-Path $tags '__pycache__'
     if (Test-Path -LiteralPath $cache -PathType Container) {
         $files += @(Get-ChildItem -LiteralPath $cache -Filter 'admin_filters.*.pyc' -File | ForEach-Object { $_.FullName })
     }
-    foreach ($file in $files) {
-        $relative = $file.Substring($root.TrimEnd('\').Length).TrimStart('\')
-        $backup = Join-Path $backupRoot $relative
-        New-Item -ItemType Directory -Path (Split-Path $backup -Parent) -Force | Out-Null
-        Move-Item -LiteralPath $file -Destination $backup
-        $count++
+}
+
+# New installers ship adjacent .pyc files. Retired .py files take precedence
+# during imports; back them up only when the replacement bytecode is present.
+foreach ($layout in @('_internal\seats', 'seats', '_internal\config', 'config')) {
+    $package = Join-Path $root $layout
+    if (!(Test-Path -LiteralPath $package -PathType Container)) { continue }
+    foreach ($source in @(Get-ChildItem -LiteralPath $package -Filter '*.py' -File -Recurse)) {
+        if (!(Test-Path -LiteralPath ($source.FullName + 'c') -PathType Leaf)) { continue }
+        $files += $source.FullName
+        $cache = Join-Path $source.DirectoryName '__pycache__'
+        if (Test-Path -LiteralPath $cache -PathType Container) {
+            $files += @(Get-ChildItem -LiteralPath $cache -Filter ($source.BaseName + '.*.pyc') -File | ForEach-Object { $_.FullName })
+        }
     }
 }
+foreach ($file in @($files | Sort-Object -Unique)) {
+    $relative = $file.Substring($root.TrimEnd('\').Length).TrimStart('\')
+    $backup = Join-Path $backupRoot $relative
+    New-Item -ItemType Directory -Path (Split-Path $backup -Parent) -Force | Out-Null
+    Move-Item -LiteralPath $file -Destination $backup
+    $count++
+}
 if ($count -gt 0) {
-    Write-Host "Repaired $count stale Django files. Backup: $backupRoot"
+    Write-Host "Repaired $count stale runtime files. Backup: $backupRoot"
     Write-Host 'You can now start FuckSeats. Your databases and plugins were not modified.'
 } else {
-    Write-Host 'No matching stale Django files found. If the error persists, reinstall the latest installer.'
+    Write-Host 'No matching stale runtime files found. If the error persists, reinstall the latest installer.'
 }

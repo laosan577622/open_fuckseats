@@ -153,20 +153,19 @@ from .data_sharing import (
 from .network_status import get_system_network_status
 from .client_control import get_resolved_client_control, load_announcement
 
-APP_MANIFEST_REDIRECT_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/api.json'
-UPDATE_DETAILS_REDIRECT_URL = 'https://apps.577622.xyz/api/user_a6d12cebda652894/7h4sjhx0azr/update.txt'
+
+@require_http_methods(['GET'])
+def app_manifest(request):
+    try:
+        response = JsonResponse(desktop_runtime.fetch_remote_release_manifest())
+    except RuntimeError as exc:
+        response = JsonResponse({'status': 'error', 'message': str(exc)}, status=502)
+    response['Cache-Control'] = 'no-store'
+    response['X-Content-Type-Options'] = 'nosniff'
+    return response
 
 
-def _redirect_preserving_query(request, target_url):
-    query_string = request.META.get('QUERY_STRING', '')
-    if query_string:
-        separator = '&' if '?' in target_url else '?'
-        target_url = f'{target_url}{separator}{query_string}'
-    return HttpResponseRedirect(target_url)
-
-
-def app_manifest_redirect(request):
-    return _redirect_preserving_query(request, desktop_runtime.get_update_manifest_url())
+app_manifest_redirect = app_manifest  # 兼容旧版路由。
 
 
 @require_http_methods(['GET'])
@@ -179,6 +178,10 @@ def update_details(request):
     response['Cache-Control'] = 'no-store'
     response['X-Content-Type-Options'] = 'nosniff'
     return response
+
+
+# 兼容覆盖升级时残留的旧版路由，仍使用当前更新说明接口。
+update_details_redirect = update_details
 
 
 @require_http_methods(['GET'])
@@ -17092,6 +17095,24 @@ def cloud_logout(request):
 
 
 @require_http_methods(['GET'])
+def cloud_pending_changes(request):
+    """退出前检查：只读本地数据库，列出已上云但本地仍有未同步改动的班级。"""
+    if not get_active_cloud_session():
+        return JsonResponse({'status': 'success', 'logged_in': False, 'classrooms': []})
+    metas = (
+        SyncMeta.objects
+        .select_related('classroom')
+        .filter(last_sync_at__isnull=False, cloud_version__gt=0, local_version__gt=models.F('cloud_version'))
+        .order_by('classroom_id')
+    )
+    classrooms = [
+        {'classroom_id': meta.classroom_id, 'name': meta.classroom.name, 'conflict': meta.last_error == 'conflict'}
+        for meta in metas
+    ]
+    return JsonResponse({'status': 'success', 'logged_in': True, 'classrooms': classrooms})
+
+
+@require_http_methods(['GET'])
 def cloud_sync_status(request):
     try:
         session = _cloud_local_session_or_401()
@@ -18104,20 +18125,33 @@ def _local_update_request(view):
     return wrapped
 
 
-@_local_update_request
-@require_http_methods(['GET'])
-def desktop_update_check(request):
+def _update_check_response(get_payload):
     try:
-        payload = desktop_runtime.check_for_updates()
-        return JsonResponse({'status': 'success', **payload})
+        response = JsonResponse({'status': 'success', **get_payload()})
     except Exception as exc:
-        return JsonResponse({
+        response = JsonResponse({
             'status': 'error',
             'state': 'error',
             'platform': desktop_runtime.get_platform_name(),
             'supported': desktop_runtime.is_update_api_supported(),
             'message': str(exc),
         }, status=502)
+    response['Cache-Control'] = 'no-store'
+    return response
+
+
+@require_http_methods(['GET'])
+def desktop_startup_update_result(request):
+    # Keep startup result reads independent of the cloud configuration and database.
+    return _update_check_response(desktop_runtime.get_startup_update_result)
+
+
+@_local_update_request
+@require_http_methods(['GET'])
+def desktop_update_check(request):
+    if request.GET.get('startup') == '1':
+        return desktop_startup_update_result(request)
+    return _update_check_response(desktop_runtime.check_for_updates)
 
 
 @_local_update_request

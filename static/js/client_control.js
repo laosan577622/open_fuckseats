@@ -165,17 +165,19 @@
             getState: function () { return state; },
             isAvailable: function (name) { return feature(name).available !== false; },
             getExperiment: function (name) { return state && state.experiments ? state.experiments[name] : 'control'; },
-            refresh: initialize
+            refresh: async function () {
+                await initialize();
+                await checkAnnouncement();
+            }
         };
         if (window.AppBranding && typeof window.AppBranding.configure === 'function') window.AppBranding.configure(state.branding);
         applyFeatureAvailability();
         window.dispatchEvent(new CustomEvent('fuckseats:client-control-ready', { detail: state }));
-        await checkAnnouncement();
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initialize, { once: true });
-    } else {
-        initialize();
-    }
+    const domReady = document.readyState === 'loading'
+        ? new Promise((resolve) => document.addEventListener('DOMContentLoaded', resolve, { once: true }))
+        : Promise.resolve();
+    window.ClientControlReady = domReady.then(initialize);
+    window.ClientControlReady.then(checkAnnouncement);
 })();

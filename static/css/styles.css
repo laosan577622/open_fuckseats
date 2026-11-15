@@ -8425,13 +8425,6 @@ body.classroom-detail-body[data-app-shell="webview"][data-app-platform="windows"
     padding-top: 12px !important;
 }
 
-@media (min-width: 1101px) {
-    body.classroom-detail-body[data-app-platform="windows"] .zoom-controls,
-    body.classroom-detail-body[data-app-platform="macos"] .zoom-controls {
-        display: none;
-    }
-}
-
 /* 动态密度变量必须放在所有平台覆盖规则之后，才能覆盖 macOS 的固定尺寸。 */
 body.classroom-detail-body[data-app-shell="webview"][data-app-platform="macos"] #classroom-root {
     --seat-density-scale: 1;

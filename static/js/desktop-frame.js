@@ -20,7 +20,13 @@
     window.addEventListener('desktopwindowstate', (event) => applyState(event.detail));
     syncState();
     const action = (name) => {
-        if (api()) api().window_action(name).catch(reportError);
+        if (!api()) return;
+        // 关闭前交给退出提醒检查未同步的云班级。
+        if (name === 'close' && window.FuckSeatsExitGuard) {
+            window.FuckSeatsExitGuard.requestClose();
+            return;
+        }
+        api().window_action(name).catch(reportError);
     };
     document.querySelectorAll('[data-window-action]').forEach((button) => {
         button.addEventListener('click', () => action(button.dataset.windowAction));

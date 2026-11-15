@@ -11,6 +11,9 @@ import os
 
 from django.core.asgi import get_asgi_application
 
+from desktop_runtime import start_startup_update_check
+
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'config.settings')
 
 application = get_asgi_application()
+start_startup_update_check()

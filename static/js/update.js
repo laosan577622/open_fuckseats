@@ -1,12 +1,12 @@
 (function () {
     let pollingInterval = null;
     let pollingGeneration = 0;
+    let manualUpdateRequested = false;
+    let startupNoticeQueued = false;
     const INSTALL_LAUNCH_DELAY_MS = 2000;
     const INSTALL_LAUNCH_DELAY_TEXT = '2 秒';
-    const DEFAULT_UPDATE_DETAILS_URL = '/update.txt';
-    const STARTUP_CHECK_KEY = 'fuckseats_update_checked_this_window';
-    const STARTUP_PROMPT_WINDOW_MS = 10000;
-    let updateDetailsRequestId = 0;
+    const STARTUP_RESULT_URL = '/api/update/startup-result/';
+    const STARTUP_NOTICE_KEY = 'fuckseats_update_startup_notice';
     const appPlatform = String(document.body && document.body.dataset.appPlatform || '').toLowerCase();
 
     window.updateInfo = null;
@@ -60,43 +60,85 @@
         window.dispatchEvent(new CustomEvent('fuckseats:update-check-complete'));
     }
 
-    function claimStartupCheck() {
-        if (!['/', '/welcome/'].includes(location.pathname) || window.FUCKSEATS_ONBOARDING_REDIRECTING === true) return false;
+    function hasShownStartupNotice(value) {
         try {
-            if (sessionStorage.getItem(STARTUP_CHECK_KEY) === '1') return false;
-            sessionStorage.setItem(STARTUP_CHECK_KEY, '1');
+            return sessionStorage.getItem(STARTUP_NOTICE_KEY) === value;
         } catch (_) {
-            // An unavailable session store should not prevent the launch check.
+            return false;
         }
-        return true;
     }
 
-    async function checkUpdate(automatic = false) {
-        const startedAt = Date.now();
+    function rememberStartupNotice(value) {
         try {
-            const data = await requestUpdateJSON('/api/update/check/');
-            if (data.supported === false) {
-                if (!automatic && typeof window.showToast === 'function') {
-                    window.showToast(data.message || '当前平台暂不支持自动更新');
+            sessionStorage.setItem(STARTUP_NOTICE_KEY, value);
+        } catch (_) {
+            // The update can still be shown when storage is unavailable.
+        }
+    }
+
+    function useManualUpdate() {
+        manualUpdateRequested = true;
+        if (startupNoticeQueued) {
+            startupNoticeQueued = false;
+            window.PopupManager?.notifyDismissed('update');
+        }
+    }
+
+    function reportUpdateCheckError(error, automatic = false) {
+        const message = '检查更新失败：' + (error && error.message || String(error));
+        if (typeof window.showToast === 'function' && (!automatic || !hasShownStartupNotice(message))) {
+            window.showToast(message, { duration: 10000 });
+            if (automatic) rememberStartupNotice(message);
+        }
+        console.error('Update check error:', error);
+        return { status: 'error', message };
+    }
+
+    async function readStartupUpdate() {
+        try {
+            await window.OnboardingStore?.ready;
+            while (!manualUpdateRequested) {
+                const data = await requestUpdateJSON(STARTUP_RESULT_URL, {}, 5000);
+                if (manualUpdateRequested) return;
+                if (data.state === 'checking') {
+                    await new Promise((resolve) => window.setTimeout(resolve, 1000));
+                    continue;
                 }
-                return data;
+                if (data.update_available === true && !hasShownStartupNotice(data.latest_version)) {
+                    await window.ClientControlReady;
+                    if (manualUpdateRequested || window.ClientControl?.isAvailable('check_update') === false) return;
+                    window.updateInfo = data;
+                    startupNoticeQueued = true;
+                    showUpdateModal(true);
+                }
+                return;
             }
+        } catch (error) {
+            if (!manualUpdateRequested) reportUpdateCheckError(error, true);
+        } finally {
+            markUpdateCheckComplete();
+        }
+    }
+
+    async function checkUpdate() {
+        useManualUpdate();
+        try {
+            const data = await requestUpdateJSON('/api/update/check/', {}, 20000);
             if (typeof data.update_available !== 'boolean') {
                 throw new Error('更新接口未返回有效的版本检查结果');
             }
             if (data.update_available) {
                 window.updateInfo = data;
-                if (!automatic || Date.now() - startedAt <= STARTUP_PROMPT_WINDOW_MS) showUpdateModal(automatic);
-            } else if (!automatic && typeof window.showToast === 'function') {
+                showUpdateModal();
+            } else {
                 window.updateInfo = null;
-                window.showToast('当前已是最新版本 ' + data.current_version);
+                if (typeof window.showToast === 'function') {
+                    window.showToast('当前已是最新版本 ' + data.current_version);
+                }
             }
             return data;
         } catch (error) {
-            const message = '检查更新失败：' + (error && error.message || String(error));
-            if (typeof window.showToast === 'function') window.showToast(message, { duration: 10000 });
-            console.error('Update check error:', error);
-            return { status: 'error', message };
+            return reportUpdateCheckError(error);
         } finally {
             markUpdateCheckComplete();
         }
@@ -127,62 +169,21 @@
         detailsEl.textContent = text;
     }
 
-    async function loadUpdateDetails() {
-        const requestId = ++updateDetailsRequestId;
-        const fallbackText = String((window.updateInfo && window.updateInfo.notes) || '').trim();
-        const detailsEl = document.getElementById('update-details-content');
-        const updateDetailsUrl = (detailsEl && detailsEl.dataset.detailsUrl) || DEFAULT_UPDATE_DETAILS_URL;
-
-        renderUpdateDetails('正在加载更新详情...', 'loading');
-
-        if (window.updateInfo && window.updateInfo.mode === 'local_package') {
-            renderUpdateDetails(fallbackText || '升级包来自你选择的本地文件，应用不会从服务器下载安装包。', 'loaded');
-            return;
-        }
-
-        if (fallbackText) {
-            renderUpdateDetails(fallbackText, 'loaded');
-            return;
-        }
-
-        try {
-            const detailUrl = `${updateDetailsUrl}?t=${Date.now()}`;
-            const response = await fetch(detailUrl, { cache: 'no-store', credentials: 'same-origin' });
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            const remoteText = (await response.text()).trim();
-            if (requestId !== updateDetailsRequestId) return;
-
-            if (remoteText) {
-                renderUpdateDetails(remoteText, 'loaded');
-                return;
-            }
-
-            if (fallbackText) {
-                renderUpdateDetails(fallbackText, 'loaded');
-                return;
-            }
-
+    function showUpdateDetails(info) {
+        const notes = String(info.notes || '').trim();
+        if (notes) {
+            renderUpdateDetails(notes);
+        } else if (info.mode === 'local_package') {
+            renderUpdateDetails('升级包来自你选择的本地文件。');
+        } else if (info.notes_error) {
+            renderUpdateDetails(`暂时无法加载更新详情：${info.notes_error}`, 'error');
+        } else {
             renderUpdateDetails('暂无更新详情。', 'empty');
-        } catch (error) {
-            console.error('Update details fetch error:', error);
-            if (requestId !== updateDetailsRequestId) return;
-
-            if (fallbackText) {
-                renderUpdateDetails(fallbackText, 'loaded');
-                return;
-            }
-
-            const reason = (window.updateInfo && window.updateInfo.notes_error) || error.message || String(error);
-            renderUpdateDetails(`暂时无法加载更新详情：${reason}`, 'error');
         }
     }
 
     function showUpdateModal(automatic = false) {
         if (!window.updateInfo) return;
-        if (automatic && (window.FUCKSEATS_ONBOARDING_ACTIVE === true || (window.PopupManager && PopupManager.isAnyShowing()))) return;
         if (window.PopupManager) {
             PopupManager.request('update', doShowUpdateModal, null, { priority: 100, allowDuringOnboarding: !automatic });
         } else {
@@ -191,23 +192,31 @@
     }
 
     function doShowUpdateModal() {
+        startupNoticeQueued = false;
         const modal = document.getElementById('update-modal');
         const currentVersion = document.getElementById('current-version');
         const latestVersion = document.getElementById('latest-version');
         const promptDiv = document.getElementById('update-prompt');
         const progressDiv = document.getElementById('update-progress');
         const closeBtn = document.getElementById('close-update-modal');
+        const canInstall = window.updateInfo.supported !== false;
 
         currentVersion.textContent = window.updateInfo.current_version;
         latestVersion.textContent = window.updateInfo.latest_version;
+        document.getElementById('update-prompt-message').textContent = canInstall
+            ? '是否立即更新？'
+            : '当前环境无法在应用内安装更新。';
+        document.getElementById('update-btn').style.display = canInstall ? '' : 'none';
+        document.getElementById('later-btn').textContent = canInstall ? '稍后提醒' : '知道了';
 
         promptDiv.style.display = 'block';
         progressDiv.style.display = 'none';
         closeBtn.style.display = '';
         resetUpdateProgressView();
 
+        showUpdateDetails(window.updateInfo);
         modal.style.display = 'flex';
-        loadUpdateDetails();
+        rememberStartupNotice(window.updateInfo.latest_version);
     }
 
     function hideUpdateModal() {
@@ -218,6 +227,7 @@
     }
 
     async function startUpdate() {
+        if (window.updateInfo?.supported === false) return;
         const promptDiv = document.getElementById('update-prompt');
         const progressDiv = document.getElementById('update-progress');
         const closeBtn = document.getElementById('close-update-modal');
@@ -377,6 +387,7 @@
             if (selection.status !== 'selected') {
                 throw new Error(selection.message || '无法读取升级包');
             }
+            useManualUpdate();
 
             const data = await requestUpdateJSON('/api/update/start/', {
                 method: 'POST',
@@ -400,12 +411,11 @@
     };
 
     document.addEventListener('DOMContentLoaded', () => {
-        if (claimStartupCheck()) checkUpdate(true);
-        else markUpdateCheckComplete();
-
         document.getElementById('close-update-modal').addEventListener('click', hideUpdateModal);
         document.getElementById('later-btn').addEventListener('click', hideUpdateModal);
         document.getElementById('update-btn').addEventListener('click', startUpdate);
         document.getElementById('install-and-exit-btn').addEventListener('click', startInstallAndExit);
+
+        readStartupUpdate();
     });
 })();

@@ -362,11 +362,14 @@ class DesktopBridge:
         self._windows_context_init_handler = None
         self._windows_context_menu_init_handler = None
         self._windows_context_menu_requested_handler = None
+        self._exit_confirmed = False
+        self._exit_prompt_pending = False
 
     def _attach_window(self, window):
         self._window = window
         if not hasattr(window, "events"):
             return
+        window.events.closing += self._on_window_closing
         window.events.maximized += self._on_window_maximized
         window.events.restored += self._on_window_restored
         window.events.loaded += self._publish_window_state
@@ -380,6 +383,33 @@ class DesktopBridge:
                 )
             except Exception:
                 pass  # 页面跳转期间由下一次 loaded 事件补齐状态。
+
+    def _on_window_closing(self, *_):
+        # 系统关闭（Alt+F4、Cmd+Q、任务栏）先交给页面检查未同步的云班级。
+        # 提醒已发出但页面无响应时，再次关闭直接放行，避免窗口无法退出。
+        if self._exit_confirmed or self._exit_prompt_pending:
+            return True
+        self._exit_prompt_pending = True
+        script = (
+            "(function(){var g=window.FuckSeatsExitGuard;"
+            "if(g){g.requestClose();}"
+            "else if(window.pywebview&&window.pywebview.api){window.pywebview.api.window_action('close');}"
+            "})();void 0;"
+        )
+
+        def _prompt():
+            try:
+                self._run_js(script)
+            except Exception:
+                self._exit_confirmed = True
+
+        # run_js 会等待 UI 线程回执，不能在关闭回调所在的 UI 线程里同步执行。
+        threading.Thread(target=_prompt, daemon=True).start()
+        return False
+
+    def cancel_exit(self):
+        self._exit_prompt_pending = False
+        return {"status": "ok"}
 
     def _on_window_maximized(self, *_):
         self._window_maximized = True
@@ -456,6 +486,7 @@ class DesktopBridge:
             else:
                 self._window.maximize()
         elif action == "close":
+            self._exit_confirmed = True
             self._close_window()
         else:
             return {"status": "error", "message": "未知窗口操作"}
@@ -754,6 +785,7 @@ class DesktopBridge:
             raise RuntimeError("桌面窗口尚未准备完成")
 
         self._close_active_context_menu()
+        self._exit_confirmed = True
 
         import webview
 

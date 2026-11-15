@@ -49,7 +49,7 @@
                     <div class="menu-submenu">
                         <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-import-third-party-menu" aria-haspopup="true" aria-expanded="false">第三方软件</button>
                         <div class="menu-panel menu-panel-sub" id="classroom-import-third-party-menu" role="menu">
-                            <div class="menu-submenu">
+                            <div class="menu-submenu" data-menu-direction="left">
                                 <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-import-seat-table-menu" aria-haspopup="true" aria-expanded="false">座位表</button>
                                 <div class="menu-panel menu-panel-sub" id="classroom-import-seat-table-menu" role="menu">
                                     <a href="{% url 'import_layout_excel_options_page' classroom.pk %}" class="menu-item-link" role="menuitem">导入座位表</a>
@@ -57,7 +57,7 @@
                                     <a href="{% url 'import_sdes' classroom.pk %}" class="menu-item-link" role="menuitem">导入 SDES</a>
                                 </div>
                             </div>
-                            <div class="menu-submenu">
+                            <div class="menu-submenu" data-menu-direction="left">
                                 <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-import-other-table-menu" aria-haspopup="true" aria-expanded="false">其他表格</button>
                                 <div class="menu-panel menu-panel-sub" id="classroom-import-other-table-menu" role="menu">
                                     <a href="{% url 'import_students_options_page' classroom.pk %}" class="menu-item-link" role="menuitem">导入 Excel 成绩表</a>
@@ -80,7 +80,7 @@
                     <div class="menu-submenu">
                         <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-export-third-party-menu" aria-haspopup="true" aria-expanded="false">第三方软件</button>
                         <div class="menu-panel menu-panel-sub" id="classroom-export-third-party-menu" role="menu">
-                            <div class="menu-submenu">
+                            <div class="menu-submenu" data-menu-direction="left">
                                 <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-export-seat-table-menu" aria-haspopup="true" aria-expanded="false">座位表</button>
                                 <div class="menu-panel menu-panel-sub" id="classroom-export-seat-table-menu" role="menu">
                                     <a href="{% url 'export_students_options_page' classroom.pk %}" class="menu-item-link" role="menuitem">导出排座表</a>
@@ -88,7 +88,7 @@
                                     <a href="{% url 'export_students_pptx_options_page' classroom.pk %}" class="menu-item-link" role="menuitem">导出 PPTX</a>
                                 </div>
                             </div>
-                            <div class="menu-submenu">
+                            <div class="menu-submenu" data-menu-direction="left">
                                 <button type="button" class="menu-item-button menu-item-has-children" data-menu-toggle="classroom-export-other-table-menu" aria-haspopup="true" aria-expanded="false">其他表格</button>
                                 <div class="menu-panel menu-panel-sub" id="classroom-export-other-table-menu" role="menu">
                                     <a href="{% url 'export_group_report' classroom.pk %}" class="menu-item-link" data-system-save="1" role="menuitem">导出小组登记表</a>

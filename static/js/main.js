@@ -193,7 +193,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 root.querySelectorAll('.menu-panel').forEach((panel) => {
                     panel.style.removeProperty('left');
                     panel.style.removeProperty('top');
-                    panel.parentElement.classList.remove('menu-opens-left');
+                    panel.parentElement.classList.toggle('menu-opens-left', panel.parentElement.dataset.menuDirection === 'left');
                     const style = getComputedStyle(panel);
                     // 入场动画刚开始时 visibility 可能仍为 hidden，按交互状态提前定位。
                     if (style.pointerEvents === 'none' || !panel.offsetParent) return;
@@ -210,7 +210,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     if (sideways) {
                         const parentPanel = anchor.closest('.menu-panel');
-                        const preferLeft = parentPanel?.parentElement.classList.contains('menu-opens-left');
+                        const preferLeft = anchor.dataset.menuDirection === 'left'
+                            || parentPanel?.parentElement.classList.contains('menu-opens-left');
                         const fitsLeft = originX - width >= leftEdge;
                         const fitsRight = originX + left + width <= rightEdge;
                         if (fitsLeft && (preferLeft || !fitsRight)) left = -width;
