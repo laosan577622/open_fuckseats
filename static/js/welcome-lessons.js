@@ -1,6 +1,8 @@
 /* Optional lessons use built-in fictitious data, never classroom endpoints. */
 window.WelcomeLessons = (() => {
-    const titles = {fixed:'固定一个座位',groups:'把他们分到同一组',batch:'一起移动两位学生',import:'导入成绩表',layoutimport:'导入座位表',export:'导出排座表'};
+    // 补充练习（小组、排座规则、快照等）在 welcome-lessons-extra.js 里定义，这里只负责外壳和完成状态。
+    const extras = window.WelcomeLessonExtras || {lessons:{},titles:{},gated:{}};
+    const titles = {fixed:'固定一个座位',groups:'把他们分到同一组',batch:'一起移动两位学生',import:'导入成绩表',layoutimport:'导入座位表',export:'导出排座表',...extras.titles};
     const roster = ['张明','李华'];
     function seat(name,row,col,extra='') {
         return `<div class="seat ${name?'occupied':''}" role="button" tabindex="0" data-row="${row}" data-col="${col}" data-cell-type="seat" aria-label="第${row}排第${col}列 ${name||'空座'}" ${extra}><div class="${name?'seat-content':'seat-placeholder'}" draggable="${!!name}">${name?`<span class="seat-name">${name}</span>`:`${row}-${col}`}</div></div>`;
@@ -19,7 +21,7 @@ window.WelcomeLessons = (() => {
         const rerender=()=>{persist();render({kind,screen,state,save,tell});};
         const btn=(text,action,disabled=false)=>`<button type="button" class="btn btn-secondary" data-lesson-action="${action}" ${disabled?'disabled':''}>${text}</button>`;
         const prompts={fixed:'右键张明的座位，选择“固定座位”。使用键盘时可点击下方的菜单按钮。',groups:'选中两位学生，再选择小组并应用。',batch:'按住 Ctrl、Command 或 Shift 点击两位学生，再把张明拖到第二排左侧空座。也可使用下方复选框选择。',import:'打开内置示例名单，确认姓名和学号字段后导入。',export:'选择 SVG 格式，预览并下载这张示例排座表。'};
-        screen.innerHTML=`<div class="welcome-split welcome-enter"><div class="welcome-stage" id="lesson-stage"></div><div class="welcome-copy"><p class="welcome-eyebrow">独立练习</p><h1 id="welcome-heading" tabindex="-1">${titles[kind]}</h1><p>${lesson.done?'练习完成。你可以返回，继续学习其他操作。':prompts[kind]}</p></div></div>`;
+        screen.innerHTML=`<div class="welcome-split welcome-enter"><div class="welcome-stage" id="lesson-stage"></div><div class="welcome-copy"><p class="welcome-eyebrow">独立练习</p><h1 id="welcome-heading" tabindex="-1">${titles[kind]}</h1><p>${lesson.done?'练习完成。你可以返回，继续学习其他操作。':(extras.lessons[kind]?extras.lessons[kind].prompt(lesson):prompts[kind])}</p></div></div>`;
         const stage=screen.querySelector('#lesson-stage');
         if(kind==='fixed') {
             stage.innerHTML=`<div class="seat-grid"><div class="seat-row">${seat('张明',1,1)}${seat('李华',1,2)}</div></div>${lesson.done?'<p class="welcome-caption">张明 · 座位已固定</p>':btn('打开张明的座位菜单','menu')}<div class="welcome-lesson-menu" role="menu" hidden><button type="button" class="menu-item-button" role="menuitem" data-lesson-action="fix">固定座位</button></div>`;
@@ -61,6 +63,7 @@ window.WelcomeLessons = (() => {
                 const url=URL.createObjectURL(new Blob([svg],{type:'image/svg+xml'}));const a=document.createElement('a');a.href=url;a.download='练习排座表.svg';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);complete();
             });
         }
+        if(extras.lessons[kind]) extras.lessons[kind].render({stage,lesson,complete,rerender,tell,persist,button:btn});
         if(!matchMedia('(prefers-reduced-motion: reduce)').matches) stage.querySelectorAll('.seat').forEach(cell=>{
             const content=cell.querySelector('.seat-content'),name=cell.querySelector('.seat-name')?.textContent,old=oldPositions.get(name);
             if(!content||!old)return;const rect=cell.getBoundingClientRect();
@@ -69,5 +72,8 @@ window.WelcomeLessons = (() => {
         });
         persist();
     }
-    return {render,titles};
+    // 云控配置里明确由云端开启的功能；与 client_control.js 对 Drop 的判断保持一致：本地默认配置不算开启。
+    const enabledFeatures=config=>new Set(config&&config.source==='remote'?Object.entries(config.features||{}).filter(([,item])=>item&&item.available===true).map(([name])=>name):[]);
+    const available=(kind,features)=>!extras.gated[kind]||features.has(extras.gated[kind]);
+    return {render,titles,enabledFeatures,available};
 })();

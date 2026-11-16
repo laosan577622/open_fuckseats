@@ -22,6 +22,13 @@ from .arrangement_preferences import (
     save_preferences,
 )
 from .seat_rotation import ROTATION_HISTORY_LIMIT, RotationContext, optimize_positions
+from .subject_champion import (
+    champion_message,
+    champion_report,
+    champion_seat_order,
+    champion_subjects,
+    plan_subject_champions,
+)
 from .layout_snapshots import create_timed_snapshot, export_snapshot_enabled
 from functools import wraps
 from django.test import RequestFactory
@@ -619,6 +626,7 @@ CLASSROOM_ARRANGE_MODE_ALIASES = {
     'score_spread': {'scorespread', 'junheng'},
     'group_balanced': {'groupbalanced', 'xiaozujunheng'},
     'group_mentor': {'groupmentor', 'xiaozuzhidao'},
+    'subject_champion': {'subjectchampion', 'dankewang', 'dankewangtongzhuo'},
 }
 
 CLASSROOM_COMMAND_HELP = {
@@ -11066,13 +11074,17 @@ def _assign_pairs(students, seats, seat_map, assignments, maps, required_group_m
     return available
 
 
-def _load_rotation_context(classroom, seats):
+def _load_rotation_context(classroom, seats, preferences=None):
+    preferences = preferences or DEFAULT_PREFERENCES
     snapshots = classroom.layout_snapshots.exclude(data__has_key='exam').order_by('-created_at', '-pk')
-    return RotationContext(seats, classroom.students.all(), snapshots.values_list('data', flat=True)[:ROTATION_HISTORY_LIMIT])
+    return RotationContext(
+        seats, classroom.students.all(), snapshots.values_list('data', flat=True)[:ROTATION_HISTORY_LIMIT],
+        avoid_row=preferences['avoid_previous_row'], avoid_col=preferences['avoid_previous_col'],
+    )
 
 
 def _arrange_standard(classroom, students, seats, method, *, preferences=None, previous_pairs=None,
-                      rotation_context=None):
+                      rotation_context=None, deskmate_affinity=None):
     seats = [s for s in seats if s.cell_type == SeatCellType.SEAT]
     seat_map = _build_seat_map(seats)
 
@@ -11108,13 +11120,15 @@ def _arrange_standard(classroom, students, seats, method, *, preferences=None, p
         preserve_rows=preserve_rows,
     )
 
-    if rotation_context is not None or (preferences and preferences_enabled(preferences)):
+    if rotation_context is not None or deskmate_affinity is not None or (
+            preferences and preferences_enabled(preferences)):
         optimize_deskmates(
             students, seats, assignments, preferences or DEFAULT_PREFERENCES.copy(),
             previous_pairs if previous_pairs is not None else current_deskmates(seats),
             lambda student, seat, simulated: _seat_is_valid(student, seat, simulated, maps),
             preserve_rows=preserve_rows,
             position_cost=rotation_context.cost if rotation_context is not None and rotation_context.previous else None,
+            affinity=deskmate_affinity,
         )
 
     Seat.objects.filter(classroom=classroom).update(student=None)
@@ -11263,8 +11277,12 @@ def _run_arrangement(classroom, method, *, sort_definition=None, preferences=Non
         return False
 
     if preferences['avoid_previous_position'] and rotation_context is None:
-        rotation_context = _load_rotation_context(classroom, seats)
-    if method == 'random':
+        rotation_context = _load_rotation_context(classroom, seats, preferences)
+    deskmate_affinity = None
+    if method == 'subject_champion':
+        students, deskmate_affinity = plan_subject_champions(students)
+        seats = champion_seat_order(seats)
+    elif method == 'random':
         random.shuffle(students)
     elif method == 'score_desc':
         students.sort(key=lambda s: s.score or 0, reverse=True)
@@ -11306,7 +11324,8 @@ def _run_arrangement(classroom, method, *, sort_definition=None, preferences=Non
         )
 
     _arrange_standard(classroom, students, seats, method, preferences=preferences,
-                      previous_pairs=previous_pairs, rotation_context=rotation_context)
+                      previous_pairs=previous_pairs, rotation_context=rotation_context,
+                      deskmate_affinity=deskmate_affinity)
     return True
 
 
@@ -11394,6 +11413,7 @@ def auto_arrange_seats(request, pk):
             'score_spread',
             'group_balanced',
             'group_mentor',
+            'subject_champion',
         }:
             return _arrange_error('不支持的自动排座策略', status=400)
         students_count = classroom.students.count()
@@ -11401,19 +11421,28 @@ def auto_arrange_seats(request, pk):
         if seat_cells_count < students_count:
             message = f'可用座位不足(座位:{seat_cells_count} < 学生:{students_count})，无法保证100%入座，请在布局编辑中增加座位。'
             return _arrange_error(message, status=400)
+        if method == 'subject_champion' and not champion_subjects(classroom.students.all()):
+            return _arrange_error(
+                '没有找到分科成绩。请先在导入成绩表时把语文、数学等各科成绩作为自定义信息一并导入，再使用单科王同桌。',
+                status=400,
+            )
 
         preferences = load_preferences(classroom)
         previous_pairs = current_deskmates(list(classroom.seats.all())) if preferences['avoid_previous'] else set()
-        rotation_context = (_load_rotation_context(classroom, list(classroom.seats.all()))
+        rotation_context = (_load_rotation_context(classroom, list(classroom.seats.all()), preferences)
                             if preferences['avoid_previous_position'] else None)
 
         def _arrange_success(auto_fixed=False):
             payload = {'status': 'success', 'preferences': preferences}
-            if preferences_enabled(preferences) or auto_fixed or rotation_context is not None:
+            champion = method == 'subject_champion'
+            if preferences_enabled(preferences) or auto_fixed or rotation_context is not None or champion:
                 seats = list(classroom.seats.select_related('student'))
                 payload['message'] = arrangement_message(
                     seats, preferences, auto_fixed=auto_fixed,
                 )
+                if champion:
+                    payload['subject_champion'] = champion_report(seats)
+                    payload['message'] += '；' + champion_message(payload['subject_champion'])
                 if rotation_context is not None:
                     payload['position_preference'] = rotation_context.report(seats)
                     payload['message'] += '；' + rotation_context.message(payload['position_preference'])
@@ -11511,6 +11540,7 @@ GROUP_AUTO_ARRANGEMENT_METHODS = {
     'score_spread',
     'group_balanced',
     'group_mentor',
+    'subject_champion',
 }
 
 GROUP_CROSS_CLASSROOM_MODES = {
@@ -11862,6 +11892,10 @@ def _arrange_group_across_classrooms(
         if method in {'group_balanced', 'group_mentor'}:
             if not _run_arrangement(classroom, method):
                 raise ValueError(f'{classroom.name} 尚未设置可用小组')
+        elif method == 'subject_champion':
+            # 同桌配对依赖桌位顺序，跨班分配完成后在各班内重新按科目配对。
+            if not _run_arrangement(classroom, method):
+                raise ValueError(f'{classroom.name} 的可用座位不足')
         else:
             _arrange_standard(
                 classroom,
@@ -11892,6 +11926,13 @@ def _apply_group_auto_arrangement(
     )
     if not classrooms:
         raise ValueError('班级组内没有可排序的班级')
+    if method == 'subject_champion' and not champion_subjects(
+        [
+            *Student.objects.filter(classroom__in=classrooms),
+            *classroom_group.unassigned_students.all(),
+        ]
+    ):
+        raise ValueError('没有找到分科成绩。请先把语文、数学等各科成绩作为自定义信息导入，再使用单科王同桌。')
     before_states = {
         classroom.pk: _capture_history_state(classroom)
         for classroom in classrooms
@@ -18334,7 +18375,10 @@ def ai_session_stream(request):
 @require_http_methods(['GET'])
 def realtime_status(request):
     from seats.open_api import realtime
+    from .agent_access_views import pending_payload
     return JsonResponse({
         'status': 'success',
         'realtime': realtime.snapshot(),
+        # 待用户确认的 Agent 授权申请，由前端弹出授权窗口。
+        'agent_access': pending_payload(),
     })

@@ -8243,6 +8243,16 @@ body.classroom-detail-body[data-app-platform="macos"] .side-panel > .panel-tabs 
     font-size: var(--fs-body);
 }
 .arrange-preferences-checkbox input { accent-color: #0a59f7; }
+/* 子项缩进到父项文字下方；父项未勾选时整体置灰。 */
+.arrange-preferences-suboptions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 20px;
+    margin: -4px 0 0 24px;
+}
+.arrange-preferences-suboptions[aria-disabled="true"] {
+    color: var(--text-tertiary, rgba(0, 0, 0, .4));
+}
 .arrange-preferences-hint {
     margin: 16px 0 0;
     color: var(--text-secondary);
@@ -9379,6 +9389,335 @@ body.layout-editor-body[data-app-shell="webview"][data-app-platform="macos"] #la
 
 .modal-content .modal-field-color { height: 36px; padding: 2px; cursor: pointer; }
 .modal-content .tag-picker { margin-top: 8px; }
+
+/* ===== Agent 授权窗口 ===== */
+.agent-access-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+.agent-access-head .modal-title { margin: 0; }
+.agent-access-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 44px;
+    height: 44px;
+    border-radius: 999px;
+    background: var(--brand-tint, rgba(10, 89, 247, .1));
+    color: var(--brand, #0a59f7);
+}
+.agent-access-queue {
+    margin: 2px 0 0;
+    color: var(--text-secondary);
+    font-size: 12px;
+    line-height: 16px;
+}
+.agent-access-client {
+    margin: 0 0 12px;
+    color: var(--text-primary);
+    font-size: 15px;
+    line-height: 22px;
+    overflow-wrap: anywhere;
+}
+.agent-access-client strong { font-weight: 600; }
+.agent-access-reason {
+    margin: 0 0 12px;
+    padding: 8px 12px;
+    border-radius: var(--radius-sm, 8px);
+    background: var(--fill-control, rgba(0, 0, 0, .05));
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 20px;
+    overflow-wrap: anywhere;
+}
+.agent-access-scope {
+    margin: 0 0 12px;
+    padding: 0 0 0 20px;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 22px;
+}
+.agent-access-scope li + li { margin-top: 4px; }
+.agent-access-duration {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 20px;
+    margin: 0 0 12px;
+    padding: 0;
+    border: 0;
+    color: var(--text-primary);
+    font-size: 14px;
+    line-height: 22px;
+}
+.agent-access-duration legend {
+    float: left;
+    margin-right: 4px;
+    padding: 0;
+    color: var(--text-secondary);
+    font-size: 13px;
+}
+.agent-access-duration label { display: inline-flex; align-items: center; gap: 6px; }
+.agent-access-duration input { accent-color: #0a59f7; }
+/* 设置页：已授权的 Agent 列表 */
+.agent-grant-list { display: flex; flex-direction: column; gap: 8px; width: 100%; margin-top: 12px; }
+.agent-grant-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius-sm, 8px);
+    background: var(--fill-control, rgba(0, 0, 0, .05));
+}
+.agent-grant-item strong { display: block; font-size: 14px; font-weight: 600; overflow-wrap: anywhere; }
+.agent-grant-item span { color: var(--text-secondary); font-size: 12px; line-height: 18px; }
+.agent-grant-item .btn { flex: 0 0 auto; border-radius: 999px; }
+.agent-grant-empty { color: var(--text-secondary); font-size: 13px; }
+.agent-access-note,
+.agent-access-error {
+    margin: 0 0 16px;
+    color: var(--text-secondary);
+    font-size: 13px;
+    line-height: 20px;
+}
+.agent-access-error { color: var(--danger-color, #d92d20); }
+.agent-access-actions { flex-wrap: wrap; }
+.agent-access-actions .btn {
+    flex: 1 1 auto;
+    padding: 10px 16px;
+    white-space: nowrap;
+}
+
+/* ===== Drop 上线提示 ===== */
+/* 头图是这个弹窗独有的“落水”动画；水面扭曲由 drop-launch.js 逐帧驱动 SVG 位移滤镜。 */
+.modal > .modal-content.drop-launch-content {
+    max-width: 440px;
+    padding: 0;
+    overflow: hidden;
+}
+.drop-launch-hero {
+    position: relative;
+    height: 236px;
+    overflow: hidden;
+    background: #0a59f7;
+}
+/* 教室大屏：座次图落进来之前是一块暗着的屏，落进来的瞬间亮一下。 */
+.drop-launch-screen {
+    position: absolute;
+    left: 50%;
+    top: 30px;
+    width: 232px;
+    height: 150px;
+    margin-left: -116px;
+    box-sizing: border-box;
+    border: 6px solid rgba(255, 255, 255, .92);
+    border-radius: 16px;
+    background: rgba(0, 28, 110, .42);
+    box-shadow: 0 22px 44px rgba(0, 30, 110, .4);
+}
+.drop-launch-screen::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 9px;
+    background: #ffffff;
+    opacity: 0;
+}
+.drop-launch-screen-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: 50%;
+    margin-top: -9px;
+    color: rgba(255, 255, 255, .7);
+    font-size: 13px;
+    line-height: 18px;
+    text-align: center;
+    letter-spacing: .08em;
+    opacity: 0;
+}
+.drop-launch-stand {
+    position: absolute;
+    left: 50%;
+    top: 180px;
+    width: 14px;
+    height: 16px;
+    margin-left: -7px;
+    background: rgba(255, 255, 255, .92);
+}
+.drop-launch-stand::after {
+    content: '';
+    position: absolute;
+    left: 50%;
+    top: 14px;
+    width: 92px;
+    height: 7px;
+    margin-left: -46px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, .92);
+}
+.drop-launch-water {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+.drop-launch-blob,
+.drop-launch-ring {
+    transform-box: fill-box;
+    transform-origin: center;
+}
+.drop-launch-ring { opacity: 0; }
+.drop-launch-card {
+    position: absolute;
+    left: 50%;
+    top: 36px;
+    width: 220px;
+    height: 138px;
+    margin-left: -110px;
+    border-radius: 10px;
+    overflow: hidden;
+}
+.drop-launch-card svg { display: block; width: 100%; height: 100%; }
+
+/* “立即体验”指向真正的 Drop 按钮时，给它一圈会呼吸的描边。 */
+.drop-launch-spotlight { animation: dropLaunchSpotlight 1.4s ease-in-out 3; }
+@keyframes dropLaunchSpotlight {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(10, 89, 247, 0); }
+    50% { box-shadow: 0 0 0 5px rgba(10, 89, 247, .45); }
+}
+
+.drop-launch-body {
+    padding: 24px 28px 28px;
+    text-align: center;
+}
+.drop-launch-title {
+    margin: 0;
+    color: var(--text-primary);
+    font-size: 26px;
+    font-weight: 700;
+    line-height: 34px;
+    letter-spacing: -.01em;
+}
+.drop-launch-lead {
+    margin: 4px 0 18px;
+    color: var(--text-secondary);
+    font-size: 15px;
+    line-height: 22px;
+}
+.drop-launch-chips {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 8px;
+    margin: 0 0 24px;
+    padding: 0;
+    list-style: none;
+}
+.drop-launch-chips li {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-radius: 999px;
+    background: var(--fill-control, rgba(0, 0, 0, .05));
+    color: var(--text-primary);
+    font-size: 13px;
+    line-height: 18px;
+    white-space: nowrap;
+}
+.drop-launch-chips svg { flex: 0 0 auto; color: #0a59f7; }
+.drop-launch-chips li.drop-launch-chip-ready { background: rgba(10, 89, 247, .1); color: #0a59f7; }
+.drop-launch-chips li.drop-launch-chip-missing { background: rgba(217, 45, 32, .1); color: var(--danger-color, #d92d20); }
+.drop-launch-chips li.drop-launch-chip-missing svg { color: inherit; }
+.drop-launch-actions { flex-wrap: wrap; }
+.drop-launch-actions .btn {
+    flex: 1 1 auto;
+    padding: 11px 16px;
+    white-space: nowrap;
+}
+#dropLaunchDownload[hidden] { display: none; }
+
+/* 入场：卡片带着模糊落下并压扁回弹，波纹从落点荡开，光斑缓慢漂移，文字依次浮现。
+   填充用 backwards，结束后不留 filter，免得影响弹窗的毛玻璃。 */
+.drop-launch-playing .drop-launch-card {
+    animation: dropLaunchFall 1.05s cubic-bezier(.2, .9, .25, 1) backwards;
+}
+.drop-launch-playing .drop-launch-ring {
+    animation: dropLaunchRipple 2.6s cubic-bezier(.16, .7, .3, 1) .5s infinite backwards;
+}
+.drop-launch-playing .drop-launch-screen { animation: dropLaunchScreenIn .7s cubic-bezier(.2, .8, .2, 1) backwards; }
+.drop-launch-playing .drop-launch-stand { animation: dropLaunchScreenIn .7s cubic-bezier(.2, .8, .2, 1) backwards; }
+.drop-launch-playing .drop-launch-screen::after { animation: dropLaunchFlash .9s ease-out .5s backwards; }
+.drop-launch-playing .drop-launch-screen-label { animation: dropLaunchLabel .62s ease-out backwards; }
+.drop-launch-playing .drop-launch-ring-2 { animation-delay: 1.36s; }
+.drop-launch-playing .drop-launch-ring-3 { animation-delay: 2.22s; }
+.drop-launch-playing .drop-launch-blob-a { animation: dropLaunchDriftA 9s ease-in-out infinite alternate; }
+.drop-launch-playing .drop-launch-blob-b { animation: dropLaunchDriftB 11s ease-in-out infinite alternate; }
+.drop-launch-playing .drop-launch-blob-c { animation: dropLaunchDriftA 13s ease-in-out infinite alternate-reverse; }
+.drop-launch-playing .drop-launch-body > * {
+    animation: dropLaunchRise .7s cubic-bezier(.2, .8, .2, 1) backwards;
+}
+.drop-launch-playing .drop-launch-title { animation-delay: .42s; }
+.drop-launch-playing .drop-launch-lead { animation-delay: .5s; }
+.drop-launch-playing .drop-launch-chips { animation-delay: .58s; }
+.drop-launch-playing .drop-launch-actions { animation-delay: .66s; }
+
+@keyframes dropLaunchFall {
+    0% { opacity: 0; transform: translateY(-210px) scale(.5) rotate(-12deg); filter: blur(22px); }
+    30% { opacity: 1; }
+    54% { transform: translateY(8px) scale(1.06, .9) rotate(0deg); filter: blur(0); }
+    72% { transform: translateY(-5px) scale(.97, 1.04); }
+    86% { transform: translateY(1px) scale(1.01, .99); }
+    100% { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes dropLaunchScreenIn {
+    from { opacity: 0; transform: translateY(26px) scale(.9); filter: blur(12px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
+}
+@keyframes dropLaunchFlash {
+    0% { opacity: 0; }
+    14% { opacity: .95; }
+    100% { opacity: 0; }
+}
+@keyframes dropLaunchLabel {
+    0%, 70% { opacity: 1; }
+    100% { opacity: 0; }
+}
+@keyframes dropLaunchRipple {
+    0% { opacity: 0; transform: scale(.12); stroke-width: 5; }
+    12% { opacity: .85; }
+    100% { opacity: 0; transform: scale(1.5); stroke-width: .6; }
+}
+@keyframes dropLaunchDriftA {
+    from { transform: translate(-18px, -10px) scale(.92); }
+    to { transform: translate(34px, 22px) scale(1.14); }
+}
+@keyframes dropLaunchDriftB {
+    from { transform: translate(20px, 12px) scale(1.1); }
+    to { transform: translate(-42px, -26px) scale(.9); }
+}
+@keyframes dropLaunchRise {
+    from { opacity: 0; transform: translateY(14px); filter: blur(8px); }
+    to { opacity: 1; transform: none; filter: blur(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .drop-launch-playing .drop-launch-card,
+    .drop-launch-playing .drop-launch-screen,
+    .drop-launch-playing .drop-launch-screen::after,
+    .drop-launch-playing .drop-launch-screen-label,
+    .drop-launch-playing .drop-launch-stand,
+    .drop-launch-spotlight,
+    .drop-launch-playing .drop-launch-ring,
+    .drop-launch-playing .drop-launch-blob,
+    .drop-launch-playing .drop-launch-body > * { animation: none; }
+    .drop-launch-ring { opacity: .35; }
+}
 
 .modal-choice-row { display: flex; justify-content: center; gap: 12px; }
 .modal-inline-actions { display: flex; gap: 8px; margin-top: 4px; }

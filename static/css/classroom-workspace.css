@@ -434,6 +434,120 @@
     }
 }
 
+/* ===================================================================== */
+/* 侧栏调宽与收起（仅宽屏并排布局）                                      */
+/* ===================================================================== */
+/* 侧栏、工作台留白、顶栏玻璃裁切和工具栏都引用 --classroom-side-w。
+   收起 / 展开的动画由 classroom-sidebar.js 逐帧写 --classroom-side-live 驱动：
+   用 @property 注册变量再做 CSS 过渡时，Chromium 会间隔性地丢掉变量更新，不能依赖。 */
+:root body.classroom-detail-body[data-app-shell][data-app-platform] :is(.side-resizer, .side-toggle) {
+    display: none;
+}
+@media (min-width: 1101px) {
+    /* --classroom-side-pref 由 classroom-sidebar.js 写在 <html> 上；下限 300，
+       上限 720 且始终给座位区留出 520，窗口变窄时自动收紧。 */
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] {
+        --classroom-side-target: clamp(300px, var(--classroom-side-pref, 430px), max(300px, min(720px, 100vw - 520px)));
+        --classroom-side-w: var(--classroom-side-live, var(--classroom-side-target));
+    }
+    :root.classroom-side-collapsed body.classroom-detail-body[data-app-shell][data-app-platform] {
+        --classroom-side-w: var(--classroom-side-live, 0px);
+    }
+    /* 拖拽时不让拖过的文字被选中。 */
+    :root.is-side-resizing body.classroom-detail-body[data-app-shell][data-app-platform] {
+        cursor: col-resize;
+        -webkit-user-select: none;
+        user-select: none;
+    }
+    :root.is-side-resizing body.classroom-detail-body[data-app-shell][data-app-platform] * {
+        cursor: col-resize !important;
+    }
+    /* 收起动画进行中（html 带 is-side-animating）侧栏仍可见，结束后才隐藏。 */
+    :root.classroom-side-collapsed:not(.is-side-animating) body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel {
+        visibility: hidden;
+    }
+    /* 侧栏内容始终按展开后的目标宽度排版：收起、展开的过程中只被侧栏裁切，不跟着挤压换行。 */
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .side-panel > * {
+        min-width: var(--classroom-side-target);
+    }
+
+    /* 分隔条：8 宽的命中区压在侧栏左边缘上，悬停、聚焦或拖拽时显示 2 宽的品牌色线。 */
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .side-resizer {
+        display: block;
+        position: fixed;
+        top: var(--cw-side-top);
+        right: calc(var(--classroom-side-w, 430px) - 4px);
+        bottom: var(--cw-status-h);
+        z-index: 1002;
+        width: 8px;
+        cursor: col-resize;
+        touch-action: none;
+        outline: none;
+    }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .side-resizer::after {
+        content: '';
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 3px;
+        width: 2px;
+        border-radius: 1px;
+        background: var(--brand);
+        opacity: 0;
+        transition: opacity var(--duration-fast, 120ms) var(--ease-standard, ease);
+    }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .side-resizer:is(:hover, :focus-visible, .is-dragging)::after {
+        opacity: 1;
+    }
+    :root.classroom-side-collapsed body.classroom-detail-body[data-app-shell][data-app-platform] .side-resizer {
+        display: none;
+    }
+
+    /* 收起 / 展开：与缩放胶囊同款的玻璃圆钮，停在座位区右下角，跟着侧栏边缘走。 */
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .side-toggle {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        position: fixed;
+        right: calc(var(--classroom-side-w, 430px) + var(--space-3, 12px));
+        bottom: calc(var(--cw-status-h) + var(--space-3, 12px));
+        z-index: 1002;
+        width: 36px;
+        height: 36px;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: var(--glass-fill-strong);
+        -webkit-backdrop-filter: blur(var(--blur-md)) saturate(var(--glass-saturate));
+        backdrop-filter: blur(var(--blur-md)) saturate(var(--glass-saturate));
+        box-shadow: var(--shadow-glass);
+        color: var(--ink);
+        cursor: pointer;
+    }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .side-toggle:focus-visible {
+        outline: 2px solid var(--brand);
+        outline-offset: 2px;
+    }
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .side-toggle-arrow {
+        transform-box: fill-box;
+        transform-origin: center;
+        transition: transform var(--duration-base, 240ms) var(--ease-standard, ease);
+    }
+    :root.classroom-side-collapsed body.classroom-detail-body[data-app-shell][data-app-platform] .side-toggle-arrow {
+        transform: rotate(180deg);
+    }
+}
+@media (min-width: 1101px) and (prefers-reduced-motion: reduce) {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] .side-toggle-arrow {
+        transition: none;
+    }
+}
+@media print {
+    :root body.classroom-detail-body[data-app-shell][data-app-platform] :is(.side-resizer, .side-toggle) {
+        display: none !important;
+    }
+}
+
 /* 状态栏统一 32 高；窄窗口整页滚动，主体底部为状态栏留白，sm 只保留排座与同步状态 */
 :root body.classroom-detail-body[data-app-shell][data-app-platform] { --cw-status-h: 32px; }
 @media (max-width: 1100px) {

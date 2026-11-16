@@ -12,6 +12,7 @@
                     <option value="score_spread">相邻成绩差异大</option>
                     <option value="group_balanced">小组均衡模式</option>
                     <option value="group_mentor">小组优带差模式</option>
+                    <option value="subject_champion">单科王同桌</option>
                 </select>
                 <button class="btn btn-primary" id="btn-auto-arrange" type="submit"><svg class="cw-ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M16 4h4v4M4 20 20 4M20 16v4h-4M14.5 14.5 20 20M4 4l5 5"/></svg>自动排座</button>
                 <button type="button" class="arrange-method-trigger" aria-label="选择自动排座算法" aria-expanded="false" aria-controls="arrange-method-menu">
@@ -26,6 +27,7 @@
                     <button type="button" role="menuitem" data-arrange-method="score_spread">相邻成绩差异大</button>
                     <button type="button" role="menuitem" data-arrange-method="group_balanced">小组均衡模式</button>
                     <button type="button" role="menuitem" data-arrange-method="group_mentor">小组优带差模式</button>
+                    <button type="button" role="menuitem" data-arrange-method="subject_champion" title="每人取最高分的一科，同科的学生排成同桌">单科王同桌</button>
                     <div class="arrange-menu-divider" role="separator"></div>
                     <button type="button" role="menuitem" id="btn-arrange-preferences" aria-haspopup="dialog">偏好选项<span id="arrange-preferences-indicator" class="arrange-preferences-indicator" hidden>已设置</span></button>
                 </div>

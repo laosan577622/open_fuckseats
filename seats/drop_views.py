@@ -8,7 +8,7 @@ from urllib.parse import urlsplit
 from django.db.models import F
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404
-from django.views.decorators.http import require_POST
+from django.views.decorators.http import require_GET, require_POST
 
 from buxiang_drop_sdk import DropClient
 from .models import Classroom
@@ -16,6 +16,8 @@ from .client_control import feature_gate
 from .sorting import normalize_custom_data
 
 logger = logging.getLogger(__name__)
+
+TEACHER_DOWNLOAD_URL = 'https://class.577622.xyz'
 
 
 def _local_request(request):
@@ -56,6 +58,28 @@ def _serialize_drop_document(classroom):
     }
 
 
+def _teacher_installed():
+    """只定位教师端程序，不启动它，也不写入任何投送请求。"""
+    if not sys.platform.startswith('win'):
+        return False
+    try:
+        DropClient(source='不想排座位')._find_executable()
+    except FileNotFoundError:
+        return False
+    except (OSError, RuntimeError, ValueError):
+        logger.exception('检测不想班管教师端失败')
+        return False
+    return True
+
+
+@require_GET
+@feature_gate('drop')
+def drop_status(request):
+    if not _local_request(request):
+        return JsonResponse({'status': 'error', 'message': '请在本机的不想排座位中使用 Drop'}, status=403)
+    return JsonResponse({'status': 'success', 'installed': _teacher_installed(), 'download_url': TEACHER_DOWNLOAD_URL})
+
+
 @require_POST
 @feature_gate('drop')
 def drop_classroom(request, pk):
@@ -63,12 +87,12 @@ def drop_classroom(request, pk):
         return JsonResponse({'status': 'error', 'message': '请在本机的不想排座位中使用 Drop'}, status=403)
     classroom = get_object_or_404(Classroom, pk=pk)
     if not sys.platform.startswith('win'):
-        return JsonResponse({'status': 'not_installed', 'message': '请先安装 Windows 版不想班管教师端，再使用 Drop。'})
+        return JsonResponse({'status': 'not_installed', 'download_url': TEACHER_DOWNLOAD_URL, 'message': '请先安装 Windows 版不想班管教师端，再使用 Drop。'})
     try:
         document = _serialize_drop_document(classroom)
         ticket = DropClient(source='不想排座位').send_seats(document, filename=_filename(classroom.name))
     except FileNotFoundError:
-        return JsonResponse({'status': 'not_installed', 'message': '请先安装不想班管教师端（支持 Drop 的新版），安装后再点击 Drop。便携版请先运行一次教师端。'})
+        return JsonResponse({'status': 'not_installed', 'download_url': TEACHER_DOWNLOAD_URL, 'message': '请先安装不想班管教师端（支持 Drop 的新版），安装后再点击 Drop。便携版请先运行一次教师端。'})
     except (OSError, RuntimeError, ValueError):
         logger.exception('无法打开本地教师端 Drop 窗口')
         return JsonResponse({'status': 'error', 'message': '无法唤起不想班管教师端，请确认安装后重试。'}, status=503)

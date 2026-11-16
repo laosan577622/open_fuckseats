@@ -22,7 +22,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
             const result = await response.json().catch(() => ({}));
             if (result.status === 'not_installed') {
-                await showMessage(result.message || '请先安装不想班管教师端，再使用 Drop。', '需要安装不想班管');
+                const message = result.message || '请先安装不想班管教师端，再使用 Drop。';
+                if (typeof window.showConfirmModal !== 'function') { window.alert(message); return; }
+                const goDownload = await window.showConfirmModal(message, { title: '需要安装不想班管', okText: '去下载', cancelText: '关闭' });
+                if (goDownload && window.DropLaunchNotice) window.DropLaunchNotice.openDownload(result.download_url);
                 return;
             }
             if (!response.ok || result.status !== 'success') {

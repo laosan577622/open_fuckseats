@@ -447,6 +447,17 @@
                         </div>
                     </div>
                 </div>
+                <div class="settings-list-group">
+                    <div class="settings-row">
+                        <div class="settings-row-main">
+                            <label>已授权的 Agent</label>
+                            <span class="settings-row-desc">这些程序可以通过本机接口访问班级数据。仅本次运行的授权在关闭应用后失效；30 天和永久授权在应用重启后仍然有效，可以随时撤销。</span>
+                            <div class="agent-grant-list" id="agent-grant-list" aria-live="polite">
+                                <span class="agent-grant-empty">加载中...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </section>
 
@@ -550,4 +561,5 @@
 
 {% block extra_scripts %}<script src="{% static 'js/wendao.js' %}?v=2" defer></script>
 <script src="{% static 'js/settings.js' %}?v=2"></script>
+<script src="{% static 'js/agent-grants.js' %}?v=1"></script>
 {% endblock %}

@@ -17,8 +17,17 @@
 .welcome-center strong { color: #0a59f7; font-weight: 600; }
 .welcome-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 36px; }
 .welcome-actions .btn { min-width: 240px; min-height: 46px; justify-content: center; }
-#welcome-screen[data-page="practice"] .welcome-actions { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); }
-#welcome-screen[data-page="practice"] .welcome-actions .btn { min-width: 0; }
+/* 练习目录：按类别分组，每组一行标题加自动换行的胶囊按钮；页面内容多时整屏滚动。 */
+#welcome-screen[data-page="practice"] { align-items: start; }
+.welcome-practice { width: min(100%, 860px); padding: 4vh 0 5vh; }
+.welcome-practice h1 { margin-bottom: 12px; }
+.welcome-practice > p { margin-bottom: 8px; font-size: 15px; }
+.welcome-practice-group { margin-top: 28px; text-align: left; }
+.welcome-practice-group h2 { margin: 0 0 12px; color: #6e6e73; font-size: 13px; line-height: 18px; font-weight: 500; }
+.welcome-practice-items { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.welcome-practice-items .btn { min-width: 0; min-height: 44px; justify-content: center; gap: 6px; }
+.welcome-practice-items .btn.is-done { color: #0a59f7; }
+.welcome-practice .welcome-actions { flex-direction: row; justify-content: center; margin-top: 32px; }
 .welcome-text { border: 0; background: none; color: #6e6e73; font: inherit; cursor: pointer; padding: 12px; border-radius: 999px; }
 .welcome-text:hover { color: #0a59f7; }
 .welcome-body :focus-visible { outline: 3px solid #0a59f7; outline-offset: 4px; }
@@ -102,6 +111,30 @@
 .welcome-lesson-options { display: flex; gap: 24px; }
 .welcome-lesson-options label { display: flex; gap: 8px; align-items: center; }
 .welcome-lesson-menu { border: 1px solid #d2d2d7; border-radius: 12px; padding: 8px; background: #fff; }
+/* 补充练习的操作区、偏好选项和示意图 */
+.welcome-lesson-controls { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 12px 16px; }
+.welcome-lesson-controls label { display: flex; align-items: center; gap: 8px; }
+.welcome-lesson-controls select, .welcome-lesson-controls input[type=text] { min-height: 36px; padding: 0 12px; border: 1px solid #d2d2d7; border-radius: 10px; background: #fff; color: #1d1d1f; font: inherit; }
+.welcome-lesson-controls input[type=range] { width: 200px; accent-color: #0a59f7; }
+.welcome-lesson-prefs { display: flex; flex-direction: column; gap: 8px; text-align: left; }
+.welcome-lesson-prefs label { display: flex; align-items: center; gap: 8px; }
+.welcome-lesson-prefs input { accent-color: #0a59f7; }
+.welcome-lesson-subprefs { display: flex; gap: 20px; margin-left: 24px; color: #6e6e73; }
+.welcome-stage .seat { position: relative; }
+.welcome-stage .seat-content { flex-direction: column; }
+.welcome-stage .seat-info { display: block; color: #6e6e73; font-size: 11px; line-height: 14px; }
+/* 小组标签贴在座位底边，姓名相应上移，避免两者重叠。 */
+.welcome-stage .seat-group-tag { position: absolute; inset: auto 4px 3px auto; width: auto; height: auto; padding: 0 5px; border: 0; border-radius: 5px; background: #edf4ff; color: #0a50e0; font-size: 10px; line-height: 14px; }
+.welcome-stage .seat:has(.seat-group-tag) .seat-content { transform: translateY(-7px); }
+.welcome-stage .seat.is-leader .seat-name { color: #bf1b3f; font-weight: 700; }
+.welcome-split-demo { display: flex; width: min(100%, 420px); height: 200px; overflow: hidden; border: 1px solid #e8e8ed; border-radius: 16px; background: #f2f2f4; color: #6e6e73; font-size: 14px; }
+.welcome-split-demo-stage, .welcome-split-demo-side { display: flex; align-items: center; justify-content: center; min-width: 0; white-space: nowrap; overflow: hidden; }
+.welcome-split-demo-stage { flex: 1 1 auto; }
+.welcome-split-demo-side { flex: 0 0 var(--demo-side, 36%); border-left: 2px solid #0a59f7; background: #fff; color: #1d1d1f; transition: flex-basis .24s cubic-bezier(.2,0,0,1); }
+.welcome-split-demo.is-collapsed .welcome-split-demo-side { flex-basis: 0; border-left-width: 0; }
+.welcome-agent-demo { width: min(100%, 400px); padding: 24px; border: 1px solid #e8e8ed; border-radius: 20px; background: #fff; text-align: left; }
+.welcome-agent-demo .welcome-lesson-controls { justify-content: flex-start; margin-top: 16px; }
+@media (prefers-reduced-motion: reduce) { .welcome-split-demo-side { transition: none; } }
 .welcome-lesson-table { border-collapse: collapse; width: min(100%,360px); text-align: left; }
 .welcome-lesson-table th, .welcome-lesson-table td { padding: 12px; border-bottom: 1px solid #e8e8ed; }
 .welcome-lesson-table caption { padding-bottom: 20px; }

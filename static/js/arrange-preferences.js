@@ -6,12 +6,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const defaults = {
         gender: 'none', score: 'none', avoid_previous: false,
-        avoid_previous_position: false,
+        avoid_previous_position: false, avoid_previous_row: false, avoid_previous_col: false,
     };
     const gender = document.getElementById('arrangePreferenceGender');
     const score = document.getElementById('arrangePreferenceScore');
     const avoidPrevious = document.getElementById('arrangePreferenceAvoidPrevious');
     const avoidPreviousPosition = document.getElementById('arrangePreferenceAvoidPreviousPosition');
+    const avoidPreviousRow = document.getElementById('arrangePreferenceAvoidPreviousRow');
+    const avoidPreviousCol = document.getElementById('arrangePreferenceAvoidPreviousCol');
+    const positionOptions = document.getElementById('arrangePreferencePositionOptions');
+    // 原行、原列是「尽量不重复位置」的子项：父项关闭时禁用并清空。
+    const positionChildren = [avoidPreviousRow, avoidPreviousCol];
+    function syncPositionOptions() {
+        const enabled = avoidPreviousPosition.checked;
+        positionOptions.setAttribute('aria-disabled', String(!enabled));
+        positionChildren.forEach((control) => {
+            control.disabled = !enabled;
+            if (!enabled) control.checked = false;
+        });
+    }
+    avoidPreviousPosition.addEventListener('change', syncPositionOptions);
     const indicator = document.getElementById('arrange-preferences-indicator');
     const error = document.getElementById('arrangePreferencesError');
     const save = document.getElementById('arrangePreferencesSave');
@@ -29,6 +43,9 @@ document.addEventListener('DOMContentLoaded', () => {
         score.value = value.score;
         avoidPrevious.checked = value.avoid_previous;
         avoidPreviousPosition.checked = value.avoid_previous_position;
+        avoidPreviousRow.checked = value.avoid_previous_row;
+        avoidPreviousCol.checked = value.avoid_previous_col;
+        syncPositionOptions();
         error.hidden = true;
     }
 
@@ -88,6 +105,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const preferences = {
             gender: gender.value, score: score.value, avoid_previous: avoidPrevious.checked,
             avoid_previous_position: avoidPreviousPosition.checked,
+            avoid_previous_row: avoidPreviousPosition.checked && avoidPreviousRow.checked,
+            avoid_previous_col: avoidPreviousPosition.checked && avoidPreviousCol.checked,
         };
         saving = true;
         error.hidden = true;
@@ -116,6 +135,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } finally {
             saving = false;
             form.querySelectorAll('button, select, input[type="checkbox"]').forEach((control) => { control.disabled = false; });
+            syncPositionOptions();
             save.textContent = '保存偏好';
         }
     });

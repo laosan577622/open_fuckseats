@@ -8,12 +8,17 @@ from django.views.decorators.http import require_http_methods
 
 from seats.constraints import get_constraint_type_definitions, get_tag_rule_type_definitions
 from seats.models import Classroom
+from .agent_access import AGENT_TOKEN_PREFIX, agent_access_broker
 from .auth import (
+    agent_access_error,
+    agent_access_state,
+    extract_bearer_token,
     get_or_create_open_api_key,
     read_access_error,
     read_access_state,
     require_open_api_auth,
 )
+from . import realtime
 from .openapi import build_openapi_schema
 from .registry import ToolExecutionError, registry
 from .serializers import (
@@ -97,8 +102,74 @@ def request_read_access(request):
     return JsonResponse(_read_access_payload(state), status=200 if state['authorization'] == 'granted' else 202)
 
 
+def _agent_access_payload(state, request):
+    granted = state['authorization'] == 'granted'
+    return {
+        'status': 'ok',
+        'authorization': state['authorization'],
+        'request_id': state['request_id'],
+        'client_name': state['client_name'],
+        'requested_scope': state['requested_scope'],
+        'scope': state['scope'],
+        'read_only': state['scope'] != 'full' if granted else None,
+        # 用户确认时选择的期限：session 只在本次运行有效，30d / forever 在应用重启后继续有效。
+        'duration': state['duration'],
+        'expires_at': state['expires_at'],
+        'session_only': state['duration'] == 'session' if granted else None,
+        # 按申请方实际访问的地址返回，开发模式换端口时也能直接使用。
+        'base_url': request.build_absolute_uri('/open_api'),
+        'status_path': '/open_api/access/status',
+    }
+
+
+@csrf_exempt
+@require_http_methods(['POST'])
+def request_agent_access(request):
+    """只登记申请并让应用界面弹出授权窗口；是否放行由用户在界面中决定。"""
+    if request.META.get('REMOTE_ADDR') not in {'127.0.0.1', '::1'} or (
+        request.headers.get('origin') or request.headers.get('sec-fetch-site')
+    ):
+        return _error_response('授权申请仅接受本机程序', code='LOCAL_CLIENT_REQUIRED', status=403)
+    if request.content_type != 'application/json':
+        return _error_response('授权申请必须使用 application/json', status=415)
+    try:
+        content_length = int(request.META.get('CONTENT_LENGTH') or 0)
+    except (TypeError, ValueError):
+        return _error_response('Content-Length 格式错误')
+    if content_length > 4096 or len(request.body) > 4096:
+        return _error_response('授权申请过大', status=413)
+    try:
+        data = _json_body(request)
+        state = agent_access_broker.submit(
+            data.get('client_name'), data.get('scope') or 'full', data.get('reason') or '',
+        )
+    except OverflowError as exc:
+        return _error_response(exc, code='TOO_MANY_REQUESTS', status=429)
+    except (ValueError, UnicodeDecodeError) as exc:
+        return _error_response(exc)
+    realtime.bump()
+    return JsonResponse({
+        **_agent_access_payload(state, request),
+        'token': state['token'],
+        'expires_in': state['expires_in'],
+        'instructions': (
+            '应用界面已弹出授权窗口。请提示用户在不想排座位中点击允许，'
+            '然后携带 Authorization: Bearer <token> 轮询 status_path，直到 authorization 变为 granted。'
+            '用户可能选择 30 天或永久授权（见 status 的 duration 与 expires_at），此时请妥善保存 token，'
+            '应用重启后可以继续使用，无需再次申请。'
+        ),
+    }, status=202)
+
+
 @require_http_methods(['GET'])
 def read_access_status(request):
+    if extract_bearer_token(request).startswith(AGENT_TOKEN_PREFIX):
+        state = agent_access_state(request)
+        if state is None or state['authorization'] in ('denied', 'expired'):
+            return agent_access_error(state)
+        return JsonResponse(
+            _agent_access_payload(state, request), status=200 if state['authorization'] == 'granted' else 202,
+        )
     state = read_access_state(request)
     if state is None or state['authorization'] == 'denied':
         return read_access_error(state)
@@ -116,6 +187,11 @@ def discovery(request):
             'client_name': request.open_api_client_name,
             'scopes': list(desktop_access.READ_ACCESS_SCOPES),
         })
+    elif getattr(request, 'open_api_agent_access', False):
+        authentication.update({
+            'read_only': False, 'session_only': request.open_api_agent_duration == 'session',
+            'client_name': request.open_api_client_name,
+        })
     else:
         key = get_or_create_open_api_key()
         authentication['api_key_preview'] = f'{key[:8]}...{key[-4:]}' if len(key) > 16 else 'configured'
@@ -132,6 +208,7 @@ def discovery(request):
             'execute': '/open_api/tools/execute',
             'batch': '/open_api/tools/batch',
             'openapi': '/open_api/openapi.json',
+            'access_authorize': '/open_api/access/authorize',
             'access_status': '/open_api/access/status',
         },
         'tool_count': len(tools),

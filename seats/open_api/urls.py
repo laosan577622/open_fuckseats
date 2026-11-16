@@ -5,6 +5,7 @@ from . import views
 
 urlpatterns = [
     path('', views.discovery, name='open_api_discovery'),
+    path('access/authorize', views.request_agent_access, name='open_api_request_agent_access'),
     path('access/request', views.request_read_access, name='open_api_request_read_access'),
     path('access/status', views.read_access_status, name='open_api_read_access_status'),
     path('classrooms', views.classrooms, name='open_api_classrooms'),

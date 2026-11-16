@@ -34,7 +34,8 @@ from seats.models import (
     SortStrategy,
 )
 from seats.sorting import (
-    PYTHON_SORT_EXAMPLE,
+    PYTHON_SORT_CONTRACT,
+    PYTHON_SORT_MODULES,
     definition_for_field,
     normalize_custom_data,
     normalize_python_sort_code,
@@ -67,6 +68,14 @@ from .serializers import (
     serialize_tags_for_classroom,
     student_sort_key,
     validate_seating_payload,
+)
+
+
+_PYTHON_SORT_RUNTIME_HINT = (
+    '可使用 for / while 循环、try / except、辅助函数和顶层常量；'
+    f'可直接使用或 import 这些模块：{"、".join(PYTHON_SORT_MODULES)}；'
+    '另提供 natural_key、pinyin_key、pinyin_initial_key、cmp_to_key。'
+    '不支持 class、with、finally、装饰器和双下划线名称，不能读写文件、联网或启动进程。'
 )
 
 
@@ -205,6 +214,7 @@ def _legacy_arrange_method(mode):
         'random': 'random',
         'group_balanced': 'group_balanced',
         'group_mentor': 'group_mentor',
+        'subject_champion': 'subject_champion',
     }.get(str(mode or '').strip(), str(mode or 'random').strip() or 'random')
 
 
@@ -1282,7 +1292,11 @@ _row_col_tool('delete_col', '注意：此操作会大规模修改数据，请务
 
 @registry.register(
     name='arrange_seats',
-    description='自动排座。支持 standard、student_id、score_first、score_balanced、snake、random、group_balanced、group_mentor。',
+    description=(
+        '自动排座。支持 standard、student_id、score_first、score_balanced、snake、random、group_balanced、'
+        'group_mentor、subject_champion。subject_champion（单科王同桌）读取学生自定义信息中的各科成绩，'
+        '每人取最高分的一科，同科目的学生排成同桌。'
+    ),
     parameters=_with_classroom({
         'mode': {'type': 'string', 'enum': [item['value'] for item in ARRANGE_MODE_DEFINITIONS]},
     }, ['mode']),
@@ -1918,14 +1932,16 @@ def update_sort_strategy_tool(ctx):
 @registry.register(
     name='create_python_sort_strategy',
     description=(
-        '使用 Python 为当前班级编写并保存新的排序算法。代码必须只定义 '
+        '使用 Python 为当前班级编写并保存新的排序算法。代码必须定义 '
         'sort_students(students)，输入是学生字典列表，返回包含全部学生的排序后列表或 ID 列表。'
+        + _PYTHON_SORT_RUNTIME_HINT
     ),
     parameters=_with_classroom({
         'name': _string('排序方式名称'),
         'description': _string('说明'),
         'python_code': _string(
             'Python 源码。学生字段包括 id、name、student_id、gender、score、classroom、group、custom_data、seat。'
+            + _PYTHON_SORT_RUNTIME_HINT
         ),
         'save_to_group': _bool('当前班级属于班级组时，是否保存为组内共享方式'),
     }, ['name', 'python_code']),
@@ -1950,10 +1966,7 @@ def create_python_sort_strategy_tool(ctx):
     return ToolResult(
         result={
             'strategy': _serialize_sort_strategy(strategy),
-            'contract': {
-                'function': 'sort_students(students)',
-                'example': PYTHON_SORT_EXAMPLE,
-            },
+            'contract': PYTHON_SORT_CONTRACT,
         },
         affected=_affected(f'已创建 Python 排序方式：{name}', classroom_ids=[ctx.classroom.pk]),
     )
@@ -1966,7 +1979,7 @@ def create_python_sort_strategy_tool(ctx):
         'strategy_id': _int('排序方式 ID', 1),
         'name': _string('新名称'),
         'description': _string('说明'),
-        'python_code': _string('新的 Python 排序源码'),
+        'python_code': _string('新的 Python 排序源码。' + _PYTHON_SORT_RUNTIME_HINT),
     }, ['strategy_id']),
     category='sorting',
     read_only=False,
@@ -2109,7 +2122,8 @@ def apply_sort_definition_tool(ctx):
     description='预览 Agent 编写的 Python 排序算法结果，不修改座位。',
     parameters=_with_classroom({
         'python_code': _string(
-            '只定义 sort_students(students)；返回排序后的学生字典列表或学生 ID 列表。'
+            '定义 sort_students(students)；返回排序后的学生字典列表或学生 ID 列表。'
+            + _PYTHON_SORT_RUNTIME_HINT
         ),
     }, ['python_code']),
     category='sorting',
@@ -2121,10 +2135,7 @@ def preview_python_sort_tool(ctx):
     return {
         'language': SortStrategy.LANGUAGE_PYTHON,
         'python_code': python_code,
-        'contract': {
-            'function': 'sort_students(students)',
-            'example': PYTHON_SORT_EXAMPLE,
-        },
+        'contract': PYTHON_SORT_CONTRACT,
         'students': [serialize_student(item, ctx.classroom) for item in students],
     }
 
@@ -2134,7 +2145,8 @@ def preview_python_sort_tool(ctx):
     description='直接应用 Agent 编写的 Python 排序算法并排座。此操作会大规模修改数据，请先向用户口头确认。',
     parameters=_with_classroom({
         'python_code': _string(
-            '只定义 sort_students(students)；返回排序后的学生字典列表或学生 ID 列表。'
+            '定义 sort_students(students)；返回排序后的学生字典列表或学生 ID 列表。'
+            + _PYTHON_SORT_RUNTIME_HINT
         ),
     }, ['python_code']),
     category='sorting',

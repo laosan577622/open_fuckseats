@@ -9,6 +9,7 @@ from django.views.decorators.csrf import csrf_exempt
 import desktop_access
 from seats.desktop_auth import desktop_mode_enabled
 from seats.models import FrontendKVStore
+from .agent_access import AGENT_TOKEN_PREFIX, agent_access_broker
 
 
 OPEN_API_STORE_KEY = 'fuckseats_open_api_key'
@@ -90,14 +91,46 @@ def is_trusted_browser_request(request):
     return bool(origin and origin in allowed_browser_origins())
 
 
+AGENT_AUTHORIZE_HINT = {
+    'method': 'POST',
+    'path': '/open_api/access/authorize',
+    'body': {'client_name': '<程序名称>', 'scope': 'full 或 read', 'reason': '<可选，申请说明>'},
+    'status_path': '/open_api/access/status',
+    'description': (
+        '没有密钥时可以直接申请：应用界面会弹出授权窗口，用户允许后，'
+        '用返回的 token 作为 Bearer 凭证调用接口；等待期间轮询 status_path。'
+    ),
+}
+
+
 def unauthorized_response(message='缺少或无效的 Bearer API Key'):
     response = JsonResponse({
         'status': 'error',
         'error': message,
         'code': 'UNAUTHORIZED',
+        'authorize': AGENT_AUTHORIZE_HINT,
     }, status=401)
     response['WWW-Authenticate'] = 'Bearer'
     return response
+
+
+def agent_access_state(request):
+    return agent_access_broker.lookup(extract_bearer_token(request))
+
+
+def agent_access_error(state):
+    if state is None:
+        return unauthorized_response('授权凭证无效、已到期、已被撤销，或仅限当次运行而应用已重启，请重新申请')
+    authorization = state['authorization']
+    if authorization == 'pending':
+        message, code, status = '等待用户在应用中确认授权', 'ACCESS_PENDING', 409
+    elif authorization == 'expired':
+        message, code, status = '授权申请已超时，请重新申请', 'ACCESS_EXPIRED', 403
+    else:
+        message, code, status = '用户已拒绝本次授权申请', 'ACCESS_DENIED', 403
+    return JsonResponse({
+        'status': 'error', 'authorization': authorization, 'error': message, 'code': code,
+    }, status=status)
 
 
 def read_access_state(request):
@@ -173,6 +206,15 @@ def require_open_api_auth(view_func):
                 return apply_open_api_browser_headers(request, read_access_error(state))
             request.open_api_read_only = True
             request.open_api_client_name = state['client_name']
+            return apply_open_api_browser_headers(request, view_func(request, *args, **kwargs))
+        if token.startswith(AGENT_TOKEN_PREFIX):
+            state = agent_access_state(request)
+            if state is None or state['authorization'] != 'granted':
+                return apply_open_api_browser_headers(request, agent_access_error(state))
+            request.open_api_read_only = state['scope'] != 'full'
+            request.open_api_client_name = state['client_name']
+            request.open_api_agent_access = True
+            request.open_api_agent_duration = state['duration']
             return apply_open_api_browser_headers(request, view_func(request, *args, **kwargs))
         if not is_authorized(request) and not is_trusted_browser_request(request):
             return apply_open_api_browser_headers(request, unauthorized_response())

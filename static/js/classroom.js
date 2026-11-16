@@ -3999,12 +3999,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (e.shiftKey || e.ctrlKey || e.metaKey || groupMode) {
                     toggleMultiSelection(seat);
                 } else {
+                    clearMultiSelection();
                     setSelectedSeat(seat);
                 }
                 return;
             }
+            // 按住修饰键点击是增减多选：再点一次已选中的座位会取消它。
             if (e.shiftKey || e.ctrlKey || e.metaKey) {
-                addToMultiSelection(seat);
+                toggleMultiSelection(seat);
                 return;
             }
             if (groupMode) {
@@ -4024,6 +4026,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }));
                 return;
             }
+            // 不带修饰键的普通点击回到单选，之前的多选一并取消。
+            clearMultiSelection();
             setSelectedSeat(seat);
         });
         seat.addEventListener('dblclick', (e) => {
@@ -4852,6 +4856,12 @@ document.addEventListener('DOMContentLoaded', () => {
             selectionBox.style.top = `${selectStart.y}px`;
             selectionBox.style.width = '0px';
             selectionBox.style.height = '0px';
+        });
+        // 点击座位区的空白处取消多选；分组模式下保留，方便连续框选后再应用分组。
+        seatStage.addEventListener('click', (e) => {
+            if (groupMode || e.shiftKey || e.ctrlKey || e.metaKey) return;
+            if (e.target.closest('.seat, button, a, input, select, .zoom-controls')) return;
+            clearMultiSelection();
         });
     }
 

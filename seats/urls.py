@@ -1,6 +1,6 @@
 from django.urls import include, path, re_path
 from . import views, wendao
-from . import exam_views, drop_views
+from . import agent_access_views, exam_views, drop_views
 from .client_control import feature_gate
 
 urlpatterns = [
@@ -131,6 +131,7 @@ urlpatterns = [
     path('classroom/<int:pk>/sync-snapshots/<int:snapshot_id>/export/', views.export_local_sync_snapshot, name='export_local_sync_snapshot'),
     path('classroom/<int:pk>/layout/export/', views.export_seats_file, name='export_seats_file'),
     path('classroom/<int:pk>/drop/', drop_views.drop_classroom, name='drop_classroom'),
+    path('api/drop/status/', drop_views.drop_status, name='drop_status'),
     path('classroom/<int:pk>/layout/import/', views.import_seats_file, name='import_seats_file'),
     path('classroom/<int:pk>/layout/import/sdes/', views.import_sdes, name='import_sdes'),
     path('classroom/<int:pk>/layout/import/bsce/', views.import_bsce_file, name='import_bsce_file'),
@@ -207,6 +208,10 @@ urlpatterns = [
     path('api/ai-session/end/', views.ai_session_end, name='ai_session_end_slash'),
     path('api/ai-session/stream', views.ai_session_stream, name='ai_session_stream'),
     path('api/ai-session/stream/', views.ai_session_stream, name='ai_session_stream_slash'),
+    path('api/agent-access/', agent_access_views.pending, name='agent_access_pending'),
+    path('api/agent-access/grants/', agent_access_views.grants, name='agent_access_grants'),
+    path('api/agent-access/grants/<str:grant_id>/revoke/', agent_access_views.revoke, name='agent_access_revoke'),
+    path('api/agent-access/<str:request_id>/decide/', agent_access_views.decide, name='agent_access_decide'),
     path('api/realtime', views.realtime_status, name='realtime_status'),
     path('api/realtime/', views.realtime_status, name='realtime_status_slash'),
     path('classrooms/batch-copy', views.batch_copy_classrooms, name='batch_copy_classrooms'),

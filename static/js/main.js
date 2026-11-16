@@ -137,6 +137,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ['学生面板', '[data-tab="students"]'],
             ['分组面板', '[data-tab="groups"]'],
             ['约束面板', '[data-tab="constraints"]'],
+            ['收起或展开侧栏', '#btn-toggle-side-panel'],
             ['外观设置', '[data-settings-nav="appearance"]'],
         ],
         arrange: [

@@ -34,6 +34,7 @@ ARRANGE_MODE_DEFINITIONS = [
     {'value': 'random', 'label': '随机'},
     {'value': 'group_balanced', 'label': '小组内成绩均衡'},
     {'value': 'group_mentor', 'label': '小组导师制'},
+    {'value': 'subject_champion', 'label': '单科王同桌（每人取最高分科目，同科目的学生排成同桌）'},
 ]
 
 

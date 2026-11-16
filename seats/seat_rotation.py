@@ -40,7 +40,11 @@ def _layout_positions(cells, resolve_student):
 
 
 class RotationContext:
-    def __init__(self, seats, students, snapshots=()):
+    def __init__(self, seats, students, snapshots=(), *, avoid_row=False, avoid_col=False):
+        self.avoid_row = bool(avoid_row)
+        self.avoid_col = bool(avoid_col)
+        # 费用各项的上界，与 cost() 返回值逐项对应；勾选的原行、原列排在区域轮换之前。
+        self.cost_bounds = (1,) * (self.avoid_row + self.avoid_col) + (1, 9, 1, 9, 1)
         students = list(students)
         student_pks = {student.pk for student in students}
         by_student_id, by_name = defaultdict(list), defaultdict(list)
@@ -91,11 +95,16 @@ class RotationContext:
         if key not in self._costs:
             previous = self.previous.get(student_id)
             if previous is None:
-                self._costs[key] = (0, 0, 0, 0, 0)
+                self._costs[key] = (0,) * len(self.cost_bounds)
             else:
                 row_region, col_region = self.regions[seat.pk]
                 row_visits, col_visits = self.visits[student_id]
-                self._costs[key] = (
+                exact = ()
+                if self.avoid_row:
+                    exact += (int(previous[2] == seat.row),)
+                if self.avoid_col:
+                    exact += (int(previous[3] == seat.col),)
+                self._costs[key] = exact + (
                     int(previous[0] == row_region),
                     row_visits[row_region],
                     int(previous[1] == col_region),
@@ -105,18 +114,20 @@ class RotationContext:
         return self._costs[key]
 
     def report(self, seats):
-        compared = changed = moved = 0
+        compared = changed = moved = changed_row = changed_col = 0
         for seat in seats:
             previous = self.previous.get(seat.student_id)
             if previous is None or seat.cell_type != SeatCellType.SEAT:
                 continue
             compared += 1
             moved += previous[2:] != (seat.row, seat.col)
+            changed_row += previous[2] != seat.row
+            changed_col += previous[3] != seat.col
             if self.axis < 2:
                 changed += previous[self.axis] != self.regions[seat.pk][self.axis]
             else:
                 changed += previous[2:] != (seat.row, seat.col)
-        return {
+        report = {
             'compared': compared,
             'changed_region': changed,
             'unchanged_region': compared - changed,
@@ -124,6 +135,11 @@ class RotationContext:
             'snapshot_count': self.snapshot_count,
             'axis': ('front_back', 'left_right', 'seat')[self.axis],
         }
+        if self.avoid_row:
+            report['changed_row'] = changed_row
+        if self.avoid_col:
+            report['changed_col'] = changed_col
+        return report
 
     def message(self, report):
         if not report['compared']:
@@ -132,6 +148,10 @@ class RotationContext:
         message = (f"位置偏好：对比 {report['snapshot_count']} 个快照，"
                    f"{report['changed_seat']}/{report['compared']} 人更换座位，"
                    f"{report['changed_region']}/{report['compared']} 人更换{label}")
+        if 'changed_row' in report:
+            message += f"，{report['changed_row']}/{report['compared']} 人离开原行"
+        if 'changed_col' in report:
+            message += f"，{report['changed_col']}/{report['compared']} 人离开原列"
         if report['unchanged_region']:
             message += '；已在原策略和约束范围内尽量换位'
         return message
@@ -151,7 +171,7 @@ def match_rotation_seats(students, seats, context, is_valid):
                 row.append(None)
                 continue
             value = 0
-            for part, upper_bound in zip(context.cost(student.pk, seat), (1, 9, 1, 9, 1)):
+            for part, upper_bound in zip(context.cost(student.pk, seat), context.cost_bounds):
                 # 每项权重高于所有学生的后续项之和，保留偏好的先后顺序。
                 value = value * (count * upper_bound + 1) + part
             row.append(value)

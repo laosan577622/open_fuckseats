@@ -8,10 +8,32 @@ document.addEventListener('DOMContentLoaded', async () => {
     pages.push(...Object.keys(WelcomeLessons.titles).map(kind=>`lesson-${kind}`));
     const exercises = ['drag', 'initials', 'history', 'layout', 'arrange'];
     const tutorialSteps = [...exercises, 'lesson-import', 'lesson-layoutimport'];
+    // 练习目录按类别分组；带 lesson- 前缀的是独立练习，其余是引导里的动手步骤。
+    const exerciseLabels = {drag:'拖拽换位', initials:'首字母换位', history:'撤销与重做', layout:'布局编辑', arrange:'自动排座'};
+    const practiceGroups = [
+        ['基础操作', ['drag', 'initials', 'history', 'layout', 'arrange', 'lesson-fixed', 'lesson-batch', 'lesson-sidebar']],
+        ['小组', ['lesson-groups', 'lesson-leader', 'lesson-autogroup', 'lesson-grouprotate']],
+        ['排座规则', ['lesson-constraint', 'lesson-tags', 'lesson-preference', 'lesson-champion']],
+        ['文件与数据', ['lesson-import', 'lesson-layoutimport', 'lesson-export', 'lesson-snapshot', 'lesson-drop']],
+        ['更多', ['lesson-exam', 'lesson-agent']],
+    ];
+    // 云控开启后才出现的练习（目前只有 Drop）。读取失败或未开启时一律不显示。
+    let enabledFeatures = new Set();
+    const featureCheck = Promise.race([
+        fetch('/api/client-control/config/', {headers:{Accept:'application/json'}, cache:'no-store', credentials:'same-origin'})
+            .then(response => response.ok ? response.json() : null)
+            .then(config => { enabledFeatures = WelcomeLessons.enabledFeatures(config); })
+            .catch(() => {}),
+        new Promise(resolve => setTimeout(resolve, 1500)),
+    ]);
+    const lessonAvailable = page => !page.startsWith('lesson-') || WelcomeLessons.available(page.slice(7), enabledFeatures);
     const replay = new URLSearchParams(location.search).has('replay');
     let state = !replay && store.read();
     if (!state || state.finished || !pages.includes(state.page) || !Array.isArray(state.completed) || !Array.isArray(state.skipped) || !Array.isArray(state.trail)) state = { page: 'welcome', returning: !!boot.returning, completed: [], skipped: [], trail: [] };
     if (replay && new URLSearchParams(location.search).has('help')) state.page = 'practice';
+    // 应用里的“立即体验”可以用 ?replay&help&lesson=xxx 直接进入某个练习，返回时回到练习目录。
+    const wantedLesson = 'lesson-' + (new URLSearchParams(location.search).get('lesson') || '');
+    if (state.page === 'practice' && pages.includes(wantedLesson)) { state.page = wantedLesson; state.practiceMode = true; state.trail = ['practice']; }
     if (replay) history.replaceState({}, '', '/welcome/');
     const screen = document.getElementById('welcome-screen');
     const status = document.getElementById('welcome-status');
@@ -157,7 +179,22 @@ document.addEventListener('DOMContentLoaded', async () => {
             screen.innerHTML = state.returning || boot.hasData || cloudUser
                 ? center('欢迎回来','<p>继续你的排座工作。</p>',button('进入应用','finish') + textButton('练习更多操作','practice'))
                 : center('准备就绪','<p>现在，创建你的第一个班级。</p>',button('创建班级','create') + button('先看看','finish',true) + textButton('练习更多操作','practice')); break;
-        case 'practice': screen.innerHTML = center('选择一个练习', '<p>示例数据仅用于练习。</p>', exercises.map((page,i)=>button(['拖拽换位','首字母换位','撤销与重做','布局编辑','自动排座'][i],`practice-${page}`,true)).join('') + Object.entries(WelcomeLessons.titles).map(([kind,label])=>button(label,`practice-lesson-${kind}`,true)).join('') + textButton('重新体验完整引导','replay') + textButton('进入应用','finish')); break;
+        case 'practice': {
+            const listed = new Set();
+            const item = page => {
+                listed.add(page);
+                const label = exerciseLabels[page] || WelcomeLessons.titles[page.slice(7)];
+                if (!label || !lessonAvailable(page)) return '';
+                const done = state.completed.includes(page);
+                return `<button type="button" class="btn btn-secondary${done ? ' is-done' : ''}" data-action="practice-${page}"${done ? ' aria-label="' + label + '，已完成"' : ''}>${done ? '<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m3 8.5 3.2 3.2L13 4.8"/></svg>' : ''}${label}</button>`;
+            };
+            const groups = practiceGroups.map(([heading, items]) => [heading, items.map(item).join('')]);
+            // 目录里没有归类的练习统一放进“更多”，新增练习不会因为漏登记而消失。
+            const rest = Object.keys(WelcomeLessons.titles).map(kind => `lesson-${kind}`).filter(page => !listed.has(page)).map(item).join('');
+            if (rest) groups[groups.length - 1][1] += rest;
+            screen.innerHTML = `<div class="welcome-center welcome-practice welcome-enter">${title('选择一个练习')}<p>示例数据仅用于练习，不会改动真实班级。</p>${groups.filter(([, html]) => html).map(([heading, html]) => `<section class="welcome-practice-group" aria-label="${heading}"><h2>${heading}</h2><div class="welcome-practice-items">${html}</div></section>`).join('')}<div class="welcome-actions">${textButton('重新体验完整引导','replay') + textButton('进入应用','finish')}</div></div>`;
+            break;
+        }
         }
         if (state.page.startsWith('lesson-')) WelcomeLessons.render({kind:state.page.slice(7),screen,state,save,tell});
         if (exercises.includes(state.page) || state.page === 'news-cloud') renderSeats();
@@ -317,7 +354,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         case 'finish': finish(); break;
         case 'create': finish('/create/'); break;
         case 'practice': go('practice'); break;
-        case 'replay': state.practiceMode = false; state.returning = !!boot.returning; go('welcome'); break;
+        // 重新体验从最开始的身份选择页出发；老用户身份由用户在那一页重新选择，不沿用设备记录。
+        case 'replay': state.practiceMode = false; state.returning = false; state.replaying = true; state.trail = []; go('welcome'); break;
         case 'cloud-demo': [state.scene[0].student,state.scene[1].student] = [state.scene[1].student,state.scene[0].student]; state.phase = 1; save(); renderSeats(); break;
         case 'demonstrate':
             if (demonstrating || state.success) return;
@@ -341,7 +379,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (changingPage) return;
         if (state.practiceMode && state.page !== 'practice') { state.trail.pop(); go('practice', {back:true}); return; }
         const previous = state.trail.pop();
-        if (previous) { if (previous === 'welcome') state.returning = !!boot.returning; go(previous,{back:true}); }
+        if (previous) { if (previous === 'welcome') state.returning = !state.replaying && !!boot.returning; go(previous,{back:true}); }
     };
     document.getElementById('welcome-skip').onclick = () => {
         if (changingPage) return;
@@ -402,5 +440,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (method) { demoToolbar.querySelector('select[name="method"]').value = method.dataset.arrangeMethod; menu.hidden = true; demoToolbar.querySelector('.arrange-method-trigger').setAttribute('aria-expanded','false'); tell(`已选择${method.textContent}`); }
     });
     window.addEventListener('onboarding-save-error',()=>tell('进度尚未保存，请检查本地服务后重试。'));
+    await featureCheck;
+    // 上次停在一个现已关闭的练习上时，回到练习目录。
+    if (state.page.startsWith('lesson-') && !lessonAvailable(state.page)) { state.page = 'practice'; state.practiceMode = true; }
     save(); render();
 });

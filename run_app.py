@@ -297,6 +297,7 @@ def _build_macos_menu(window_ref, context='classroom'):
             menu_action('布局编辑', '#btn-layout-editor'), menu_action('全屏', '#btn-fullscreen'),
             menu_action('学生面板', '[data-tab="students"]'), menu_action('小组面板', '[data-tab="groups"]'),
             menu_action('约束面板', '[data-tab="constraints"]'),
+            menu_action('收起或展开侧栏', '#btn-toggle-side-panel'),
         ]),
         menu_group('排座', [
             menu_action('自动排座', '#btn-auto-arrange'), menu_action('自定义策略设置', '#classroom-custom-sort-link'),

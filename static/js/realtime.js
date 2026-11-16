@@ -71,7 +71,12 @@
     function poll() {
         fetch('/api/realtime/', { credentials: 'same-origin', cache: 'no-store' })
             .then(function (response) { return response.ok ? response.json() : null; })
-            .then(function (data) { if (data) applyRealtime(data.realtime); })
+            .then(function (data) {
+                if (!data) return;
+                applyRealtime(data.realtime);
+                // 其他模块（如 Agent 授权窗口）复用这一次轮询的结果，不再各自请求。
+                window.dispatchEvent(new CustomEvent('fuckseats:realtime', { detail: data }));
+            })
             .catch(function () {})
             .finally(function () { window.setTimeout(poll, POLL_MS); });
     }

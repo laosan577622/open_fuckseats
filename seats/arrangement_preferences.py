@@ -11,10 +11,13 @@ DEFAULT_PREFERENCES = {
     'score': 'none',
     'avoid_previous': False,
     'avoid_previous_position': False,
+    # 以下两项是「尽量不重复位置」的子项，父项关闭时不生效。
+    'avoid_previous_row': False,
+    'avoid_previous_col': False,
 }
 BUILTIN_METHODS = {
     'random', 'score_desc', 'score_asc', 'good_front', 'good_back',
-    'score_spread', 'group_balanced', 'group_mentor',
+    'score_spread', 'group_balanced', 'group_mentor', 'subject_champion',
 }
 
 
@@ -36,6 +39,10 @@ def normalize_preferences(value):
         raise ValueError('更换同桌选项必须为布尔值')
     if not isinstance(result['avoid_previous_position'], bool):
         raise ValueError('不重复位置选项必须为布尔值')
+    for key in ('avoid_previous_row', 'avoid_previous_col'):
+        if not isinstance(result[key], bool):
+            raise ValueError('不在原行、原列选项必须为布尔值')
+        result[key] = result[key] and result['avoid_previous_position']
     return result
 
 
@@ -94,11 +101,15 @@ def _score(student):
 
 
 def optimize_deskmates(students, seats, assignments, preferences, previous_pairs, is_valid,
-                       *, preserve_rows=False, preserve_groups=False, position_cost=None):
-    """只接受不违反约束的改善；方位轮换优先于同桌搭配偏好。"""
+                       *, preserve_rows=False, preserve_groups=False, position_cost=None, affinity=None):
+    """只接受不违反约束的改善；方位轮换优先于同桌搭配偏好。
+
+    affinity 是排座策略自身要求的同桌归类（学生 ID -> 类别），优先级高于方位轮换和偏好。
+    """
     deskmate_preferences = any(preferences[key] != DEFAULT_PREFERENCES[key]
                               for key in ('gender', 'score', 'avoid_previous'))
-    if (not deskmate_preferences and position_cost is None) or len(assignments) != len(students):
+    if (not deskmate_preferences and position_cost is None and affinity is None) or (
+            len(assignments) != len(students)):
         return
     pairs = desk_pairs(seats)
     if not pairs and position_cost is None:
@@ -117,7 +128,8 @@ def optimize_deskmates(students, seats, assignments, preferences, previous_pairs
         left, right = pairs[index]
         left_id, right_id = occupants[left.pk], occupants[right.pk]
         if not left_id or not right_id:
-            return (0, 0, 0, 0)
+            return (0, 0, 0, 0, 0)
+        affinity_cost = int(affinity is not None and affinity.get(left_id) != affinity.get(right_id))
         gender_cost = 0
         if preferences['gender'] != 'none':
             left_gender, right_gender = student_map[left_id].gender, student_map[right_id].gender
@@ -136,15 +148,18 @@ def optimize_deskmates(students, seats, assignments, preferences, previous_pairs
                 difference = abs(left_score - right_score) / score_range
                 score_cost = difference if preferences['score'] == 'similar' else 1 - difference
         # 优先保留完整同桌，避免用拆成单人座的方式规避偏好。
-        return (-1, gender_cost, repeat_cost, round(score_cost, 8))
+        return (-1, affinity_cost, gender_cost, repeat_cost, round(score_cost, 8))
 
     def cost(indices, positions):
         costs = [pair_cost(index) for index in indices]
-        desk_cost = tuple(sum(item[part] for item in costs) for part in range(4))
+        desk_cost = tuple(sum(item[part] for item in costs) for part in range(5))
         if position_cost is None:
             return desk_cost
         position_costs = [position_cost(occupants[seat.pk], seat) for seat in positions if occupants[seat.pk]]
-        return tuple(map(sum, zip(*position_costs))) + desk_cost
+        position_total = tuple(map(sum, zip(*position_costs)))
+        if affinity is None:
+            return position_total + desk_cost
+        return desk_cost[:2] + position_total + desk_cost[2:]
 
     # 使用局部增量评分，不在交换循环中访问数据库；限制大布局的计算量。
     comparisons = 0

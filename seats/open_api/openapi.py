@@ -54,9 +54,35 @@ def build_openapi_schema(base_url='/open_api', *, request=None):
                     'responses': {'200': {'description': 'OK'}},
                 },
             },
+            '/access/authorize': {
+                'post': {
+                    'summary': '在应用界面弹出授权窗口，申请本次运行期间的访问凭证',
+                    'security': [],
+                    'requestBody': {
+                        'required': True,
+                        'content': {
+                            'application/json': {
+                                'schema': {
+                                    'type': 'object',
+                                    'properties': {
+                                        'client_name': {'type': 'string', 'maxLength': 80},
+                                        'scope': {'type': 'string', 'enum': ['full', 'read'], 'default': 'full'},
+                                        'reason': {'type': 'string', 'maxLength': 200},
+                                    },
+                                    'required': ['client_name'],
+                                },
+                            },
+                        },
+                    },
+                    'responses': {
+                        '202': {'description': '已弹出授权窗口，返回 token 与 request_id'},
+                        '403': {'description': '仅接受本机程序'}, '429': {'description': '待确认的申请过多'},
+                    },
+                },
+            },
             '/access/status': {
                 'get': {
-                    'summary': '查询本次运行的只读授权状态',
+                    'summary': '查询本次运行的授权状态',
                     'responses': {
                         '200': {'description': '已授权'}, '202': {'description': '等待用户授权'},
                         '401': {'description': '凭证无效或已失效'}, '403': {'description': '用户拒绝'},
