@@ -51,8 +51,20 @@ BLOCKED_INSTALLER_FLAG_RE = re.compile(
 UPDATE_STATE_LOCK = threading.Lock()
 UPDATE_THREAD_LOCK = threading.RLock()
 UPDATE_THREAD = None
-STARTUP_UPDATE_CHECK_LOCK = threading.Lock()
-STARTUP_UPDATE_CHECK = None
+UPDATE_CHECK_LOCK = threading.Lock()
+# 失败的检查在下次读取状态时自动重试的最短间隔。
+UPDATE_CHECK_RETRY_SECONDS = 60
+# 超过该时长仍未结束的检查视为失联：不再等待它，但也不会终止它。
+UPDATE_CHECK_STALE_SECONDS = 120
+UPDATE_CHECK = {
+    "sequence": 0,
+    "future": None,
+    "started_at": 0.0,
+    "finished_at": 0.0,
+    "result": None,
+    "error": "",
+    "dismissed_version": "",
+}
 PREPARED_INSTALLER_PATH = ""
 UPDATE_STATE = {
     "state": "idle",
@@ -872,31 +884,125 @@ def check_for_updates():
     return payload
 
 
+def _run_update_check(future):
+    try:
+        payload = check_for_updates()
+    except Exception as exc:
+        with UPDATE_CHECK_LOCK:
+            if UPDATE_CHECK["future"] is future:
+                UPDATE_CHECK["error"] = str(exc) or exc.__class__.__name__
+                UPDATE_CHECK["finished_at"] = time.monotonic()
+        future.set_exception(exc)
+        return
+    with UPDATE_CHECK_LOCK:
+        if UPDATE_CHECK["future"] is future:
+            # 已发现的更新一直保留到本次运行结束，后续检查失败也不会清除。
+            UPDATE_CHECK["result"] = payload
+            UPDATE_CHECK["error"] = ""
+            UPDATE_CHECK["finished_at"] = time.monotonic()
+    future.set_result(payload)
+
+
+def request_update_check(mode="startup"):
+    """启动或加入后台更新检查，立即返回对应的 Future。
+
+    检查在独立线程中运行：请求结束、页面切换、再次检查、下载或安装都不会中断它，
+    它也不占用请求线程和其他操作使用的锁。同一时间只运行一个检查，
+    期间到达的请求共用这一次检查的结果。
+
+    mode:
+        startup  仅在本次运行尚未检查过时启动；
+        retry    仅在上一次检查失败且超过冷却时间后重新检查；
+        manual   用户主动检查，获取最新结果并重新允许弹窗提示。
+    """
+    now = time.monotonic()
+    with UPDATE_CHECK_LOCK:
+        future = UPDATE_CHECK["future"]
+        if mode == "manual":
+            UPDATE_CHECK["dismissed_version"] = ""
+        if future is not None:
+            if not future.done():
+                # 只有用户主动检查才会绕开长时间无响应的检查；原检查仍会运行到结束。
+                if mode != "manual" or now - UPDATE_CHECK["started_at"] < UPDATE_CHECK_STALE_SECONDS:
+                    return future
+            elif mode == "startup":
+                return future
+            elif mode == "retry" and (
+                not UPDATE_CHECK["error"] or now - UPDATE_CHECK["finished_at"] < UPDATE_CHECK_RETRY_SECONDS
+            ):
+                return future
+        elif mode == "retry":
+            return None
+        future = Future()
+        UPDATE_CHECK["future"] = future
+        UPDATE_CHECK["sequence"] += 1
+        UPDATE_CHECK["started_at"] = now
+    try:
+        threading.Thread(
+            target=_run_update_check, args=(future,), name="fuckseats-update-check", daemon=True,
+        ).start()
+    except RuntimeError as exc:
+        with UPDATE_CHECK_LOCK:
+            if UPDATE_CHECK["future"] is future:
+                UPDATE_CHECK["error"] = f"无法启动更新检查：{exc}"
+                UPDATE_CHECK["finished_at"] = time.monotonic()
+        future.set_exception(exc)
+    return future
+
+
 def start_startup_update_check():
-    global STARTUP_UPDATE_CHECK
-    with STARTUP_UPDATE_CHECK_LOCK:
-        if STARTUP_UPDATE_CHECK is None:
-            result = Future()
-
-            def run():
-                try:
-                    result.set_result(check_for_updates())
-                except Exception as exc:
-                    result.set_exception(exc)
-
-            threading.Thread(target=run, name="fuckseats-update-check", daemon=True).start()
-            STARTUP_UPDATE_CHECK = result
-        return STARTUP_UPDATE_CHECK
+    return request_update_check("startup")
 
 
-def get_startup_update_result():
-    with STARTUP_UPDATE_CHECK_LOCK:
-        result = STARTUP_UPDATE_CHECK
-    if result is None:
-        return {"state": "idle"}
-    if not result.done():
-        return {"state": "checking"}
-    return {"state": "checked", **result.result()}
+def dismiss_update(version):
+    """记录用户在本次运行中关闭了该版本的更新提示。"""
+    version = str(version or "").strip()
+    with UPDATE_CHECK_LOCK:
+        result = UPDATE_CHECK["result"] or {}
+        if version and version == result.get("latest_version"):
+            UPDATE_CHECK["dismissed_version"] = version
+
+
+def get_update_check_state():
+    with UPDATE_CHECK_LOCK:
+        future = UPDATE_CHECK["future"]
+        payload = dict(UPDATE_CHECK["result"] or {})
+        error = UPDATE_CHECK["error"]
+        sequence = UPDATE_CHECK["sequence"]
+        started_at = UPDATE_CHECK["started_at"]
+        dismissed_version = UPDATE_CHECK["dismissed_version"]
+    payload.setdefault("platform", get_platform_name())
+    payload.setdefault("supported", is_update_api_supported())
+    payload.setdefault("current_version", get_current_version())
+    payload["check_id"] = sequence
+    payload["dismissed"] = bool(
+        payload.get("update_available") and dismissed_version == payload.get("latest_version")
+    )
+    if future is None:
+        payload["state"] = "idle"
+    elif not future.done():
+        if time.monotonic() - started_at < UPDATE_CHECK_STALE_SECONDS:
+            payload["state"] = "checking"
+        else:
+            payload["state"] = "error"
+            payload["message"] = "更新检查超时，请稍后重试。"
+    elif error:
+        payload["state"] = "error"
+        payload["message"] = error
+    else:
+        payload["state"] = "checked"
+    with UPDATE_STATE_LOCK:
+        payload["install_state"] = UPDATE_STATE["state"]
+        payload["install_target"] = UPDATE_STATE["target_version"]
+    return payload
+
+
+def reset_update_check_state():
+    with UPDATE_CHECK_LOCK:
+        UPDATE_CHECK.update(
+            sequence=0, future=None, started_at=0.0, finished_at=0.0,
+            result=None, error="", dismissed_version="",
+        )
 
 
 def _run_manual_update_task(manifest):

@@ -1,12 +1,15 @@
 (function () {
     let pollingInterval = null;
     let pollingGeneration = 0;
-    let manualUpdateRequested = false;
-    let startupNoticeQueued = false;
+    let manualCheck = null;
+    let automaticPromptQueued = false;
     const INSTALL_LAUNCH_DELAY_MS = 2000;
     const INSTALL_LAUNCH_DELAY_TEXT = '2 秒';
-    const STARTUP_RESULT_URL = '/api/update/startup-result/';
-    const STARTUP_NOTICE_KEY = 'fuckseats_update_startup_notice';
+    const CHECK_POLL_INTERVAL_MS = 1000;
+    const UPDATE_STATE_URL = '/api/update/state/';
+    const UPDATE_CHECK_URL = '/api/update/check/';
+    const UPDATE_DISMISS_URL = '/api/update/dismiss/';
+    const ERROR_NOTICE_KEY = 'fuckseats_update_error_notice';
     const appPlatform = String(document.body && document.body.dataset.appPlatform || '').toLowerCase();
 
     window.updateInfo = null;
@@ -60,78 +63,95 @@
         window.dispatchEvent(new CustomEvent('fuckseats:update-check-complete'));
     }
 
-    function hasShownStartupNotice(value) {
+    // 同一条自动检查的失败提示在一个窗口内只显示一次，避免每次切换页面都重复提示。
+    function hasShownErrorNotice(value) {
         try {
-            return sessionStorage.getItem(STARTUP_NOTICE_KEY) === value;
+            return sessionStorage.getItem(ERROR_NOTICE_KEY) === value;
         } catch (_) {
             return false;
         }
     }
 
-    function rememberStartupNotice(value) {
+    function rememberErrorNotice(value) {
         try {
-            sessionStorage.setItem(STARTUP_NOTICE_KEY, value);
+            sessionStorage.setItem(ERROR_NOTICE_KEY, value);
         } catch (_) {
-            // The update can still be shown when storage is unavailable.
-        }
-    }
-
-    function useManualUpdate() {
-        manualUpdateRequested = true;
-        if (startupNoticeQueued) {
-            startupNoticeQueued = false;
-            window.PopupManager?.notifyDismissed('update');
+            // The error can still be shown when storage is unavailable.
         }
     }
 
     function reportUpdateCheckError(error, automatic = false) {
         const message = '检查更新失败：' + (error && error.message || String(error));
-        if (typeof window.showToast === 'function' && (!automatic || !hasShownStartupNotice(message))) {
+        if (typeof window.showToast === 'function' && (!automatic || !hasShownErrorNotice(message))) {
             window.showToast(message, { duration: 10000 });
-            if (automatic) rememberStartupNotice(message);
+            if (automatic) rememberErrorNotice(message);
         }
         console.error('Update check error:', error);
         return { status: 'error', message };
     }
 
-    async function readStartupUpdate() {
+    function isUpdateModalVisible() {
+        const modal = document.getElementById('update-modal');
+        return Boolean(modal && modal.style.display === 'flex');
+    }
+
+    // 后端在独立线程中检查更新，这里只读取状态：离开页面或再次检查都不会打断它。
+    async function waitForCheckResult(minimumCheckId = 0) {
+        for (;;) {
+            const data = await requestUpdateJSON(UPDATE_STATE_URL, {}, 5000);
+            if (data.state !== 'checking' && Number(data.check_id || 0) >= minimumCheckId) return data;
+            await new Promise((resolve) => window.setTimeout(resolve, CHECK_POLL_INTERVAL_MS));
+        }
+    }
+
+    // 本次运行中发现的更新，只要用户没有关闭提示，就在每个页面弹出。
+    async function followUpdateState() {
         try {
             await window.OnboardingStore?.ready;
-            while (!manualUpdateRequested) {
-                const data = await requestUpdateJSON(STARTUP_RESULT_URL, {}, 5000);
-                if (manualUpdateRequested) return;
-                if (data.state === 'checking') {
-                    await new Promise((resolve) => window.setTimeout(resolve, 1000));
-                    continue;
-                }
-                if (data.update_available === true && !hasShownStartupNotice(data.latest_version)) {
-                    await window.ClientControlReady;
-                    if (manualUpdateRequested || window.ClientControl?.isAvailable('check_update') === false) return;
-                    window.updateInfo = data;
-                    startupNoticeQueued = true;
-                    showUpdateModal(true);
-                }
-                return;
+            const data = await waitForCheckResult();
+            if (data.state === 'error' && !manualCheck) {
+                reportUpdateCheckError(new Error(data.message || '更新检查失败'), true);
             }
+            if (data.update_available !== true || data.dismissed === true) return;
+            await window.ClientControlReady;
+            if (window.ClientControl?.isAvailable('check_update') === false) return;
+            if (manualCheck || automaticPromptQueued || isUpdateModalVisible()) return;
+            window.updateInfo = data;
+            automaticPromptQueued = true;
+            showUpdateModal(true);
         } catch (error) {
-            if (!manualUpdateRequested) reportUpdateCheckError(error, true);
+            if (!manualCheck) reportUpdateCheckError(error, true);
         } finally {
             markUpdateCheckComplete();
         }
     }
 
-    async function checkUpdate() {
-        useManualUpdate();
+    async function runManualCheck() {
         try {
-            const data = await requestUpdateJSON('/api/update/check/', {}, 20000);
+            const started = await requestUpdateJSON(UPDATE_CHECK_URL, { method: 'POST' }, 20000);
+            const data = started.state === 'checking'
+                ? await waitForCheckResult(Number(started.check_id || 0))
+                : started;
+            if (data.state === 'error') {
+                throw new Error(data.message || '更新检查失败');
+            }
             if (typeof data.update_available !== 'boolean') {
                 throw new Error('更新接口未返回有效的版本检查结果');
             }
             if (data.update_available) {
-                window.updateInfo = data;
-                showUpdateModal();
+                if (automaticPromptQueued) {
+                    // 尚未显示的自动提示由这次手动检查的结果取代。
+                    automaticPromptQueued = false;
+                    window.PopupManager?.notifyDismissed('update');
+                }
+                const showing = isUpdateModalVisible();
+                if (!showing || window.updateInfo?.latest_version !== data.latest_version) {
+                    window.updateInfo = data;
+                    if (showing) doShowUpdateModal();
+                    else showUpdateModal();
+                }
             } else {
-                window.updateInfo = null;
+                if (!isUpdateModalVisible()) window.updateInfo = null;
                 if (typeof window.showToast === 'function') {
                     window.showToast('当前已是最新版本 ' + data.current_version);
                 }
@@ -142,6 +162,24 @@
         } finally {
             markUpdateCheckComplete();
         }
+    }
+
+    function checkUpdate() {
+        if (!manualCheck) {
+            manualCheck = runManualCheck().finally(() => { manualCheck = null; });
+        }
+        return manualCheck;
+    }
+
+    function reportUpdateDismissed() {
+        const version = window.updateInfo && window.updateInfo.latest_version;
+        if (!version) return;
+        requestUpdateJSON(UPDATE_DISMISS_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ version }),
+            keepalive: true
+        }, 5000).catch((error) => console.error('Update dismiss error:', error));
     }
 
     function setInstallActionVisible(visible, pending = false) {
@@ -192,7 +230,7 @@
     }
 
     function doShowUpdateModal() {
-        startupNoticeQueued = false;
+        automaticPromptQueued = false;
         const modal = document.getElementById('update-modal');
         const currentVersion = document.getElementById('current-version');
         const latestVersion = document.getElementById('latest-version');
@@ -216,10 +254,31 @@
 
         showUpdateDetails(window.updateInfo);
         modal.style.display = 'flex';
-        rememberStartupNotice(window.updateInfo.latest_version);
+        resumeUpdateProgress(window.updateInfo);
     }
 
+    // 切换页面前已经开始的下载或已准备好的安装包，在新页面直接接着显示进度。
+    async function resumeUpdateProgress(info) {
+        if (info.install_target !== info.latest_version) return;
+        if (info.install_state !== 'downloading' && info.install_state !== 'ready_to_install') return;
+        try {
+            const data = await requestUpdateJSON('/api/update/status/', {}, 5000);
+            if (window.updateInfo !== info || !isUpdateModalVisible()) return;
+            if (data.target_version !== info.latest_version) return;
+            if (data.state !== 'downloading' && data.state !== 'ready_to_install') return;
+            if (document.getElementById('update-prompt').style.display === 'none') return;
+            document.getElementById('update-prompt').style.display = 'none';
+            document.getElementById('update-progress').style.display = 'block';
+            updateProgress(data);
+            if (data.state === 'downloading') startPolling();
+        } catch (error) {
+            console.error('Update progress resume error:', error);
+        }
+    }
+
+    // 只有用户主动关闭才算关闭提示，之后本次运行不再自动弹出该版本。
     function hideUpdateModal() {
+        reportUpdateDismissed();
         const modal = document.getElementById('update-modal');
         modal.style.display = 'none';
         stopPolling();
@@ -387,7 +446,10 @@
             if (selection.status !== 'selected') {
                 throw new Error(selection.message || '无法读取升级包');
             }
-            useManualUpdate();
+            if (automaticPromptQueued) {
+                automaticPromptQueued = false;
+                window.PopupManager?.notifyDismissed('update');
+            }
 
             const data = await requestUpdateJSON('/api/update/start/', {
                 method: 'POST',
@@ -416,6 +478,6 @@
         document.getElementById('update-btn').addEventListener('click', startUpdate);
         document.getElementById('install-and-exit-btn').addEventListener('click', startInstallAndExit);
 
-        readStartupUpdate();
+        followUpdateState();
     });
 })();

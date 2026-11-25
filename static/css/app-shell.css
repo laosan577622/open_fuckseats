@@ -447,6 +447,9 @@ body[data-app-shell="webview"]:not([data-app-platform="macos"]) .header-titlebar
 
 /* 收起状态的弹出面板、窗口缩放边等不可见层不应撑出横向滚动 */
 html { overflow-x: clip; }
+/* 根滚动不回弹：macOS 触控板快速滑动时，WebKit 会把固定的顶栏、底部标签栏
+   连同页面一起拖离窗口边缘，露出底色。内部可滚动区域仍保留各自的回弹。 */
+html, body { overscroll-behavior: none; }
 
 /* ===================================================================== */
 /* 页面变体                                                               */

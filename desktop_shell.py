@@ -373,6 +373,32 @@ class DesktopBridge:
         window.events.maximized += self._on_window_maximized
         window.events.restored += self._on_window_restored
         window.events.loaded += self._publish_window_state
+        if sys.platform == "darwin":
+            window.events.shown += self._disable_mac_rubber_banding
+
+    def _disable_mac_rubber_banding(self, *_):
+        """关闭 WKWebView 根滚动的弹性回弹，顶栏与底栏始终贴住窗口边缘。
+
+        CSS 的 overscroll-behavior 只在页面加载后生效，且旧版 WebKit 不保证
+        覆盖触控板惯性滚动，这里在原生层再关一次。私有接口不可用时静默跳过。
+        """
+
+        def apply():
+            try:
+                from webview.platforms import cocoa
+
+                browser_view = cocoa.BrowserView.instances.get(getattr(self._window, "uid", ""))
+                native_webview = getattr(browser_view, "webview", None)
+                if native_webview is not None and native_webview.respondsToSelector_(b"_setRubberBandingEnabled:"):
+                    native_webview._setRubberBandingEnabled_(0)  # _WKRectEdgeNone
+            except Exception:
+                pass
+
+        try:
+            from webview.platforms.cocoa import AppHelper
+            AppHelper.callAfter(apply)
+        except Exception:
+            apply()
 
     def _publish_window_state(self, *_):
         if self._window is not None:

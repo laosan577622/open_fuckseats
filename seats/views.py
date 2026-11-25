@@ -18166,9 +18166,9 @@ def _local_update_request(view):
     return wrapped
 
 
-def _update_check_response(get_payload):
+def _update_check_state_response():
     try:
-        response = JsonResponse({'status': 'success', **get_payload()})
+        response = JsonResponse({'status': 'success', **desktop_runtime.get_update_check_state()})
     except Exception as exc:
         response = JsonResponse({
             'status': 'error',
@@ -18182,17 +18182,37 @@ def _update_check_response(get_payload):
 
 
 @require_http_methods(['GET'])
-def desktop_startup_update_result(request):
-    # Keep startup result reads independent of the cloud configuration and database.
-    return _update_check_response(desktop_runtime.get_startup_update_result)
+def desktop_update_state(request):
+    # 状态读取不访问云控和数据库；上一次检查失败时，超过冷却时间后在后台重试。
+    desktop_runtime.request_update_check('retry')
+    return _update_check_state_response()
 
 
 @_local_update_request
-@require_http_methods(['GET'])
+@require_http_methods(['GET', 'POST'])
 def desktop_update_check(request):
     if request.GET.get('startup') == '1':
-        return desktop_startup_update_result(request)
-    return _update_check_response(desktop_runtime.check_for_updates)
+        return desktop_update_state(request)
+    # 只负责发起后台检查并立即返回，检查结果通过状态接口读取。
+    desktop_runtime.request_update_check('manual')
+    return _update_check_state_response()
+
+
+@_local_update_request
+@require_POST
+def desktop_update_dismiss(request):
+    try:
+        payload = json.loads(request.body or b'{}')
+        if not isinstance(payload, dict):
+            raise ValueError('请求数据必须是对象')
+    except Exception:
+        return JsonResponse({
+            'status': 'error',
+            'state': 'invalid_json',
+            'message': '请求数据格式错误',
+        }, status=400)
+    desktop_runtime.dismiss_update(payload.get('version'))
+    return _update_check_state_response()
 
 
 @_local_update_request
