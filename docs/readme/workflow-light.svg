@@ -1,0 +1,58 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="196" viewBox="0 0 1000 196" role="img" aria-label="排座流程：导入名单、设置规则、自动排座、手动微调、导出留底">
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif; }
+    .ring { fill: #0a59f7; fill-opacity: 0.1; }
+    .dot { fill: #0a59f7; }
+    .num { fill: #ffffff; font-size: 24px; font-weight: 700; }
+    .link { stroke: #0a59f7; stroke-opacity: 0.35; stroke-width: 2; stroke-linecap: round; stroke-dasharray: 2 7; fill: none; }
+    .chev { stroke: #0a59f7; stroke-opacity: 0.7; stroke-width: 2.4; stroke-linecap: round; stroke-linejoin: round; fill: none; }
+    .title { fill: #1d1d1f; font-size: 24px; font-weight: 600; }
+    .cap { fill: #6e6e73; font-size: 17px; }
+  </style>
+
+  <g text-anchor="middle">
+    <line class="link" x1="144" y1="48" x2="256" y2="48"/>
+    <line class="link" x1="344" y1="48" x2="456" y2="48"/>
+    <line class="link" x1="544" y1="48" x2="656" y2="48"/>
+    <line class="link" x1="744" y1="48" x2="856" y2="48"/>
+    <path class="chev" d="M197 41 L204 48 L197 55"/>
+    <path class="chev" d="M397 41 L404 48 L397 55"/>
+    <path class="chev" d="M597 41 L604 48 L597 55"/>
+    <path class="chev" d="M797 41 L804 48 L797 55"/>
+
+    <circle class="ring" cx="100" cy="48" r="38"/>
+    <circle class="dot" cx="100" cy="48" r="27"/>
+    <text class="num" x="100" y="48" dominant-baseline="central">1</text>
+    <text class="title" x="100" y="124">导入名单</text>
+    <text class="cap" x="100" y="154">Excel · BSCE</text>
+    <text class="cap" x="100" y="180">SDES · .seats</text>
+
+    <circle class="ring" cx="300" cy="48" r="38"/>
+    <circle class="dot" cx="300" cy="48" r="27"/>
+    <text class="num" x="300" y="48" dominant-baseline="central">2</text>
+    <text class="title" x="300" y="124">设置规则</text>
+    <text class="cap" x="300" y="154">固定座位 · 区域</text>
+    <text class="cap" x="300" y="180">相邻关系 · 小组</text>
+
+    <circle class="ring" cx="500" cy="48" r="38"/>
+    <circle class="dot" cx="500" cy="48" r="27"/>
+    <text class="num" x="500" y="48" dominant-baseline="central">3</text>
+    <text class="title" x="500" y="124">自动排座</text>
+    <text class="cap" x="500" y="154">多种策略与偏好</text>
+    <text class="cap" x="500" y="180">冲突提示 · 回滚</text>
+
+    <circle class="ring" cx="700" cy="48" r="38"/>
+    <circle class="dot" cx="700" cy="48" r="27"/>
+    <text class="num" x="700" y="48" dominant-baseline="central">4</text>
+    <text class="title" x="700" y="124">手动微调</text>
+    <text class="cap" x="700" y="154">拖拽换位 · 多选</text>
+    <text class="cap" x="700" y="180">撤销 · 重做</text>
+
+    <circle class="ring" cx="900" cy="48" r="38"/>
+    <circle class="dot" cx="900" cy="48" r="27"/>
+    <text class="num" x="900" y="48" dominant-baseline="central">5</text>
+    <text class="title" x="900" y="124">导出留底</text>
+    <text class="cap" x="900" y="154">Excel · SVG · PPTX</text>
+    <text class="cap" x="900" y="180">快照 · .seats</text>
+  </g>
+</svg>

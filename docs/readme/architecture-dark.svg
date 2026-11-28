@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="510" viewBox="0 0 1120 510" role="img" aria-label="整体架构：客户端经本机服务访问加密数据库，并连接云同步、闻道智能与教师端">
+  <style>
+    text { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", "Noto Sans SC", sans-serif; }
+    .col { fill: #8b949e; font-size: 15px; font-weight: 600; letter-spacing: 2px; }
+    .box { fill: #161b22; stroke: #30363d; }
+    .inner { fill: #161b22; stroke: #30363d; }
+    .zone { fill: #0a59f7; fill-opacity: 0.08; stroke: #5b8dff; stroke-opacity: 0.4; stroke-dasharray: 6 6; }
+    .t { fill: #e6edf3; font-size: 21px; font-weight: 600; }
+    .s { fill: #8b949e; font-size: 16px; }
+    .zl { fill: #7aa5ff; font-size: 15px; font-weight: 600; }
+    .chip { fill: #0a59f7; fill-opacity: 0.22; }
+    .ct { fill: #9cbcff; font-size: 16px; font-weight: 600; }
+    .flow { fill: none; stroke: #5b8dff; stroke-opacity: 0.7; stroke-width: 2; }
+  </style>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="11" markerHeight="11" markerUnits="userSpaceOnUse" orient="auto-start-reverse">
+      <path d="M1.5 1.5 L8 5 L1.5 8.5" fill="none" stroke="#5b8dff" stroke-opacity="0.9" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+    </marker>
+  </defs>
+
+  <g text-anchor="middle">
+    <text class="col" x="144" y="40">客户端</text>
+    <text class="col" x="560" y="40">本机服务</text>
+    <text class="col" x="976" y="40">外部服务</text>
+  </g>
+
+  <!-- 客户端 -->
+  <rect class="box" x="24" y="72" width="240" height="80" rx="16"/>
+  <text class="t" x="46" y="104">桌面窗口</text>
+  <text class="s" x="46" y="132">pywebview · 启动会话凭证</text>
+
+  <rect class="box" x="24" y="180" width="240" height="80" rx="16"/>
+  <text class="t" x="46" y="212">浏览器</text>
+  <text class="s" x="46" y="240">-dev 调试模式</text>
+
+  <rect class="box" x="24" y="288" width="240" height="80" rx="16"/>
+  <text class="t" x="46" y="320">脚本与 Agent</text>
+  <text class="s" x="46" y="348">Open API · Bearer 凭证</text>
+
+  <rect class="box" x="24" y="396" width="240" height="80" rx="16"/>
+  <text class="t" x="46" y="428">AI 客户端</text>
+  <text class="s" x="46" y="456">MCP · stdio 直连数据库</text>
+
+  <!-- 本机服务 -->
+  <rect class="zone" x="320" y="64" width="480" height="420" rx="24"/>
+  <text class="zl" x="348" y="92">127.0.0.1:23948</text>
+
+  <rect class="inner" x="348" y="108" width="424" height="60" rx="14"/>
+  <text class="t" x="370" y="138" dominant-baseline="central">Waitress</text>
+  <text class="s" x="750" y="138" text-anchor="end" dominant-baseline="central">WSGI 服务 · 桌面与浏览器共用</text>
+
+  <rect class="inner" x="348" y="196" width="424" height="128" rx="14"/>
+  <text class="t" x="370" y="228" dominant-baseline="central">Django 应用</text>
+  <text class="s" x="750" y="228" text-anchor="end" dominant-baseline="central">seats · config</text>
+  <g text-anchor="middle">
+    <rect class="chip" x="358" y="268" width="92" height="38" rx="19"/>
+    <text class="ct" x="404" y="287" dominant-baseline="central">排座引擎</text>
+    <rect class="chip" x="462" y="268" width="92" height="38" rx="19"/>
+    <text class="ct" x="508" y="287" dominant-baseline="central">导入导出</text>
+    <rect class="chip" x="566" y="268" width="92" height="38" rx="19"/>
+    <text class="ct" x="612" y="287" dominant-baseline="central">Open API</text>
+    <rect class="chip" x="670" y="268" width="92" height="38" rx="19"/>
+    <text class="ct" x="716" y="287" dominant-baseline="central">本地插件</text>
+  </g>
+
+  <rect class="inner" x="348" y="352" width="260" height="96" rx="14"/>
+  <text class="t" x="370" y="386" dominant-baseline="central">SQLCipher 数据库</text>
+  <text class="s" x="370" y="418" dominant-baseline="central">SQLite 全库加密 · db.sqlite3</text>
+
+  <rect class="inner" x="628" y="352" width="144" height="96" rx="14"/>
+  <text class="t" x="700" y="386" text-anchor="middle" dominant-baseline="central">系统钥匙串</text>
+  <text class="s" x="700" y="418" text-anchor="middle" dominant-baseline="central">保存数据库密钥</text>
+
+  <!-- 外部服务 -->
+  <rect class="box" x="856" y="72" width="240" height="80" rx="16"/>
+  <text class="t" x="878" y="104">云同步后端</text>
+  <text class="s" x="878" y="132">backend/ · 可自建 · HTTPS</text>
+
+  <rect class="box" x="856" y="180" width="240" height="80" rx="16"/>
+  <text class="t" x="878" y="212">闻道智能</text>
+  <text class="s" x="878" y="240">自然语言排座 · 姓名脱敏</text>
+
+  <rect class="box" x="856" y="288" width="240" height="80" rx="16"/>
+  <text class="t" x="878" y="320">不想班管教师端</text>
+  <text class="s" x="878" y="348">Drop 投送 · Windows</text>
+
+  <!-- 连线 -->
+  <path class="flow" d="M264 112 C305 112 305 126 346 126" marker-end="url(#ah)"/>
+  <path class="flow" d="M264 220 C310 220 300 138 346 138" marker-end="url(#ah)"/>
+  <path class="flow" d="M264 328 C315 328 295 150 346 150" marker-end="url(#ah)"/>
+  <path class="flow" d="M264 436 C305 436 305 400 346 400" marker-end="url(#ah)"/>
+  <path class="flow" d="M560 168 L560 194" marker-end="url(#ah)"/>
+  <path class="flow" d="M478 324 L478 350" marker-end="url(#ah)"/>
+  <path class="flow" d="M628 400 L610 400" marker-end="url(#ah)"/>
+  <path class="flow" d="M774 236 C815 236 815 112 854 112" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <path class="flow" d="M774 262 C815 262 815 220 854 220" marker-end="url(#ah)"/>
+  <path class="flow" d="M774 288 C815 288 815 328 854 328" marker-end="url(#ah)"/>
+</svg>
